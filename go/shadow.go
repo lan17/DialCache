@@ -2,7 +2,6 @@ package dialcache
 
 import (
 	"bytes"
-	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,7 +22,7 @@ type shadowVerdict struct {
 }
 
 func (x *execution[T]) darkSource(layer string, localMiss bool) (T, error) {
-	start := elapsedNow(x.cache.options.Clock)
+	start := elapsedNow(x.cache.settings.clock)
 	source := startPending(func() (T, error) { return x.source(layer) })
 	x.scheduleShadow(nil, source, start)
 	<-source.done
@@ -41,11 +40,11 @@ func (x *execution[T]) scheduleShadow(frame *Frame, source *pending[T], started 
 		x.errorEvent("remote", "config_resolution", false)
 		return
 	}
-	if !p.Enabled || c.options.ShadowOutcome == nil {
+	if !p.Enabled || c.settings.shadowOutcome == nil {
 		return
 	}
 	c.mu.Lock()
-	if c.shadows[x.key] != nil || len(c.shadows) >= c.options.ShadowMaxInFlight {
+	if c.shadows[x.key] != nil || len(c.shadows) >= c.settings.shadowCapacity {
 		c.mu.Unlock()
 		x.shadowEvent(shadowVerdict{outcome: "dropped"})
 		return
@@ -56,14 +55,14 @@ func (x *execution[T]) scheduleShadow(frame *Frame, source *pending[T], started 
 	if p.LoggingConfigError {
 		x.errorEvent("remote", "config_resolution", false)
 	}
-	deferWork(c.options.Clock, func() { x.runShadow(f, frame, source, started) })
+	deferWork(c.settings.clock, func() { x.runShadow(f, frame, source, started) })
 }
 
 func (x *execution[T]) shadowEvent(v shadowVerdict) {
 	d := x.labels("")
 	d["outcome"] = v.outcome
 	e := Event{Kind: "shadowValidation", Key: x.key, Data: d, Outcome: v.outcome}
-	if cb := x.cache.options.ShadowOutcome; cb != nil {
+	if cb := x.cache.settings.shadowOutcome; cb != nil {
 		func() { defer func() { recover() }(); cb(e) }()
 	}
 	x.cache.emit(e)
@@ -74,7 +73,7 @@ func (x *execution[T]) shadowEvent(v shadowVerdict) {
 		}
 		x.event("shadowAge", "", map[string]any{"outcome": v.outcome, "seconds": float64(age) / 1000})
 	}
-	if v.outcome == "mismatch" && x.policy.Shadow.LogMismatches && x.cache.options.Logger != nil {
+	if v.outcome == "mismatch" && x.policy.Shadow.LogMismatches && x.cache.settings.logger != nil {
 		func() {
 			defer func() { recover() }()
 			details := x.labels("")
@@ -92,19 +91,19 @@ func (x *execution[T]) shadowEvent(v shadowVerdict) {
 			} else {
 				details["sourceValueJson"] = nil
 			}
-			x.cache.options.Logger.Warn("DialCache shadow validation mismatch", details)
+			x.cache.settings.logger.Warn("DialCache shadow validation mismatch", details)
 		}()
 	}
 }
 
 func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[T], started time.Duration) {
-	clock := x.cache.options.Clock
+	clock := x.cache.settings.clock
 	if source == nil {
 		started = elapsedNow(clock)
 	}
 	budget := x.budget()
 	if budget < 0 {
-		budget = 60000
+		budget = ms(DefaultSourceTimeout)
 	}
 	expired := func() bool {
 		if elapsedNow(clock)-started >= time.Duration(budget)*time.Millisecond {
@@ -131,7 +130,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 				age, valid := x.frameAge(&r.Frame, "remote_shadow")
 				if !valid && !(retainFuture && age < 0) {
 					r = ReadResult{Kind: "miss", Reason: "unclassified"}
-				} else if maxAge && age >= x.policy.Remote.TTLMS {
+				} else if maxAge && age >= ms(x.policy.Remote.TTL) {
 					r = ReadResult{Kind: "miss", Reason: "expired"}
 				}
 			}
@@ -194,10 +193,8 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 				<-done
 			}
 		} else {
-			err = x.cache.Disable(x.ctx, func(ctx context.Context) error {
-				value, err = callSafely(func() (T, error) { return x.load(ctx) })
-				return err
-			})
+			ctx := x.cache.Disable(x.ctx)
+			value, err = callSafely(func() (T, error) { return x.load(ctx) })
 		}
 		if err != nil {
 			if source != nil && x.timedOut.Load() {
@@ -217,7 +214,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 				return out("filled")
 			}
 			if writeErr != nil {
-				x.cache.options.Logger.Warn("Error populating Redis from DialCache shadow work", writeErr)
+				x.cache.settings.logger.Warn("Error populating Redis from DialCache shadow work", writeErr)
 				return out("fill_error")
 			}
 			return out("fill_fenced")
@@ -236,7 +233,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 			if x.op.Comparator != nil {
 				return x.op.Comparator(cached, value)
 			}
-			return SemanticEqual(cached, value), nil
+			return SemanticEqual(any(cached), any(value)), nil
 		})
 		if err != nil {
 			return out("comparison_error")
@@ -261,7 +258,9 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 		age = clock.WallMS() - int64(frame.CreatedAtMS)
 		return shadowVerdict{outcome: "mismatch", age: &age, cached: cached, source: value}, nil
 	})
-	verdict, err := awaitDeadline(clock, validation, started, budget, func() error { return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, TimeoutMS: budget} }, f.abandon)
+	verdict, err := awaitDeadline(clock, validation, started, budget, func() error {
+		return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(budget) * time.Millisecond}
+	}, f.abandon)
 	if err != nil {
 		verdict = shadowVerdict{outcome: "timeout"}
 	}

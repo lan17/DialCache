@@ -4,8 +4,7 @@ package dialcache
 
 import (
 	"context"
-	"errors"
-	"strings"
+	"fmt"
 	"sync"
 	"time"
 
@@ -16,153 +15,176 @@ import (
 // checked lazily on read against Clock.ElapsedMS, as lru-cache does in
 // TypeScript without ttlAutopurge: an unread expired entry keeps its LRU
 // position until a read removes it or capacity evicts it.
-type entry[T any] struct {
-	value      T
+type entry struct {
+	value      any
 	insertedMS int64
 	ttlMS      int64
 }
-type flight[T any] struct {
+type flight struct {
 	done      chan struct{}
-	value     T
+	value     any
 	err       error
 	started   time.Duration
 	followers int
 }
-type scope[T any] struct {
+type scope struct {
 	live    bool
-	memo    map[string]T
-	flights map[string]*flight[T]
+	memo    map[string]any
+	flights map[string]*flight
 }
-type scopeState[T any] struct {
+type scopeState struct {
 	enabled bool
-	owner   *scope[T]
+	owner   *scope
 }
 
-type Cache[T any] struct {
-	mu      sync.Mutex
-	options Options[T]
+// Cache is one DialCache instance: a process-local LRU, coalescing table,
+// shadow slots and use case registry shared by every value type.
+type Cache struct {
+	mu       sync.Mutex
+	settings settings
 	// local is nil when zero capacity disables local storage. Reads and writes
 	// both promote; the least recently used entry is evicted at capacity.
-	local      *simplelru.LRU[string, entry[T]]
-	flights    map[string]*flight[T]
+	local      *simplelru.LRU[string, entry]
+	flights    map[string]*flight
 	shadows    map[string]*shadowFlight
 	registered map[string]bool
 }
 
-func New[T any](options Options[T]) *Cache[T] {
-	if options.Clock == nil {
-		options.Clock = newSystemClock()
+// New constructs a cache. Options are applied in order; an invalid option
+// returns an error wrapping ErrInvalidOption.
+func New(opts ...Option) (*Cache, error) {
+	compression, err := ResolveCompressionConfig(nil)
+	if err != nil {
+		return nil, err
 	}
-	if options.Codec == nil {
-		options.Codec = JSONCodec[T]{}
+	s := settings{
+		clock:             newSystemClock(),
+		namespace:         "urn",
+		localCapacity:     10000,
+		remoteReadTimeout: DefaultRemoteReadTimeout,
+		shadowCapacity:    1,
+		logger:            defaultLogger{},
+		compression:       &compression,
 	}
-	if options.Logger == nil {
-		options.Logger = defaultLogger{}
-	}
-	options.Logger = FailureIsolatedLogger(options.Logger)
-	if !options.DisableCompression {
-		config, err := ResolveCompressionConfig(options.Compression)
-		if err != nil {
-			panic(err)
+	for _, opt := range opts {
+		if opt == nil {
+			continue
 		}
-		options.Compression = &config
+		if err := opt(&s); err != nil {
+			return nil, err
+		}
 	}
-	if options.Namespace == "" && !options.NamespaceSet {
-		options.Namespace = "urn"
-	}
-	if strings.ContainsAny(options.Namespace, "{}") {
-		panic("DialCache namespace contains a reserved delimiter")
-	}
-	if options.LocalCapacity < 0 || uint64(options.LocalCapacity) > MaxSafeInteger {
-		panic("DialCache local capacity must be a nonnegative safe integer")
-	}
-	if options.LocalCapacity == 0 && !options.LocalCapacitySet {
-		options.LocalCapacity = 10000
-	}
-	if options.RemoteReadTimeoutMS == 0 {
-		options.RemoteReadTimeoutMS = 50
-	}
-	if options.RemoteReadTimeoutMS < 1 || options.RemoteReadTimeoutMS > MaxDeadlineMS {
-		panic("invalid DialCache remote read deadline")
-	}
-	if options.ShadowMaxInFlight == 0 {
-		options.ShadowMaxInFlight = 1
-	}
-	if options.ShadowMaxInFlight < 1 || uint64(options.ShadowMaxInFlight) > MaxSafeInteger {
-		panic("invalid DialCache shadow capacity")
-	}
-	c := &Cache[T]{options: options, flights: make(map[string]*flight[T]), shadows: make(map[string]*shadowFlight), registered: make(map[string]bool)}
-	if options.LocalCapacity > 0 {
+	s.logger = FailureIsolatedLogger(s.logger)
+	c := &Cache{settings: s, flights: make(map[string]*flight), shadows: make(map[string]*shadowFlight), registered: make(map[string]bool)}
+	if s.localCapacity > 0 {
 		// The LRU allocates per entry, so a large configured capacity stays sparse.
-		local, err := simplelru.NewLRU[string, entry[T]](options.LocalCapacity, nil)
+		local, err := simplelru.NewLRU[string, entry](s.localCapacity, nil)
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("%w: %v", ErrInvalidOption, err)
 		}
 		c.local = local
+	}
+	return c, nil
+}
+
+// MustNew is New for configuration known to be valid; it panics otherwise.
+func MustNew(opts ...Option) *Cache {
+	c, err := New(opts...)
+	if err != nil {
+		panic(err)
 	}
 	return c
 }
 
-// Enable reuses a live outer lifetime, including when nested inside Disable.
-// Completing an outer callback closes only that scope, preventing late memo
-// publication. Context cancellation remains an application/source concern.
-func (c *Cache[T]) Enable(ctx context.Context, fn func(context.Context) error) error {
-	prior, _ := ctx.Value(c).(scopeState[T])
+// Enable returns a context in which cached operations participate, and the
+// function that closes that request scope. Call it when the request's work
+// is complete, typically with defer: it ends the request memo lifetime and
+// prevents late publication into it. A context enabled inside a live scope
+// shares that scope, and its close function does nothing. Retaining the
+// context after close does not keep caching enabled. Context cancellation
+// remains an application and source concern.
+func (c *Cache) Enable(ctx context.Context) (context.Context, func()) {
+	prior, _ := ctx.Value(c).(scopeState)
 	c.mu.Lock()
 	owned := prior.owner == nil || !prior.owner.live
 	s := prior.owner
 	if owned {
-		s = &scope[T]{live: true, memo: make(map[string]T), flights: make(map[string]*flight[T])}
+		s = &scope{live: true, memo: make(map[string]any), flights: make(map[string]*flight)}
 	}
 	c.mu.Unlock()
-	if owned {
-		defer func() { c.mu.Lock(); s.live = false; clear(s.memo); clear(s.flights); c.mu.Unlock() }()
+	var once sync.Once
+	done := func() {
+		if !owned {
+			return
+		}
+		once.Do(func() {
+			c.mu.Lock()
+			s.live = false
+			clear(s.memo)
+			clear(s.flights)
+			c.mu.Unlock()
+		})
 	}
-	return fn(context.WithValue(ctx, c, scopeState[T]{enabled: true, owner: s}))
+	return context.WithValue(ctx, c, scopeState{enabled: true, owner: s}), done
 }
 
-func (c *Cache[T]) Disable(ctx context.Context, fn func(context.Context) error) error {
-	state, _ := ctx.Value(c).(scopeState[T])
-	state.enabled = false
-	return fn(context.WithValue(ctx, c, state))
+// WithEnabled runs fn inside an enabled scope that closes when fn returns.
+func (c *Cache) WithEnabled(ctx context.Context, fn func(context.Context) error) error {
+	ctx, done := c.Enable(ctx)
+	defer done()
+	return fn(ctx)
 }
-func (c *Cache[T]) IsEnabled(ctx context.Context) bool {
-	state, _ := ctx.Value(c).(scopeState[T])
+
+// Disable returns a context whose cached operations pass straight through to
+// their sources. Enabling again inside it rejoins the surrounding live scope.
+func (c *Cache) Disable(ctx context.Context) context.Context {
+	state, _ := ctx.Value(c).(scopeState)
+	state.enabled = false
+	return context.WithValue(ctx, c, state)
+}
+
+// WithDisabled runs fn with caching disabled.
+func (c *Cache) WithDisabled(ctx context.Context, fn func(context.Context) error) error {
+	return fn(c.Disable(ctx))
+}
+
+// IsEnabled reports whether operations with ctx participate in caching.
+func (c *Cache) IsEnabled(ctx context.Context) bool {
+	state, _ := ctx.Value(c).(scopeState)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return state.enabled && state.owner != nil && state.owner.live
 }
 
-func (c *Cache[T]) emit(event Event) {
-	if c.options.Observe != nil {
-		func() { defer func() { _ = recover() }(); c.options.Observe(event) }()
+func (c *Cache) emit(event Event) {
+	for _, observe := range c.settings.observers {
+		func() { defer func() { _ = recover() }(); observe(event) }()
 	}
 }
 
-func (c *Cache[T]) localGet(key string) (T, bool) {
+func (c *Cache) localGet(key string) (any, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	var zero T
 	if c.local == nil {
-		return zero, false
+		return nil, false
 	}
 	// Peek, then check freshness, then promote: lru-cache checks staleness
 	// before any promotion, and a clock read that fails must leave the LRU
 	// order untouched, exactly as the TypeScript fault seam does.
 	item, found := c.local.Peek(key)
 	if !found {
-		return zero, false
+		return nil, false
 	}
 	// Match the TypeScript local cache's whole-millisecond monotonic clock.
 	// Source/read/shadow deadlines separately retain fractional elapsed time.
-	if c.options.Clock.ElapsedMS()-item.insertedMS >= item.ttlMS {
+	if c.settings.clock.ElapsedMS()-item.insertedMS >= item.ttlMS {
 		c.local.Remove(key)
-		return zero, false
+		return nil, false
 	}
 	c.local.Get(key)
 	return item.value, true
 }
-func (c *Cache[T]) localPut(key string, value T, ttl int64) {
+func (c *Cache) localPut(key string, value any, ttl int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.local == nil {
@@ -170,37 +192,42 @@ func (c *Cache[T]) localPut(key string, value T, ttl int64) {
 	}
 	// Add promotes an existing key and evicts the least recently used entry
 	// once capacity is exceeded, regardless of that entry's remaining TTL.
-	c.local.Add(key, entry[T]{value: value, insertedMS: c.options.Clock.ElapsedMS(), ttlMS: ttl})
+	c.local.Add(key, entry{value: value, insertedMS: c.settings.clock.ElapsedMS(), ttlMS: ttl})
 }
 
-func (c *Cache[T]) Invalidate(ctx context.Context, identity Identity, futureBufferMS int64) (err error) {
-	if futureBufferMS < 0 || futureBufferMS > 31536000000 {
-		return errors.New("invalid future buffer")
+// Invalidate raises the remote watermark for every tracked value of the
+// entity named by identity's KeyType and ID, so frames stamped at or before
+// the invalidation plus futureBuffer are no longer served. It requires a
+// remote adapter and returns its error. Local entries expire by TTL.
+func (c *Cache) Invalidate(ctx context.Context, identity Identity, futureBuffer time.Duration) (err error) {
+	if futureBuffer < 0 || futureBuffer > MaxSupportedDuration || futureBuffer%time.Millisecond != 0 {
+		return fmt.Errorf("%w: future buffer must be whole milliseconds within 365 days", ErrInvalidOperation)
 	}
 	if identity.Namespace == "" {
-		identity.Namespace = c.options.Namespace
+		identity.Namespace = c.settings.namespace
 	}
 	c.emit(Event{Kind: "invalidation", Data: map[string]any{"cacheNamespace": identity.Namespace, "keyType": identity.KeyType, "layer": "remote"}})
 	defer func() {
 		if err != nil {
-			c.options.Logger.Warn("Error writing DialCache invalidation watermark", err)
+			c.settings.logger.Warn("Error writing DialCache invalidation watermark", err)
 			c.emit(Event{Kind: "error", Data: map[string]any{"cacheNamespace": identity.Namespace, "keyType": identity.KeyType, "useCase": "watermark", "layer": "remote", "error": "invalidation", "inFallback": false}})
 		}
 	}()
-	if c.options.Remote == nil {
-		return MissingRemoteError
+	if c.settings.remote == nil {
+		return ErrNoRemote
 	}
 	identity.Tracked = true
 	_, _, watermark, err := identity.Keys()
 	if err != nil {
 		return err
 	}
-	now := c.options.Clock.WallMS()
-	if now < 0 || uint64(now) > MaxSafeInteger-uint64(futureBufferMS) {
-		return errors.New("invalid invalidation timestamp")
+	now := c.settings.clock.WallMS()
+	bufferMS := int64(futureBuffer / time.Millisecond)
+	if now < 0 || uint64(now) > MaxSafeInteger-uint64(bufferMS) {
+		return fmt.Errorf("%w: invalid invalidation timestamp", ErrInvalidOperation)
 	}
 	_, err = callSafely(func() (struct{}, error) {
-		return struct{}{}, c.options.Remote.Invalidate(ctx, watermark, now, futureBufferMS)
+		return struct{}{}, c.settings.remote.Invalidate(ctx, watermark, now, bufferMS)
 	})
 	return err
 }

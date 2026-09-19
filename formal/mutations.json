@@ -24,8 +24,8 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age >= x.policy.StaleOnErrorMaxAgeMS {",
-            "after": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age > x.policy.StaleOnErrorMaxAgeMS {"
+            "before": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age >= maxAge {",
+            "after": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age > maxAge {"
           }
         ],
         "requiredDetections": [
@@ -288,8 +288,8 @@
         "edits": [
           {
             "path": "go/policy.go",
-            "before": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeoutMS: defaults.RemoteReadTimeoutMS}",
-            "after": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeoutMS: defaults.RemoteReadTimeoutMS, Shadow: ResolvedShadow{LogMismatches: true}}"
+            "before": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeout: defaults.RemoteReadTimeout}",
+            "after": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeout: defaults.RemoteReadTimeout, Shadow: ResolvedShadow{LogMismatches: true}}"
           }
         ],
         "requiredDetections": [
@@ -355,7 +355,7 @@
           {
             "path": "go/cache.go",
             "before": "\tc.local.Get(key)\n\treturn item.value, true",
-            "after": "\titem.insertedMS = c.options.Clock.ElapsedMS()\n\tc.local.Add(key, item)\n\treturn item.value, true"
+            "after": "\titem.insertedMS = c.settings.clock.ElapsedMS()\n\tc.local.Add(key, item)\n\treturn item.value, true"
           }
         ],
         "requiredDetections": [
@@ -452,7 +452,7 @@
           {
             "path": "go/engine.go",
             "before": "\t\treturn callSafely(func() (T, error) { return load(ctx) })",
-            "after": "\t\treturn awaitDeadline(c.options.Clock, startPending(func() (T, error) { return load(ctx) }), elapsedNow(c.options.Clock), x.budget(), func() error { return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, TimeoutMS: x.budget()} }, nil)"
+            "after": "\t\treturn awaitDeadline(c.settings.clock, startPending(func() (T, error) { return load(ctx) }), elapsedNow(c.settings.clock), x.budget(), func() error { return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(x.budget()) * time.Millisecond} }, nil)"
           }
         ],
         "requiredDetections": [
@@ -483,8 +483,8 @@
         "edits": [
           {
             "path": "go/cache.go",
-            "before": "\tif owned {\n\t\tdefer func() { c.mu.Lock(); s.live = false; clear(s.memo); clear(s.flights); c.mu.Unlock() }()\n\t}",
-            "after": "\tif owned {\n\t\tdefer func() { c.mu.Lock(); s.live = false; clear(s.memo); clear(s.flights); c.mu.Unlock() }()\n\t} else {\n\t\tdefer func() { c.mu.Lock(); clear(s.memo); c.mu.Unlock() }()\n\t}"
+            "before": "\tdone := func() {\n\t\tif !owned {\n\t\t\treturn\n\t\t}",
+            "after": "\tdone := func() {\n\t\tif !owned {\n\t\t\tc.mu.Lock()\n\t\t\tclear(s.memo)\n\t\t\tc.mu.Unlock()\n\t\t\treturn\n\t\t}"
           }
         ],
         "requiredDetections": [
@@ -514,9 +514,9 @@
       "go": {
         "edits": [
           {
-            "path": "go/cache.go",
-            "before": "\treturn item.value, true",
-            "after": "\treturn zero, true"
+            "path": "go/engine.go",
+            "before": "\t\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil",
+            "after": "\t\t\t\t_, ok := assertValue[T](raw)\n\t\t\t\treturn localResult[T]{found: ok, mismatch: !ok}, nil"
           }
         ],
         "requiredDetections": [
@@ -547,8 +547,8 @@
         "edits": [
           {
             "path": "go/cache.go",
-            "before": "if c.options.Clock.ElapsedMS()-item.insertedMS >= item.ttlMS {",
-            "after": "if c.options.Clock.ElapsedMS()-item.insertedMS > item.ttlMS {"
+            "before": "if c.settings.clock.ElapsedMS()-item.insertedMS >= item.ttlMS {",
+            "after": "if c.settings.clock.ElapsedMS()-item.insertedMS > item.ttlMS {"
           }
         ],
         "requiredDetections": [
@@ -584,13 +584,13 @@
         "edits": [
           {
             "path": "go/cache.go",
-            "before": "if c.options.Clock.ElapsedMS()-item.insertedMS >= item.ttlMS {",
-            "after": "if int64(elapsedNow(c.options.Clock))-item.insertedMS >= item.ttlMS*int64(time.Millisecond) {"
+            "before": "if c.settings.clock.ElapsedMS()-item.insertedMS >= item.ttlMS {",
+            "after": "if int64(elapsedNow(c.settings.clock))-item.insertedMS >= item.ttlMS*int64(time.Millisecond) {"
           },
           {
             "path": "go/cache.go",
-            "before": "insertedMS: c.options.Clock.ElapsedMS()",
-            "after": "insertedMS: int64(elapsedNow(c.options.Clock))"
+            "before": "insertedMS: c.settings.clock.ElapsedMS()",
+            "after": "insertedMS: int64(elapsedNow(c.settings.clock))"
           }
         ],
         "requiredDetections": [
@@ -621,18 +621,18 @@
         "edits": [
           {
             "path": "go/cache.go",
-            "before": "type scopeState[T any] struct {\n\tenabled bool\n\towner   *scope[T]\n}",
-            "after": "type scopeState[T any] struct {\n\tenabled bool\n\towner   *scope[T]\n}\n\n// Fault injection: one process-wide flight registry shared by every instance,\n// guarded by one lock in singleFlight so the shared map stays race-free.\nvar sharedProcessFlights any\nvar sharedProcessFlightsMu sync.Mutex\n\nfunc sharedProcessFlightsFor[T any]() map[string]*flight[T] {\n\tif flights, ok := sharedProcessFlights.(map[string]*flight[T]); ok {\n\t\treturn flights\n\t}\n\tflights := make(map[string]*flight[T])\n\tsharedProcessFlights = flights\n\treturn flights\n}"
+            "before": "type scopeState struct {\n\tenabled bool\n\towner   *scope\n}",
+            "after": "type scopeState struct {\n\tenabled bool\n\towner   *scope\n}\n\n// Fault injection: one process-wide flight registry shared by every instance,\n// guarded by one lock in singleFlight so the shared map stays race-free.\nvar sharedProcessFlights = make(map[string]*flight)\nvar sharedProcessFlightsMu sync.Mutex"
           },
           {
             "path": "go/cache.go",
-            "before": "c := &Cache[T]{options: options, flights: make(map[string]*flight[T]), shadows:",
-            "after": "c := &Cache[T]{options: options, flights: sharedProcessFlightsFor[T](), shadows:"
+            "before": "c := &Cache{settings: s, flights: make(map[string]*flight), shadows:",
+            "after": "c := &Cache{settings: s, flights: sharedProcessFlights, shadows:"
           },
           {
             "path": "go/engine.go",
-            "before": "\tstarted := elapsedNow(c.options.Clock)\n\tc.mu.Lock()\n\tif owner != nil && !owner.live {\n\t\tc.mu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tc.mu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn f.value, f.err\n\t}\n\tf := &flight[T]{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tc.mu.Unlock()\n\tf.value, f.err = callSafely(run)\n\tc.mu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tc.mu.Unlock()\n\treturn f.value, f.err\n}",
-            "after": "\tstarted := elapsedNow(c.options.Clock)\n\t// Fault injection: process flights live in one registry shared by every\n\t// instance, guarded by one lock so the shared map itself stays race-free.\n\tmu := &c.mu\n\tif owner == nil {\n\t\tmu = &sharedProcessFlightsMu\n\t}\n\tmu.Lock()\n\tif owner != nil && !owner.live {\n\t\tmu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tmu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn f.value, f.err\n\t}\n\tf := &flight[T]{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tmu.Unlock()\n\tf.value, f.err = callSafely(run)\n\tmu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tmu.Unlock()\n\treturn f.value, f.err\n}"
+            "before": "\tstarted := elapsedNow(c.settings.clock)\n\tc.mu.Lock()\n\tif owner != nil && !owner.live {\n\t\tc.mu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tc.mu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tc.mu.Unlock()\n\tvalue, err := callSafely(run)\n\tf.value, f.err = value, err\n\tc.mu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tc.mu.Unlock()\n\treturn value, err\n}",
+            "after": "\tstarted := elapsedNow(c.settings.clock)\n\t// Fault injection: process flights live in one registry shared by every\n\t// instance, guarded by one lock so the shared map itself stays race-free.\n\tmu := &c.mu\n\tif owner == nil {\n\t\tmu = &sharedProcessFlightsMu\n\t}\n\tmu.Lock()\n\tif owner != nil && !owner.live {\n\t\tmu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tmu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tmu.Unlock()\n\tvalue, err := callSafely(run)\n\tf.value, f.err = value, err\n\tmu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tmu.Unlock()\n\treturn value, err\n}"
           }
         ],
         "requiredDetections": [
@@ -664,7 +664,7 @@
           {
             "path": "go/engine.go",
             "before": "\tif p.Local.Enabled {\n\t\tif p.Coalesce {",
-            "after": "\tif p.Local.Enabled {\n\t\tif early, _ := callSafely(func() (localResult[T], error) {\n\t\t\tvalue, found := c.localGet(x.key)\n\t\t\treturn localResult[T]{value, found}, nil\n\t\t}); early.found {\n\t\t\treturn run()\n\t\t}\n\t\tif p.Coalesce {"
+            "after": "\tif p.Local.Enabled {\n\t\tif early, _ := callSafely(func() (localResult[T], error) {\n\t\t\traw, found := c.localGet(x.key)\n\t\t\tif !found {\n\t\t\t\treturn localResult[T]{}, nil\n\t\t\t}\n\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil\n\t\t}); early.found {\n\t\t\treturn run()\n\t\t}\n\t\tif p.Coalesce {"
           }
         ],
         "requiredDetections": [
@@ -727,8 +727,8 @@
         "edits": [
           {
             "path": "go/cache.go",
-            "before": "\tc.local.Add(key, entry[T]{value: value, insertedMS: c.options.Clock.ElapsedMS(), ttlMS: ttl})",
-            "after": "\tif _, present := c.local.Peek(key); !present {\n\t\tc.local.Add(key, entry[T]{value: value, insertedMS: c.options.Clock.ElapsedMS(), ttlMS: ttl})\n\t}"
+            "before": "\tc.local.Add(key, entry{value: value, insertedMS: c.settings.clock.ElapsedMS(), ttlMS: ttl})",
+            "after": "\tif _, present := c.local.Peek(key); !present {\n\t\tc.local.Add(key, entry{value: value, insertedMS: c.settings.clock.ElapsedMS(), ttlMS: ttl})\n\t}"
           }
         ],
         "requiredDetections": [
@@ -759,8 +759,8 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "\t\tif c.options.Remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, e\n\t\t}",
-            "after": "\t\tif c.options.Remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.mu.Lock()\n\t\t\t\tif c.local != nil {\n\t\t\t\t\tc.local.Remove(x.key)\n\t\t\t\t}\n\t\t\t\tc.mu.Unlock()\n\t\t\t}\n\t\t\treturn v, e\n\t\t}"
+            "before": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, e\n\t\t}",
+            "after": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.mu.Lock()\n\t\t\t\tif c.local != nil {\n\t\t\t\t\tc.local.Remove(x.key)\n\t\t\t\t}\n\t\t\t\tc.mu.Unlock()\n\t\t\t}\n\t\t\treturn v, e\n\t\t}"
           },
           {
             "path": "go/engine.go",
@@ -865,8 +865,8 @@
         "edits": [
           {
             "path": "go/policy.go",
-            "before": "\"coalesce\": !p.DisableCoalescing}",
-            "after": "\"coalesce\": true}"
+            "before": "\t\tcoalesce = *p.Coalesce\n\t}",
+            "after": "\t\tcoalesce = true\n\t}"
           }
         ],
         "requiredDetections": [
@@ -903,7 +903,7 @@
           {
             "path": "go/policy.go",
             "before": "\t\tv, present := optionalLeaf(m, field)\n\t\tif !present {\n\t\t\tcontinue\n\t\t}",
-            "after": "\t\tv, present := optionalLeaf(m, field)\n\t\tif !present {\n\t\t\tif field == \"coalesce\" {\n\t\t\t\tp.DisableCoalescing = true\n\t\t\t}\n\t\t\tcontinue\n\t\t}"
+            "after": "\t\tv, present := optionalLeaf(m, field)\n\t\tif !present {\n\t\t\tif field == \"coalesce\" {\n\t\t\t\tp.Coalesce = Ptr(false)\n\t\t\t}\n\t\t\tcontinue\n\t\t}"
           }
         ],
         "requiredDetections": [
@@ -935,7 +935,7 @@
           {
             "path": "go/shadow.go",
             "before": "if fill {\n\t\t\tfilled, writeErr := x.putRemote(value, fence, \"remote_shadow\", func() bool { return !expired() })",
-            "after": "if fill {\n\t\t\tif provider := x.cache.options.PolicyProvider; provider != nil {\n\t\t\t\tif overlay, err := callSafely(func() (any, error) { return provider(x.ctx, x.op.Identity) }); err == nil {\n\t\t\t\t\tif current, err := ResolvePolicy(x.op.Policy, overlay, x.op.Identity, PolicyDefaults{RemoteReadTimeoutMS: x.cache.options.RemoteReadTimeoutMS}); err == nil {\n\t\t\t\t\t\tx.policy.Remote.TTLMS, x.policy.StaleOnErrorMaxAgeMS = current.Remote.TTLMS, current.StaleOnErrorMaxAgeMS\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tfilled, writeErr := x.putRemote(value, fence, \"remote_shadow\", func() bool { return !expired() })"
+            "after": "if fill {\n\t\t\tif provider := x.cache.settings.policyProvider; provider != nil {\n\t\t\t\tif overlay, err := callSafely(func() (RuntimePolicy, error) { return provider(x.ctx, x.op.Identity) }); err == nil {\n\t\t\t\t\tif current, err := ResolvePolicy(x.op.Policy, overlay, x.op.Identity, PolicyDefaults{RemoteReadTimeout: x.cache.settings.remoteReadTimeout}); err == nil {\n\t\t\t\t\t\tx.policy.Remote.TTL, x.policy.StaleOnErrorMaxAge = current.Remote.TTL, current.StaleOnErrorMaxAge\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tfilled, writeErr := x.putRemote(value, fence, \"remote_shadow\", func() bool { return !expired() })"
           }
         ],
         "requiredDetections": [
@@ -966,8 +966,8 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "if age >= x.policy.Remote.TTLMS {",
-            "after": "if age > x.policy.Remote.TTLMS {"
+            "before": "if age >= ms(x.policy.Remote.TTL) {",
+            "after": "if age > ms(x.policy.Remote.TTL) {"
           }
         ],
         "requiredDetections": [
@@ -998,8 +998,8 @@
         "edits": [
           {
             "path": "go/shadow.go",
-            "before": "} else if maxAge && age >= x.policy.Remote.TTLMS {",
-            "after": "} else if maxAge && age > x.policy.Remote.TTLMS {"
+            "before": "} else if maxAge && age >= ms(x.policy.Remote.TTL) {",
+            "after": "} else if maxAge && age > ms(x.policy.Remote.TTL) {"
           }
         ],
         "requiredDetections": [
@@ -1030,8 +1030,8 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "ttl = x.policy.StaleOnErrorMaxAgeMS",
-            "after": "ttl = x.policy.Remote.TTLMS"
+            "before": "ttl = x.policy.StaleOnErrorMaxAge",
+            "after": "ttl = x.policy.Remote.TTL"
           }
         ],
         "requiredDetections": [
@@ -1099,7 +1099,7 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "<-f.done\n\t\treturn f.value, f.err",
+            "before": "<-f.done\n\t\treturn followerResult[T](f)",
             "after": "<-f.done\n\t\tvar zero T\n\t\treturn zero, f.err"
           }
         ],
@@ -1420,7 +1420,7 @@
           {
             "path": "go/engine.go",
             "before": "return remoteValue[T]{kind: \"retained\", frame: &r.Frame}",
-            "after": "return remoteValue[T]{kind: \"retained\", frame: &Frame{CreatedAtMS: uint64(x.cache.options.Clock.WallMS()), Binary: r.Frame.Binary, Payload: r.Frame.Payload}}"
+            "after": "return remoteValue[T]{kind: \"retained\", frame: &Frame{CreatedAtMS: uint64(x.cache.settings.clock.WallMS()), Binary: r.Frame.Binary, Payload: r.Frame.Payload}}"
           }
         ],
         "requiredDetections": [
@@ -1451,8 +1451,8 @@
         "edits": [
           {
             "path": "go/policy.go",
-            "before": "resolved.StaleOnErrorMaxAgeMS = ms",
-            "after": "resolved.StaleOnErrorMaxAgeMS = ms + 1000"
+            "before": "resolved.StaleOnErrorMaxAge = time.Duration(ms) * time.Millisecond",
+            "after": "resolved.StaleOnErrorMaxAge = time.Duration(ms)*time.Millisecond + time.Second"
           }
         ],
         "requiredDetections": [
@@ -1547,8 +1547,8 @@
         "edits": [
           {
             "path": "go/shadow.go",
-            "before": "if c.shadows[x.key] != nil || len(c.shadows) >= c.options.ShadowMaxInFlight {",
-            "after": "if len(c.shadows) >= c.options.ShadowMaxInFlight {"
+            "before": "if c.shadows[x.key] != nil || len(c.shadows) >= c.settings.shadowCapacity {",
+            "after": "if len(c.shadows) >= c.settings.shadowCapacity {"
           }
         ],
         "requiredDetections": [
@@ -1579,8 +1579,8 @@
         "edits": [
           {
             "path": "go/shadow.go",
-            "before": "len(c.shadows) >= c.options.ShadowMaxInFlight",
-            "after": "len(c.shadows) > c.options.ShadowMaxInFlight"
+            "before": "len(c.shadows) >= c.settings.shadowCapacity",
+            "after": "len(c.shadows) > c.settings.shadowCapacity"
           }
         ],
         "requiredDetections": [

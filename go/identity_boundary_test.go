@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestReservedIdentityValidationBoundary(t *testing.T) {
@@ -22,17 +23,14 @@ func TestReservedIdentityValidationBoundary(t *testing.T) {
 						},
 						write: func(Frame) error { writes.Add(1); return nil },
 					}
-					cache := New(Options[int]{Remote: remote, Logger: &boundaryLogger{},
-						PolicyProvider: func(context.Context, Identity) (any, error) { policies.Add(1); return nil, nil },
-						Observe: func(event Event) {
-							if event.Kind == "error" && event.Data["error"] == "key_construction" {
-								keyErrors.Add(1)
-							}
-						},
-					})
-					operation := Operation{
+					cache := MustNew(WithRemote(remote), WithLogger(&boundaryLogger{}), WithPolicyProvider(func(context.Context, Identity) (RuntimePolicy, error) { policies.Add(1); return nil, nil }), WithObserver(func(event Event) {
+						if event.Kind == "error" && event.Data["error"] == "key_construction" {
+							keyErrors.Add(1)
+						}
+					}))
+					operation := Operation[int]{
 						Identity: Identity{UseCase: "watermark", KeyType: "id", ID: "1", Tracked: true},
-						Policy:   Policy{LocalTTLMS: 1000, RemoteTTLMS: 60000},
+						Policy:   Policy{LocalTTL: time.Duration(1000) * time.Millisecond, RemoteTTL: time.Duration(60000) * time.Millisecond},
 						IdentityProvider: func() (Identity, error) {
 							identities.Add(1)
 							return Identity{UseCase: "watermark", KeyType: "id", ID: "1", Tracked: true}, nil
@@ -46,7 +44,7 @@ func TestReservedIdentityValidationBoundary(t *testing.T) {
 						// Repetition also verifies that fail-open results never enter
 						// the enabled local cache under the invalid computed key.
 						for call := 1; call <= 2; call++ {
-							value, err := cache.GetOrLoad(ctx, operation, func(context.Context) (int, error) {
+							value, err := GetOrLoad(ctx, cache, operation, func(context.Context) (int, error) {
 								value := int(sources.Add(1))
 								if sourceFails {
 									return 0, sourceError
@@ -68,7 +66,7 @@ func TestReservedIdentityValidationBoundary(t *testing.T) {
 						return nil
 					}
 					if enabled {
-						if err := cache.Enable(context.Background(), invoke); err != nil {
+						if err := cache.WithEnabled(context.Background(), invoke); err != nil {
 							t.Fatal(err)
 						}
 					} else if err := invoke(context.Background()); err != nil {

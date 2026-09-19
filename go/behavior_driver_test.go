@@ -321,7 +321,7 @@ type behaviorDriver struct {
 	fixture                             obj
 	observed                            obj
 	clock                               *behaviorClock
-	instances                           map[string]*Cache[any]
+	instances                           map[string]*Cache
 	scopes                              map[string]*behaviorScope
 	effects                             map[string]map[int]*behaviorGate
 	loaders                             []*behaviorGate
@@ -362,7 +362,7 @@ func emptyBehaviorObservation(fixture obj) obj {
 	return o
 }
 func newBehaviorDriver(t *testing.T, fixture obj) *behaviorDriver {
-	d := &behaviorDriver{t: t, fixture: bm(bclone(fixture)), observed: emptyBehaviorObservation(fixture), clock: &behaviorClock{wall: time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC).UnixMilli()}, instances: map[string]*Cache[any]{}, scopes: map[string]*behaviorScope{}, effects: map[string]map[int]*behaviorGate{}, faults: map[string]bool{}, runtimePolicy: obj{}, values: map[string]behaviorStored{}, maintenanceError: errors.New("controlled mutation failure")}
+	d := &behaviorDriver{t: t, fixture: bm(bclone(fixture)), observed: emptyBehaviorObservation(fixture), clock: &behaviorClock{wall: time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC).UnixMilli()}, instances: map[string]*Cache{}, scopes: map[string]*behaviorScope{}, effects: map[string]map[int]*behaviorGate{}, faults: map[string]bool{}, runtimePolicy: obj{}, values: map[string]behaviorStored{}, maintenanceError: errors.New("controlled mutation failure")}
 	d.sourceByInvocation = map[int]int{}
 	for _, key := range []string{"read", "write", "dump", "load", "policy"} {
 		d.effects[key] = map[int]*behaviorGate{}
@@ -455,16 +455,16 @@ func (d *behaviorDriver) classifier(mode string) RecoveryPredicate {
 		return mode == "allow", nil
 	}
 }
-func (d *behaviorDriver) instance(id string) *Cache[any] {
+func (d *behaviorDriver) instance(id string) *Cache {
 	if c := d.instances[id]; c != nil {
 		return c
 	}
-	options := Options[any]{Clock: d.clock, Codec: behaviorCodec{d: d}, Logger: behaviorLogger{d: d}, DisableCompression: true, LocalCapacity: int(bn(bdefault(d.fixture, "localMaxSize", 10000))), LocalCapacitySet: true, ShadowMaxInFlight: int(bn(bdefault(d.fixture, "shadowMaxInFlight", 1))), Observe: d.observe, RecoveryOutcome: func(e Event) {
+	opts := []Option{WithClock(d.clock), WithLogger(behaviorLogger{d: d}), WithoutCompression(), WithLocalCapacity(int(bn(bdefault(d.fixture, "localMaxSize", 10000)))), WithShadowCapacity(int(bn(bdefault(d.fixture, "shadowMaxInFlight", 1)))), WithObserver(d.observe), WithRecoveryOutcomes(func(e Event) {
 		d.append("recovery", e.Outcome)
 		if bb(d.fixture["observerFailure"]) || d.fault("observer") {
 			panic("controlled observer failure")
 		}
-	}, PolicyProvider: func(ctx context.Context, id Identity) (any, error) {
+	}), WithPolicyProvider(func(ctx context.Context, id Identity) (RuntimePolicy, error) {
 		index := d.increment("policyCalls")
 		if d.fault("holdPolicies") {
 			if err := d.hold("policy", index); err != nil {
@@ -476,29 +476,31 @@ func (d *behaviorDriver) instance(id string) *Cache[any] {
 		}
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		return bclone(d.runtimePolicy), nil
-	}}
+		// The fixture's overlay is decoded JSON, including deliberately malformed
+		// containers, so it passes through untouched.
+		return RawPolicy(bclone(d.runtimePolicy)), nil
+	})}
 	if d.fixture["remote"] != false {
-		options.Remote = behaviorRemote{d: d}
+		opts = append(opts, WithRemote(behaviorRemote{d: d}))
 	}
 	if bb(d.fixture["localFaultInjection"]) {
-		options.Clock = behaviorLocalFaultClock{behaviorClock: d.clock, driver: d}
+		opts = append(opts, WithClock(behaviorLocalFaultClock{behaviorClock: d.clock, driver: d}))
 	}
 	if d.fixture["readTimeoutMs"] != "default" {
-		options.RemoteReadTimeoutMS = bn(bdefault(d.fixture, "readTimeoutMs", 50))
+		opts = append(opts, WithRemoteReadTimeout(time.Duration(bn(bdefault(d.fixture, "readTimeoutMs", 50)))*time.Millisecond))
 	}
 	if mode := bs(d.fixture["recovery"]); mode != "" && mode != "default" {
-		options.ShouldRecover = d.classifier(mode)
+		opts = append(opts, WithStaleRecovery(d.classifier(mode)))
 	}
 	if d.fixture["shadowHook"] != false {
-		options.ShadowOutcome = func(e Event) {
+		opts = append(opts, WithShadowOutcomes(func(e Event) {
 			d.append("shadow", e.Outcome)
 			if bb(d.fixture["observerFailure"]) || d.fault("observer") {
 				panic("controlled observer failure")
 			}
-		}
+		}))
 	}
-	c := New[any](options)
+	c := MustNew(opts...)
 	d.instances[id] = c
 	return c
 }
@@ -693,14 +695,13 @@ func (d *behaviorDriver) apply(input obj) error {
 		if err != nil {
 			return fmt.Errorf("invalid fixture policy: %w", err)
 		}
-		operation := Operation{Identity: d.identity(bs(input["key"]), bs(input["useCase"])), Policy: policy}
+		operation := Operation[any]{Identity: d.identity(bs(input["key"]), bs(input["useCase"])), Policy: policy, Codec: behaviorCodec{d: d}}
 		if d.fixture["fallbackTimeoutMs"] != "default" {
 			budget := bdefault(d.fixture, "fallbackTimeoutMs", 10)
 			if budget == nil {
-				operation.UnboundedFallback = true
+				operation.SourceTimeout = NoTimeout
 			} else {
-				n := bn(budget)
-				operation.FallbackTimeoutMS = &n
+				operation.SourceTimeout = time.Duration(bn(budget)) * time.Millisecond
 			}
 		}
 		if mode := bs(input["recovery"]); mode != "" {
@@ -718,14 +719,14 @@ func (d *behaviorDriver) apply(input obj) error {
 		}
 		call := func(callctx context.Context) error {
 			budget := int64(60000)
-			if operation.FallbackTimeoutMS != nil {
-				budget = *operation.FallbackTimeoutMS
+			if operation.SourceTimeout > 0 {
+				budget = ms(operation.SourceTimeout)
 			}
-			if operation.UnboundedFallback || !cache.IsEnabled(callctx) {
+			if operation.SourceTimeout == NoTimeout || !cache.IsEnabled(callctx) {
 				budget = -1
 			}
 			callctx = context.WithValue(callctx, behaviorInvocationKey{}, behaviorInvocation{owner: index})
-			value, err := cache.GetOrLoad(callctx, operation, func(sourcectx context.Context) (any, error) {
+			value, err := GetOrLoad(callctx, cache, operation, func(sourcectx context.Context) (any, error) {
 				gate := &behaviorGate{done: make(chan struct{})}
 				d.mu.Lock()
 				id := len(d.loaders)
@@ -756,7 +757,7 @@ func (d *behaviorDriver) apply(input obj) error {
 		}
 		execute := func(ec context.Context) error {
 			if bb(input["disabled"]) {
-				return cache.Disable(ec, call)
+				return cache.WithDisabled(ec, call)
 			}
 			return call(ec)
 		}
@@ -764,7 +765,7 @@ func (d *behaviorDriver) apply(input obj) error {
 			if _, saved := input["scope"]; saved || bb(input["outside"]) {
 				_ = execute(ctx)
 			} else {
-				_ = cache.Enable(ctx, execute)
+				_ = cache.WithEnabled(ctx, execute)
 			}
 		}()
 	case "resolve", "reject":
@@ -829,12 +830,12 @@ func (d *behaviorDriver) apply(input obj) error {
 		d.values[key] = behaviorStored{raw: raw, expires: d.clock.ElapsedMS() + bn(bdefault(input, "ttlMs", 60000))}
 		d.mu.Unlock()
 	case "invalidate":
-		err := d.instance("default").Invalidate(context.Background(), d.identity(bs(input["key"]), ""), bn(input["futureBufferMs"]))
+		err := d.instance("default").Invalidate(context.Background(), d.identity(bs(input["key"]), ""), time.Duration(bn(input["futureBufferMs"]))*time.Millisecond)
 		status := "ok"
 		if err != nil {
 			if err == d.maintenanceError {
 				status = "mutation_error"
-			} else if errors.Is(err, MissingRemoteError) {
+			} else if errors.Is(err, ErrNoRemote) {
 				status = "missing_remote"
 			} else {
 				return err
@@ -924,9 +925,9 @@ func (d *behaviorDriver) apply(input obj) error {
 		go func() {
 			defer close(scope.done)
 			if bb(input["disabled"]) {
-				_ = cache.Disable(ctx, body)
+				_ = cache.WithDisabled(ctx, body)
 			} else {
-				_ = cache.Enable(ctx, body)
+				_ = cache.WithEnabled(ctx, body)
 			}
 		}()
 		<-ready
@@ -1042,7 +1043,7 @@ func (r behaviorRemote) Read(ctx context.Context, key, watermark string) (ReadRe
 	d := r.d
 	index := d.increment("reads")
 	if budget, ok := ReadBudget(ctx); ok {
-		d.record("readContext", obj{"index": index, "timeoutMs": budget, "aborted": ctx.Err() != nil})
+		d.record("readContext", obj{"index": index, "timeoutMs": ms(budget), "aborted": ctx.Err() != nil})
 		context.AfterFunc(ctx, func() { d.record("readAbort", obj{"index": index}) })
 	}
 	if d.fault("holdReads") {
@@ -1069,7 +1070,7 @@ func (r behaviorRemote) Read(ctx context.Context, key, watermark string) (ReadRe
 	}
 	return DecodeFrame(raw, watermark != "", marker), nil
 }
-func (r behaviorRemote) Write(ctx context.Context, key string, frame Frame, ttl int64) error {
+func (r behaviorRemote) Write(ctx context.Context, key string, frame Frame, ttl time.Duration) error {
 	d := r.d
 	index := d.increment("writes")
 	d.mu.Lock()
@@ -1084,7 +1085,7 @@ func (r behaviorRemote) Write(ctx context.Context, key string, frame Frame, ttl 
 	d.causal = append(d.causal, behaviorCausalEvent{kind: "writeDispatch", id: source, owner: owner, at: d.clock.ElapsedMS()})
 	d.mu.Unlock()
 	d.record("writeDispatch", obj{"index": index})
-	d.append("writeTtls", ttl)
+	d.append("writeTtls", ms(ttl))
 	if d.fault("holdWrites") {
 		if err := d.hold("write", index); err != nil {
 			return err
@@ -1099,7 +1100,7 @@ func (r behaviorRemote) Write(ctx context.Context, key string, frame Frame, ttl 
 	}
 	d.mu.Lock()
 	if !d.discardWrites {
-		d.values[key] = behaviorStored{raw: raw, expires: d.clock.ElapsedMS() + ttl}
+		d.values[key] = behaviorStored{raw: raw, expires: d.clock.ElapsedMS() + ms(ttl)}
 	}
 	d.mu.Unlock()
 	return nil

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type binaryCodec struct{}
@@ -24,15 +25,15 @@ func (binaryCodec) Decode(payload Payload) ([]byte, error) {
 func TestBinaryCodecRemoteRoundTripPreservesBytesAndTag(t *testing.T) {
 	clock := &manualClock{wall: 1788868800000}
 	remote := &memoryRemote{clock: clock, values: make(map[string]remoteEntry), watermarks: make(map[string]string)}
-	cache := New(Options[[]byte]{Clock: clock, Remote: remote, Codec: binaryCodec{}, LocalCapacity: 10000})
-	op := coreOperation("binaryRoundTrip")
-	op.Policy.RemoteTTLMS = 60000
+	cache := MustNew(WithClock(clock), WithRemote(remote), WithLocalCapacity(10000))
+	op := Operation[[]byte]{Identity: Identity{Namespace: "urn", KeyType: "user_id", ID: "123", UseCase: "binaryRoundTrip"}, Codec: binaryCodec{}}
+	op.Policy.RemoteTTL = time.Minute
 	want := []byte{0, 0xff, 0x80, 0xe2, 0x82}
 	var sourceCalls atomic.Int64
 	load := func(context.Context) ([]byte, error) { sourceCalls.Add(1); return append([]byte{}, want...), nil }
 	for call := 0; call < 2; call++ {
-		if err := cache.Enable(context.Background(), func(ctx context.Context) error {
-			value, err := cache.GetOrLoad(ctx, op, load)
+		if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+			value, err := GetOrLoad(ctx, cache, op, load)
 			if err != nil {
 				return err
 			}
@@ -50,15 +51,15 @@ func TestBinaryCodecRemoteRoundTripPreservesBytesAndTag(t *testing.T) {
 }
 
 func TestClosedScopeCannotPublishIntoReplacement(t *testing.T) {
-	c := New(Options[int64]{LocalCapacity: 10000})
+	c := MustNew(WithLocalCapacity(10000))
 	op := coreOperation("lifetime")
 	op.Policy.RequestLocal = true
 	started, release, done := make(chan struct{}), make(chan struct{}), make(chan callResult, 1)
 	var detached context.Context
-	if err := c.Enable(context.Background(), func(ctx context.Context) error {
+	if err := c.WithEnabled(context.Background(), func(ctx context.Context) error {
 		detached = ctx
 		go func() {
-			value, err := c.GetOrLoad(ctx, op, func(context.Context) (int64, error) { close(started); <-release; return 1, nil })
+			value, err := GetOrLoad(ctx, c, op, func(context.Context) (int64, error) { close(started); <-release; return 1, nil })
 			done <- callResult{value, err}
 		}()
 		<-started
@@ -69,8 +70,8 @@ func TestClosedScopeCannotPublishIntoReplacement(t *testing.T) {
 	if c.IsEnabled(detached) {
 		t.Fatal("closed scope remains enabled")
 	}
-	if err := c.Enable(context.Background(), func(ctx context.Context) error {
-		first, err := c.GetOrLoad(ctx, op, func(context.Context) (int64, error) { return 2, nil })
+	if err := c.WithEnabled(context.Background(), func(ctx context.Context) error {
+		first, err := GetOrLoad(ctx, c, op, func(context.Context) (int64, error) { return 2, nil })
 		if err != nil || first != 2 {
 			t.Fatalf("replacement first: %v %v", first, err)
 		}
@@ -79,7 +80,7 @@ func TestClosedScopeCannotPublishIntoReplacement(t *testing.T) {
 		if original.value != 1 || original.err != nil {
 			t.Fatalf("old source: %+v", original)
 		}
-		second, err := c.GetOrLoad(ctx, op, func(context.Context) (int64, error) { t.Error("replacement memo lost"); return 3, nil })
+		second, err := GetOrLoad(ctx, c, op, func(context.Context) (int64, error) { t.Error("replacement memo lost"); return 3, nil })
 		if err != nil || second != 2 {
 			t.Fatalf("replacement memo: %v %v", second, err)
 		}
@@ -87,30 +88,30 @@ func TestClosedScopeCannotPublishIntoReplacement(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	value, err := c.GetOrLoad(detached, op, func(context.Context) (int64, error) { return 4, nil })
+	value, err := GetOrLoad(detached, c, op, func(context.Context) (int64, error) { return 4, nil })
 	if err != nil || value != 4 {
 		t.Fatalf("detached source: %v %v", value, err)
 	}
 }
 
 func TestNestedDisablePreservesMemoAndOutsideDoesNotShare(t *testing.T) {
-	c := New(Options[int64]{LocalCapacity: 10000})
+	c := MustNew(WithLocalCapacity(10000))
 	op := coreOperation("nested")
 	op.Policy.RequestLocal = true
 	var calls atomic.Int64
 	load := func(context.Context) (int64, error) { return calls.Add(1), nil }
-	if err := c.Enable(context.Background(), func(ctx context.Context) error {
-		value, err := c.GetOrLoad(ctx, op, load)
+	if err := c.WithEnabled(context.Background(), func(ctx context.Context) error {
+		value, err := GetOrLoad(ctx, c, op, load)
 		if err != nil || value != 1 {
 			t.Fatalf("first: %v %v", value, err)
 		}
-		return c.Disable(ctx, func(disabled context.Context) error {
-			value, err := c.GetOrLoad(disabled, op, load)
+		return c.WithDisabled(ctx, func(disabled context.Context) error {
+			value, err := GetOrLoad(disabled, c, op, load)
 			if err != nil || value != 2 {
 				t.Fatalf("disabled: %v %v", value, err)
 			}
-			return c.Enable(disabled, func(reenabled context.Context) error {
-				value, err := c.GetOrLoad(reenabled, op, load)
+			return c.WithEnabled(disabled, func(reenabled context.Context) error {
+				value, err := GetOrLoad(reenabled, c, op, load)
 				if err != nil || value != 1 {
 					t.Fatalf("reenabled: %v %v", value, err)
 				}
@@ -121,7 +122,7 @@ func TestNestedDisablePreservesMemoAndOutsideDoesNotShare(t *testing.T) {
 		t.Fatal(err)
 	}
 	for expected := int64(3); expected <= 4; expected++ {
-		value, err := c.GetOrLoad(context.Background(), op, load)
+		value, err := GetOrLoad(context.Background(), c, op, load)
 		if err != nil || value != expected {
 			t.Fatalf("outside: %v %v", value, err)
 		}
