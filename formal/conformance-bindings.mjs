@@ -37,7 +37,10 @@ export function nativeBinding(entry, language, workspace = root) {
     if (entry.category === 'protocol') return `${protocolGoRoots[entry.group] ?? 'TestProtocolRemainingVectors'}/${goName(entry.name)}`;
     return `TestGeneratedWitnessEvidence/${entry.profile}`;
   }
-  if (language !== 'typescript') throw new Error('Native report adapter is only supplied for TypeScript and Go');
+  // The Rust harness names every case by its shared inventory id, so the
+  // binding is the identity: the report is read against the inventory directly.
+  if (language === 'rust') return entry.id;
+  if (language !== 'typescript') throw new Error('Native report adapter is only supplied for TypeScript, Go and Rust');
   if (entry.category === 'sampled' || entry.category === 'regression') return [profileFile(entry.profile),
     `${profileSuite(entry.profile)} replays ${resolve(workspace, entry.path)}`];
   if (entry.category === 'scenario') return ['formal-behavior.test.ts', `portable behavioral scenarios ${entry.feature}: ${entry.name}`];

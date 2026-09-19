@@ -178,7 +178,7 @@ once, then:
 
 ```sh
 make check-go      # Native checks, committed cases/smoke and race detection.
-make formal        # Rust model/corpus checks, then prepared TS and Go replay.
+make formal        # Quint model/corpus checks, then prepared TS, Go and Rust replay.
 make model-check   # Separate finite symbolic checks.
 make mutations-go  # Go fault catalog over the generated corpus and witness evidence.
 make integration-go

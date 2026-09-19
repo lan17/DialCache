@@ -261,7 +261,7 @@ from the repository root:
 
 ```sh
 make check         # Fast native checks and committed smoke; not full acceptance.
-make formal        # Rust model/corpus checks, then prepared TS and Go replay.
+make formal        # Quint model/corpus checks, then prepared TS, Go and Rust replay.
 make model-check   # Separate finite symbolic checks; requires Java 21 and tar.
 make mutations     # Measures both fault catalogs over the generated corpus.
 make integration   # Real-server interoperability; requires Docker.
@@ -272,8 +272,8 @@ including symbolic checks and the exact Node 22.15.0 package floor.
 `make formal-check` runs the Quint evidence lane (every scheduled model, its
 public regressions and the model mutation challenges); the aggregate requires
 it, but the port lanes do not wait for it. `make formal-generate` produces the
-full corpus and the shared witness evidence; `make formal-ts` and
-`make formal-go` each prepare and complete one port's run against them. The
+full corpus and the shared witness evidence; `make formal-ts`, `make formal-go`
+and `make formal-rust` each prepare and complete one port's run against them. The
 parity and mutation lanes depend only on the generated corpus and shared witness
 evidence and run in parallel in hosted CI, whose aggregate requires all of them.
 These are the same entry points used by hosted CI.
@@ -286,7 +286,7 @@ complete inventory. A green smoke lane supplies no full-parity claim.
 Print the current required IDs with `node formal/conformance.mjs inventory`.
 The commands below describe
 the lower-level completion API for implementers of another port; the Make
-targets already orchestrate it for TS and Go.
+targets already orchestrate it for TypeScript, Go and Rust.
 
 The shared inventory contains stable language-neutral IDs:
 
@@ -311,35 +311,40 @@ Prepare each port immediately before its native tests. For TS, the low-level
 command is `node formal/conformance.mjs prepare typescript .formal-traces/ts-context.json`.
 Run its complete native suite, evaluate the shared witness evidence, and
 validate its completion before using
-`node formal/conformance.mjs prepare go .formal-traces/go-context.json`.
-Go preparation binds the witness evidence the shared evaluator just produced.
-Do not prepare both contexts consecutively before running either suite.
+`node formal/conformance.mjs prepare go .formal-traces/go-context.json` or
+`node formal/conformance.mjs prepare rust .formal-traces/rust-context.json`.
+Go and Rust preparation bind the witness evidence the shared evaluator just
+produced. Do not prepare two contexts consecutively before running either suite.
 
-For another language, supply a JSON array containing every repository-relative
+TypeScript, Go and Rust have built-in default source inventories. For another
+language, supply a JSON array containing every repository-relative
 implementation, driver, adapter, dependency-lock and test-configuration file
 that affects execution:
 
 ```sh
-node formal/conformance.mjs prepare rust .formal-traces/rust-context.json rust/conformance-sources.json
+node formal/conformance.mjs prepare zig .formal-traces/zig-context.json zig/conformance-sources.json
 ```
 
 These commands do not run the implementation. They record a unique run ID,
 preparation time, specification/source fingerprints, the exact corpus bytes,
 and the required case inventory. A port's source manifest is a reviewed input
 declaration; the checker cannot discover an omitted native dependency itself.
-Go's default inputs also include the shared source/fixture definitions and the
-evaluated witness JSON under `.formal-traces/go-parity-witnesses/`. Another port
-that consumes auxiliary evidence must include those files in its input manifest.
+The Go and Rust default inputs also include the shared source/fixture
+definitions and the evaluated witness JSON under
+`.formal-traces/go-parity-witnesses/`. Another port that consumes auxiliary
+evidence must include those files in its input manifest.
 
 Run native tests with complete trace directory selectors. Preserve the original
 assertion report and its timestamps. The supplied report adapters accept
-Vitest JSON and `go test -json`, respectively:
+Vitest JSON, `go test -json` and the Rust harness's JSON-lines report:
 
 ```sh
 node formal/conformance-adapters.mjs typescript .formal-traces/ts-replay.json .formal-traces/ts-context.json > .formal-traces/ts-completion.json
 node formal/conformance-adapters.mjs go .formal-traces/go-replay.jsonl .formal-traces/go-context.json > .formal-traces/go-completion.json
+node formal/conformance-adapters.mjs rust .formal-traces/rust-replay.jsonl .formal-traces/rust-context.json > .formal-traces/rust-completion.json
 node formal/conformance.mjs check .formal-traces/ts-completion.json .formal-traces/ts-context.json
 node formal/conformance.mjs check .formal-traces/go-completion.json .formal-traces/go-context.json
+node formal/conformance.mjs check .formal-traces/rust-completion.json .formal-traces/rust-context.json
 ```
 
 Another language emits the same JSON completion schema: `schemaVersion: 1`,
@@ -355,7 +360,7 @@ failed and incomplete results are rejected. So are changed source/corpus bytes
 and native runs predating preparation. Keep contexts, corpus, original reports
 and completion JSON together under `.formal-traces/`. Mutation targets validate
 the relevant full reports against current source and corpus fingerprints before
-starting: TS mutations need TS completion, and Go mutations need both ports.
+starting: TS mutations need TS completion, and Go mutations need TS and Go completion.
 Supplied adapters verify actual native
 assertion records before producing completion results. A completion document
 is test evidence, not cryptographic attestation that an untrusted driver behaved
@@ -452,13 +457,13 @@ replay does. The TypeScript suite runs the same evaluator over the histories
 it parsed for replay and writes no evidence. The Go replay also checks that
 every required label names at least one history of the bound corpus.
 
-## Current limitations for a third port
+## Current limitations for a further port
 
 The `causally-ready-v1` settlement contract is defined in prose, in the
 [trace and observation contract](#trace-and-observation-contract) and the
 `Settle` row above; no machine-checkable definition exists. Its executable
-controls are the TypeScript and Go no-settle tests, each written against its
-own driver, so a third port writes its own the same way.
+controls are the TypeScript, Go and Rust no-settle tests, each written against
+its own driver, so a further port writes its own the same way.
 
 Node 24 is required as test tooling: the coordinator and the witness evaluator
 are Node scripts that a port's test run spawns, and the completion checker and

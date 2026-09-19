@@ -2,7 +2,7 @@
 
 ## Project overview
 
-DialCache has TypeScript and Go implementations with explicit request-scoped enablement, local and Redis layers, runtime rollout controls, request coalescing, targeted invalidation, and adapter-based observability.
+DialCache has TypeScript, Go and Rust implementations with explicit request-scoped enablement, local and Redis layers, runtime rollout controls, request coalescing, targeted invalidation, and adapter-based observability.
 
 ## Structure
 
@@ -27,6 +27,7 @@ src/
   internal/             # Cache layers, runtime config, payload compression, and invalidation Lua script
 test/                   # Unit and Redis integration tests
 go/                     # Go module, public cache and adapters, shared-corpus replay
+rust/                   # Rust crate, public cache and adapters, shared-corpus replay (tests/conformance.rs)
 formal/                 # Quint behavioral source of truth, contracts and portable vectors
 ```
 
@@ -64,8 +65,8 @@ formal/                 # Quint behavioral source of truth, contracts and portab
   readable as behavior definitions, share helpers with identical meaning, retain
   independent property checks, and register executable evidence in the catalogs.
 - Define portable behavior in Quint first. Require consequential generated
-  witnesses and replay the same histories in TypeScript and Go; keep native
-  API, wire and integration tests for their explicit boundaries.
+  witnesses and replay the same histories in TypeScript, Go and Rust; keep
+  native API, wire and integration tests for their explicit boundaries.
 
 ## Validation
 
@@ -75,8 +76,10 @@ make check
 make integration
 ```
 
-Use `make formal` for complete Quint model checks, corpus generation and both
-ports' full replay, then `make mutations` for assertion-strength checks.
+`make check-rust` runs the Rust crate's fmt, clippy, unit, vector, scenario and
+smoke checks; `make formal-rust` completes its replay of the generated corpus.
+Use `make formal` for complete Quint model checks, corpus generation and every
+port's full replay, then `make mutations` for assertion-strength checks.
 `make ci` runs all validation in the required order. `make help` lists targets
 and prerequisites; `formal/README.md` documents the fast PR and full-validation
 workflows. Full behavior/model/replay changes require full validation before
