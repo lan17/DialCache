@@ -13,24 +13,45 @@ use crate::observe::Event;
 /// method names and the Go `metricKinds` table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MetricKind {
+    /// Counter of lookups that reached an enabled layer ([`Event::Request`]).
     Request,
+    /// Counter of classified misses ([`Event::Miss`]).
     Miss,
+    /// Counter of skipped layers and no-layer calls ([`Event::Disabled`]).
     Disabled,
+    /// Counter of bounded failure sites ([`Event::Error`]).
     Error,
+    /// Counter of explicit invalidation attempts ([`Event::Invalidation`]).
     Invalidation,
+    /// Counter of callers that joined an in-flight execution ([`Event::Coalesced`]).
     Coalesced,
+    /// Counter of terminal shadow job outcomes ([`Event::ShadowValidation`]).
     ShadowValidation,
+    /// Seconds: validated value age at a match or mismatch verdict ([`Event::ShadowValueAge`]).
     ShadowValueAge,
+    /// Seconds: how far a frame is dated ahead of the observing clock
+    /// ([`Event::FutureTimestampOffset`]).
     FutureTimestampOffset,
+    /// Counter of authorized stale-recovery checks ([`Event::StaleRecovery`]).
     StaleRecovery,
+    /// Seconds: age of a stale value when recovery served it
+    /// ([`Event::StaleRecoveryValueAge`]).
     StaleRecoveryValueAge,
+    /// Counter of envelope outcomes on writes and reads ([`Event::Compression`]).
     Compression,
+    /// Seconds: layer lookup latency ([`Event::Get`]).
     Get,
+    /// Seconds: time until the source settled or timed out ([`Event::Fallback`]).
     Fallback,
+    /// Seconds: codec encode or decode latency ([`Event::Serialization`]).
     Serialization,
+    /// Bytes: serializer output before compression and escaping ([`Event::Size`]).
     Size,
+    /// Bytes: prepared payload after compression and escaping ([`Event::StoredSize`]).
     StoredSize,
+    /// Ratio: stored over original bytes of a compressed write ([`Event::CompressionRatio`]).
     CompressionRatio,
+    /// Seconds: zstd compress or decompress latency ([`Event::CompressionDuration`]).
     CompressionDuration,
 }
 

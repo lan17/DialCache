@@ -14,8 +14,12 @@ use crate::observe::CompressionOutcome;
 use super::frame::ProtocolError;
 use super::text::replacement_utf8;
 
+/// Envelope byte `0x00`: the rest is raw serializer output whose own first
+/// byte would have collided with a marker.
 pub const MARKER_ESCAPED_RAW: u8 = 0x00;
+/// Envelope byte `0x01`: the rest is one zstd frame of UTF-8 text.
 pub const MARKER_ZSTD_UTF8: u8 = 0x01;
+/// Envelope byte `0x02`: the rest is one zstd frame of binary bytes.
 pub const MARKER_ZSTD_BINARY: u8 = 0x02;
 
 const MIN_ZSTD_LEVEL: i32 = 1;
@@ -56,16 +60,25 @@ impl CompressionConfig {
     }
 }
 
+/// What [`compress_payload`] chose to store, and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompressionWriteResult {
+    /// The bytes to store: marked zstd output, or the escaped raw form.
     pub payload: Payload,
+    /// One of the write outcomes: compressed, below threshold, not smaller
+    /// or over limit.
     pub outcome: CompressionOutcome,
+    /// Length of the serializer output after text replacement, before escaping.
     pub original_bytes: usize,
+    /// Length of `payload`.
     pub stored_bytes: usize,
 }
 
+/// What [`decompress_payload`] produced from a stored payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompressionReadResult {
+    /// The decoded payload, or the input unchanged when it passed through or
+    /// zstd rejected it.
     pub payload: Payload,
     /// `None` when the payload passed through untouched.
     pub outcome: Option<CompressionOutcome>,

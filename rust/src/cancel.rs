@@ -33,6 +33,7 @@ impl std::fmt::Debug for CancelToken {
 }
 
 impl CancelToken {
+    /// A token that has not been cancelled; clones share its state.
     pub fn new() -> Self {
         Self::default()
     }

@@ -35,6 +35,7 @@ pub enum ObservationMetricType {
 /// Construction options of a [`DatadogObserver`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DatadogOptions {
+    /// Whether observations go to DogStatsD histograms or distributions.
     pub observation_metric_type: ObservationMetricType,
     /// Metric-name namespace; unrelated to the cache namespace label.
     /// `None` selects [`DEFAULT_NAMESPACE`]; an explicit empty string is an error.
@@ -42,6 +43,7 @@ pub struct DatadogOptions {
 }
 
 impl DatadogOptions {
+    /// Options under the default metric-name namespace, [`DEFAULT_NAMESPACE`].
     pub fn new(observation_metric_type: ObservationMetricType) -> Self {
         DatadogOptions {
             observation_metric_type,
@@ -49,6 +51,7 @@ impl DatadogOptions {
         }
     }
 
+    /// Set the metric-name namespace; it must satisfy [`is_valid_namespace`].
     pub fn namespace(mut self, namespace: impl Into<String>) -> Self {
         self.namespace = Some(namespace.into());
         self
@@ -152,6 +155,9 @@ impl fmt::Debug for DatadogObserver {
 }
 
 impl DatadogObserver {
+    /// Validate the namespace and precompute every metric name. Fails when
+    /// the namespace is invalid or a name would exceed
+    /// [`METRIC_NAME_MAX_LENGTH`].
     pub fn new(
         client: impl DogStatsdClient,
         options: DatadogOptions,

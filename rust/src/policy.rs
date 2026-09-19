@@ -34,6 +34,7 @@ pub struct Policy {
     pub stale_on_error_max_age_sec: Option<u64>,
     /// Remote read budget in milliseconds, `1..=MAX_DEADLINE_MS`.
     pub remote_read_timeout_ms: Option<u64>,
+    /// Shadow validation cohort and warning policy. Omitted means no shadow work.
     pub shadow: Option<ShadowPolicy>,
 }
 
@@ -66,46 +67,58 @@ impl Policy {
         }
     }
 
+    /// Set whether values are memoized for the outermost enabled scope.
     pub fn request_local(mut self, enabled: bool) -> Self {
         self.request_local = Some(enabled);
         self
     }
 
+    /// Set whether concurrent same-key callers share one execution.
     pub fn coalesce(mut self, enabled: bool) -> Self {
         self.coalesce = Some(enabled);
         self
     }
 
+    /// Set the process-local TTL in whole seconds, enabling the layer with
+    /// an implied full ramp.
     pub fn local_ttl_sec(mut self, ttl_sec: u64) -> Self {
         self.local_ttl_sec = Some(ttl_sec);
         self
     }
 
+    /// Set the remote TTL in whole seconds, enabling the layer with an
+    /// implied full ramp.
     pub fn remote_ttl_sec(mut self, ttl_sec: u64) -> Self {
         self.remote_ttl_sec = Some(ttl_sec);
         self
     }
 
+    /// Set the process-local serving cohort percentage, `0.0..=100.0`.
     pub fn local_ramp(mut self, ramp: f64) -> Self {
         self.local_ramp = Some(ramp);
         self
     }
 
+    /// Set the remote serving cohort percentage, `0.0..=100.0`.
     pub fn remote_ramp(mut self, ramp: f64) -> Self {
         self.remote_ramp = Some(ramp);
         self
     }
 
+    /// Set the stale-recovery age ceiling in seconds. Zero disables
+    /// recovery; a positive value must exceed the remote TTL.
     pub fn stale_on_error_max_age_sec(mut self, seconds: u64) -> Self {
         self.stale_on_error_max_age_sec = Some(seconds);
         self
     }
 
+    /// Set the remote read budget in milliseconds, overriding the instance default.
     pub fn remote_read_timeout_ms(mut self, ms: u64) -> Self {
         self.remote_read_timeout_ms = Some(ms);
         self
     }
 
+    /// Set the shadow validation policy.
     pub fn shadow(mut self, shadow: ShadowPolicy) -> Self {
         self.shadow = Some(shadow);
         self
@@ -298,6 +311,8 @@ impl Policy {
 pub struct RuntimePolicy(pub Value);
 
 impl RuntimePolicy {
+    /// Wrap a JSON overlay as received from a configuration source. Nothing
+    /// is validated here; resolution judges every leaf per call.
     pub fn from_json(value: Value) -> Self {
         RuntimePolicy(value)
     }
@@ -318,6 +333,9 @@ impl From<Value> for RuntimePolicy {
 /// Instance defaults consulted during resolution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PolicyDefaults {
+    /// Instance remote read budget in milliseconds, used when neither the
+    /// operation nor the overlay sets one. Zero selects the library default
+    /// of 50 ms.
     pub remote_read_timeout_ms: u64,
 }
 
@@ -337,12 +355,15 @@ pub struct PolicyError(pub String);
 /// One serving layer after resolution.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ResolvedLayer {
+    /// Whether the layer serves this key: configured and admitted by its ramp.
     pub enabled: bool,
     /// Why the layer is disabled, when it is.
     pub reason: Option<DisabledReason>,
     /// A valid TTL and ramp remain available when the ramp excluded this key.
     pub configured: bool,
+    /// The effective TTL in milliseconds; zero when not configured.
     pub ttl_ms: u64,
+    /// The effective cohort percentage; zero when not configured.
     pub ramp: f64,
 }
 
@@ -363,8 +384,13 @@ impl ResolvedLayer {
 pub struct ResolvedShadow {
     /// Cohort selection only; admission still needs an eligible path, hook and capacity.
     pub enabled: bool,
+    /// The shadow cohort percentage; zero when omitted or invalid.
     pub ramp: f64,
+    /// Whether a confirmed mismatch logs a warning; `false` when the flag
+    /// was omitted or malformed.
     pub log_mismatches: bool,
+    /// The shadow ramp leaf was present but invalid: shadow work is off and a
+    /// `config_resolution` error is emitted on the remote layer.
     pub config_error: bool,
     /// Recorded only if a job is admitted.
     pub logging_config_error: bool,
@@ -373,14 +399,24 @@ pub struct ResolvedShadow {
 /// The captured policy of one enabled invocation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedPolicy {
+    /// Whether the call memoizes in the outermost enabled scope.
     pub request_local: bool,
+    /// Whether the call joins or leads a single flight for its key.
     pub coalesce: bool,
+    /// The process-local layer.
     pub local: ResolvedLayer,
+    /// The remote layer.
     pub remote: ResolvedLayer,
+    /// The effective remote read budget in milliseconds: overlay, then
+    /// operation, then instance default.
     pub remote_read_timeout_ms: u64,
     /// Zero when recovery is off.
     pub stale_on_error_max_age_ms: u64,
+    /// The recovery age leaf was present but invalid (not whole seconds, or
+    /// not above the remote TTL): recovery is off and a `config_resolution`
+    /// error is emitted on the remote layer.
     pub stale_on_error_config_error: bool,
+    /// The shadow validation policy.
     pub shadow: ResolvedShadow,
 }
 

@@ -94,7 +94,9 @@ impl From<ConfigError> for Error {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("DialCache fallback for use case {use_case:?} timed out after {timeout_ms} ms")]
 pub struct FallbackTimeout {
+    /// The use case whose source timed out.
     pub use_case: String,
+    /// The source budget that elapsed, in milliseconds.
     pub timeout_ms: u64,
 }
 
@@ -102,17 +104,22 @@ pub struct FallbackTimeout {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("DialCache remote read for use case {use_case:?} timed out after {timeout_ms} ms")]
 pub struct RemoteReadTimeout {
+    /// The use case whose remote read timed out.
     pub use_case: String,
+    /// The read budget that elapsed, in milliseconds.
     pub timeout_ms: u64,
 }
 
 /// Static configuration rejected at construction or registration.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigError {
+    /// A value is outside its domain; the message names it.
     #[error("{0}")]
     Invalid(String),
+    /// The use case name `watermark` is owned by invalidation.
     #[error("DialCache use case name is reserved: {0}")]
     ReservedUseCase(String),
+    /// A use case with this name is already registered on the instance.
     #[error("DialCache use case already registered: {0}")]
     UseCaseAlreadyRegistered(String),
 }

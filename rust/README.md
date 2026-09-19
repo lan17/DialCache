@@ -16,8 +16,10 @@ possible input or schedule.
 ## Use
 
 The crate requires Rust 1.85 or later; CI pins 1.98.1 through
-`rust-toolchain.toml`. Applications own their Redis connection and its
-timeout, retry and resource budgets. The default runtime is tokio.
+`rust/rust-toolchain.toml`, which rustup honors when cargo runs inside
+`rust/`. Applications own their Redis connection and its timeout, retry and
+resource budgets. The default runtime is the tokio runtime that is current
+while the cache is built.
 
 ```rust
 use std::sync::Arc;
@@ -99,11 +101,22 @@ retain the documented lifetime rules.
 
 `Clock` separates wall time from elapsed time; `Runtime` supplies detached
 task admission and timers. The defaults are `SystemClock` (aligned to the
-process-wide millisecond grid used by local expiry) and `TokioRuntime`. The
-`test-util` feature ships `testing::TestExecutor`, a deterministic
-single-threaded executor with a virtual clock that runs the cache's detached
-work to quiescence on demand and delivers timers only when a test advances
-time; the conformance harness is built on it.
+process-wide millisecond grid used by local expiry) and `TokioRuntime`, which
+captures the current tokio runtime handle when the cache is built: building
+outside a tokio context is a `ConfigError`, and `TokioRuntime::from_handle`
+selects a runtime explicitly. The runtime needs its time driver.
+`SystemClock::with_sources` runs the same grid alignment over caller-supplied
+time sources. The `test-util` feature ships `testing::TestExecutor`, a
+deterministic single-threaded executor with a virtual clock that runs the
+cache's detached work to quiescence on demand and delivers timers only when a
+test advances time; the conformance harness is built on it, and its
+local-clock replay builds `SystemClock` over the virtual clock.
+
+Detached work is registered RAII-style: if a runtime drops a leader task
+before it settles (the cache outlived a shut-down runtime), its flight is
+unregistered and its followers receive an error instead of waiting forever.
+Local storage hands removed entries back to the cache so a value's destructor
+never runs while a cache lock is held.
 
 ## Values, codecs and observability
 
@@ -123,6 +136,23 @@ Mismatch logging is opt-in, confirmed, bounded, and previews values through
 the operation's `preview` (JSON for serde values). Observer and logger failures
 never change a cache, source or maintenance result.
 
+`MetricKind` maps every event to the metric names, labels and values shared
+with the TypeScript and Go exporters. `PrometheusObserver` (feature
+`prometheus`) registers the nineteen collectors on a `prometheus::Registry`
+under an optional prefix; clone one observer for every instance that exports
+to the same registry, because the `prometheus` crate cannot hand back an
+existing collector and a second registration of the same names is a
+`PrometheusError::Conflict`. `DatadogObserver` sends the same metrics through
+a caller-supplied `DogStatsdClient`, with `DatadogOptions` choosing histogram
+or distribution and a namespace.
+
+`RedisAdapter` (feature `redis`) implements `Remote` over the `redis` crate
+for `ConnectionManager`, `MultiplexedConnection` and cluster connections,
+routing tracked reads to slot primaries and sharing the invalidation script
+and frame codec with the other ports. The `redis_integration` test replays
+every invalidation vector against real Redis, Valkey and Cluster servers when
+`DIALCACHE_RUST_INTEGRATION=1` is set and Docker is available.
+
 ## Validation and reproducing a trace
 
 Use the repository [Make targets](../Makefile) from its root. CI pins Rust
@@ -131,9 +161,10 @@ shared Node replay coordinator for command mappings and assertions; the crate
 itself has no Node dependency.
 
 ```sh
-make check-rust     # fmt, clippy, unit tests, protocol vectors, fixed scenarios and committed smoke histories
-make formal         # Quint model checks, full corpus, then TypeScript, Go and Rust replay
-make formal-rust    # Complete prepared Rust replay of the generated corpus
+make check-rust        # fmt, clippy, unit tests, protocol vectors, fixed scenarios and committed smoke histories
+make integration-rust  # Real Redis, Valkey and Cluster servers through Docker, plus every invalidation vector
+make formal            # Quint model checks, full corpus, then TypeScript, Go and Rust replay
+make formal-rust       # Complete prepared Rust replay of the generated corpus
 ```
 
 Without overrides, `cargo test --all-features --test conformance` replays the
@@ -162,6 +193,12 @@ every behavior-driver-backed smoke history.
   itself where the TypeScript default treats it as equal.
 - Local storage failures are exposed through the `LocalStore` trait rather
   than a clock fault.
-- The core replay, the Prometheus exporter and the Redis adapter follow their
-  Go counterparts; native Redis integration is not yet part of the completion
-  claim (see `formal/profiles.json`).
+- Prometheus collectors are shared by cloning the observer rather than by
+  registering the same names twice.
+- The behavior driver ports the effects profile's publication monitor but
+  not the reference drivers' cross-profile publication-causality monitor,
+  because `Remote::write` carries no caller context to attribute a write to
+  an invocation.
+- The core replay, the exporters and the Redis adapter follow their Go
+  counterparts; real-server integration is a separate lane, as in the other
+  ports, and not part of the completion claim (see `formal/profiles.json`).

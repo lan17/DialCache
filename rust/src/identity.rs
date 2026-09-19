@@ -13,20 +13,29 @@ use crate::limits::FRAME_KEY_SUFFIX;
 /// use [`normalize_args`] to build them from a host-language record.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Identity {
+    /// The instance namespace; empty means the cache fills in its own at execution.
     #[serde(default)]
     pub namespace: String,
+    /// The entity type; serialized as `keyType`.
     #[serde(rename = "keyType")]
     pub key_type: String,
+    /// The entity identifier.
     pub id: String,
+    /// The operation name; serialized as `useCase`.
     #[serde(rename = "useCase")]
     pub use_case: String,
+    /// Whether the identity is fenced by its entity's invalidation watermark;
+    /// serialized as `trackForInvalidation`. Defaults to false.
     #[serde(rename = "trackForInvalidation", default)]
     pub tracked: bool,
+    /// Secondary dimensions as `(name, spelled value)` pairs, already
+    /// normalized and in key order.
     #[serde(default)]
     pub args: Vec<(String, String)>,
 }
 
 impl Identity {
+    /// An untracked identity with an empty namespace and no arguments.
     pub fn new(
         key_type: impl Into<String>,
         id: impl Into<String>,
@@ -42,16 +51,19 @@ impl Identity {
         }
     }
 
+    /// Set whether the identity shares its entity's invalidation watermark.
     pub fn tracked(mut self, tracked: bool) -> Self {
         self.tracked = tracked;
         self
     }
 
+    /// Set the namespace explicitly instead of inheriting the instance's.
     pub fn namespace(mut self, namespace: impl Into<String>) -> Self {
         self.namespace = namespace.into();
         self
     }
 
+    /// Replace the ordered argument pairs; build them with [`normalize_args`].
     pub fn args(mut self, args: Vec<(String, String)>) -> Self {
         self.args = args;
         self
@@ -77,8 +89,11 @@ pub struct Keys {
 /// Why an identity cannot form a key.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum IdentityError {
+    /// A component contains `{` or `}` where it would form the Redis Cluster
+    /// hash tag: the namespace always, the key type and ID when tracked.
     #[error("DialCache identity component contains a reserved hash-tag delimiter")]
     ReservedDelimiter,
+    /// An argument value cannot be spelled; the text names the offending value.
     #[error("DialCache identity contains an unsupported argument value: {0}")]
     UnsupportedArgument(String),
 }
@@ -90,12 +105,15 @@ pub enum ArgValue {
     Absent,
     /// JSON null, spelled `null`.
     Null,
+    /// Spelled `true` or `false`.
     Bool(bool),
     /// Spelled with JavaScript `Number` formatting.
     Number(f64),
+    /// Spelled as a decimal integer.
     Int(i64),
     /// An arbitrary-precision integer as decimal text.
     BigInt(String),
+    /// Used verbatim, then percent-escaped like every other component.
     Str(String),
 }
 

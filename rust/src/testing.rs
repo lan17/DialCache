@@ -56,6 +56,8 @@ pub struct VirtualClock {
 }
 
 impl VirtualClock {
+    /// A clock at `wall_ms` epoch milliseconds with zero elapsed and
+    /// scheduler time.
     pub fn new(wall_ms: i64) -> Arc<Self> {
         Arc::new(VirtualClock {
             state: Mutex::new(ClockState {
@@ -73,6 +75,7 @@ impl VirtualClock {
         self.shift_ns(delta_ms as i128 * 1_000_000, wall_only);
     }
 
+    /// [`shift`](Self::shift) in nanoseconds; elapsed time saturates at zero.
     pub fn shift_ns(&self, delta_ns: i128, wall_only: bool) {
         let mut state = self.state.lock();
         state.wall_ns += delta_ns;
@@ -117,6 +120,7 @@ impl VirtualClock {
         self.state.lock().scheduler_ns
     }
 
+    /// Timers registered and neither fired nor dropped.
     pub fn pending_timers(&self) -> usize {
         let state = self.state.lock();
         state
@@ -198,6 +202,8 @@ pub struct StepRuntime {
 }
 
 impl StepRuntime {
+    /// A runtime whose timers register on `clock` and whose tasks wait for
+    /// a [`TestExecutor`] to drain them.
     pub fn new(clock: Arc<VirtualClock>) -> Arc<Self> {
         Arc::new(StepRuntime {
             queues: Mutex::new(Queues::default()),
@@ -241,7 +247,9 @@ impl Runtime for StepRuntime {
 pub struct TestExecutor {
     pool: LocalPool,
     local: LocalSpawner,
+    /// The virtual clock to share with every instance under test.
     pub clock: Arc<VirtualClock>,
+    /// The runtime handle to pass to every instance under test.
     pub runtime: Arc<StepRuntime>,
 }
 
@@ -254,6 +262,8 @@ impl std::fmt::Debug for TestExecutor {
 }
 
 impl TestExecutor {
+    /// A fresh pool with its clock at `wall_ms`; replayed histories use
+    /// [`WALL_EPOCH_MS`].
     pub fn new(wall_ms: i64) -> Self {
         let pool = LocalPool::new();
         let local = pool.spawner();

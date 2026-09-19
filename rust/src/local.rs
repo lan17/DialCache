@@ -12,9 +12,12 @@ pub type StoredValue = Arc<dyn Any + Send + Sync>;
 /// One process-local entry with its insertion-time TTL.
 #[derive(Clone)]
 pub struct LocalEntry {
+    /// The cached value, shared by reference with every reader.
     pub value: StoredValue,
     /// Whole-millisecond elapsed reading at insertion.
     pub inserted_ms: i64,
+    /// Lifetime in whole milliseconds; the entry is expired once
+    /// `now_ms - inserted_ms >= ttl_ms`.
     pub ttl_ms: i64,
 }
 
@@ -63,10 +66,12 @@ impl LruLocalStore {
         }
     }
 
+    /// Entries currently held, expired ones included until a read removes them.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Whether no entries are held.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

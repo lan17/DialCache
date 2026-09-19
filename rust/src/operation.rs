@@ -53,12 +53,20 @@ pub type Preview<T> = Arc<dyn Fn(&T) -> Option<String> + Send + Sync>;
 /// case is declared at the call site instead of being registered.
 #[derive(Clone)]
 pub struct Operation<T> {
+    /// The logical identity; an empty namespace inherits the instance's.
     pub identity: Identity,
+    /// Static caching policy, validated before execution.
     pub policy: Policy,
+    /// The source deadline.
     pub budget: SourceBudget,
+    /// Encodes and decodes values for the remote layer.
     pub codec: Arc<dyn Codec<T>>,
+    /// Application equality for shadow validation.
     pub comparator: Comparator<T>,
+    /// Per-operation stale-recovery classifier. `None` defers to the
+    /// instance's, which by default admits only the source deadline error.
     pub should_recover: Option<RecoveryPredicate>,
+    /// Renders bounded value previews for mismatch warnings; `None` logs none.
     pub preview: Option<Preview<T>>,
 }
 
@@ -107,16 +115,20 @@ impl<T: Send + Sync + 'static> Operation<T> {
         }
     }
 
+    /// Replace the static policy.
     pub fn policy(mut self, policy: Policy) -> Self {
         self.policy = policy;
         self
     }
 
+    /// Replace the source deadline.
     pub fn budget(mut self, budget: SourceBudget) -> Self {
         self.budget = budget;
         self
     }
 
+    /// Set the stale-recovery classifier for this operation, overriding the
+    /// instance's.
     pub fn should_recover(
         mut self,
         predicate: impl Fn(&Error) -> bool + Send + Sync + 'static,
@@ -125,6 +137,7 @@ impl<T: Send + Sync + 'static> Operation<T> {
         self
     }
 
+    /// Set the mismatch-warning preview; `None` from the closure omits the value.
     pub fn preview(
         mut self,
         preview: impl Fn(&T) -> Option<String> + Send + Sync + 'static,

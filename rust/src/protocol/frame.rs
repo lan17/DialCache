@@ -14,14 +14,22 @@ use super::text::replacement_utf8;
 /// Wire-level failures that are errors rather than misses.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ProtocolError {
+    /// A frame's encoding tag is neither text (`0x00`) nor binary (`0x01`).
     #[error("Invalid DialCache Redis payload encoding")]
     PayloadEncoding,
+    /// The server accepted a command but replied outside the protocol; the
+    /// text says how, for example a watermark that is not a digit string.
     #[error("Invalid DialCache Redis reply: {0}")]
     InvalidReply(String),
+    /// A stamp is not a nonnegative safe integer, or an invalidation would
+    /// push its watermark past one.
     #[error("DialCache timestamp must be a nonnegative safe integer")]
     InvalidTimestamp,
+    /// A TTL is not positive, or a TTL or future buffer exceeds 365 days.
     #[error("DialCache cache TTL must be positive and no greater than 365 days")]
     InvalidDuration,
+    /// zstd or its configuration failed on the write side; the text is
+    /// zstd's error name or the rejected option.
     #[error("DialCache compression failed: {0}")]
     Compression(String),
 }
