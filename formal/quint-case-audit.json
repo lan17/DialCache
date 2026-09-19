@@ -2188,12 +2188,6 @@
     },
     {
       "case": "C24.independent-source-budgets",
-      "reference": "formal/dialcache-independent-conformance.qnt:sourceSettlementsRespectOwnDeadline",
-      "kind": "invariant",
-      "scope": "Two uncoalesced same-key callers start sources five milliseconds apart. First timeout does not cancel the second, which can succeed at elapsed11 or time out at its own elapsed15 deadline. Both reads acquire fenced storage, so recovery cannot mask shortened deadlines. Clock advance delivers modeled due timers; no timer-undelivered acceptance claim."
-    },
-    {
-      "case": "C24.independent-source-budgets",
       "reference": "formal/dialcache-independent-conformance.qnt:staggeredSourceStartsKeepIndependentBudgetsTest",
       "kind": "regression",
       "scope": "Two uncoalesced same-key callers start sources five milliseconds apart. First timeout does not cancel the second, which can succeed at elapsed11 or time out at its own elapsed15 deadline. Both reads acquire fenced storage, so recovery cannot mask shortened deadlines. Clock advance delivers modeled due timers; no timer-undelivered acceptance claim."
@@ -3519,12 +3513,6 @@
       "scope": "The independent profile reconstructs source starts and caller ownership from preceding read/decode events or owned read deadlines during time advance, then compares actual modeled source origins and call-to-source links. Read-deadline correctness remains a profile obligation."
     },
     {
-      "case": "C24.independent-source-budgets",
-      "reference": "formal/dialcache-independent-connection.qnt:independentSourceMatchesTimerContract",
-      "kind": "invariant",
-      "scope": "Each modeled source timer equals its separately reconstructed source origin plus budget, and nonpending nontimeout source settlements satisfy that acquired owner/start/budget contract."
-    },
-    {
       "case": "C43.request-memo",
       "reference": "formal/dialcache-legacy-recovery-connection.qnt:flightRecoveryMatchesContract",
       "kind": "invariant",
@@ -4530,13 +4518,13 @@
     },
     {
       "case": "C24.independent-source-budgets",
-      "reference": "formal/dialcache-independent-conformance.qnt:startSource",
+      "reference": "formal/kernel/deadlines.qnt:deliver",
       "kind": "helper",
       "scope": "Two uncoalesced same-key callers start sources five milliseconds apart. First timeout does not cancel the second, which can succeed at elapsed11 or time out at its own elapsed15 deadline. Both reads acquire fenced storage, so recovery cannot mask shortened deadlines. Clock advance delivers modeled due timers; no timer-undelivered acceptance claim."
     },
     {
       "case": "C24.independent-source-budgets",
-      "reference": "formal/dialcache-independent-conformance.qnt:tick",
+      "reference": "formal/kernel/remote-io.qnt:startLoader",
       "kind": "helper",
       "scope": "Two uncoalesced same-key callers start sources five milliseconds apart. First timeout does not cancel the second, which can succeed at elapsed11 or time out at its own elapsed15 deadline. Both reads acquire fenced storage, so recovery cannot mask shortened deadlines. Clock advance delivers modeled due timers; no timer-undelivered acceptance claim."
     },

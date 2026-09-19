@@ -172,7 +172,8 @@ the third, over the request-only projection with diagnostics;
 `formal/dialcache-source-budgets-conformance.qnt` the fourth, over the budgeted
 local projection; `formal/dialcache-policy-conformance.qnt` the fifth, with held
 replies decoded by `policy_overlay` over the receipted layered release and the
-config error record). It keeps
+config error record; `formal/dialcache-independent-conformance.qnt` the sixth,
+over the budgeted held remote lifecycle with its recovery snapshots). It keeps
 its constants, its flat `State`, `var s` and `var input`, its `nondet` input
 choices, its guards, its invariants and its regressions. Each wrapper action
 assigns `s'` to one library transition and `input'` to the driver record:

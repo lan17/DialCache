@@ -333,20 +333,25 @@ describe("shadow fidelity against the model's private predictions", () => {
     expect(new Set(predictedFixtures.shadowWalk!.states.map(state => state.input.name))).toEqual(new Set(["init", ...Object.keys(independent.actions)]));
   });
 
+  // The layout is the composed profile's: a read's activity is its flight (a
+  // delivered deadline disowns it), a caller's refill authority is its flight's
+  // captured retention, a loader's start is its pending deadline minus the budget.
   it.each([
-    ["reads", 2, (s: Record<string, unknown>) => { (s.reads as Array<Record<string, unknown>>)[0]!.active = false; },
+    ["reads", 2, (s: Record<string, unknown>) => { (s.reads as Array<Record<string, unknown>>)[0]!.flight = integer(-1); },
       /step 2: shadow reads \[\{"caller":0,"pending":true,"active":true\}\] differs from the model's \[\{"caller":0,"pending":true,"active":false\}\]/],
     ["now", 8, (s: Record<string, unknown>) => { s.now = integer(4); }, /step 8: shadow now 5 differs from the model's 4/],
-    ["calls", 7, (s: Record<string, unknown>) => { (s.calls as Array<Record<string, unknown>>)[1]!.canWrite = true; },
+    ["calls", 7, (s: Record<string, unknown>) => { (s.sources as Array<Record<string, unknown>>)[1]!.retentionMs = integer(5000); },
       /step 7: shadow calls .*"canWrite":false.* differs from the model's .*"canWrite":true/],
-    ["sources", 8, (s: Record<string, unknown>) => { (s.sources as Array<Record<string, unknown>>)[2]!.startedAt = integer(4); },
-      /step 8: shadow sources .*"startedAt":5.* differs from the model's .*"startedAt":4/],
+    ["sources", 8, (s: Record<string, unknown>) => {
+      const due = (s.deadlines as Array<Record<string, unknown>>).find(deadline => (deadline.index as Integer)["#bigint"] === "2")!;
+      due.at = integer(14);
+    }, /step 8: shadow sources .*"startedAt":5.* differs from the model's .*"startedAt":4/],
   ])("names the first field the model predicts differently: %s", (_field, step, mutate, message) => {
     expect(() => independentWitnesses([walk(states => mutate(states[step]!.s))])).toThrow(message);
   });
 
-  it("requires every shadowed field of a private layout", () => {
-    expect(() => independentWitnesses([walk(states => { for (const state of states) delete state.s.timers; })]))
-      .toThrow(/step 0: shadow timers \[\] differs from the model's undefined/);
+  it("requires every field of the private layout the shadow reads", () => {
+    expect(() => independentWitnesses([walk(states => { for (const state of states) delete state.s.deadlines; })]))
+      .toThrow(/step 0: private layout is missing deadlines/);
   });
 });

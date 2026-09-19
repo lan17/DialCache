@@ -110,8 +110,16 @@
       "id": "independent",
       "model": "formal/dialcache-independent-conformance.qnt",
       "module": "dialcache_independent_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 66
+      "libraryTransitions": [
+        "deadlines::advance",
+        "deadlines::begin",
+        "deadlines::settleLoad",
+        "deadlines::settleLoader",
+        "deadlines::settleRead",
+        "remote_frames::seedAged",
+        "serving::invalidate"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "recovery-read",

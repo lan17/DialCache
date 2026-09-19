@@ -454,7 +454,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'profile-recovery-wrong-snapshot',
   'recovery-read-wrong-admission-policy',
   'legacy-recovery-wrong-snapshot',
-  'independent-wrong-admission-policy',
   'independent-wrong-recovered-value',
   'effects-source-wrong-clock',
   'effects-wrong-acceptance-receipt',

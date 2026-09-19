@@ -130,7 +130,7 @@
     },
     "independent": {
       "sampledHistories": 512,
-      "corpusSha256": "9e8c9084c909e2d38307356f6e7adf1809ad739b25abe2cdc4dc927a4920ab53",
+      "corpusSha256": "57134d035a0f317364338513d107f10d26765ca05b33f3af6b58c2836c236b6e",
       "labels": {
         "independent-source-error-identities": 262,
         "independent-read-overlap": 465,

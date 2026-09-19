@@ -18,8 +18,10 @@ import { profiles } from "../features.mjs";
 // on a fresh decode, a settlement of an expired source that changes the
 // observation) is a contradiction and throws. The fidelity check compares the
 // shadow after every step with the model's private predictions in every
-// history that still carries them; a composition of this profile re-encodes
-// that check against its new private layout and leaves the labels alone.
+// history that still carries them: the composed profile's layout (its flights,
+// held reads and decodes, loader ordinals, snapshots, deadlines and drained
+// flags) is read back into the shadow's fields wherever the layout carries
+// them, so a shadow that drifts from the model is refused, not credited.
 //
 // The labels that read private fields before this rewrite are redefined
 // around public checkpoints with the same consequence:
@@ -58,7 +60,7 @@ const READ_BUDGETS = [...new Set(independent.actions.policy.choices.map(choice =
 
 const CALL_PENDING = 0, SOURCE_ERROR = 3, DEADLINE_ERROR = 4;
 const settled = value => value === 1 || value === 2;
-// The model's phase and source encodings, for the fidelity check.
+// The shadow's phase and source encodings (the former model's), for the fidelity check.
 const READ_PENDING = 1, SOURCE_RUNNING = 2, FRESH_DECODE = 3, RECOVERY_DECODE = 4, CALL_DONE = 5, NO_SOURCE = -1;
 
 // Independent-call witnesses over the shadowed schedule; the source-budget
@@ -255,24 +257,75 @@ function shadowHistory(steps, path) {
 }
 
 // A history projected to its public channels carries nothing to compare; any
-// other decoded state is the model's private layout and must match the shadow
-// on every field the shadow keeps (dialcache-independent-conformance.qnt's
-// own names; a decode's value and a call's candidate, stamps and fence are
-// not shadowed and not compared).
+// other decoded state is the model's private layout and must agree with the
+// shadow on every field the shadow keeps that the layout carries. The layout
+// is the composed profile's (dialcache-independent-conformance.qnt over the
+// kernel library): a caller's flight is owners[caller], a held read or decode
+// names its flight, loaders maps the drivers' ordinal to its flight, retained
+// holds the pending snapshots and deadlines the pending due instants. Held
+// records are pending-only, so the shadow's per-caller history is read back
+// where the layout still holds it: a read's activity and a loader's owner,
+// drain and outcome always; a decode's owner and kind while it is held; a
+// loader's start while its deadline is pending; a caller's maximum while its
+// read is held, its snapshot retained or its refill authorized; its recovery
+// flag while it is pending; its refill authority once a loader has started;
+// its error while it decodes a candidate. The instant a loader settled, a
+// decode's value and a candidate's stamps and fence are not compared.
 const publicChannels = ["o", "io"];
 const carriesPrivateState = predictions => predictions !== undefined
   && predictions.some(state => Object.keys(state).some(field => !publicChannels.includes(field)));
-const shadowedFields = { calls: ["source", "phase", "maxAge", "canRecover", "canWrite", "error"], reads: ["caller", "pending", "active"],
-  sources: ["caller", "pending", "active", "startedAt", "settledAt", "outcome"], loads: ["caller", "pending", "recovery"], timers: ["read", "index", "at"] };
-const pick = (record, fields) => Object.fromEntries(fields.map(field => [field, record?.[field]]));
-const modelView = state => ({ now: state.now, readBudget: state.readBudget, maxAge: state.maxAge,
-  ...Object.fromEntries(Object.entries(shadowedFields).map(([list, fields]) => [list, Array.isArray(state[list]) ? state[list].map(record => pick(record, fields)) : state[list]])) });
+const NO_OWNER = -1, READ_DEADLINE = 0, SOURCE_DEADLINE = 1;
+const layoutFields = ["o", "now", "readBudget", "ttls", "owners", "sources", "reads", "loads", "loaders", "retained", "deadlines", "drained"];
+// The shadow's fields derived from one private layout state. A field the
+// layout does not carry at this step is left out and not compared.
+function modelView(state, context) {
+  for (const field of layoutFields) if (!Object.hasOwn(state, field)) throw new Error(`${context}: private layout is missing ${field}`);
+  const { o, owners, sources, reads, loads, loaders, retained, deadlines, drained } = state;
+  const ownerOf = flight => flight < 0 ? NO_OWNER : owners.indexOf(flight);
+  const latestLoader = flight => loaders.reduce((latest, candidate, ordinal) => candidate === flight ? ordinal : latest, NO_SOURCE);
+  const calls = o.calls.map((result, caller) => {
+    const flight = owners[caller];
+    if (!(flight >= 0)) throw new Error(`${context}: caller ${caller} owns no flight`);
+    const source = latestLoader(flight), load = loads.find(held => held.flight === flight), snapshot = retained.find(held => held.flight === flight);
+    const read = reads.find(held => held.flight === flight), authority = sources[flight];
+    const phase = result !== CALL_PENDING ? CALL_DONE : load !== undefined ? (load.recovery ? RECOVERY_DECODE : FRESH_DECODE) : source >= 0 ? SOURCE_RUNNING : READ_PENDING;
+    return { source, phase,
+      ...(read !== undefined ? { maxAge: read.ttls.retentionMs } : snapshot !== undefined ? { maxAge: snapshot.maximum } : authority.retentionMs > 0 ? { maxAge: authority.retentionMs } : {}),
+      ...(result === CALL_PENDING ? { canRecover: snapshot !== undefined } : {}),
+      ...(source >= 0 ? { canWrite: authority.retentionMs > 0 } : {}),
+      ...(phase === RECOVERY_DECODE ? { error: snapshot.error } : {}) };
+  });
+  const readViews = Array.from({ length: o.reads }, (_, index) => {
+    const held = reads.find(read => read.read === index);
+    return { caller: held !== undefined && held.flight >= 0 ? ownerOf(held.flight) : index, pending: held !== undefined, active: held !== undefined && held.flight !== NO_OWNER };
+  });
+  const loadViews = Array.from({ length: o.loads }, (_, index) => {
+    const held = loads.find(load => load.load === index);
+    return held === undefined ? { pending: false } : { caller: ownerOf(held.flight), pending: true, recovery: held.recovery };
+  });
+  const sourceViews = loaders.map((flight, ordinal) => {
+    const due = deadlines.find(deadline => deadline.kind === SOURCE_DEADLINE && deadline.index === ordinal);
+    return { caller: ownerOf(flight), pending: !drained[ordinal], active: sources[flight].result === CALL_PENDING, outcome: sources[flight].result,
+      ...(due !== undefined ? { startedAt: due.at - SOURCE_BUDGET_MS } : {}) };
+  });
+  const timers = deadlines.map(deadline => ({ read: deadline.kind === READ_DEADLINE, index: deadline.index, at: deadline.at }));
+  return { now: state.now, readBudget: state.readBudget, maxAge: state.ttls.retentionMs, calls, reads: readViews, loads: loadViews, sources: sourceViews, timers };
+}
+// The shadow projected to the fields the layout carries at this step: each
+// list entry keeps the keys of the model's view of it; the timers are the
+// live ones (a delivered or settled timer is no pending deadline).
+function shadowView(shadow, model) {
+  const project = (records, views) => records.map((record, index) => Object.fromEntries(Object.keys(views[index] ?? {}).map(key => [key, record[key]])));
+  const live = timer => timer.read ? shadow.reads[timer.index].active : shadow.sources[timer.index].active;
+  return { now: shadow.now, readBudget: shadow.readBudget, maxAge: shadow.maxAge, calls: project(shadow.calls, model.calls),
+    reads: shadow.reads, loads: project(shadow.loads, model.loads), sources: project(shadow.sources, model.sources), timers: shadow.timers.filter(live) };
+}
 
 function checkFidelity(frames, predictions, path) {
   const shadows = [initialShadow(), ...frames.map(frame => frame.after)];
   for (const [index, shadow] of shadows.entries()) {
-    const model = modelView(predictions[index]);
-    for (const [field, value] of Object.entries(modelView(shadow))) {
+    const model = modelView(predictions[index], `${path} step ${index}`);
+    for (const [field, value] of Object.entries(shadowView(shadow, model))) {
       if (!isDeepStrictEqual(value, model[field])) throw new Error(`${path} step ${index}: shadow ${field} ${JSON.stringify(value)} differs from the model's ${JSON.stringify(model[field])}`);
     }
   }

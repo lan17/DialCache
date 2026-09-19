@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "f57bae3d0f5b3bf1a9dcc77c5a5f85a567ef31347ac602bcf9e5c1163d9617f5",
-    "executionSha256": "00d71ea8b01261dd01fb20e2bf51950f050050a21d53593d042c98db9344beb7",
+    "semanticCasesSha256": "f009de0239f532b698704c9a661096684abf5f6aadb10b390e7766ee63100351",
+    "executionSha256": "c7ff49b9e14ec93a86e6a9bfbf5c231b3a930734209beb950d17150cbaff77fc",
     "sourceAuditSha256": "f826e84b60f4dce743c006f1ebaf37add11749b89503433e4c8314404ab236ff",
-    "quintCaseAuditSha256": "82e2f0c2ca1858dda843d448c724535a5e7bf4d72067e48459244583ae053255",
+    "quintCaseAuditSha256": "63f69247d7bb23e08664c24eccd791b26dd203c2d63c91f230adb6d7e4ff44cb",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d"
@@ -29,12 +29,12 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
-    "scheduledInvariants": 219,
-    "scheduledRegressions": 419,
+    "scheduledInvariants": 217,
+    "scheduledRegressions": 421,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 252
+    "exportedRegressionHistories": 257
   },
   "profiles": [
     {
@@ -340,7 +340,12 @@
         "independentReadDeadlinesStartSeparateSourcesTest",
         "timedOutReadCannotAffectAnotherCallTest",
         "readFailureCannotBorrowAnotherCallsRefillTest",
-        "independentRecoveriesServeDistinctAcquiredSnapshotsTest"
+        "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+        "independentRecoveryKeepsDistinctSnapshotsTest",
+        "acceptedFreshDecodeSurvivesOtherInvalidationTest",
+        "recoveryPolicyIsCapturedPerCallerTest",
+        "freshDecodeFailureCannotRecoverTest",
+        "visibleStaleMissCarriesNoFenceAndRefillsTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -10228,11 +10233,9 @@
       "quintProperties": [
         "formal/dialcache-flight-deadlines.qnt:independentAcceptanceChecksCapturedDeadline",
         "formal/dialcache-independent-conformance.qnt:eachSourceKeepsItsFullBudget",
-        "formal/dialcache-independent-conformance.qnt:sourceSettlementsRespectOwnDeadline",
         "formal/dialcache-independent-conformance.qnt:staggeredSourceStartsKeepIndependentBudgetsTest",
         "formal/dialcache-independent-conformance.qnt:staggeredSourcesExpireAtTheirOwnDeadlineTest",
-        "formal/dialcache-independent-connection.qnt:independentSourceOriginsMatchContract",
-        "formal/dialcache-independent-connection.qnt:independentSourceMatchesTimerContract"
+        "formal/dialcache-independent-connection.qnt:independentSourceOriginsMatchContract"
       ],
       "requiredGenerated": [
         {
@@ -10252,8 +10255,8 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-independent-conformance.qnt:startSource",
-        "formal/dialcache-independent-conformance.qnt:tick"
+        "formal/kernel/deadlines.qnt:deliver",
+        "formal/kernel/remote-io.qnt:startLoader"
       ],
       "status": "executable-generated",
       "gaps": [],

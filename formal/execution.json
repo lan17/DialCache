@@ -772,8 +772,7 @@
         "retainedSnapshotsWereEligible",
         "abortsAreUnique",
         "writesKeepCapturedRetention",
-        "eachSourceKeepsItsFullBudget",
-        "sourceSettlementsRespectOwnDeadline"
+        "eachSourceKeepsItsFullBudget"
       ],
       "regressions": [
         "independentReadDeadlinesStartSeparateSourcesTest",
@@ -785,7 +784,9 @@
         "staggeredSourceStartsKeepIndependentBudgetsTest",
         "staggeredSourcesExpireAtTheirOwnDeadlineTest",
         "independentRecoveryAtCapturedAgeBoundaryTest",
-        "independentRecoveriesServeDistinctAcquiredSnapshotsTest"
+        "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+        "freshDecodeFailureCannotRecoverTest",
+        "visibleStaleMissCarriesNoFenceAndRefillsTest"
       ],
       "profile": "independent",
       "generate": {
@@ -801,7 +802,12 @@
         "independentReadDeadlinesStartSeparateSourcesTest",
         "timedOutReadCannotAffectAnotherCallTest",
         "readFailureCannotBorrowAnotherCallsRefillTest",
-        "independentRecoveriesServeDistinctAcquiredSnapshotsTest"
+        "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+        "independentRecoveryKeepsDistinctSnapshotsTest",
+        "acceptedFreshDecodeSurvivesOtherInvalidationTest",
+        "recoveryPolicyIsCapturedPerCallerTest",
+        "freshDecodeFailureCannotRecoverTest",
+        "visibleStaleMissCarriesNoFenceAndRefillsTest"
       ]
     },
     {
@@ -1320,7 +1326,6 @@
       "invariants": [
         "independentSnapshotsMatchAcquisition",
         "independentRecoveryMatchesContract",
-        "independentSourceMatchesTimerContract",
         "independentSourceOriginsMatchContract"
       ],
       "regressions": []
@@ -1424,7 +1429,7 @@
           "recovery": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "shadow": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "admission": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
-          "independent": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "independent": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so the mutated lookup is never executed and no local entry is ever written.",
           "recovery-read": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "local-failure": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
@@ -1554,29 +1559,56 @@
     {
       "id": "independent-wrong-admission-policy",
       "contract": "C45",
-      "source": "formal/dialcache-independent-conformance.qnt",
+      "source": "formal/kernel/remote-io.qnt",
       "model": "formal/dialcache-independent-connection.qnt",
       "invariant": "independentSnapshotsMatchAcquisition",
-      "before": "source: NO_SOURCE, phase: READ_PENDING, maxAge: x.maxAge,",
-      "after": "source: NO_SOURCE, phase: READ_PENDING, maxAge: SHORT_RETENTION_MS,",
+      "before": "ttls: effectiveTtls(judged.effective, ttls) }),",
+      "after": "ttls: { retentionMs: 2000, ...effectiveTtls(judged.effective, ttls) } }),",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "recoveryPolicyIsCapturedPerCallerTest",
+        "model": "formal/dialcache-independent-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, SOURCE_ERROR) and s.io.sourceErrors == List(0, 2) and s.o.recovery == List(\"served\", \"miss\")",
+        "family": "wrong-admission-policy",
+        "profiles": [
+          "formal/dialcache-independent-connection.qnt",
+          "independent"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "recovery-read": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+        }
+      },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M46",
-        "text": "M46 is the native twin of dialcache-independent-conformance.qnt begin capturing a fixed retention constant instead of the current maxAge: the ports have no constant to substitute for a generic policy, so admitting with the static default while ignoring the runtime overlay is the faithful analog. independent/independentRecoveryAtCapturedAgeBoundaryTest and recovery-read/physicalCapDoesNotClampLogicalRecoveryTest are the expected evidence."
+        "text": "M46 is the native twin of kernel/remote-io.qnt dispatchRead recording a fixed retention on the held read instead of the reply's effective TTLs (the maximum its snapshot is retained under): the ports have no constant to substitute for a generic policy, so admitting with the static default while ignoring the runtime overlay is the faithful analog. independent/independentRecoveryAtCapturedAgeBoundaryTest and recovery-read/physicalCapDoesNotClampLogicalRecoveryTest are the expected evidence."
       }
     },
     {
       "id": "independent-wrong-recovered-value",
       "contract": "C43",
-      "source": "formal/dialcache-independent-conformance.qnt",
+      "source": "formal/kernel/recovery.qnt",
       "model": "formal/dialcache-independent-connection.qnt",
       "invariant": "independentRecoveryMatchesContract",
-      "before": "call.error else load.value)",
-      "after": "call.error else VALUE_TWO)",
+      "before": "value: if (valid) snapshot.candidate else snapshot.error",
+      "after": "value: if (valid) VALUE_TWO else snapshot.error",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M41",
-        "text": "M41 is the native twin of dialcache-independent-conformance.qnt loadReply serving a constant other than the loaded value: both ports decode the retained candidate and then serve an undefined or zero value, the only wrong constant expressible for a generic value type. independent/independentRecoveriesServeDistinctAcquiredSnapshotsTest and recovery/coalescedRecoveryClassifiesAndDecodesOnceTest are the expected evidence."
+        "text": "M41 is the native twin of kernel/recovery.qnt recovered serving a constant other than the retained candidate: both ports decode the retained candidate and then serve an undefined or zero value, the only wrong constant expressible for a generic value type. independent/independentRecoveriesServeDistinctAcquiredSnapshotsTest and recovery/coalescedRecoveryClassifiesAndDecodesOnceTest are the expected evidence."
       }
     },
     {
@@ -1624,28 +1656,29 @@
     {
       "id": "independent-source-wrong-clock",
       "contract": "C23",
-      "source": "formal/dialcache-independent-conformance.qnt",
+      "source": "formal/kernel/deadlines.qnt",
       "model": "formal/dialcache-independent-connection.qnt",
       "invariant": "independentSourceOriginsMatchContract",
-      "before": "startedAt: x.now, settledAt: -1, outcome: CALL_PENDING }),\n    timers: x.timers.append({ read: false, index: x.sources.length(), at: x.now + SOURCE_BUDGET_MS }),",
-      "after": "startedAt: 0, settledAt: -1, outcome: CALL_PENDING }),\n    timers: x.timers.append({ read: false, index: x.sources.length(), at: SOURCE_BUDGET_MS }),",
+      "before": "at: state.now + budget }), ...state }",
+      "after": "at: budget }), ...state }",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M33",
-        "text": "Same native fault as source-deadline-epoch: M33 judges a source settlement against a budget anchored at the clock origin rather than the source start, which is dialcache-independent-conformance.qnt startSource recording startedAt as 0 and the timer at the bare budget instead of the now-relative values. independent/staggeredSourceStartsKeepIndependentBudgetsTest is the expected evidence in both ports."
+        "text": "Same native fault as source-deadline-epoch: M33 judges a source settlement against a budget anchored at the clock origin rather than the source start, which is kernel/deadlines.qnt due registering a deadline at the bare budget instead of the current instant plus the budget, so every read and loader deadline is measured from the origin. independent/staggeredSourceStartsKeepIndependentBudgetsTest is the expected evidence in both ports."
       }
     },
     {
       "id": "independent-source-wrong-owner",
       "contract": "C24",
-      "source": "formal/dialcache-independent-conformance.qnt",
+      "source": "formal/kernel/flights.qnt",
       "model": "formal/dialcache-independent-connection.qnt",
       "invariant": "independentSourceOriginsMatchContract",
-      "before": "sources: x.sources.append({ caller: caller, active: true, pending: true,",
-      "after": "sources: x.sources.append({ caller: 0, active: true, pending: true,",
+      "before": "owners: state.owners.replaceAt(caller, index),",
+      "after": "owners: state.owners.replaceAt(caller, 0),",
+      "measures": "Repeats the profile-source-wrong-owner fault against the independent connection: the same registry mutation, reached through remote_io's read dispatch instead of the local release, must also be caught by that monitor's origins clause.",
       "nativeMutants": {
         "kind": "model-only",
-        "text": "The fault rewrites dialcache-independent-conformance.qnt startSource to record caller 0 as the owner of every independent source, so expireSource and sourceReply complete caller 0; Source.caller is consumed only by the connection monitor independentSourceOriginsMatchContract. With coalesce false each port caller awaits the promise or goroutine of the source it started itself (TypeScript src/dialcache.ts finishRedisChain through callFallback and withFallbackTimeout; Go go/engine.go execution.source returning into GetOrLoad), so no registry exists that could route a settlement to another caller."
+        "text": "The fault rewrites kernel/flights.qnt registerSource to record every caller as the owner of flight 0, so the flight a caller's own read dispatched never completes it and flight 0 completes every caller; the connection monitor independentSourceOriginsMatchContract finds no owner for any other flight's loader. With coalesce false each port caller awaits the promise or goroutine of the source it started itself (TypeScript src/dialcache.ts finishRedisChain through callFallback and withFallbackTimeout; Go go/engine.go execution.source returning into GetOrLoad), so no registry exists that could route a settlement to another caller."
       }
     },
     {
@@ -1677,7 +1710,8 @@
         "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.o.loads == 0 and s.expires.nth(0) == DEFAULT_RETENTION_MS",
         "family": "inclusive-freshness-boundary",
         "profiles": [
-          "policy"
+          "policy",
+          "independent"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
@@ -1685,7 +1719,6 @@
           "recovery": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "shadow": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "admission": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
-          "independent": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "recovery-read": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "local-failure": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
@@ -2061,7 +2094,7 @@
           "policy": "Has no request scopes (persistentContexts 0 and no closeScope input), so the memo fold the fault mutates is never executed.",
           "shadow": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "admission": "Composes no kernel module, so request_memo.closeScope is never executed.",
-          "independent": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "independent": "Composes the layered traversal with persistentContexts 0 and no closeScope input, so request_memo.closeScope is never executed.",
           "recovery-read": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "local-failure": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "runtime-boundaries": "One persistent scope owns the only memo row, so a close that clears every row clears exactly its own.",
@@ -2145,27 +2178,27 @@
     {
       "id": "independent-fresh-frame-retained",
       "contract": "C40",
-      "source": "formal/dialcache-independent-conformance.qnt",
+      "source": "formal/kernel/recovery.qnt",
       "model": "formal/dialcache-independent-conformance.qnt",
       "invariant": "retainedSnapshotsWereEligible",
-      "before": "retainedAgeAllowed(x.created, x.wall, FRESH_AGE_MS, call.maxAge)",
-      "after": "recoveryAgeAllowed(x.created, x.wall, call.maxAge)",
+      "before": "val stale = visible and retainedAgeAllowed(created, Clock::wallOf(state), ttls.freshMs, ttls.retentionMs)",
+      "after": "val stale = visible",
       "nativeMutants": {
         "kind": "model-only",
-        "text": "The fault replaces retainedAgeAllowed with recoveryAgeAllowed in the stale predicate of dialcache-independent-conformance.qnt readReply, recording a candidate for a fresh read; that candidate is consulted only when the call can recover, which requires a failed and non-fresh read, so no observation changes and only retainedSnapshotsWereEligible sees it. In both ports retention and serving are mutually exclusive (TypeScript src/internal/redis-cache.ts getWithResolvedConfig returns hit or retained by comparing the age with the fresh age, and src/dialcache.ts finishRedisChain returns before the retained frame is computed; Go go/engine.go readServing returns kind hit and shared returns before recover), so no single edit retains a fresh frame while still serving it."
+        "text": "The fault drops the age window from kernel/recovery.qnt retain, so a visible frame the read declined is retained whatever its age. A fresh frame never reaches retain, so the candidate retained under the fault is one past the maximum, consulted only through validCandidate's maximum recheck at loader failure and at decode settlement: no observation changes and only retainedSnapshotsWereEligible sees it; the former literal mutant (retainedAgeAllowed to recoveryAgeAllowed) is equivalent here for the same reason. In both ports retention and serving are mutually exclusive (TypeScript src/internal/redis-cache.ts getWithResolvedConfig returns hit or retained by comparing the age with the fresh age; Go go/engine.go readServing returns kind hit before recover) and the maximum is rechecked before and after decode, so no single edit retains an out-of-window frame a later check does not reject."
       }
     },
     {
       "id": "independent-deadline-settles-at-start",
       "contract": "C24",
-      "source": "formal/dialcache-independent-conformance.qnt",
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "invariant": "sourceSettlementsRespectOwnDeadline",
-      "before": "sources: x.sources.replaceAt(index, { active: false, settledAt: x.now, outcome: DEADLINE_ERROR, ...source }),",
-      "after": "sources: x.sources.replaceAt(index, { active: false, settledAt: source.startedAt, outcome: DEADLINE_ERROR, ...source }),",
+      "source": "formal/kernel/deadlines.qnt",
+      "model": "formal/dialcache-independent-connection.qnt",
+      "invariant": "independentSourceOriginsMatchContract",
+      "before": "val moved = Clock::advance(current, earliestDue(current, target) - current.now)",
+      "after": "val moved = Clock::advance(current, target - current.now)",
       "nativeMutants": {
         "kind": "model-only",
-        "text": "The fault changes the settledAt that dialcache-independent-conformance.qnt expireSource stamps for a deadline error from the current time to the source's start; settledAt is read only by sourceSettlementsRespectOwnDeadline, acceptedSourcesMatchContract and the monitor independentSourceMatchesTimerContract (sourceReturnAllowed). Neither port records when a deadline error settled (TypeScript src/internal/deadline.ts withMonotonicDeadline rejects on the timer or on a late result; Go go/deadline.go awaitDeadline returns its timeout error), and the nearest observable, the fallback duration metric, is emitted for every outcome, so an edit there would be a different, broader fault."
+        "text": "The fault makes kernel/deadlines.qnt deliver move the clocks straight to the advance's target instead of visiting each due instant, so a deadline is delivered at the end of the advance rather than at its own instant: a loader a read expiry starts is stamped at the wrong instant and its deadline registered from there, which the monitor's origins clause (the read's own due instant plus the budget) rejects. The former text measured this rule through the settledAt it stamped at expiry, which the held shape does not carry. Neither port records when a deadline error settled (TypeScript src/internal/deadline.ts withMonotonicDeadline rejects on the timer or on a late result; Go go/deadline.go awaitDeadline returns its timeout error), and the nearest observable, the fallback duration metric, is emitted for every outcome, so an edit there would be a different, broader fault."
       }
     },
     {
@@ -2426,7 +2459,8 @@
         "failure": "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2",
         "family": "inclusive-deadline-boundary",
         "profiles": [
-          "source-budgets"
+          "source-budgets",
+          "independent"
         ],
         "exclusions": {
           "core": "does not compose the deadlines module: its sources have no budget",
@@ -2437,7 +2471,6 @@
           "scope": "does not compose the deadlines module: its sources have no budget",
           "admission": "does not compose the deadlines module: its sources have no budget",
           "layers": "does not compose the deadlines module: its sources have no budget",
-          "independent": "does not compose the deadlines module: its sources have no budget",
           "recovery-read": "does not compose the deadlines module: its sources have no budget",
           "local-failure": "does not compose the deadlines module: its sources have no budget",
           "runtime-boundaries": "does not compose the deadlines module: its sources have no budget",
@@ -2475,7 +2508,7 @@
           "recovery": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "shadow": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "admission": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
-          "independent": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "independent": "Composes decide with coalesce false, so no process owner is ever looked up, and with no request memo and no local layer no layer value can precede a join.",
           "recovery-read": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "local-failure": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
@@ -2513,7 +2546,7 @@
           "recovery": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
           "shadow": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
           "admission": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
-          "independent": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "independent": "Composes decide with coalesce false and registers its flights unshared, so the process registry never names an owner and the dropped conjunct changes no decision.",
           "recovery-read": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
           "local-failure": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
@@ -2554,7 +2587,7 @@
           "scope": "Composes the request-only projection without local storage: its sources settle through serving.settleRequest.",
           "admission": "Composes no kernel module, so serving.settleLocal is never executed.",
           "layers": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
-          "independent": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "independent": "Composes the layered shape: its loaders settle through remote_io and serving.publish, never the local projection's settleLocal.",
           "recovery-read": "Composes no kernel module, so serving.settleLocal is never executed.",
           "local-failure": "Composes no kernel module, so serving.settleLocal is never executed.",
           "runtime-boundaries": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
@@ -2593,7 +2626,7 @@
           "scope": "Composes the request-only projection without local storage: its sources settle through serving.settleRequest.",
           "admission": "Composes no kernel module, so serving.settleLocal is never executed.",
           "layers": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
-          "independent": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "independent": "Composes the layered shape: its loaders settle through remote_io and serving.publish, never the local projection's settleLocal.",
           "recovery-read": "Composes no kernel module, so serving.settleLocal is never executed.",
           "local-failure": "Composes no kernel module, so serving.settleLocal is never executed.",
           "runtime-boundaries": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
@@ -2621,7 +2654,6 @@
     "profile-recovery-wrong-snapshot",
     "recovery-read-wrong-admission-policy",
     "legacy-recovery-wrong-snapshot",
-    "independent-wrong-admission-policy",
     "independent-wrong-recovered-value",
     "effects-source-wrong-clock",
     "effects-wrong-acceptance-receipt",

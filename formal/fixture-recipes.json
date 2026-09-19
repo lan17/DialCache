@@ -209,17 +209,15 @@
       }
     },
     "independent-shadow": {
-      "calls": true,
-      "created": true,
-      "expires": true,
-      "frame": true,
+      "deadlines": true,
+      "drained": true,
       "io": {
         "aborted": true,
         "budgets": true,
         "sourceErrors": true
       },
+      "loaders": true,
       "loads": true,
-      "maxAge": true,
       "now": true,
       "o": {
         "calls": true,
@@ -238,12 +236,12 @@
         "writeTtls": true,
         "writes": true
       },
+      "owners": true,
       "readBudget": true,
       "reads": true,
+      "retained": true,
       "sources": true,
-      "timers": true,
-      "wall": true,
-      "watermark": true
+      "ttls": true
     },
     "recovery-read": {
       "acceptedFresh": true,
