@@ -1,14 +1,12 @@
 //! Wall and elapsed clocks.
 
-use std::time::Duration;
+use std::sync::OnceLock;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use futures::future::BoxFuture;
-
-/// Separates wall timestamps from monotonic elapsed time and timers.
+/// Separates wall timestamps from monotonic elapsed time.
 ///
 /// Wall time stamps frames and invalidation markers. Elapsed time governs
-/// deadlines and process-local expiry. Timers deliver deadline callbacks; a
-/// controlled clock may deliver them on its own schedule.
+/// deadlines and process-local expiry. Timers live on the [`Runtime`](crate::Runtime).
 pub trait Clock: Send + Sync + 'static {
     /// Epoch milliseconds from the application wall clock.
     fn wall_ms(&self) -> i64;
@@ -21,62 +19,42 @@ pub trait Clock: Send + Sync + 'static {
     fn elapsed_ms(&self) -> i64 {
         self.elapsed().as_millis().min(i64::MAX as u128) as i64
     }
-    /// A timer that completes once `duration` of this clock's time has passed.
-    fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()>;
 }
 
-#[cfg(feature = "tokio")]
-mod system {
-    use super::Clock;
-    use futures::future::BoxFuture;
-    use std::sync::OnceLock;
-    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+static PROCESS_ORIGIN: OnceLock<Instant> = OnceLock::new();
 
-    static PROCESS_ORIGIN: OnceLock<Instant> = OnceLock::new();
+/// The default clock: system wall time and a monotonic origin aligned to the
+/// process-wide millisecond grid, so default instances share one local expiry grid.
+#[derive(Debug, Clone)]
+pub struct SystemClock {
+    origin: Instant,
+}
 
-    /// The default clock: system wall time, a monotonic origin aligned to the
-    /// process-wide millisecond grid, and tokio timers.
-    #[derive(Debug, Clone)]
-    pub struct SystemClock {
-        origin: Instant,
-    }
-
-    impl SystemClock {
-        /// A clock whose whole-millisecond grid is shared by every default instance.
-        pub fn new() -> Self {
-            let process = *PROCESS_ORIGIN.get_or_init(Instant::now);
-            let now = Instant::now();
-            let phase = now.saturating_duration_since(process).as_nanos() % 1_000_000;
-            let origin = now
-                .checked_sub(Duration::from_nanos(phase as u64))
-                .unwrap_or(now);
-            SystemClock { origin }
-        }
-    }
-
-    impl Default for SystemClock {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
-
-    impl Clock for SystemClock {
-        fn wall_ms(&self) -> i64 {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_millis().min(i64::MAX as u128) as i64)
-                .unwrap_or(0)
-        }
-
-        fn elapsed(&self) -> Duration {
-            self.origin.elapsed()
-        }
-
-        fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
-            Box::pin(tokio::time::sleep(duration))
-        }
+impl SystemClock {
+    pub fn new() -> Self {
+        let process = *PROCESS_ORIGIN.get_or_init(Instant::now);
+        let now = Instant::now();
+        let phase = now.saturating_duration_since(process).as_nanos() % 1_000_000;
+        let origin = now.checked_sub(Duration::from_nanos(phase as u64)).unwrap_or(now);
+        SystemClock { origin }
     }
 }
 
-#[cfg(feature = "tokio")]
-pub use system::SystemClock;
+impl Default for SystemClock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Clock for SystemClock {
+    fn wall_ms(&self) -> i64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis().min(i64::MAX as u128) as i64)
+            .unwrap_or(0)
+    }
+
+    fn elapsed(&self) -> Duration {
+        self.origin.elapsed()
+    }
+}

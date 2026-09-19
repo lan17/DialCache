@@ -20,6 +20,12 @@ pub(crate) struct Owner {
     pub(crate) state: Mutex<OwnerState>,
 }
 
+impl fmt::Debug for Owner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Owner").field("live", &self.is_live()).finish()
+    }
+}
+
 impl Owner {
     pub(crate) fn new() -> Arc<Owner> {
         Arc::new(Owner {

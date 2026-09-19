@@ -230,9 +230,10 @@ pub trait Observer: Send + Sync + 'static {
     /// Whether this observer consumes shadow validation outcomes.
     ///
     /// Shadow validation is diagnostic work that exists only to be observed,
-    /// so the cache admits a shadow job only when an observer reports `true`.
+    /// so the cache admits a shadow job only when the observer opts in by
+    /// returning `true`. The bundled metric exporters opt in.
     fn observes_shadow_outcomes(&self) -> bool {
-        true
+        false
     }
 }
 

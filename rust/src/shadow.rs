@@ -73,7 +73,7 @@ impl Execution {
     ) -> ValueResult {
         let start = self.elapsed();
         let source: Settled<ValueResult> = start_pending(
-            self.core.spawner.as_ref(),
+            self.core.runtime.as_ref(),
             {
                 let x = self.clone();
                 async move { x.source(layer).await }
@@ -125,7 +125,7 @@ impl Execution {
             self.error_event(Layer::Remote, ErrorKind::ConfigResolution, false);
         }
         let x = self.clone();
-        self.core.spawner.defer(Box::pin(async move {
+        self.core.runtime.defer(Box::pin(async move {
             x.run_shadow(flight, frame, source, started).await
         }));
     }
@@ -186,7 +186,7 @@ impl Execution {
             .unwrap_or(DEFAULT_FALLBACK_TIMEOUT_MS);
         let reads: Arc<Mutex<Vec<Settled<RawRead>>>> = Arc::new(Mutex::new(Vec::new()));
         let validation: Settled<Verdict> = start_pending(
-            self.core.spawner.as_ref(),
+            self.core.runtime.as_ref(),
             {
                 let x = self.clone();
                 let flight = flight.clone();
@@ -210,9 +210,9 @@ impl Execution {
                     // write work already keeps this operation running until raw completion.
                     let pending = std::mem::take(&mut *reads.lock());
                     let core = x.core.clone();
-                    let spawner = core.spawner.clone();
+                    let runtime = core.runtime.clone();
                     let key = x.keys.logical.clone();
-                    spawner.spawn(Box::pin(async move {
+                    runtime.spawn(Box::pin(async move {
                         for read in pending {
                             let _ = read.wait().await;
                         }
@@ -232,6 +232,7 @@ impl Execution {
         );
         let verdict = await_deadline(
             clock.as_ref(),
+            self.core.runtime.as_ref(),
             &validation,
             started,
             Some(budget_ms),
@@ -345,7 +346,7 @@ impl Execution {
                 if result.is_ok() {
                     // Let the caller finish its own continuation before any shadow
                     // decode, comparison or dump work.
-                    yield_deferred(self.core.spawner.as_ref()).await;
+                    yield_deferred(self.core.runtime.as_ref()).await;
                 }
                 result
             }

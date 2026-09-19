@@ -122,7 +122,7 @@ pub(crate) async fn run(core: Arc<Core>, scope: Scope, op: Arc<ErasedOperation>)
     let overlay: Result<Option<crate::policy::RuntimePolicy>, BoxError> = match &core.provider {
         Some(provider) => {
             let pending = start_pending(
-                core.spawner.as_ref(),
+                core.runtime.as_ref(),
                 {
                     let provider = provider.clone();
                     let identity = identity.clone();
@@ -265,7 +265,7 @@ async fn source_with_budget(
     let start = clock.elapsed();
     let budget = op.budget.millis();
     let pending: Settled<ValueResult> = start_pending(
-        core.spawner.as_ref(),
+        core.runtime.as_ref(),
         {
             let op = op.clone();
             async move { call_load(&op, scope).await }
@@ -273,7 +273,7 @@ async fn source_with_budget(
         |message| Err(Error::Panic(message)),
     );
     let use_case = labels.use_case.to_string();
-    let result = await_deadline(clock.as_ref(), &pending, start, budget, || {
+    let result = await_deadline(clock.as_ref(), core.runtime.as_ref(), &pending, start, budget, || {
         if let Some(flag) = timed_out {
             flag.store(true, Ordering::SeqCst);
         }
@@ -629,9 +629,10 @@ impl Execution {
             },
         };
         let clock = self.core.clock.clone();
+        let runtime = self.core.runtime.clone();
         let start = clock.elapsed();
         let raw: Settled<RawRead> = start_pending(
-            self.core.spawner.as_ref(),
+            self.core.runtime.as_ref(),
             async move {
                 remote
                     .read(request, context)
@@ -644,7 +645,7 @@ impl Execution {
         let use_case = self.labels.use_case.to_string();
         let waited = raw.clone();
         let bounded = Box::pin(async move {
-            let result = await_deadline(clock.as_ref(), &waited, start, Some(timeout_ms), || {
+            let result = await_deadline(clock.as_ref(), runtime.as_ref(), &waited, start, Some(timeout_ms), || {
                 cancel.cancel();
                 Err(Arc::new(RemoteReadTimeout {
                     use_case,
@@ -910,7 +911,7 @@ impl Execution {
             ttl_ms: ttl,
         };
         let pending: Settled<Result<(), SharedError>> = start_pending(
-            self.core.spawner.as_ref(),
+            self.core.runtime.as_ref(),
             async move {
                 remote
                     .write(request)

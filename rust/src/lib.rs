@@ -26,33 +26,26 @@ pub mod policy;
 pub mod preview;
 pub mod protocol;
 pub mod remote;
+pub mod runtime;
 mod scope;
 mod shadow;
-pub mod spawn;
+#[cfg(feature = "test-util")]
+pub mod testing;
 mod use_case;
 
 pub use cancel::CancelToken;
-pub use clock::Clock;
-#[cfg(feature = "tokio")]
-pub use clock::SystemClock;
-pub use codec::{Codec, JsonCodec, Payload, SyncCodec};
-pub use engine::{
-    CoalescingState, DialCache, DialCacheBuilder, PolicyProvider, ProcessCoalescingState,
-};
+pub use clock::{Clock, SystemClock};
+pub use codec::{Codec, FromSync, JsonCodec, Payload, SyncCodec};
+pub use engine::{CoalescingState, DialCache, DialCacheBuilder, PolicyProvider, ProcessCoalescingState, ScopeGuard};
 pub use error::{BoxError, ConfigError, Error, FallbackTimeout, RemoteReadTimeout, SharedError};
 pub use identity::{normalize_args, ArgValue, Identity, IdentityError, Keys};
 pub use local::{LocalEntry, LocalStore, LruLocalStore, StoredValue};
 pub use observe::{Event, Labels, LogEvent, LogLevel, Logger, Observer, ShadowMismatchDetails};
 pub use operation::{Comparator, Operation, Preview, RecoveryPredicate, SourceBudget};
-pub use policy::{
-    Policy, PolicyDefaults, PolicyError, ResolvedPolicy, RuntimePolicy, ShadowPolicy,
-};
-pub use remote::{
-    Frame, InvalidateRequest, MissReason, ReadContext, ReadRequest, ReadResult, Remote,
-    WriteRequest,
-};
-pub use scope::Scope;
-pub use spawn::Spawner;
+pub use policy::{Policy, PolicyDefaults, PolicyError, ResolvedPolicy, RuntimePolicy, ShadowPolicy};
+pub use remote::{Frame, InvalidateRequest, MissReason, ReadContext, ReadRequest, ReadResult, Remote, WriteRequest};
+pub use runtime::Runtime;
 #[cfg(feature = "tokio")]
-pub use spawn::TokioSpawner;
+pub use runtime::TokioRuntime;
+pub use scope::Scope;
 pub use use_case::{KeySpec, UseCase, UseCaseBuilder};

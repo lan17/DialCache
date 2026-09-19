@@ -6,6 +6,7 @@ use futures::future::{select, Either};
 
 use crate::clock::Clock;
 use crate::flight::Settled;
+use crate::runtime::Runtime;
 
 /// Elapsed time since `start`, never negative.
 pub(crate) fn since(clock: &dyn Clock, start: Duration) -> Duration {
@@ -21,6 +22,7 @@ pub(crate) fn seconds_since(clock: &dyn Clock, start: Duration) -> f64 {
 /// caller stops waiting. `None` budget waits without bound.
 pub(crate) async fn await_deadline<T: Clone>(
     clock: &dyn Clock,
+    runtime: &dyn Runtime,
     pending: &Settled<T>,
     started: Duration,
     budget_ms: Option<u64>,
@@ -38,7 +40,7 @@ pub(crate) async fn await_deadline<T: Clone>(
             break;
         }
         let remaining = budget.saturating_sub(since(clock, started));
-        let timer = clock.sleep(remaining);
+        let timer = runtime.sleep(remaining);
         match select(pending.wait(), timer).await {
             Either::Left((value, _timer)) => {
                 if since(clock, started) < budget {

@@ -129,6 +129,7 @@ dependencies = [
 name = "dialcache"
 version = "0.1.0"
 dependencies = [
+ "dialcache",
  "futures",
  "hex",
  "log",

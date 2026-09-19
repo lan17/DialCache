@@ -27,7 +27,7 @@ use crate::protocol::CompressionConfig;
 use crate::remote::{InvalidateRequest, Remote};
 use crate::scope::{Owner, Scope};
 use crate::shadow::ShadowFlight;
-use crate::spawn::Spawner;
+use crate::runtime::Runtime;
 
 /// Resolves a sparse runtime policy overlay once per enabled call.
 pub type PolicyProvider = Arc<
@@ -56,7 +56,7 @@ pub(crate) struct Core {
     /// `None` disables new compressed writes; reads still decompress.
     pub(crate) compression: Option<CompressionConfig>,
     pub(crate) clock: Arc<dyn Clock>,
-    pub(crate) spawner: Arc<dyn Spawner>,
+    pub(crate) runtime: Arc<dyn Runtime>,
     pub(crate) state: Mutex<CoreState>,
 }
 
@@ -149,7 +149,7 @@ pub struct DialCacheBuilder {
     should_recover: Option<RecoveryPredicate>,
     compression: Option<Option<CompressionConfig>>,
     clock: Option<Arc<dyn Clock>>,
-    spawner: Option<Arc<dyn Spawner>>,
+    runtime: Option<Arc<dyn Runtime>>,
 }
 
 impl std::fmt::Debug for DialCacheBuilder {
@@ -175,7 +175,7 @@ impl DialCacheBuilder {
             should_recover: None,
             compression: None,
             clock: None,
-            spawner: None,
+            runtime: None,
         }
     }
 
@@ -187,18 +187,35 @@ impl DialCacheBuilder {
     }
 
     /// The remote layer adapter. Without one, only request and local layers serve.
-    pub fn remote(mut self, remote: Arc<dyn Remote>) -> Self {
+    pub fn remote(mut self, remote: impl Remote) -> Self {
+        self.remote = Some(Arc::new(remote));
+        self
+    }
+
+    /// The remote layer adapter, shared.
+    pub fn remote_arc(mut self, remote: Arc<dyn Remote>) -> Self {
         self.remote = Some(remote);
         self
     }
 
     /// Receives every public diagnostic; also the shadow outcome hook.
-    pub fn observer(mut self, observer: Arc<dyn Observer>) -> Self {
+    pub fn observer(mut self, observer: impl Observer) -> Self {
+        self.observer = Some(Arc::new(observer));
+        self
+    }
+
+    /// Receives every public diagnostic, shared.
+    pub fn observer_arc(mut self, observer: Arc<dyn Observer>) -> Self {
         self.observer = Some(observer);
         self
     }
 
-    pub fn logger(mut self, logger: Arc<dyn Logger>) -> Self {
+    pub fn logger(mut self, logger: impl Logger) -> Self {
+        self.logger = Some(Arc::new(logger));
+        self
+    }
+
+    pub fn logger_arc(mut self, logger: Arc<dyn Logger>) -> Self {
         self.logger = Some(logger);
         self
     }
@@ -262,13 +279,26 @@ impl DialCacheBuilder {
         self
     }
 
-    pub fn clock(mut self, clock: Arc<dyn Clock>) -> Self {
+    pub fn clock(mut self, clock: impl Clock) -> Self {
+        self.clock = Some(Arc::new(clock));
+        self
+    }
+
+    /// Share a clock between instances (for example a controlled test clock).
+    pub fn clock_arc(mut self, clock: Arc<dyn Clock>) -> Self {
         self.clock = Some(clock);
         self
     }
 
-    pub fn spawner(mut self, spawner: Arc<dyn Spawner>) -> Self {
-        self.spawner = Some(spawner);
+    /// Share a runtime between instances.
+    pub fn runtime_arc(mut self, runtime: Arc<dyn Runtime>) -> Self {
+        self.runtime = Some(runtime);
+        self
+    }
+
+    /// Replace the executor and timer source. Defaults to tokio.
+    pub fn runtime(mut self, runtime: impl Runtime) -> Self {
+        self.runtime = Some(Arc::new(runtime));
         self
     }
 
@@ -321,9 +351,9 @@ impl DialCacheBuilder {
             Some(clock) => clock,
             None => default_clock()?,
         };
-        let spawner = match self.spawner {
-            Some(spawner) => spawner,
-            None => default_spawner()?,
+        let runtime = match self.runtime {
+            Some(runtime) => runtime,
+            None => default_runtime()?,
         };
         let core = Core {
             id: NEXT_CACHE_ID.fetch_add(1, Ordering::Relaxed),
@@ -339,7 +369,7 @@ impl DialCacheBuilder {
             should_recover: self.should_recover,
             compression,
             clock,
-            spawner,
+            runtime,
             state: Mutex::new(CoreState {
                 local,
                 flights: HashMap::new(),
@@ -353,24 +383,38 @@ impl DialCacheBuilder {
     }
 }
 
-#[cfg(feature = "tokio")]
 fn default_clock() -> Result<Arc<dyn Clock>, ConfigError> {
     Ok(Arc::new(crate::clock::SystemClock::new()))
 }
 
-#[cfg(not(feature = "tokio"))]
-fn default_clock() -> Result<Arc<dyn Clock>, ConfigError> {
-    Err(ConfigError::invalid("DialCache needs a clock: enable the tokio feature or supply one with DialCacheBuilder::clock"))
-}
-
 #[cfg(feature = "tokio")]
-fn default_spawner() -> Result<Arc<dyn Spawner>, ConfigError> {
-    Ok(Arc::new(crate::spawn::TokioSpawner))
+fn default_runtime() -> Result<Arc<dyn Runtime>, ConfigError> {
+    Ok(Arc::new(crate::runtime::TokioRuntime))
 }
 
 #[cfg(not(feature = "tokio"))]
-fn default_spawner() -> Result<Arc<dyn Spawner>, ConfigError> {
-    Err(ConfigError::invalid("DialCache needs a spawner: enable the tokio feature or supply one with DialCacheBuilder::spawner"))
+fn default_runtime() -> Result<Arc<dyn Runtime>, ConfigError> {
+    Err(ConfigError::invalid("DialCache needs a runtime: enable the tokio feature or supply one with DialCacheBuilder::runtime"))
+}
+
+/// Holds the outermost enabled scope open until dropped.
+#[derive(Debug)]
+pub struct ScopeGuard {
+    scope: Scope,
+    owner: Arc<Owner>,
+}
+
+impl ScopeGuard {
+    /// The enabled scope of this request.
+    pub fn scope(&self) -> &Scope {
+        &self.scope
+    }
+}
+
+impl Drop for ScopeGuard {
+    fn drop(&mut self) {
+        self.owner.close();
+    }
 }
 
 /// A cache instance: request, process-local and remote layers behind explicit enablement.
@@ -397,6 +441,19 @@ impl DialCache {
     /// The instance namespace.
     pub fn namespace(&self) -> &str {
         &self.core.namespace
+    }
+
+    /// Open the outermost enabled scope and hold it in a guard. The scope
+    /// closes when the guard drops; retained [`Scope`] clones then pass through.
+    ///
+    /// ```ignore
+    /// let request = cache.enable_guard();
+    /// let name = display_name.get(request.scope(), id).await?;
+    /// ```
+    pub fn enable_guard(&self) -> ScopeGuard {
+        let owner = Owner::new();
+        let scope = Scope { cache_id: self.core.id, owner: Some(owner.clone()), enabled: true };
+        ScopeGuard { scope, owner }
     }
 
     /// Open the outermost enabled scope for `f`. The scope closes when the
@@ -552,7 +609,7 @@ impl DialCache {
                 future_buffer_ms,
             };
             let pending: Settled<Result<(), Error>> = start_pending(
-                core.spawner.as_ref(),
+                core.runtime.as_ref(),
                 async move {
                     remote
                         .invalidate(request)
@@ -632,7 +689,7 @@ impl DialCache {
             Scope::outside()
         };
         let pending: Settled<ValueResult> = start_pending(
-            core.spawner.clone().as_ref(),
+            core.runtime.clone().as_ref(),
             crate::execution::run(core, scope, Arc::new(operation)),
             |message| Err(Error::Panic(message)),
         );

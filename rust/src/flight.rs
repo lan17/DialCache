@@ -13,7 +13,7 @@ use parking_lot::Mutex;
 
 use crate::error::Error;
 use crate::local::StoredValue;
-use crate::spawn::Spawner;
+use crate::runtime::Runtime;
 
 struct SettledState<T> {
     value: Option<T>,
@@ -107,7 +107,7 @@ pub(crate) fn panic_message(payload: Box<dyn std::any::Any + Send>) -> Arc<str> 
 /// result, or with `on_panic` when it panics. Callers that stop waiting keep
 /// no ownership of the work.
 pub(crate) fn start_pending<T, F>(
-    spawner: &dyn Spawner,
+    runtime: &dyn Runtime,
     work: F,
     on_panic: impl FnOnce(Arc<str>) -> T + Send + 'static,
 ) -> Settled<T>
@@ -117,7 +117,7 @@ where
 {
     let settled = Settled::new();
     let cell = settled.clone();
-    spawner.spawn(Box::pin(async move {
+    runtime.spawn(Box::pin(async move {
         let outcome = match AssertUnwindSafe(work).catch_unwind().await {
             Ok(value) => value,
             Err(payload) => on_panic(panic_message(payload)),
@@ -129,10 +129,10 @@ where
 
 /// Complete once work that is already runnable has progressed (the executor's
 /// deferred queue drained under a controlled scheduler).
-pub(crate) async fn yield_deferred(spawner: &dyn Spawner) {
+pub(crate) async fn yield_deferred(runtime: &dyn Runtime) {
     let done: Settled<()> = Settled::new();
     let cell = done.clone();
-    spawner.defer(Box::pin(async move {
+    runtime.defer(Box::pin(async move {
         cell.settle(());
     }));
     done.wait().await;
