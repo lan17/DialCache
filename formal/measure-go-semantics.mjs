@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
 import { classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { settlementViolationPattern } from './replay/settlement.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -92,7 +93,7 @@ export function evaluateGoTestEvents(lines, exitCode) {
       // travels with the error so the runner records a mutant's cohort against
       // it by name (mutation-reports.mjs classifyCohort) instead of crediting
       // or discounting it.
-      const violation = /[^\n]*Settlement violation: (?:\d+ runnable|monotonic clock|wall clock|\w+ gates held)[^\n]*/.exec(output);
+      const violation = new RegExp(`[^\\n]*${settlementViolationPattern.source}[^\\n]*`).exec(output);
       if (violation !== null) {
         const error = new Error(`settlement violation under mutation is not comparison evidence: ${name}`);
         error.settlementViolation = violation[0].trim();

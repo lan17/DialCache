@@ -90,6 +90,10 @@ it("requires executed assertions and distinguishes detection from infrastructure
     const timedOut = { testResults: [{ assertionResults: [{ status: "failed", fullName: "slow", failureMessages: ["Error: Test timed out in 5000ms."] }] }] };
     const slow = (() => { try { evaluateSemanticTestReport(timedOut, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1); } catch (error) { return error as Error & { settlementViolation?: string }; } return undefined; })();
     expect(slow?.settlementViolation).toBeUndefined();
+    // A failed expectation that quotes the phrase prints it, and its regex source, into the message: a detection, not a violation.
+    const quoted = { testResults: [{ assertionResults: [{ status: "failed", fullName: "control", failureMessages: [
+      "AssertionError: expected 'passed' to match /Settlement violation: \\d+ runnable task\\(s\\) at observation/\n    at control"] }] }] };
+    expect(evaluateSemanticTestReport(quoted, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1)).toMatchObject({ state: "detected", failed: 1 });
 
     for (const empty of [run(passingSource, "^no-matching-test$"),
       run('import { it } from "vitest"; it.skip("skipped assertion", () => { throw new Error("must remain skipped"); });')]) {

@@ -12,7 +12,7 @@ import { featureInput, profiles } from "../formal/replay/features.mjs";
 import { inputsFor } from "../formal/replay/effects.mjs";
 import { emptyObservation } from "../formal/replay/observation.mjs";
 import { assertSchema, schema, schemaViolation } from "../formal/replay/schema.mjs";
-import { SettlementLedger, wallEpochMs, type SettlementReceipt } from "../formal/replay/settlement.mjs";
+import { SettlementLedger, settlementViolationPattern, wallEpochMs, type SettlementReceipt } from "../formal/replay/settlement.mjs";
 import { parseJSON, replayLines } from "../formal/replay/validation.mjs";
 import { replaySources } from "../formal/replay/sources.mjs";
 import { BehaviorDriver, type Fixture, type Input } from "./formal/behavior-driver.js";
@@ -410,6 +410,8 @@ describe("settlement receipt contract", () => {
     const session = behavior(profile);
     const rendered = failureOf(() => session.observe(0, observed, { environment: wall, ...tamper(receipt) }));
     expect(rendered).toContain(`step 0 action init: ${message}`);
+    // The runners classify a violation by this pattern; every rule text must match it.
+    expect(rendered).toMatch(settlementViolationPattern);
     infrastructure(rendered);
     expect(failureOf(() => session.observe(0, observed))).toMatch(/Unknown replay session/);
   });

@@ -1005,20 +1005,20 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "888d45dd13b1e4f6233c6b25e33d0c68c1702570b3c3c382a165b102b973673d",
+      "sha256": "53b255b7edd8eb3ed944b16ce2dc8db8595d3ff8fad3882c580aca26ad1d6d98",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
         {"line":56,"title":"Writing conventions"},
         {"line":150,"title":"Codifying the next behavior"},
-        {"line":196,"title":"Give reviewers focused context"},
-        {"line":211,"title":"Exporting a deterministic regression"},
-        {"line":247,"title":"Maintaining case and witness evidence"},
-        {"line":295,"title":"Reproducible committed fixtures"},
-        {"line":305,"title":"Refactoring and execution"},
-        {"line":330,"title":"Challenging every model"},
-        {"line":403,"title":"Mapping every challenge to native mutants"},
-        {"line":489,"title":"Exported runs are exactly the public-only runs"}
+        {"line":198,"title":"Give reviewers focused context"},
+        {"line":213,"title":"Exporting a deterministic regression"},
+        {"line":249,"title":"Maintaining case and witness evidence"},
+        {"line":297,"title":"Reproducible committed fixtures"},
+        {"line":307,"title":"Refactoring and execution"},
+        {"line":332,"title":"Challenging every model"},
+        {"line":405,"title":"Mapping every challenge to native mutants"},
+        {"line":491,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",

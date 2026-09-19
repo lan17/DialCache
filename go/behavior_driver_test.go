@@ -343,6 +343,9 @@ type behaviorDriver struct {
 	// its receipt. Both are taken together at the end of every apply.
 	reported          obj
 	settlementReceipt obj
+	// settlementDiagnostic describes the verification drain's findings when
+	// the receipt reports runnable work; it never crosses the wire.
+	settlementDiagnostic string
 }
 
 func emptyBehaviorObservation(fixture obj) obj {
@@ -554,11 +557,54 @@ func (d *behaviorDriver) settle() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	// Compare two clones so the check reads wire values on both sides.
-	if !bequal(reported, bclone(d.observed)) {
+	after := bm(bclone(d.observed))
+	changed := !bequal(reported, after)
+	if changed {
 		runnable++
 	}
 	d.reported = reported
 	d.settlementReceipt = obj{"elapsedMs": elapsed, "runnable": runnable, "held": held}
+	// For the failure message only, never for the wire: what the drain did.
+	d.settlementDiagnostic = ""
+	if runnable > 0 {
+		member := "observation unchanged"
+		if changed {
+			member = "observation member " + firstDifference(reported, after) + " changed"
+		}
+		d.settlementDiagnostic = fmt.Sprintf("verification drain: %s, %d deferred function(s) pending", member, runnable-boolToInt(changed))
+	}
+}
+
+// firstDifference names the first observation member, in key order, whose
+// wire value differs between two snapshots.
+func firstDifference(before, after obj) string {
+	keys := make([]string, 0, len(after))
+	for key := range after {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if !bequal(before[key], after[key]) {
+			return key
+		}
+	}
+	return "(none)"
+}
+
+func boolToInt(value bool) int64 {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+// diagnostic is what the verification drain found when the receipt reports
+// runnable work, for the harness failure message; the receipt itself stays a
+// closed record.
+func (d *behaviorDriver) diagnostic() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.settlementDiagnostic
 }
 
 // heldLocked counts the controlled gates still unsettled: loader gates settle

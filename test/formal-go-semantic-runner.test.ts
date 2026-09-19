@@ -40,6 +40,11 @@ describe("Go local-clock mutation assertion attribution", () => {
     // The violating line travels with the error, so a mutant's cohort can be recorded against it by name.
     const thrown = (() => { try { evaluateGoTestEvents(violation, 1); } catch (error) { return error as Error & { settlementViolation?: string }; } return undefined; })();
     expect(thrown?.settlementViolation).toBe("feature_replay_test.go:84: control.itf.json step 3 action beginCall: Settlement violation: 1 runnable task(s) at observation");
+    // The bare phrase, or a printed expectation regex, is not a rule text: no violation is recorded and the strict rule applies.
+    const quoted = replayFailure("TestFeatureConformance", "feature_replay_test.go", "control did not fail through a Settlement violation: \\d+ runnable task\\(s\\) at observation");
+    const strict = (() => { try { evaluateGoTestEvents(quoted, 1); } catch (error) { return error as Error & { settlementViolation?: string }; } return undefined; })();
+    expect(strict?.message).toMatch(/replay failure lacks observation/);
+    expect(strict?.settlementViolation).toBeUndefined();
   });
   it.each(["unknown trace input", "call before instance construction", "default clock started with negative elapsed time"])(
     "does not credit infrastructure failure: %s", message => {

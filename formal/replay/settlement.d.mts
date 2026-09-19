@@ -1,5 +1,7 @@
 /** protocol.schema.json definition every behavior driver's receipt must satisfy. */
 export const receiptDefinition: "settlementReceipt";
+/** Matches the rule texts `SettlementLedger.assert` produces; the mutation runners classify violations by it. */
+export const settlementViolationPattern: RegExp;
 /** 2026-09-08T12:00:00.000Z: where every controlled driver starts its wall clock. */
 export const wallEpochMs: 1788868800000;
 

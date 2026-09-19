@@ -231,7 +231,16 @@ func (c *replayCoordinator) prepare(profile, path string, raw []byte) (obj, erro
 	return result, nil
 }
 func (c *replayCoordinator) replay(d *behaviorDriver, prepared obj, monitors ...func() error) error {
-	return c.executeWithReceipt(prepared, d.apply, d.observation, d.clock.WallMS, d.receipt, monitors...)
+	err := c.executeWithReceipt(prepared, d.apply, d.observation, d.clock.WallMS, d.receipt, monitors...)
+	// A settlement violation names the rule; the driver's own account of what
+	// its verification drain found makes the failure diagnosable from the
+	// message, as the TypeScript transport does.
+	if err != nil && strings.Contains(err.Error(), "Settlement violation") {
+		if note := d.diagnostic(); note != "" {
+			return fmt.Errorf("%w\n%s", err, note)
+		}
+	}
+	return err
 }
 
 // execute runs a session whose driver reports no settlement receipt: core and

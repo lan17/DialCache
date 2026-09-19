@@ -111,6 +111,10 @@ func TestHarnessControlNoSettle(t *testing.T) {
 				// A driver, transport or binding crash is a harness defect,
 				// not settlement evidence.
 				t.Fatalf("skipping settlement in %s failed without settlement evidence: %v", profile, err)
+			case !strings.Contains(err.Error(), "verification drain:"):
+				// The driver's account of what its verification drain found
+				// travels with the violation, so the failure is diagnosable.
+				t.Fatalf("skipping settlement in %s failed without the driver's drain diagnostic: %v", profile, err)
 			default:
 				detected = append(detected, profile)
 				step := "?"

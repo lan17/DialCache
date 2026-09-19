@@ -182,6 +182,8 @@ For each new rule or interaction:
    [replay/settlement.mjs](./replay/settlement.mjs), the `held` members of
    `$defs/settlementReceipt`, both drivers' held computation and the receipt
    table; a hold fault must precede every effect-starting command of its step.
+   A new rule text belongs in the same module's exported violation pattern,
+   which both mutation runners import.
 5. **Account for the evidence.** Link the case, property, scenario, and required
    witness in the existing catalogs. Preserve explicit gaps and update profile
    claims only after the corresponding language driver passes.

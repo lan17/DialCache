@@ -31,6 +31,14 @@ function violation(message) {
   return new Error(`Settlement violation: ${message}`);
 }
 
+// The four rule texts assert() produces, for the mutation runners: a failure
+// that matches is the driver failing its own contract and is recorded against
+// the mutant, never read as a detection. A test that quotes the phrase in an
+// expectation prints it into its failure message; matching the rule texts,
+// not the phrase, keeps such a failure a detection. Kept beside the texts so
+// a new or reworded rule changes both together.
+export const settlementViolationPattern = /Settlement violation: (?:\d+ runnable task\(s\) at observation|monotonic clock at|wall clock at|\w+ gates held)/;
+
 export class SettlementLedger {
   #fixture;
   #hold = { read: false, write: false, dump: false, load: false, policy: false };
