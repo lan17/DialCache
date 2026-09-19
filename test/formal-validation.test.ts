@@ -62,6 +62,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     put("formal/generated-fixtures.lock.json", '{"quintVersion":"0.32.0"}');
     fakeTool("corepack", 'console.log("10.33.0")');
     fakeTool("go", 'console.log("go version go1.27.1 test/test")');
+    fakeTool("cargo", 'console.log("cargo 1.98.1 (test 2026-08-05)")');
     fakeTool("quint", 'console.log("0.32.0")');
     fakeTool("java", 'console.log("openjdk 21.0.11")');
     fakeTool("tar", 'console.log("bsdtar 3.5.3")');
@@ -118,10 +119,10 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(plan.filter(step => step.args?.[0] === "formal/witnesses.mjs")).toHaveLength(1);
     expect(plan.some(step => step.args?.[0] === "formal/generate-artifacts.mjs")).toBe(false);
     expect(plan[0]!.args).toEqual(["formal/run-models.mjs", "check"]);
-    expect(plan.find(step => step.remove)!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json"]);
+    expect(plan.find(step => step.remove)!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json", ".formal-traces/rust-completion.json"]);
     // The aggregate is exactly these lanes in order, so a CI job running
     // one lane executes the same steps as the local sequential run.
-    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go"].flatMap(target => validationPlan(target, { directory })));
+    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go", "formal-rust"].flatMap(target => validationPlan(target, { directory })));
   });
 
   it("keeps the model check as its own lane that produces nothing the port lanes consume", () => {

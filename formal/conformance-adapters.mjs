@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkGoReplay, loadGoReplayInventory } from './check-go-replay.mjs';
+import { checkRustReplay } from './check-rust-replay.mjs';
 import { root } from './execution.mjs';
 import { readJSON, digest, fingerprint, validateContext, checkCompletion } from './conformance.mjs';
 
@@ -51,11 +52,22 @@ export function parseGoReport(text, inventory) {
   }) };
 }
 
+// The Rust harness names cases by inventory id, so the strict report gate is
+// also the binding check; only the execution window is read here.
+export function parseRustReport(text, inventory) {
+  checkRustReplay(text, inventory);
+  const events = text.trim().split('\n').map(line => JSON.parse(line));
+  const startedAt = events[0].startedAt, finishedAt = events.at(-1).finishedAt;
+  if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt)) throw new Error('Rust report is missing execution timestamps');
+  return { startedAt, finishedAt, results: inventory.map(entry => ({ id: entry.id, status: 'passed' })) };
+}
+
 export function adaptReport(language, text, context) {
   validateContext(context);
   if (context.language !== language) throw new Error('Wrong port context');
   const parsed = language === 'typescript' ? parseTypeScriptReport(text, context.inventory) : language === 'go'
-    ? parseGoReport(text, context.inventory) : (() => { throw new Error('Unsupported native report adapter'); })();
+    ? parseGoReport(text, context.inventory) : language === 'rust' ? parseRustReport(text, context.inventory)
+    : (() => { throw new Error('Unsupported native report adapter'); })();
   const report = { schemaVersion: 1, language, runId: context.runId, contextSha256: fingerprint(context),
     ...parsed, status: 'passed', nativeReportSha256: digest(text) };
   checkCompletion(report, context);
@@ -63,6 +75,6 @@ export function adaptReport(language, text, context) {
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [language, nativePath, contextPath, ...extra] = process.argv.slice(2);
-  if (extra.length || !language || !nativePath || !contextPath) throw new Error('Usage: node formal/conformance-adapters.mjs <typescript|go> <native-report> <context.json>');
+  if (extra.length || !language || !nativePath || !contextPath) throw new Error('Usage: node formal/conformance-adapters.mjs <typescript|go|rust> <native-report> <context.json>');
   console.log(JSON.stringify(adaptReport(language, readFileSync(resolve(root, nativePath), 'utf8'), readJSON(contextPath)), null, 2));
 }

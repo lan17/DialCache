@@ -67,17 +67,30 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  # The existing required `test` status now requires both native language jobs.
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ./.github/actions/setup-validation
+        with:
+          rust: "true"
+      - name: Check Rust formatting, clippy and native tests including the smoke conformance run
+        run: make check-rust
+
+  # The existing required `test` status now requires every native language job.
   test:
-    needs: [typescript, go]
+    needs: [typescript, go, rust]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require successful TypeScript and Go checks
+      - name: Require successful TypeScript, Go and Rust checks
         env:
           TYPESCRIPT_RESULT: ${{ needs.typescript.result }}
           GO_RESULT: ${{ needs.go.result }}
+          RUST_RESULT: ${{ needs.rust.result }}
         run: |
           test "$TYPESCRIPT_RESULT" = success
           test "$GO_RESULT" = success
+          test "$RUST_RESULT" = success
