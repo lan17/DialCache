@@ -235,8 +235,27 @@ The merge triggers the publish job. Before any release side effect, it verifies:
 It then reruns the package checks and asks Semantic Release to:
 
 1. create the matching Git tag;
-2. publish the public npm package with provenance; and
-3. publish the GitHub release.
+2. publish the public npm package with provenance;
+3. publish the GitHub release; and
+4. tag the same commit `go/vX.Y.Z` for the Go module.
+
+Go has no package registry. A module version is a Git tag that `go get`
+resolves through the public module proxy, and a module in a subdirectory
+takes that directory as its tag prefix, so
+`go get github.com/lan17/DialCache/go@vX.Y.Z` resolves the tag `go/vX.Y.Z`.
+The workflow creates that tag after Semantic Release succeeds, checks that
+`go/go.mod` declares the repository module path, and requests the version
+from `proxy.golang.org` so the proxy, the checksum database and pkg.go.dev
+record it before the first consumer asks. Both ports therefore share one
+version number and one release commit. A fetched version is immutable:
+never move or delete a tag, and retract a bad version with a `retract`
+directive in `go/go.mod`. If the step fails after the npm publication,
+create the tag by hand:
+
+```sh
+git tag go/vX.Y.Z vX.Y.Z
+git push origin go/vX.Y.Z
+```
 
 The repository must enable **Allow GitHub Actions to create and approve pull
 requests** under Actions workflow permissions.

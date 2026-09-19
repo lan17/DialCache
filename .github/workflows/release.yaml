@@ -295,3 +295,53 @@ jobs:
             echo "Expected release version $EXPECTED_RELEASE_VERSION; got $ACTUAL_RELEASE_VERSION" >&2
             exit 1
           fi
+      - name: Tag the Go module
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ steps.source.outputs.release_commit }}
+          RELEASE_VERSION: ${{ steps.source.outputs.release_version }}
+        run: |
+          # Go has no package registry: a module version is a Git tag, and a
+          # module in a subdirectory takes that directory as its tag prefix.
+          # Tag the commit the npm package was released from so both ports
+          # share one version number and one release commit.
+          module_path="$(awk '$1 == "module" { print $2; exit }' go/go.mod)"
+          expected_path="github.com/$GITHUB_REPOSITORY/go"
+          if [[ "$module_path" != "$expected_path" ]]; then
+            echo "Expected go/go.mod to declare module $expected_path; got $module_path" >&2
+            exit 1
+          fi
+
+          tag="go/v$RELEASE_VERSION"
+          existing="$(git rev-parse --verify --quiet "refs/tags/$tag^{commit}" || true)"
+          if [[ -n "$existing" && "$existing" != "$RELEASE_COMMIT" ]]; then
+            echo "Go module tag $tag already exists at $existing, not at $RELEASE_COMMIT" >&2
+            exit 1
+          fi
+          if [[ -z "$existing" ]]; then
+            git tag "$tag" "$RELEASE_COMMIT"
+            git -c credential.helper= \
+              -c "credential.helper=!f() { echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f" \
+              push "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$tag"
+          fi
+          echo "Tagged Go module $module_path as $tag" >> "$GITHUB_STEP_SUMMARY"
+
+          # Ask the public module proxy for the version now so the proxy, the
+          # checksum database and pkg.go.dev record it before the first
+          # consumer asks. Best effort: the tag is the release, and the proxy
+          # fetches on demand. Uppercase path letters are escaped as !lowercase.
+          escaped=""
+          for (( i = 0; i < ${#module_path}; i++ )); do
+            ch="${module_path:i:1}"
+            if [[ "$ch" == [[:upper:]] ]]; then
+              escaped+="!$(printf '%s' "$ch" | tr '[:upper:]' '[:lower:]')"
+            else
+              escaped+="$ch"
+            fi
+          done
+          if curl -sSf --retry 5 --retry-all-errors --retry-delay 15 \
+              "https://proxy.golang.org/$escaped/@v/v$RELEASE_VERSION.info" >/dev/null; then
+            echo "proxy.golang.org recorded $module_path@v$RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::proxy.golang.org has not recorded $module_path@v$RELEASE_VERSION yet; the first go get will."
+          fi

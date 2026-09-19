@@ -152,7 +152,7 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "149dbfcd060842f03ea660e4641ac96e0a693f8a55c77002a71fdab91b7c511a",
+      "sha256": "b50b76dbd6a070c9dacb3c584989dc754e28e6eec3849e4c95e4877dbf6357dc",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
@@ -1533,13 +1533,13 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "8527fa4575ed1739abf134def472decac898060bb69f3e9b9ced4dfbe6e1c26d",
+      "sha256": "b13d025adc4074fee28a7fa294df1126dbda04457068ffc1b181d139adcd3e60",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
         {"line":19,"title":"Use"},
-        {"line":72,"title":"Configuration and effects"},
-        {"line":124,"title":"Values, codecs and observability"},
-        {"line":166,"title":"Validation and reproducing a trace"}
+        {"line":76,"title":"Configuration and effects"},
+        {"line":128,"title":"Values, codecs and observability"},
+        {"line":170,"title":"Validation and reproducing a trace"}
       ],
       "review": {
         "kind": "contract-guide",
