@@ -2,7 +2,10 @@
 
 Specification revision **0.1.0 (experimental)**. The repository commit identifies
 the exact Quint definitions, profile definitions, and evidence used in a
-conformance report. **Quint is the source of truth for portable behavior.**
+conformance report. **Quint states the portable contract; TypeScript is the
+executable reference it formalizes.** A disagreement between them is settled by
+a regression that distinguishes the two behaviors and a recorded decision about
+the intended one, not by editing whichever side is easier to change.
 The models registered in [`execution.json`](./execution.json) define transitions
 and independently checked properties; this document explains their contracts,
 assumptions, and encoding boundaries. [`CONTRACTS.md`](./CONTRACTS.md)
@@ -32,10 +35,9 @@ caller ownership and permitted acceptance for the named scope:
 
 | Profile | Checked connection |
 | --- | --- |
-| recovery-read | [Acquired payload and recovery return](./dialcache-recovery-connection.qnt) |
-| recovery | [Retained flight snapshot and recovery](./dialcache-legacy-recovery-connection.qnt) |
+| recovery-read | [Acquired payload and recovery return](./dialcache-recovery-read-connection.qnt) |
+| recovery | [Retained flight snapshot and recovery](./dialcache-recovery-connection.qnt) |
 | independent | [Per-caller snapshots and source deadlines](./dialcache-independent-connection.qnt) |
-| effects | [Source start and accepted publication timing](./dialcache-effects-connection.qnt) |
 | source-budgets | [Captured source origin, budget and follower ownership](./dialcache-source-connection.qnt) |
 
 Properties have different roles. The boundary assertions in

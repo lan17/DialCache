@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { basename, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { readExecution, validateExecution } from './execution.mjs';
+import { quintSources, readExecution, validateExecution } from './execution.mjs';
 import { prepareApalache } from './apalache.mjs';
 import { waitForApalache } from './apalache-readiness.mjs';
 
@@ -107,7 +107,7 @@ export async function checkSymbolicModels({ directory = root } = {}) {
     const plan = symbolicPlan(manifest);
     report.backend = manifest.symbolic;
     const sources = ['formal/execution.json', 'formal/execution.mjs', 'formal/generated-fixtures.lock.json',
-      'formal/check-symbolic-models.mjs', 'formal/apalache.mjs', 'formal/apalache-readiness.mjs', ...manifest.libraries, ...manifest.models.map(model => model.path)];
+      'formal/check-symbolic-models.mjs', 'formal/apalache.mjs', 'formal/apalache-readiness.mjs', ...quintSources(directory)];
     report.sources = Object.fromEntries(sources.map(path => [path, hash(resolve(directory, path))]));
     save();
     const version = spawnSync('quint', ['--version'], { cwd: directory, encoding: 'utf8', timeout: 15_000 });

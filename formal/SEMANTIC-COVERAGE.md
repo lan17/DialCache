@@ -5,7 +5,7 @@ Measure named contract cases, exercised boundaries, and detected behavioral defe
 ## Evidence inventory
 
 [semantic-cases.json](./semantic-cases.json) refines the obligations in
-[CONTRACTS.md](./CONTRACTS.md) into named behavioral and wire cases. All 240
+[CONTRACTS.md](./CONTRACTS.md) into named behavioral and wire cases. All reviewed
 behavioral cases now cite checked Quint clauses and Quint-driven implementation
 evidence. The wire expansion adds Quint-derived artifacts alongside fixed
 vectors; native cases remain in [feature-coverage.json](./feature-coverage.json).
@@ -16,7 +16,7 @@ The checker reports these distinct categories:
 
 | Category | What is counted |
 | --- | --- |
-| Model | A cited invariant/regression scheduled in [execution.json](./execution.json) |
+| Model | A cited invariant scheduled in [execution.json](./execution.json) or a run declared by a scheduled model |
 | Portable | Fixed scenarios, witnesses, exported Quint regressions or wire vectors |
 | Generated witness | A required consequential history in [coverage-witnesses.json](./coverage-witnesses.json) |
 | Quint regression replay | A named public-action regression exported and replayed in both ports |
@@ -25,9 +25,27 @@ The checker reports these distinct categories:
 
 These categories overlap. Definitions/helpers explain rules but are not checked
 properties. A named case is not an independent proof, and a finite corpus is not
-the full input domain. [quint-case-audit.json](./quint-case-audit.json) records
-what each cited check actually establishes; metadata validation cannot replace
-semantic review of that scope.
+the full input domain. Each Quint citation in semantic-cases.json carries a
+reviewed `scope`: what that scheduled invariant or regression (`models`) or that
+transition, helper or predicate (`definitions`) establishes for the case. A
+scheduled check supports only its stated scope, not necessarily every clause of
+the case; a cited bounded model clause complements the fixed and generated
+consequences and does not prove every host input or scheduling combination;
+definitions describe transition semantics and are not independent invariants or
+extra coverage. No model state-space exhaustion or universal refinement is
+claimed. The checker verifies that every citation has a scope, that a cited
+check is scheduled and that a cited definition is an action, def or val of a
+scheduled model or library rather than a scheduled property; it cannot automate
+the semantic judgment in the scope text. Generated witness reachability and
+implementation replay are recorded separately: a citation alone does not
+establish that a witness was reached or that both implementations passed. Weak
+accounting checks such as policy `hitsSkipSource` (loaders <= callers), recovery
+`singleReadPerFlight` (reads <= callers) and age-sample counts are not treated
+as proofs of hit traversal, single execution or sample time. No general
+generated model claim is made for native key/byte/compression/numeric limits,
+the 60000 ms default source timeout, unbounded source mode, the one-hour
+tracked cap or arbitrary backend collector behavior; fixed, vector and native
+evidence and the explicit model bounds remain relevant.
 
 Previous model-only gaps now have replay: local read/write failure consequences
 use native injection seams, and marker-preservation histories observe actual
@@ -75,19 +93,30 @@ model checks and records an independent baseline and counterexample for each
 fault. Count challenges and distinct faults separately: a challenge is one
 (fault, model, invariant) measurement, while a distinct fault is one
 `(source, before, after)` mutation. The same shared-rule fault may be measured
-against several models when each entry carries a `measures` note, so the
-catalog currently reports 72 challenges over 68 distinct faults. Every scheduled
+against several models when each entry carries a `measures` note;
+`node formal/execution.mjs` reports both counts. Every scheduled
 model owns at least one challenge; a `challengeWaiver` on a model entry is a
 documented gap, not coverage. A detected challenge shows that the named
 invariant rejects that one deliberate change under the manifest bounds. Model
 receipts preserve the timestamp, captured policy and owner at acceptance.
-A challenge with a `reproducer` is also pinned to one deterministic history
+Every challenge is pinned by its `reproducer` to one deterministic history
 that passes clean and fails under the fault at a declared expectation, either
 an exported public regression both ports replay or a documented model-only
-run; challenges not yet backfilled are listed in the manifest's
-`reproducerBacklog`, whose size `node formal/execution.mjs` reports beside the
-challenge counts. See the
+run. Missing reproducers fail validation. See the
 [authoring rules](./AUTHORING.md#challenging-every-model).
+Each challenge also carries a `nativeMutants` entry naming the TypeScript and
+Go mutants that inject the same wrong behavior into the ports, or an
+enumerated explanation of why no native line exists; the mutation lanes must
+detect every mapped mutant in their generated cohort. A mapped challenge
+establishes that the corpus would catch the mistake in a port; an explained
+one establishes only that the model rejects it. A missing mapping or
+explanation fails validation. See
+[mapping every challenge to native mutants](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
+Ownership receipts, failed-read state, closed-scope memo cleanup and initial
+recovery retention have exact model checkpoints. The closed-scope and recovery
+histories also use public inputs replayed by both ports, but their additional
+private-state assertions remain model evidence; they do not create native
+mutation coverage where later native checks hide the same internal fault.
 Boundary properties can challenge an eligibility helper by stating the
 inequality directly. Connection and composition properties may reuse that
 helper while checking independently captured inputs, ownership and history;
@@ -109,7 +138,7 @@ Witness classification lives in the language-neutral modules under [`formal/repl
 
 ## Behavioral mutation comparison
 
-[`semantic-mutations.json`](./semantic-mutations.json) defines 13 reviewed, single-site faults. `node formal/measure-semantics.mjs` applies each in an isolated copy, verifies that it compiles, and runs three cohorts against it:
+[`mutations.json`](./mutations.json) defines the reviewed fault catalog: each fault is described once, with a rationale naming the port lines it changes, and carries a TypeScript and a Go section of exact-anchor edits to `src/` and `go/`; `node formal/execution.mjs` and `make audit` check the catalog on every pull request, including that every anchor still matches the port text exactly once. `node formal/measure-semantics.mjs` applies each TypeScript section in an isolated copy, verifies that it compiles, and runs three cohorts against it:
 
 1. **Ordinary:** existing unit tests, excluding all formal tests.
 2. **Generated:** sampled and exported-regression replays, reachability gates, and Quint-derived primitive vectors.
@@ -132,7 +161,7 @@ results; fresh measurements belong with their exact source and corpus artifacts.
 Use the [shared Make targets and pinned prerequisites](./README.md#generating-and-replaying-behavior):
 
 ```sh
-make formal        # Regenerate and complete prepared TS and Go replay.
+make formal        # Regenerate and complete prepared TS, Go and Rust replay.
 make mutations     # Measure every fault catalog over the generated corpus.
 ```
 
@@ -146,18 +175,18 @@ witness fingerprints it measured. Raw measurement programs remain
 `measure-rust-semantics.mjs`; the Make targets supply the pinned prerequisite
 checks used by hosted full validation.
 
-The Rust catalog [`rust-mutations.json`](./rust-mutations.json) names the same
-13 contract cases. Its ordinary cohort is the crate's unit tests plus every
-native integration test that is not harness infrastructure, a negative
-control, a protocol vector suite or a real-server test; its generated cohort
-is the conformance harness with `DIALCACHE_RUST_SUITE=generated` over the
-complete corpus, witness evidence and Quint-generated vectors; its fixed
-cohort is the harness with `DIALCACHE_RUST_SUITE=fixed` over the fixed
-scenarios and checked-in vectors. Each mutant is compiled in release mode in
-an isolated copy of the crate; dependencies build once and are shared through
-`rust/target/semantic`.
+Rust has a separate catalog, [`rust-mutations.json`](./rust-mutations.json). Its
+ordinary cohort runs crate unit tests and native integration tests, excluding
+harness controls, protocol-vector suites and real-server tests. Its generated
+and fixed cohorts select the corresponding conformance harness suites. The
+runner requires complete reports and assertion evidence; an infrastructure
+failure is a failed measurement. Rust results establish detection for this
+catalog only; the TypeScript/Go model-to-mutant boundary mappings in
+`mutations.json` do not confer Rust coverage. Each mutant builds in release
+mode in an isolated crate copy. Concurrent local shards need separate
+`DIALCACHE_RUST_TARGET_DIR` build directories to avoid sharing mutant binaries.
 
-Hosted runs shard each lane three ways with `MUTATION_SHARD=<index>/<count>`.
+Hosted runs shard each lane with `MUTATION_SHARD=<index>/<count>`, matching the workflow matrix; `test/formal-validation.test.ts` pins how many mutants a shard may hold within its timeout, so catalog growth fails the pull request until the matrix grows.
 A shard reruns the compile check, every unmodified baseline and the witness
 evaluation before its contiguous slice of the catalog, and writes an incomplete
 report under `shards/<index>-of-<count>/`. `make mutations-merge-ts` and
@@ -180,7 +209,25 @@ The runner clears inherited trace selectors, uses the complete generated directo
 
 Each catalog entry's `requiredDetections` is a regression gate. The local mutation target and full workflow fail if a required fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 
-To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go and Rust suites require every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with equivalent fault catalogs in `go-mutations.json` and `rust-mutations.json`. Broader interaction histories and larger domains remain separate assurance work.
+The report separately records each mapped challenge's boundary evidence: its
+exported history, checkpoint, compared fields, and every divergence seen while
+replaying that history through the coordinator. An earlier unrelated counter
+mismatch cannot establish the later behavioral consequence. A `confirmed`
+boundary requires a complete mutant replay and a clean replay of the same
+history; driver failures, settlement violations and missing recordings remain
+`unreached`. Every mapped exported reproducer must be confirmed by the mutation
+gate in both ports; an entire cohort detecting the mutant cannot replace that
+evidence. A mapped vector reproducer has the same requirement at its selected
+generated row: record the actual native result after a clean run of that row,
+then confirm a mismatch in the declared public fields. The coordinator alone
+reads the expectations; native workers receive only the operation and inputs.
+Reports retain row identity, binding, artifact and input fingerprints, and the
+actual result so the gate can recompute the comparison. Different native codec
+sizes may require different declared rows for the same strict-shrink rule.
+Missing, malformed or stale results earn no credit. `unreproduced` mappings
+remain explicit gaps beside these measured boundaries and cohort detections.
+
+To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with the Go section of every entry in `mutations.json`. A mutant whose fault leaves a goroutine blocked or a pointer nil makes the Go port's own synctest suite panic instead of failing an assertion, and one that settles a promise the TypeScript suite was not awaiting can leave no failed assertion behind; each runner records such an ordinary cohort as `crashed`, outside the detected and survived totals, as it does every cohort of a mutant that does not compile, and the generated cohort remains the required detection. Broader interaction histories and larger domains remain separate assurance work.
 
 ## Model properties and cross-language execution
 
@@ -195,3 +242,12 @@ implementation mutation detection.
 Every effects replay also runs `assertEffectsHistory` over actual external source starts/settlements and public fallback/write observations. Its C23/C25/C26 checks cover source-relative budget/duration, strict deadline acceptance, and a preceding accepted success before publication. It consumes no expected model phases and permits pending prefixes. An additional causal monitor in both drivers ties writes to their actual invocation/source callback and rejects publication after that source settled too late; negative tests distinguish property failures from malformed monitor inputs. This is a bounded connection for selected properties, not full model refinement or liveness proof.
 
 The Go driver executes the same generated corpus through its own cache implementation. Its value-domain and API adaptations appear in [`go/README.md`](../go/README.md). `measure-go-semantics.mjs` independently measures the Go fault catalog; TypeScript mutation results are never credited to Go. The Go race detector covers only exercised schedules.
+
+
+Generated invalidation vectors also run inside both standard native mutation
+campaigns. Every shard provisions its own real Redis 6.2 server through Docker;
+the whole generated set shares a native connection. The exact cutoff and maximum
+buffer challenges additionally record their selected input-only vector operation.
+Their outcomes come from each port's production Lua. Server elapsed time bounds
+positive TTL drift; rejected input must preserve the prior state. Infrastructure
+errors and unexpected Lua replies are never assertion-based detections.

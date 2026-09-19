@@ -49,11 +49,23 @@ jobs:
   # previous text generated, and vice versa, unless the manifest declares an
   # intended change. The reference is the merge base with the pull request's
   # base branch; a push to main has no reference. The step also checks the
-  # composition lint baseline.
+  # composition lint baseline and the kernel fixtures. A kernel change replays
+  # every composed profile in both directions. One job overran the 60-minute
+  # budget; alphabetical splitting later left one shard at 47 minutes and
+  # another at eight. Four shards now balance estimated profile replay time
+  # (formal/differential.mjs); every history still runs in both directions.
+  # Replay batches report progress through one bounded pool per job. The
+  # gate is the four statuses `differential (1)` to `differential (4)`; none
+  # is required on main. Grow the matrix, and the count in DIFFERENTIAL_SHARD
+  # with it, before a shard approaches the budget.
   differential:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -64,16 +76,17 @@ jobs:
         run: node .github/scripts/fixture-scope.mjs
       - uses: ./.github/actions/setup-quint
         if: steps.fixture-scope.outputs.recompute == 'true'
-      - name: Replay every composed profile's reference corpus through the pull request's text
+      - name: Replay this shard of the composed profiles' reference corpus through the pull request's text
         if: steps.fixture-scope.outputs.recompute == 'true'
         env:
           DIFFERENTIAL_REFERENCE: origin/${{ github.base_ref }}
+          DIFFERENTIAL_SHARD: ${{ matrix.shard }}/4
         run: make differential
-      - name: Preserve differential reports
+      - name: Preserve this shard's differential reports
         if: always() && steps.fixture-scope.outputs.recompute == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: formal-differential
+          name: formal-differential-${{ matrix.shard }}
           path: |
             .formal-traces/differential/*/report.json
             .formal-traces/differential/**/replay-*/quint-test.log

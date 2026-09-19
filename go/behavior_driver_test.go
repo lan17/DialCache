@@ -321,7 +321,7 @@ type behaviorDriver struct {
 	fixture                             obj
 	observed                            obj
 	clock                               *behaviorClock
-	instances                           map[string]*Cache[any]
+	instances                           map[string]*Cache
 	scopes                              map[string]*behaviorScope
 	effects                             map[string]map[int]*behaviorGate
 	loaders                             []*behaviorGate
@@ -339,7 +339,13 @@ type behaviorDriver struct {
 	fallbackFailed                      bool
 	discardWrites, discardInvalidations bool
 	skipSettle                          bool
-	unsettled                           obj
+	// reported is the observation the driver attests to; settlementReceipt is
+	// its receipt. Both are taken together at the end of every apply.
+	reported          obj
+	settlementReceipt obj
+	// settlementDiagnostic describes the verification drain's findings when
+	// the receipt reports runnable work; it never crosses the wire.
+	settlementDiagnostic string
 }
 
 func emptyBehaviorObservation(fixture obj) obj {
@@ -356,21 +362,25 @@ func emptyBehaviorObservation(fixture obj) obj {
 	return o
 }
 func newBehaviorDriver(t *testing.T, fixture obj) *behaviorDriver {
-	d := &behaviorDriver{t: t, fixture: bm(bclone(fixture)), observed: emptyBehaviorObservation(fixture), clock: &behaviorClock{wall: time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC).UnixMilli()}, instances: map[string]*Cache[any]{}, scopes: map[string]*behaviorScope{}, effects: map[string]map[int]*behaviorGate{}, faults: map[string]bool{}, runtimePolicy: obj{}, values: map[string]behaviorStored{}, maintenanceError: errors.New("controlled mutation failure")}
+	d := &behaviorDriver{t: t, fixture: bm(bclone(fixture)), observed: emptyBehaviorObservation(fixture), clock: &behaviorClock{wall: time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC).UnixMilli()}, instances: map[string]*Cache{}, scopes: map[string]*behaviorScope{}, effects: map[string]map[int]*behaviorGate{}, faults: map[string]bool{}, runtimePolicy: obj{}, values: map[string]behaviorStored{}, maintenanceError: errors.New("controlled mutation failure")}
 	d.sourceByInvocation = map[int]int{}
 	for _, key := range []string{"read", "write", "dump", "load", "policy"} {
 		d.effects[key] = map[int]*behaviorGate{}
 	}
 	d.instance("default")
+	// A fresh driver attests its own quiescence like every later apply does, so
+	// a session whose setup is empty still observes a measured receipt.
+	d.settle()
 	return d
 }
 
 // newUnsettledBehaviorDriver is a harness control only: the returned driver
-// reports the observation it held before the end-of-apply drain that
-// implements the causally-ready-v1 settlement contract, so a control test can
-// prove the replays depend on it. It still drains after that snapshot, so
-// every command starts from a settled driver and the control measures early
-// observation alone. Conformance replays must never use it.
+// skips the settle drain that implements the causally-ready-v1 settlement
+// contract and so reports the observation it held before it, which is what an
+// unsettled port would report. Its receipt still comes from the verification
+// drain, which finds the skipped work and settles the driver, so every command
+// starts settled and the coordinator can only reject the replay through the
+// receipt. Conformance replays must never use it.
 func newUnsettledBehaviorDriver(t *testing.T, fixture obj) *behaviorDriver {
 	d := newBehaviorDriver(t, fixture)
 	d.skipSettle = true
@@ -445,16 +455,16 @@ func (d *behaviorDriver) classifier(mode string) RecoveryPredicate {
 		return mode == "allow", nil
 	}
 }
-func (d *behaviorDriver) instance(id string) *Cache[any] {
+func (d *behaviorDriver) instance(id string) *Cache {
 	if c := d.instances[id]; c != nil {
 		return c
 	}
-	options := Options[any]{Clock: d.clock, Codec: behaviorCodec{d: d}, Logger: behaviorLogger{d: d}, DisableCompression: true, LocalCapacity: int(bn(bdefault(d.fixture, "localMaxSize", 10000))), LocalCapacitySet: true, ShadowMaxInFlight: int(bn(bdefault(d.fixture, "shadowMaxInFlight", 1))), Observe: d.observe, RecoveryOutcome: func(e Event) {
+	opts := []Option{WithClock(d.clock), WithLogger(behaviorLogger{d: d}), WithoutCompression(), WithLocalCapacity(int(bn(bdefault(d.fixture, "localMaxSize", 10000)))), WithShadowCapacity(int(bn(bdefault(d.fixture, "shadowMaxInFlight", 1)))), WithObserver(d.observe), WithRecoveryOutcomes(func(e Event) {
 		d.append("recovery", e.Outcome)
 		if bb(d.fixture["observerFailure"]) || d.fault("observer") {
 			panic("controlled observer failure")
 		}
-	}, PolicyProvider: func(ctx context.Context, id Identity) (any, error) {
+	}), WithPolicyProvider(func(ctx context.Context, id Identity) (RuntimePolicy, error) {
 		index := d.increment("policyCalls")
 		if d.fault("holdPolicies") {
 			if err := d.hold("policy", index); err != nil {
@@ -466,29 +476,31 @@ func (d *behaviorDriver) instance(id string) *Cache[any] {
 		}
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		return bclone(d.runtimePolicy), nil
-	}}
+		// The fixture's overlay is decoded JSON, including deliberately malformed
+		// containers, so it passes through untouched.
+		return RawPolicy(bclone(d.runtimePolicy)), nil
+	})}
 	if d.fixture["remote"] != false {
-		options.Remote = behaviorRemote{d: d}
+		opts = append(opts, WithRemote(behaviorRemote{d: d}))
 	}
 	if bb(d.fixture["localFaultInjection"]) {
-		options.Clock = behaviorLocalFaultClock{behaviorClock: d.clock, driver: d}
+		opts = append(opts, WithClock(behaviorLocalFaultClock{behaviorClock: d.clock, driver: d}))
 	}
 	if d.fixture["readTimeoutMs"] != "default" {
-		options.RemoteReadTimeoutMS = bn(bdefault(d.fixture, "readTimeoutMs", 50))
+		opts = append(opts, WithRemoteReadTimeout(time.Duration(bn(bdefault(d.fixture, "readTimeoutMs", 50)))*time.Millisecond))
 	}
 	if mode := bs(d.fixture["recovery"]); mode != "" && mode != "default" {
-		options.ShouldRecover = d.classifier(mode)
+		opts = append(opts, WithStaleRecovery(d.classifier(mode)))
 	}
 	if d.fixture["shadowHook"] != false {
-		options.ShadowOutcome = func(e Event) {
+		opts = append(opts, WithShadowOutcomes(func(e Event) {
 			d.append("shadow", e.Outcome)
 			if bb(d.fixture["observerFailure"]) || d.fault("observer") {
 				panic("controlled observer failure")
 			}
-		}
+		}))
 	}
-	c := New[any](options)
+	c := MustNew(opts...)
 	d.instances[id] = c
 	return c
 }
@@ -500,13 +512,126 @@ func (d *behaviorDriver) hold(effect string, index int) error {
 	<-gate.done
 	return gate.err
 }
+
+// observation is the record the driver reports: the snapshot its receipt
+// attests to, not the live counters, so the observation and the receipt
+// describe one instant and the coordinator's next commands derive from it.
 func (d *behaviorDriver) observation() obj {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.skipSettle && d.unsettled != nil {
-		return bm(bclone(d.unsettled))
+	return bm(bclone(d.reported))
+}
+
+// receipt is the settlement receipt of the reported observation, computed by
+// the driver alone from its executor, gate and clock state and sent with every
+// behavior observe (PORTING.md, causally-ready-v1).
+func (d *behaviorDriver) receipt() obj {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return bm(bclone(d.settlementReceipt))
+}
+
+// settle is the causally-ready-v1 settlement step followed by its attestation.
+// The settle drain runs the executor work a command made ready while external
+// gates stay held; the harness control skips only that drain. The driver then
+// snapshots the observation it will report together with its held gates and
+// monotonic clock, and verifies quiescence with one more zero-time drain: the
+// deferred functions pending once every goroutine is blocked, plus one if the
+// observation changed, are the runnable count the coordinator requires to be
+// zero. That drain also settles a control driver, so its next command starts
+// settled and skipped settlement can only surface through the receipt.
+func (d *behaviorDriver) settle() {
+	if !d.skipSettle {
+		d.clock.drain()
 	}
-	return bm(bclone(d.observed))
+	// The base clock: the local-fault wrapper is the library's view and panics
+	// under the localStorage fault.
+	elapsed := d.clock.ElapsedMS()
+	d.mu.Lock()
+	reported := bm(bclone(d.observed))
+	held := d.heldLocked()
+	d.mu.Unlock()
+	synctest.Wait()
+	d.clock.mu.Lock()
+	runnable := int64(len(d.clock.deferred))
+	d.clock.mu.Unlock()
+	d.clock.drain()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	// Compare two clones so the check reads wire values on both sides.
+	after := bm(bclone(d.observed))
+	changed := !bequal(reported, after)
+	if changed {
+		runnable++
+	}
+	d.reported = reported
+	d.settlementReceipt = obj{"elapsedMs": elapsed, "runnable": runnable, "held": held}
+	// For the failure message only, never for the wire: what the drain did.
+	d.settlementDiagnostic = ""
+	if runnable > 0 {
+		member := "observation unchanged"
+		if changed {
+			member = "observation member " + firstDifference(reported, after) + " changed"
+		}
+		d.settlementDiagnostic = fmt.Sprintf("verification drain: %s, %d deferred function(s) pending", member, runnable-boolToInt(changed))
+	}
+}
+
+// firstDifference names the first observation member, in key order, whose
+// wire value differs between two snapshots.
+func firstDifference(before, after obj) string {
+	keys := make([]string, 0, len(after))
+	for key := range after {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if !bequal(before[key], after[key]) {
+			return key
+		}
+	}
+	return "(none)"
+}
+
+func boolToInt(value bool) int64 {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+// diagnostic is what the verification drain found when the receipt reports
+// runnable work, for the harness failure message; the receipt itself stays a
+// closed record.
+func (d *behaviorDriver) diagnostic() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.settlementDiagnostic
+}
+
+// heldLocked counts the controlled gates still unsettled: loader gates settle
+// only through resolve and reject, effect gates leave the map only through
+// their release (a gate the library abandons, such as a deadline-aborted read,
+// stays registered until then), and a closed scope stays in the map with a
+// settled gate.
+func (d *behaviorDriver) heldLocked() obj {
+	held := obj{}
+	for effect, field := range map[string]string{"read": "reads", "write": "writes", "dump": "dumps", "load": "loads", "policy": "policies"} {
+		held[field] = int64(len(d.effects[effect]))
+	}
+	loaders, scopes := int64(0), int64(0)
+	for _, gate := range d.loaders {
+		if !gate.settled {
+			loaders++
+		}
+	}
+	for _, scope := range d.scopes {
+		if !scope.gate.settled {
+			scopes++
+		}
+	}
+	held["loaders"], held["scopes"] = loaders, scopes
+	return held
 }
 func (d *behaviorDriver) observedEffectCount(effect string) int {
 	keys := map[string]string{"read": "reads", "write": "writes", "dump": "dumps", "load": "loads", "policy": "policyCalls", "loader": "loaders"}
@@ -570,14 +695,13 @@ func (d *behaviorDriver) apply(input obj) error {
 		if err != nil {
 			return fmt.Errorf("invalid fixture policy: %w", err)
 		}
-		operation := Operation{Identity: d.identity(bs(input["key"]), bs(input["useCase"])), Policy: policy}
+		operation := Operation[any]{Identity: d.identity(bs(input["key"]), bs(input["useCase"])), Policy: policy, Codec: behaviorCodec{d: d}}
 		if d.fixture["fallbackTimeoutMs"] != "default" {
 			budget := bdefault(d.fixture, "fallbackTimeoutMs", 10)
 			if budget == nil {
-				operation.UnboundedFallback = true
+				operation.SourceTimeout = NoTimeout
 			} else {
-				n := bn(budget)
-				operation.FallbackTimeoutMS = &n
+				operation.SourceTimeout = time.Duration(bn(budget)) * time.Millisecond
 			}
 		}
 		if mode := bs(input["recovery"]); mode != "" {
@@ -595,14 +719,14 @@ func (d *behaviorDriver) apply(input obj) error {
 		}
 		call := func(callctx context.Context) error {
 			budget := int64(60000)
-			if operation.FallbackTimeoutMS != nil {
-				budget = *operation.FallbackTimeoutMS
+			if operation.SourceTimeout > 0 {
+				budget = ms(operation.SourceTimeout)
 			}
-			if operation.UnboundedFallback || !cache.IsEnabled(callctx) {
+			if operation.SourceTimeout == NoTimeout || !cache.IsEnabled(callctx) {
 				budget = -1
 			}
 			callctx = context.WithValue(callctx, behaviorInvocationKey{}, behaviorInvocation{owner: index})
-			value, err := cache.GetOrLoad(callctx, operation, func(sourcectx context.Context) (any, error) {
+			value, err := GetOrLoad(callctx, cache, operation, func(sourcectx context.Context) (any, error) {
 				gate := &behaviorGate{done: make(chan struct{})}
 				d.mu.Lock()
 				id := len(d.loaders)
@@ -633,7 +757,7 @@ func (d *behaviorDriver) apply(input obj) error {
 		}
 		execute := func(ec context.Context) error {
 			if bb(input["disabled"]) {
-				return cache.Disable(ec, call)
+				return cache.WithDisabled(ec, call)
 			}
 			return call(ec)
 		}
@@ -641,7 +765,7 @@ func (d *behaviorDriver) apply(input obj) error {
 			if _, saved := input["scope"]; saved || bb(input["outside"]) {
 				_ = execute(ctx)
 			} else {
-				_ = cache.Enable(ctx, execute)
+				_ = cache.WithEnabled(ctx, execute)
 			}
 		}()
 	case "resolve", "reject":
@@ -706,18 +830,30 @@ func (d *behaviorDriver) apply(input obj) error {
 		d.values[key] = behaviorStored{raw: raw, expires: d.clock.ElapsedMS() + bn(bdefault(input, "ttlMs", 60000))}
 		d.mu.Unlock()
 	case "invalidate":
-		err := d.instance("default").Invalidate(context.Background(), d.identity(bs(input["key"]), ""), bn(input["futureBufferMs"]))
+		err := d.instance("default").Invalidate(context.Background(), d.identity(bs(input["key"]), ""), time.Duration(bn(input["futureBufferMs"]))*time.Millisecond)
 		status := "ok"
 		if err != nil {
 			if err == d.maintenanceError {
 				status = "mutation_error"
-			} else if errors.Is(err, MissingRemoteError) {
+			} else if errors.Is(err, ErrNoRemote) {
 				status = "missing_remote"
 			} else {
 				return err
 			}
 		}
 		d.append("maintenance", status)
+	case "inspectCoalescing":
+		instance := bs(input["instance"])
+		if instance == "" {
+			instance = "default"
+		}
+		state := d.instance(instance).GetCoalescingState().Process
+		var age any
+		if state.ActiveLeaders > 0 {
+			age = float64(state.OldestLeaderAge) / float64(time.Millisecond)
+		}
+		d.record("coalescingState", obj{"instance": instance, "activeLeaders": state.ActiveLeaders,
+			"activeFollowers": state.ActiveFollowers, "oldestLeaderAgeMs": age})
 	case "observeMarker":
 		identity := d.identity(bs(input["key"]), "")
 		identity.Tracked = true
@@ -801,9 +937,9 @@ func (d *behaviorDriver) apply(input obj) error {
 		go func() {
 			defer close(scope.done)
 			if bb(input["disabled"]) {
-				_ = cache.Disable(ctx, body)
+				_ = cache.WithDisabled(ctx, body)
 			} else {
-				_ = cache.Enable(ctx, body)
+				_ = cache.WithEnabled(ctx, body)
 			}
 		}()
 		<-ready
@@ -818,17 +954,7 @@ func (d *behaviorDriver) apply(input obj) error {
 	default:
 		return fmt.Errorf("unknown behavior input %s", bjson(input))
 	}
-	// The no-settle harness control records what an unsettled port would
-	// report: the observation before the drain. It drains afterwards so the
-	// next command finds its gates registered and no failure is a harness error.
-	if d.skipSettle {
-		d.mu.Lock()
-		d.unsettled = bm(bclone(d.observed))
-		d.mu.Unlock()
-	}
-	// Drain ready executor work while unresolved external gates remain held:
-	// the causally-ready-v1 settlement step.
-	d.clock.drain()
+	d.settle()
 	return d.assertPublicationCausality()
 }
 func (d *behaviorDriver) close() {
@@ -929,7 +1055,7 @@ func (r behaviorRemote) Read(ctx context.Context, key, watermark string) (ReadRe
 	d := r.d
 	index := d.increment("reads")
 	if budget, ok := ReadBudget(ctx); ok {
-		d.record("readContext", obj{"index": index, "timeoutMs": budget, "aborted": ctx.Err() != nil})
+		d.record("readContext", obj{"index": index, "timeoutMs": ms(budget), "aborted": ctx.Err() != nil})
 		context.AfterFunc(ctx, func() { d.record("readAbort", obj{"index": index}) })
 	}
 	if d.fault("holdReads") {
@@ -956,7 +1082,7 @@ func (r behaviorRemote) Read(ctx context.Context, key, watermark string) (ReadRe
 	}
 	return DecodeFrame(raw, watermark != "", marker), nil
 }
-func (r behaviorRemote) Write(ctx context.Context, key string, frame Frame, ttl int64) error {
+func (r behaviorRemote) Write(ctx context.Context, key string, frame Frame, ttl time.Duration) error {
 	d := r.d
 	index := d.increment("writes")
 	d.mu.Lock()
@@ -971,7 +1097,7 @@ func (r behaviorRemote) Write(ctx context.Context, key string, frame Frame, ttl 
 	d.causal = append(d.causal, behaviorCausalEvent{kind: "writeDispatch", id: source, owner: owner, at: d.clock.ElapsedMS()})
 	d.mu.Unlock()
 	d.record("writeDispatch", obj{"index": index})
-	d.append("writeTtls", ttl)
+	d.append("writeTtls", ms(ttl))
 	if d.fault("holdWrites") {
 		if err := d.hold("write", index); err != nil {
 			return err
@@ -986,7 +1112,7 @@ func (r behaviorRemote) Write(ctx context.Context, key string, frame Frame, ttl 
 	}
 	d.mu.Lock()
 	if !d.discardWrites {
-		d.values[key] = behaviorStored{raw: raw, expires: d.clock.ElapsedMS() + ttl}
+		d.values[key] = behaviorStored{raw: raw, expires: d.clock.ElapsedMS() + ms(ttl)}
 	}
 	d.mu.Unlock()
 	return nil

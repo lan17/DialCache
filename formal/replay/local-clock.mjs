@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import { assertObservation } from "./divergence.mjs";
 import { emptyObservation } from "./observation.mjs";
 import { assertInputMetadata, itfInteger, itfSignedInteger, record } from "./itf.mjs";
 const advances = [1, 100, 300, 400, 700, 999200, 999999, 1000000];
@@ -56,6 +56,14 @@ export function localClockInput(action, choice) {
   }
 }
 export function assertLocalClockObservation(step, observed) {
-  assert.deepEqual(observed, step.expected);
+  assertObservation(observed, step.expected);
 }
 export const localClockActions = Object.keys(choices).filter(action => action !== "init");
+// The explicit-input descriptor the corpus differential replays this profile
+// with: the same action choices, over the shared observation record. The
+// binding names the public wrapper a reference text declares where `call`
+// is its parametrized action (the text before the wrapper was renamed), so a
+// history replays through that text too.
+export const localClockDescriptor = { explicitInputs: true,
+  actions: Object.fromEntries(localClockActions.map(action => [action, { choices: choices[action] }])),
+  actionBindings: { call: "callCache" } };

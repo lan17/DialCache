@@ -1,13 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mutantsForPort, readMutantCatalog } from './execution.mjs';
 import { fingerprintFiles, gateDetections, languages, sha256 } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
 // Fields a shard legitimately owns or that the merge recomputes. Every other
 // field describes the measured inputs and must be identical across shards.
-const perShardFields = new Set(['complete', 'shard', 'startedAt', 'elapsedSeconds', 'baselines', 'mutations', 'error', 'detection', 'requiredDetectionRegressions', 'shards']);
+const perShardFields = new Set(['complete', 'shard', 'startedAt', 'elapsedSeconds', 'baselines', 'boundaryBaselines', 'mutations', 'error', 'detection', 'requiredDetectionRegressions', 'shards']);
 const timingFields = new Set(['startedAt', 'finishedAt', 'elapsedSeconds', 'durationMs', 'duration']);
 
 // Stable text for structural comparison: key order is irrelevant, timing is dropped.
@@ -82,6 +83,29 @@ export function mergeShardReports(language, shards, { catalog, catalogSha256, in
   delete merged.requiredDetectionRegressions;
   merged.startedAt = ordered.map(report => report.startedAt).sort()[0];
   merged.mutations = mutations;
+  // Boundary histories follow each shard's mutant selection. The same history
+  // may support several mutants, so union the clean recordings and require
+  // agreement when they overlap. Runner-specific absolute trace paths are not
+  // semantic differences; all other fields are.
+  if (ordered.some(report => report.boundaryBaselines !== undefined)) {
+    const baselines = {};
+    for (const report of ordered) {
+      if (!report.boundaryBaselines || typeof report.boundaryBaselines !== 'object' || Array.isArray(report.boundaryBaselines)) refuse(`shard ${describe(report)} lacks boundary baselines`);
+      for (const [history, recording] of Object.entries(report.boundaryBaselines)) {
+        if (recording?.history !== history || recording.completed !== true || recording.error !== undefined ||
+            !Array.isArray(recording.divergences) || recording.divergences.length || !Number.isSafeInteger(recording.lastStep) || recording.lastStep < 0) {
+          refuse(`boundary baseline ${history} is not a clean completed replay`);
+        }
+        const { path, ...stable } = recording;
+        if (baselines[history] && canonical(baselines[history]) !== canonical(stable)) refuse(`boundary baseline ${history} differs across shards`);
+        baselines[history] = stable;
+      }
+    }
+    for (const mutation of mutations) for (const entry of mutation.boundary ?? []) {
+      if (entry.history && !baselines[entry.history]) refuse(`${mutation.id}: boundary history ${entry.history} has no clean baseline`);
+    }
+    merged.boundaryBaselines = baselines;
+  }
   // Total measurement time across shards, comparable to a single run's wall time.
   merged.elapsedSeconds = ordered.reduce((sum, report) => sum + (report.elapsedSeconds ?? 0), 0);
   merged.shards = ordered.map(report => ({ index: report.shard.index, count, mutationIds: report.shard.mutationIds, startedAt: report.startedAt, elapsedSeconds: report.elapsedSeconds }));
@@ -123,8 +147,13 @@ export function mergeMutationReports(name, { directory = root, shardsDirectory, 
   try {
     const catalogText = readFileSync(resolve(directory, language.catalog));
     const catalog = JSON.parse(catalogText);
+    // Rust keeps its native catalog; shared TypeScript/Go entries use the
+    // canonical port reader introduced on main.
+    const entries = language.port
+      ? mutantsForPort(readMutantCatalog(path => readFileSync(resolve(directory, path), 'utf8')), language.port)
+      : catalog.mutations;
     merged = mergeShardReports(language, readShardReports(shards), { catalog, catalogSha256: sha256(catalogText), inputs: fingerprintFiles(directory, language.inputs, { exclude: language.exclude }) });
-    gateDetections(language, merged, catalog.mutations, { directory });
+    gateDetections(language, merged, entries, { directory });
   } catch (error) {
     const failed = merged ?? { schemaVersion: 1, complete: false, startedAt };
     failed.complete = false;
@@ -133,7 +162,7 @@ export function mergeMutationReports(name, { directory = root, shardsDirectory, 
     throw error;
   }
   save(merged);
-  writeFileSync(resolve(output, 'report.md'), language.markdown(merged));
+  writeFileSync(resolve(output, 'report.md'), language.markdown(merged, directory));
   return merged;
 }
 

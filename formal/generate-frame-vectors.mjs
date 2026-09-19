@@ -4,7 +4,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { encodeJson } from './compact-json.mjs';
+
 const root = fileURLToPath(new URL('../', import.meta.url));
+// The corpus header stays indented; every vector row is one line.
+const encode = corpus => encodeJson(corpus, path => path.length === 2 && typeof path[1] === 'number');
 export const model = 'formal/dialcache-frame-vectors.qnt';
 export const generator = 'formal/generate-frame-vectors.mjs';
 export const artifact = 'formal/quint-frame-vectors.json';
@@ -124,7 +128,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (run.status !== 0) process.exit(run.status ?? 1);
   const generated = { schemaVersion: 3, provenance: { model, sourceSha256: sourceHashes() },
     ...vectorsFromTrace(JSON.parse(readFileSync(history, 'utf8'))) };
-  const encoded = JSON.stringify(generated, null, 2) + '\n';
+  const encoded = encode(generated);
   if (process.argv[2] === '--write') writeFileSync(resolve(root, artifact), encoded);
   else if (readFileSync(resolve(root, artifact), 'utf8') !== encoded) throw new Error('Quint frame vectors changed; review and regenerate');
   console.log(`Verified ${expectedCases} Quint frame/text/duration primitive cases`);

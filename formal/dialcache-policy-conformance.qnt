@@ -1,5 +1,6 @@
 module dialcache_policy_conformance {
   import conformance_observations.* from "./conformance-observations"
+  import payloads as Payloads from "./kernel/payloads"
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
   import layer_policy.* from "./kernel/layer-policy"
@@ -80,7 +81,7 @@ module dialcache_policy_conformance {
   // and a 5 s stale-on-error maximum, the baseline every overlay resolves
   // against (formal/replay/features.mjs policy).
   pure val LAYOUT: Serving::Layout =
-    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false }
+    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false, policyProvider: true }
   pure val BASELINE: Ttls = { localMs: ONE_SECOND_MS, freshMs: ONE_SECOND_MS, retentionMs: DEFAULT_RETENTION_MS }
   // Input decoding: every caller is enabled and asks for one key.
   pure def call(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }
@@ -337,6 +338,9 @@ module dialcache_policy_conformance {
     error.layer == "noop" and error.errorType == "config_resolution"
   })
 
+  // Atomic reads and shadow comparisons have no decode-failure settlement.
+  val atomicPathSeedsDecodableFrames = Payloads::atomicSafe(s)
+
   // -- Deterministic regression schedules ------------------------------------
 
   run invalidReadBudgetBypassesAllCachingTest = init.then(changePolicy(INVALID_READ_BUDGET))
@@ -476,6 +480,30 @@ module dialcache_policy_conformance {
     .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
+
+  // A source that settles with the source error is not a local writer: the
+  // entry the earlier completed source published stays and serves the next call.
+  run independentFailureKeepsSettledLocalValueTest = init
+    .then(changePolicy(INDEPENDENT_OFFSET + NO_REMOTE))
+    .then(startCall(0)).then(releasePolicy)
+    .then(startCall(0)).then(releasePolicy)
+    .then(finishSource(0, VALUE_ONE)).then(finishSource(1, SOURCE_ERROR))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE) and s.o.loaders == 2)
+
+  // The same preservation rule across a remote-chain failure: both sources
+  // start from a remote miss, with no stale-recovery classifier. After one
+  // publishes, the other's error cannot discard its local entry. A later
+  // remote fault makes a lost local entry observable as a pending source
+  // rather than a hit on the remote refill.
+  run independentFailureKeepsLocalValueWhenRemoteFailsTest = init
+    .then(changePolicy(INDEPENDENT_OFFSET))
+    .then(startCall(0)).then(releasePolicy)
+    .then(startCall(0)).then(releasePolicy)
+    .then(finishSource(0, VALUE_ONE)).then(finishSource(1, SOURCE_ERROR))
+    .then(setReadFault(true))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE) and s.o.loaders == 2 and s.o.reads == 2)
 
   run independentRemotePublicationUsesLastCompletionTest = init
     .then(changePolicy(INDEPENDENT_OFFSET + NO_LOCAL))
@@ -630,4 +658,14 @@ module dialcache_policy_conformance {
     .expect(s.o.calls == List(VALUE_FALSE, VALUE_FALSE, VALUE_ZERO, VALUE_ZERO, VALUE_EMPTY_STRING, VALUE_EMPTY_STRING)
       and s.o.loaders == 3 and s.o.reads == 6 and s.o.loads == 3 and s.o.writes == 3
       and s.localValues == List(NO_VALUE, NO_VALUE))
+
+  // Stop at the observable decision so both the clean and faulty implementation
+  // can complete this boundary history without a later fault-dependent command.
+  run nonCoalescingCallStartsSeparateSourceTest = init
+    .then(startCall(0))
+    .then(releasePolicy)
+    .then(changePolicy(INDEPENDENT_OFFSET))
+    .then(startCall(0))
+    .then(releasePolicy)
+    .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2)
 }

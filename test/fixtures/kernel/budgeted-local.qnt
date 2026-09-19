@@ -19,22 +19,25 @@ module budgeted_local {
   pure val BUDGET = 10
   pure val LOCAL_TTL_MS = 1000
   pure val START = 10000
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false }
-  pure val TWO_KEYS: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 2, operationsPerEntity: 2, probeSourceScope: false }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true }
+  pure val TWO_KEYS: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 2, operationsPerEntity: 2, probeSourceScope: false, policyProvider: true }
   pure val LOCAL: Resolution = { layers: { request: false, local: true, remote: false }, coalesce: true }
   pure val TTLS: Ttls = { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }
 
   // Admission kinds: an enabled caller in persistent context 0 or 1, a caller
   // in a disabled context, a caller whose key failed to construct, and an
-  // enabled caller for key 1 (the two-key layout only).
+  // enabled caller for key 1 (the two-key layout only). A failed key can also
+  // retain the enabled flag: failure still bypasses policy and every layer.
   pure val ENABLED = 0
   pure val ENABLED_OTHER = 1
   pure val DISABLED = 2
   pure val FAILED_KEY = 3
   pure val ENABLED_KEY_ONE = 4
+  pure val ENABLED_FAILED_KEY = 5
   pure def call(kind: int): Call = {
     instance: 0, key: if (kind == ENABLED_KEY_ONE) 1 else 0, context: if (kind == ENABLED_OTHER) 1 else 0,
-    enabled: kind == ENABLED or kind == ENABLED_OTHER or kind == ENABLED_KEY_ONE, keyFailed: kind == FAILED_KEY
+    enabled: kind == ENABLED or kind == ENABLED_OTHER or kind == ENABLED_KEY_ONE or kind == ENABLED_FAILED_KEY,
+    keyFailed: kind == FAILED_KEY or kind == ENABLED_FAILED_KEY
   }
 
   type State = {
@@ -42,7 +45,7 @@ module budgeted_local {
     closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
     localValues: List[int], localExpires: List[int], lru: List[List[int]],
     sources: List[Serving::LocalSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held],
-    started: List[int], budgets: List[int], settledAt: List[int], drained: List[bool]
+    deadlines: List[Deadlines::Due], started: List[int], budgets: List[int], settledAt: List[int], drained: List[bool]
   }
   var s: State
   var input: { name: str, choice: int }
@@ -52,7 +55,7 @@ module budgeted_local {
       closed: List(false, false), memo: List(NO_VALUE, NO_VALUE), requestFlights: List(NO_OWNER, NO_OWNER), processFlights: List(NO_OWNER),
       localValues: List(NO_VALUE), localExpires: List(0), lru: List(List()),
       sources: List(), owners: List(), memoSlots: List(), held: List(),
-      started: List(), budgets: List(), settledAt: List(), drained: List() },
+      deadlines: List(), started: List(), budgets: List(), settledAt: List(), drained: List() },
     input' = { name: "init", choice: budget }
   }
   action init = initialize(BUDGET)
@@ -62,7 +65,7 @@ module budgeted_local {
       closed: List(false, false), memo: List(NO_VALUE, NO_VALUE, NO_VALUE, NO_VALUE), requestFlights: List(NO_OWNER, NO_OWNER, NO_OWNER, NO_OWNER),
       processFlights: List(NO_OWNER, NO_OWNER), localValues: List(NO_VALUE, NO_VALUE), localExpires: List(0, 0), lru: List(List()),
       sources: List(), owners: List(), memoSlots: List(), held: List(),
-      started: List(), budgets: List(), settledAt: List(), drained: List() },
+      deadlines: List(), started: List(), budgets: List(), settledAt: List(), drained: List() },
     input' = { name: "init", choice: 2 }
   }
   action admit(kind: int): bool = all {
@@ -110,6 +113,20 @@ module budgeted_local {
     .expect(s.o.loaders == 3 and s.o.policyCalls == 0 and s.budgets.nth(2) == Deadlines::UNBOUNDED)
     .then(admit(ENABLED_OTHER)).then(release)
     .expect(s.o.loaders == 4 and s.o.policyCalls == 1 and s.budgets.nth(3) == BUDGET and s.sources.nth(3).shared)
+
+  // Keeping enabled true does not let a failed key read a live local entry or
+  // share source work. Both bypass callers retain their configured deadlines.
+  run enabledFailedKeyBypassesCachingWithItsDeadlineTest = init
+    .then(admit(ENABLED)).then(release).then(settle(0, VALUE_ONE))
+    .expect(s.o.calls == List(VALUE_ONE) and s.localValues == List(VALUE_ONE))
+    .then(admit(ENABLED_FAILED_KEY)).then(admit(ENABLED_FAILED_KEY))
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING, CALL_PENDING)
+      and s.o.loaders == 3 and s.o.policyCalls == 1
+      and s.o.reads == 0 and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0
+      and s.budgets == List(BUDGET, BUDGET, BUDGET))
+    .then(advance(BUDGET))
+    .expect(s.o.calls == List(VALUE_ONE, DEADLINE_ERROR, DEADLINE_ERROR)
+      and s.localValues == List(VALUE_ONE) and s.o.policyCalls == 1 and s.o.loaders == 3)
 
   // A caller whose scope closed between admission and release starts its
   // source at release, outside the cache, with the configured budget: it

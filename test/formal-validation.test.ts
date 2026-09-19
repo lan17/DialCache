@@ -98,6 +98,34 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(crate!.cwd).toBe(realpathSync(join(directory, "rust")));
   });
 
+  it("excludes only opt-in Go workers from complete replay and exploration", async () => {
+    const { loadGoReplayInventory } = await import(new URL("../formal/check-go-replay.mjs", import.meta.url).href) as {
+      loadGoReplayInventory(): { required: Array<{ name: string }> };
+    };
+    const { explorationPlan } = await import(new URL("../formal/explore.mjs", import.meta.url).href) as {
+      explorationPlan(directory: string, seed: string): Step[];
+    };
+    const goTest = (step: Step) => step.command === "go" && step.args?.includes("test");
+    const replay = validationPlan("formal-go", { directory }).find(goTest)!;
+    expect(replay.args).toContain("-skip");
+    const skipped = new RegExp(replay.args![replay.args!.indexOf("-skip") + 1]!);
+    for (const worker of ["TestGeneratedInvalidationVectors", "TestVectorBoundaryDriver"]) {
+      expect(skipped.test(worker), worker).toBe(true);
+      expect(skipped.test(`${worker}Required`), worker).toBe(false);
+      expect(skipped.test(`Other${worker}`), worker).toBe(false);
+    }
+    // Check the real inventory so adding a required corpus root cannot
+    // silently inherit a worker exclusion.
+    const requiredRoots = [...new Set(loadGoReplayInventory().required.map(entry => entry.name.split("/")[0]!))];
+    expect(requiredRoots.filter(name => skipped.test(name))).toEqual([]);
+    expect(explorationPlan(directory, "0x1").find(goTest)!.args)
+      .toEqual(replay.args);
+    for (const target of ["check-go", "smoke"]) {
+      expect(validationPlan(target, { directory }).find(goTest)!.args, target)
+        .not.toContain("-skip");
+    }
+  });
+
   it("stops at a failing child and preserves its partial native report without running later steps", async () => {
     const steps: Step[] = [
       { label: "first", command: process.execPath, args: [child, "first"] },
@@ -141,17 +169,26 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     // evidence about Quint; generation is the only producer downstream reads.
     expect(validationPlan("formal-check", { directory })).toEqual([
       { label: "Check every scheduled Quint model", command: process.execPath, args: ["formal/run-models.mjs", "check"] },
+      { label: "Measure every pinned model fault", command: process.execPath, args: ["formal/check-model-properties.mjs"] },
       { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/lint-profiles.mjs", "baseline", "--check"] },
       { label: "Check the kernel library fixtures", command: process.execPath, args: ["formal/check-kernel-fixtures.mjs"] },
     ]);
     const generate = validationPlan("formal-generate", { directory });
     expect(generate.some(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toBe(false);
     expect(generate.some(step => step.args?.[0] === "formal/check-model-properties.mjs")).toBe(false);
-    for (const target of ["formal-ts", "formal-go", "mutations"]) {
+    for (const target of ["formal-ts", "formal-go", "formal-rust", "mutations"]) {
       expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/run-models.mjs")).toBe(false);
     }
-    // ci keeps requiring the check through the aggregate; nothing else adds a second one.
-    expect(validationPlan("ci", { directory }).filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toHaveLength(1);
+    // Every acceptance entry point keeps one complete campaign, after all
+    // unmodified model checks. No filtered --only run can replace that gate.
+    for (const target of ["formal-check", "formal", "ci"]) {
+      const plan = validationPlan(target, { directory });
+      const checks = plan.filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check");
+      const campaigns = plan.filter(step => step.args?.[0] === "formal/check-model-properties.mjs");
+      expect(checks, target).toHaveLength(1);
+      expect(campaigns.map(step => step.args), target).toEqual([["formal/check-model-properties.mjs"]]);
+      expect(plan.indexOf(checks[0]!), target).toBeLessThan(plan.indexOf(campaigns[0]!));
+    }
   });
 
 
@@ -162,6 +199,19 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       { label: "Replay composed profiles against their reference corpus", command: process.execPath, args: ["formal/differential.mjs", "--composed", "--reference=origin/release"] },
     ]);
     expect(validationPlan("differential", { directory, environment }).at(-1)!.args).toEqual(["formal/differential.mjs", "--composed", "--reference=origin/main"]);
+    // DIFFERENTIAL_SHARD narrows the replay to one shard, keeps the two cheap checks in every shard, and is validated as the script parses it.
+    const sharded = validationPlan("differential", { directory, environment: { ...environment, DIFFERENTIAL_SHARD: "2/4" } });
+    expect(sharded.map(step => step.args)).toEqual([["formal/lint-profiles.mjs", "baseline", "--check"], ["formal/check-kernel-fixtures.mjs"],
+      ["formal/differential.mjs", "--composed", "--reference=origin/main", "--shard=2/4"]]);
+    expect(validationPlan("differential", { directory, environment }).flatMap(step => step.args ?? []).some(argument => argument.startsWith("--shard"))).toBe(false);
+    for (const value of ["0/4", "5/4", "2", "a/b", ""]) {
+      expect(() => validationPlan("differential", { directory, environment: { ...environment, DIFFERENTIAL_SHARD: value } }), value).toThrow(/DIFFERENTIAL_SHARD must be <index>\/<count>/);
+    }
+    // Other targets ignore the variable, even a malformed one: no aggregate includes the differential.
+    for (const target of ["check-ts", "formal-check", "ci"]) {
+      expect(validationPlan(target, { directory, environment: { ...environment, DIFFERENTIAL_SHARD: "9/1" } }), target).toEqual(validationPlan(target, { directory, environment }));
+    }
+    expect(targetDescriptions.differential).toMatch(/DIFFERENTIAL_SHARD=<index>\/<count>/);
   });
   it("ends generation with the shared witness evaluation and starts each replay lane from a prepared context", () => {
     const generate = validationPlan("formal-generate", { directory });
@@ -214,6 +264,29 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     }
     // The runner's environment cleaning removes replay selectors, not the shard.
     expect(cleanEnvironment({ MUTATION_SHARD: "2/3", DIALCACHE_PROTOCOL_CORPUS: "fixed", QUINT_SEED: "1" })).toEqual({ MUTATION_SHARD: "2/3" });
+  });
+
+  it("measures named mutants only through MUTATION_ONLY on its own target, never together with a shard", () => {
+    const partial = { ...environment, MUTATION_ONLY: "M14,M15" };
+    expect(validationPlan("mutations-ts", { directory, environment: partial })).toEqual([
+      { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/measure-semantics.mjs", "--only=M14,M15"] },
+    ]);
+    expect(validationPlan("mutations-go", { directory, environment: partial }).map(step => step.args)).toEqual([["formal/measure-go-semantics.mjs", "--only=M14,M15"]]);
+    expect(validationPlan("mutations-rust", { directory, environment: { ...environment, MUTATION_ONLY: "M01,M02" } }).map(step => step.args)).toEqual([["formal/measure-rust-semantics.mjs", "--only=M01,M02"]]);
+    for (const value of ["", "M14,", "M14,M14", "m14", "14", "M14 M15"]) {
+      expect(() => validationPlan("mutations-ts", { directory, environment: { ...environment, MUTATION_ONLY: value } }), value).toThrow(/MUTATION_ONLY must be <id>,<id> naming distinct mutant ids/);
+    }
+    // A partial run is never merged, so it cannot also be a shard.
+    expect(() => validationPlan("mutations-ts", { directory, environment: { ...partial, MUTATION_SHARD: "2/3" } })).toThrow(/MUTATION_SHARD and MUTATION_ONLY exclude each other/);
+    // The aggregates refuse to ignore it silently; unrelated targets ignore it.
+    for (const target of ["mutations", "ci"]) {
+      expect(() => validationPlan(target, { directory, environment: partial }), target).toThrow(/MUTATION_ONLY=M14,M15 applies only to make mutations-ts, make mutations-go and make mutations-rust/);
+    }
+    for (const target of ["check", "formal", "formal-ts", "mutations-merge-ts", "mutations-merge-go", "mutations-merge-rust"]) {
+      expect(validationPlan(target, { directory, environment: partial }), target).toEqual(validationPlan(target, { directory, environment }));
+    }
+    expect(cleanEnvironment({ MUTATION_ONLY: "M14", DIALCACHE_PROTOCOL_CORPUS: "fixed" })).toEqual({ MUTATION_ONLY: "M14" });
+    for (const target of ["mutations-ts", "mutations-go", "mutations-rust"]) expect(targetDescriptions[target]).toMatch(/MUTATION_ONLY=<id>,<id>/);
   });
 
   it("merges each language's shards with a plain Node step that needs neither Quint nor Go", () => {
@@ -280,6 +353,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     }
   });
 
+  it("requires Docker for mutation measurements but not report merging", () => {
+    fakeTool("docker", 'console.error("Docker not running"); process.exit(1)');
+    for (const target of ["mutations-ts", "mutations-go"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/docker/);
+    }
+    for (const target of ["mutations-merge-ts", "mutations-merge-go"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
+    }
+  });
+
   it("allows the standalone floor target on Node 22.15 and propagates its PATH without reintroducing selectors", async () => {
     const floor = fakeTool("node22", `if (process.argv[2] === '--version') console.log('v22.15.0');
 else {
@@ -310,7 +393,7 @@ else {
 describe("full formal workflow shape", () => {
   type Step = { name?: string; run?: string; uses?: string; if?: string; env?: Record<string, string>; with?: Record<string, string | boolean> };
   type Job = { needs?: string | string[]; if?: string; env?: Record<string, string>; strategy?: { "fail-fast"?: boolean; matrix?: Record<string, unknown[]> }; "timeout-minutes"?: number; steps: Step[] };
-  const lanes = ["typescript-parity", "go-parity", "typescript-mutations", "go-mutations"];
+  const lanes = ["typescript-parity", "go-parity", "rust-parity", "typescript-mutations", "go-mutations", "rust-mutations"];
   const needsOf = (job: Job) => (job.needs === undefined ? [] : [job.needs].flat());
   let jobs: Record<string, Job>;
 
@@ -339,18 +422,29 @@ describe("full formal workflow shape", () => {
     for (const lane of lanes) expect(needsOf(jobs[lane]!), lane).toEqual(["generate"]);
   });
 
-  it("shards both mutation lanes over three runners and gates the aggregate on their merges", () => {
+  it("shards both mutation lanes so every shard fits its timeout on the slow runner class, and gates the aggregate on their merges", () => {
     const uploadOf = (job: Job) => job.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!;
     const downloadsOf = (job: Job) => job.steps.filter(step => step.uses?.startsWith("actions/download-artifact")).map(step => step.with);
     const matrixShard = "$" + "{{ matrix.shard }}";
+    // A shard runs the baselines, then its slice of the catalog strictly in sequence; on the slow
+    // runner class a TypeScript mutant costs about 2 minutes and a Go mutant about 3.5 (run
+    // 35335831285 measured 200-208 s per Go mutant on that class), and one hung
+    // cohort adds its own bound (the 540 s vitest spawn timeout, the 480 s go test timeout) before
+    // the shard fails. The matrix must keep every shard inside the job timeout, so growing the
+    // catalog fails here until the matrix grows. The shard count in the matrix and in MUTATION_SHARD
+    // must agree or the merge refuses the shards.
+    const catalogSize = (JSON.parse(readFileSync(new URL("../formal/mutations.json", import.meta.url), "utf8")) as { mutations: unknown[] }).mutations.length;
+    const baselineMinutes = 4;
     const table = [
-      { lane: "typescript-mutations", language: "ts", output: ".formal-traces/semantic", artifact: "typescript-semantic", timeout: 30, go: undefined },
-      { lane: "go-mutations", language: "go", output: ".formal-traces/go-semantic", artifact: "go-semantic", timeout: 40, go: { go: "true" } },
+      { lane: "typescript-mutations", language: "ts", output: ".formal-traces/semantic", artifact: "typescript-semantic", timeout: 40, shards: 6, slowMinutesPerMutant: 2, hungCohortMinutes: 9, go: undefined },
+      { lane: "go-mutations", language: "go", output: ".formal-traces/go-semantic", artifact: "go-semantic", timeout: 40, shards: 10, slowMinutesPerMutant: 3.5, hungCohortMinutes: 8, go: { go: "true" } },
     ];
-    for (const { lane, language, output, artifact, timeout, go } of table) {
+    for (const { lane, language, output, artifact, timeout, shards, slowMinutesPerMutant, hungCohortMinutes, go } of table) {
       const job = jobs[lane]!;
-      expect(job.strategy, lane).toEqual({ "fail-fast": false, matrix: { shard: [1, 2, 3] } });
-      expect(job.env, lane).toEqual({ MUTATION_SHARD: matrixShard + "/3" });
+      const perShard = Math.ceil(catalogSize / shards);
+      expect(baselineMinutes + perShard * slowMinutesPerMutant + hungCohortMinutes, `${lane}: ${perShard} mutants per shard`).toBeLessThanOrEqual(timeout);
+      expect(job.strategy, lane).toEqual({ "fail-fast": false, matrix: { shard: Array.from({ length: shards }, (_, position) => position + 1) } });
+      expect(job.env, lane).toEqual({ MUTATION_SHARD: matrixShard + "/" + shards });
       expect(job["timeout-minutes"], lane).toBe(timeout);
       expect(job.steps.map(step => step.run).filter(Boolean), lane).toEqual(["make mutations-" + language]);
       expect(job.steps.find(step => step.uses === "./.github/actions/setup-validation")!.with, lane).toEqual(go);
@@ -405,14 +499,27 @@ describe("full formal workflow shape", () => {
     const jobs = parse(readFileSync(new URL("../.github/workflows/formal.yaml", import.meta.url), "utf8")).jobs;
     const job = jobs.differential!;
     expect(job.if).toBe("github.event_name == 'pull_request'");
-    expect(job["timeout-minutes"]).toBe(30);
+    // Every composed profile replaying both ways after a kernel change overran one 60-minute job
+    // (57 minutes, then a cancellation at the timeout); retain the four required shard statuses.
+    expect(job["timeout-minutes"]).toBe(60);
+    expect(job.strategy).toEqual({ "fail-fast": false, matrix: { shard: [1, 2, 3, 4] } });
+    const shards = job.strategy!.matrix!.shard as number[];
     expect(job.steps.find(step => step.uses?.startsWith("actions/checkout"))!.with).toEqual({ "fetch-depth": 0 });
     expect(job.steps.some(step => step.uses === "./.github/actions/setup-quint")).toBe(true);
     const run = job.steps.find(step => step.run === "make differential")!;
-    expect(run.env).toEqual({ DIFFERENTIAL_REFERENCE: "origin/$" + "{{ github.base_ref }}" });
+    // The count in DIFFERENTIAL_SHARD must agree with the matrix, or a profile is replayed twice or never.
+    expect(run.env).toEqual({ DIFFERENTIAL_REFERENCE: "origin/$" + "{{ github.base_ref }}", DIFFERENTIAL_SHARD: "$" + "{{ matrix.shard }}/" + shards.length });
     expect(run.if).toBe("steps.fixture-scope.outputs.recompute == 'true'");
     const upload = job.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!;
-    expect(upload.with!.name).toBe("formal-differential");
+    expect(upload.with!.name).toBe("formal-differential-$" + "{{ matrix.shard }}");
     expect(String(upload.with!.path)).toContain("**/replay-*/quint-test.log");
+  });
+});
+
+describe("kernel fixture checker", () => {
+  it("lists a fixture's declared runs and rejects a name quint test would not select", async () => {
+    const { declaredRuns } = await import(new URL("../formal/check-kernel-fixtures.mjs", import.meta.url).href) as { declaredRuns(source: string): string[] };
+    expect(declaredRuns("module m {\n  run firstTest = init\n  run secondTest = init.then(step)\n}\n")).toEqual(["firstTest", "secondTest"]);
+    expect(() => declaredRuns("module m {\n  run firstTest = init\n  run probe = init\n}\n")).toThrow(/Kernel fixture runs must end in Test: probe/);
   });
 });

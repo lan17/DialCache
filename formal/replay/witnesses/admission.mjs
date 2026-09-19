@@ -1,17 +1,32 @@
+import { publicPrefixWitnesses, publicPrefixRule as rule, publicCheckpoint as check, witnessCommand as command } from "./public-prefix.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
+import { fidelityBinding } from "./fidelity.mjs";
+
+export const admissionWitnessRules = [
+  rule("later-served-shadow-keeps-own-job-budget", "laterServedShadowKeepsItsWholeBudgetTest",
+    [command("init"), command("advance", 10), command("beginCall", 0), command("releaseRead", 0), command("releaseLoad", 0), command("advance", 1), command("rejectLoader", 0)],
+    check(5, { calls: [1], loaders: 1, loads: 1, shadow: [] }),
+    check(6, { calls: [1], loaders: 1, loads: 1, shadow: ["source_error"] })),
+];
+
 
 // Shadow-job admission witnesses use declared inputs and public observations
 // only. Job bookkeeping below mirrors the observed effect indices; it never
-// reads private model admissions.
+// reads private model admissions. Wherever a history still carries the
+// model's private predictions, the fidelity check compares the shadow after
+// every step with the composed layout (dialcache-admission-conformance.qnt
+// over the kernel library): the live jobs by loader ordinal with their
+// identity, phase, expiry and timeout, each pending held read and decode as a
+// caller flight's (its identity, captured selection and callers) or a job's,
+// the flights registered for sharing, and the clock.
 export function admissionWitnesses(histories, recorder = createWitnessRecorder()) {
-  for (const { path, steps } of histories) {
+  publicPrefixWitnesses(histories, admissionWitnessRules, recorder);
+  for (const { path, steps, predictions } of histories) {
     recorder.enter(path);
-    let now = 0;
     let overlay = 0;
-    const registered = new Map();
-    const jobs = new Map();
-    const reads = new Map();
-    const loads = new Map();
+    const shadow = { now: 0, registered: new Map(), jobs: new Map(), reads: new Map(), loads: new Map() };
+    const { registered, jobs, reads, loads } = shadow;
+    const shadows = [];
     const released = new Set();
     const instance = identity => Math.floor(identity / 3);
     const finish = index => {
@@ -24,12 +39,12 @@ export function admissionWitnesses(histories, recorder = createWitnessRecorder()
       recorder.credit(`action:${step.action}`);
       const o = step.expected;
       const previous = steps[i - 1]?.expected;
-      if (previous === undefined) continue;
+      if (previous === undefined) { shadows.push(structuredClone(shadow)); continue; }
       for (const outcome of o.shadow) recorder.credit(`outcome:${outcome}`);
       if (step.action === "policy") overlay = step.choice;
       if (step.action === "advance") {
-        now += step.choice;
-        for (const job of jobs.values()) if (now >= job.deadline) job.timedOut = true;
+        shadow.now += step.choice;
+        for (const job of jobs.values()) if (shadow.now >= job.deadline) job.timedOut = true;
       }
       if (step.action === "beginCall") {
         if (o.reads > previous.reads) {
@@ -63,7 +78,7 @@ export function admissionWitnesses(histories, recorder = createWitnessRecorder()
             if ([...jobs.values()].filter(job => instance(job.identity) !== instance(flight.identity)).length === 2) recorder.credit("other-instance-full-admission");
             if ([...jobs.values()].some(job => job.identity % 3 === flight.identity % 3)) recorder.credit("per-instance-deduplication");
             if (released.has(flight.identity)) recorder.credit("readmission-after-timeout-drains");
-            jobs.set(o.loaders - 1, { identity: flight.identity, phase: "source", deadline: now + 10, timedOut: false });
+            jobs.set(o.loaders - 1, { identity: flight.identity, phase: "source", deadline: shadow.now + 10, timedOut: false });
           } else if (o.shadow.length > previous.shadow.length) {
             if (duplicate && active.length < 2) recorder.credit("duplicate-with-free-capacity");
             if (!duplicate && active.length === 2) recorder.credit("full-capacity-drop");
@@ -87,7 +102,67 @@ export function admissionWitnesses(histories, recorder = createWitnessRecorder()
           loads.set(o.loads - 1, { job: loader });
         } else finish(loader);
       }
+      shadows.push(structuredClone(shadow));
     }
+    if (carriesPrivateState(predictions)) checkFidelity(shadows, predictions, path);
   }
   return recorder.labels();
 }
+
+// The composed layout read back in the shadow's terms. The registry is
+// pending-only, so every job is live; a job is keyed by the loader ordinal of
+// the detached flight it runs over, its phase is the held lifecycle's (waiting
+// for its source, decoding, confirming) and its deadline (keyed by its source)
+// is compared while the budget is pending. A held read or decode over a
+// source with a job confirming or decoding is that job's; any other is a
+// caller flight's, whose identity is its source's, whose selection is the one
+// captured for the flight and whose callers are the owners the registry
+// names. A flight registered for sharing is the process registry's entry for
+// its identity.
+const KEYS = 3, WAITING_SOURCE = 1, DECODING = 2, CONFIRMING = 3, JOB_DEADLINE = 2;
+const PHASES = new Map([[WAITING_SOURCE, "source"], [DECODING, "decode"], [CONFIRMING, "confirmation"]]);
+const layoutFields = ["now", "sources", "owners", "processFlights", "jobs", "deadlines", "selected", "loaders", "reads", "loads"];
+function modelView(state, context) {
+  const { sources, owners, processFlights, jobs, deadlines, selected, loaders, reads, loads } = state;
+  const identityOf = flight => sources[flight].instance * KEYS + sources[flight].key;
+  const flightView = flight => ({ identity: identityOf(flight), selected: selected.includes(flight), callers: owners.flatMap((owned, caller) => owned === flight ? [caller] : []) });
+  const ordinalOf = job => {
+    const ordinal = loaders.indexOf(job.source);
+    if (ordinal < 0) throw new Error(`${context}: a job runs over flight ${job.source}, which no loader maps to`);
+    return ordinal;
+  };
+  const effectView = (flight, phase) => {
+    const job = jobs.find(candidate => candidate.source === flight && candidate.phase === phase);
+    return job !== undefined ? { job: ordinalOf(job) } : { flight: flightView(flight) };
+  };
+  const jobViews = new Map();
+  for (const job of jobs) {
+    const phase = PHASES.get(job.phase);
+    if (phase === undefined) throw new Error(`${context}: the job over flight ${job.source} is in phase ${job.phase}, which the held lifecycle never takes`);
+    const due = deadlines.find(deadline => deadline.kind === JOB_DEADLINE && deadline.index === job.source);
+    jobViews.set(ordinalOf(job), { identity: identityOf(job.source), phase, timedOut: job.timedOut, ...(due !== undefined ? { deadline: due.at } : {}) });
+  }
+  return {
+    now: state.now,
+    registered: new Map(processFlights.flatMap((flight, identity) => flight >= 0 ? [[identity, flightView(flight)]] : [])),
+    jobs: jobViews,
+    reads: new Map(reads.map(held => [held.read, effectView(held.flight, CONFIRMING)])),
+    loads: new Map(loads.map(held => [held.load, effectView(held.flight, DECODING)])),
+  };
+}
+// The shadow projected to the fields the layout carries: a job's deadline is
+// compared only while the model still holds its budget.
+function shadowView(shadow, model) {
+  const flight = ({ identity, selected, callers }) => ({ identity, selected, callers });
+  const effect = held => "job" in held ? { job: held.job } : { flight: flight(held.flight) };
+  const project = entries => new Map([...entries].map(([key, value]) => [key, effect(value)]));
+  return {
+    now: shadow.now,
+    registered: new Map([...shadow.registered].map(([identity, held]) => [identity, flight(held)])),
+    jobs: new Map([...shadow.jobs].map(([ordinal, job]) => [ordinal, Object.fromEntries(Object.keys(model.jobs.get(ordinal) ?? { identity: 0, phase: 0, timedOut: 0 }).map(key => [key, job[key]]))])),
+    reads: project(shadow.reads),
+    loads: project(shadow.loads),
+  };
+}
+const { carriesPrivateState, checkFidelity } = fidelityBinding({ publicChannels: ["o"], layoutFields,
+  view: (shadow, state, context) => { const model = modelView(state, context); return [shadowView(shadow, model), model]; } });

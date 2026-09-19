@@ -4,15 +4,19 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'nod
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { copySources, readExecution, root, validateExecution } from './execution.mjs';
+import { encodeJson } from './compact-json.mjs';
+import { copySources, importClosure, readExecution, root, scheduleExecution, validateExecution } from './execution.mjs';
 import { resolveConcurrency, runPool, spawnBuffered } from './quint-pool.mjs';
 
 const recipePath = 'formal/fixture-recipes.json';
 const lockPath = 'formal/generated-fixtures.lock.json';
 const generator = 'formal/generated-fixtures.mjs';
+const encoder = 'formal/compact-json.mjs';
 const read = path => readFileSync(resolve(root, path), 'utf8');
 const json = path => JSON.parse(read(path));
-const encode = value => JSON.stringify(value, null, 2) + '\n';
+// Every history state, excerpt step and excerpt initial state is one line.
+const record = path => ['states', 'steps'].includes(path.at(-2)) || path.at(-1) === 'initialState';
+const encode = value => encodeJson(value, record);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const integer = value => ({ '#bigint': String(value) });
 const identifier = value => typeof value === 'string' && /^[A-Za-z_]\w*$/.test(value);
@@ -25,8 +29,7 @@ export function validateRecipes(book, execution = readExecution()) {
   for (const artifact of book.artifacts) {
     if (typeof artifact.path !== 'string' || !/^(formal\/[\w-]+-smoke\.itf|test\/fixtures\/[\w-]+)\.json$/.test(artifact.path) || paths.has(artifact.path)) fail('Invalid/duplicate fixture path');
     paths.add(artifact.path);
-    if (Object.keys(artifact).some(key => !['path', 'model', 'format', 'recipes', 'actionBindings'].includes(key))) fail('Unexpected artifact recipe field');
-    for (const [name, target] of Object.entries(artifact.actionBindings ?? {})) if (!identifier(name) || !identifier(target)) fail('Invalid public action binding');
+    if (Object.keys(artifact).some(key => !['path', 'model', 'format', 'recipes'].includes(key))) fail('Unexpected artifact recipe field');
     if (!['smoke', 'named-map', 'named-list', 'excerpts'].includes(artifact.format) || !Array.isArray(artifact.recipes) || !artifact.recipes.length) fail('Invalid fixture format');
     if (artifact.format === 'smoke' && artifact.recipes.length !== 1) fail('Smoke must select exactly one history');
     const ids = new Set();
@@ -173,7 +176,7 @@ export function spliceDeclarations(source, lines) {
   return `${source.slice(0, end)}\n${lines.join('\n')}\n${source.slice(end)}`;
 }
 
-async function exportModel(model, requests, directory, settings) {
+async function exportModel(model, requests, directory, settings, exported) {
   const source = read(model), name = /^module\s+(\w+)\s*\{/.exec(source)?.[1];
   if (!name) fail('Unsupported Quint module');
   const { parsed, sourceMap } = await parseWithSourceMap(model, directory, execute);
@@ -192,8 +195,7 @@ async function exportModel(model, requests, directory, settings) {
   for (const request of named) {
     const regression = request.recipe.regression;
     if (declarations.get(regression)?.qualifier !== 'run') fail(`Missing named Quint run ${regression}`);
-    const scheduled = readExecution().models.find(m => m.path === model)?.replayRegressions ?? [];
-    if (!scheduled.includes(regression)) fail(`Fixture run is not a scheduled public-action replay: ${regression}`);
+    if (!exported.includes(regression)) fail(`Fixture run is not a scheduled public-action replay: ${regression}`);
     request.run = regression;
   }
   if (named.length) await execute(['test', input, `--backend=${settings.backend}`, '--max-samples=1', `--seed=${settings.seed}`,
@@ -201,9 +203,8 @@ async function exportModel(model, requests, directory, settings) {
   for (const [i, request] of requests.entries()) {
     if (request.recipe.regression) continue;
     const calls = request.recipe.actions.map(([action, choice]) => {
-      const selectedAction = request.artifact.actionBindings?.[action] ?? action;
-      if (!publicActions.has(selectedAction)) fail(`Action is not exposed by the model's step: ${selectedAction}`);
-      return [selectedAction, choice];
+      if (!publicActions.has(action)) fail(`Action is not exposed by the model's step: ${action}`);
+      return [action, choice];
     });
     const { declarations: additions, schedules: [schedule] } = scheduleHistories(source, declarations, sourceMap, [calls], { prefix: 'fixture', cursor: 'fixtureCursor' });
     request.run = `fixtureHistory${i}`;
@@ -227,14 +228,21 @@ async function exportModel(model, requests, directory, settings) {
   }
 }
 
+// What the fixture bytes depend on: the recipes, this generator with its
+// encoder, and every Quint source a recipe model reaches through its imports.
+// The Quint settings the export runs with are recorded beside them. The
+// manifest, the profile registry and libraries no recipe model imports are
+// not inputs: editing them cannot change a fixture, so they do not invalidate one.
 function inputs(book) {
-  const execution = readExecution();
-  return Object.fromEntries([...new Set([recipePath, generator, 'formal/execution.mjs', 'formal/execution.json', 'formal/profiles.json',
-    ...execution.libraries, ...book.artifacts.flatMap(a => a.recipes.map(r => r.model ?? a.model))])].sort().map(path => [path, hash(read(path))]));
+  const models = new Set(book.artifacts.flatMap(a => a.recipes.map(r => r.model ?? a.model)));
+  return Object.fromEntries([...new Set([recipePath, generator, encoder, ...[...models].flatMap(model => importClosure(model))])].sort()
+    .map(path => [path, hash(read(path))]));
 }
-export function verifyFixtures(book = validateRecipes(json(recipePath))) {
+const exportSettings = execution => ({ backend: execution.settings.backend, seed: execution.settings.seed });
+export function verifyFixtures(book = validateRecipes(json(recipePath)), execution = readExecution()) {
   const lock = json(lockPath);
-  if (lock.schemaVersion !== 1 || lock.quintVersion !== '0.32.0' || !isDeepStrictEqual(lock.inputs, inputs(book))) fail('Generated fixture inputs changed; regenerate and review');
+  if (lock.schemaVersion !== 1 || lock.quintVersion !== '0.32.0' || !isDeepStrictEqual(lock.settings, exportSettings(execution)) ||
+      !isDeepStrictEqual(lock.inputs, inputs(book))) fail('Generated fixture inputs changed; regenerate and review');
   const expected = Object.fromEntries(book.artifacts.map(a => [a.path, hash(read(a.path))]));
   if (!isDeepStrictEqual(lock.artifacts, expected)) fail('Generated fixture content changed; regenerate and review');
   return { artifacts: book.artifacts.length, histories: book.artifacts.reduce((n, a) => n + a.recipes.length, 0) };
@@ -242,7 +250,8 @@ export function verifyFixtures(book = validateRecipes(json(recipePath))) {
 export async function generateFixtures(mode, { concurrency = resolveConcurrency() } = {}) {
   const execution = readExecution(); validateExecution(execution);
   const book = validateRecipes(json(recipePath), execution);
-  if (mode === '--verify') return verifyFixtures(book);
+  if (mode === '--verify') return verifyFixtures(book, execution);
+  const scheduled = scheduleExecution(execution);
   if (!['--check', '--write'].includes(mode)) fail('Use --write, --check or --verify');
   const version = spawnSync('quint', ['--version'], { encoding: 'utf8' });
   if (version.status !== 0 || version.stdout.trim() !== '0.32.0') fail('Fixture export requires Quint 0.32.0');
@@ -257,7 +266,7 @@ export async function generateFixtures(mode, { concurrency = resolveConcurrency(
   await runPool([...groups].map(([model, requests]) => async () => {
     const directory = resolve(root, '.formal-traces/fixture-build', basename(model, '.qnt'));
     rmSync(directory, { recursive: true, force: true }); mkdirSync(directory, { recursive: true });
-    await exportModel(model, requests, directory, execution.settings);
+    await exportModel(model, requests, directory, execution.settings, scheduled.models.find(m => m.path === model).replayRegressions);
     console.log(`Quint fixtures: ${basename(model)} (${requests.length} histories)`);
   }), { concurrency });
   const requests = [...groups.values()].flat(), outputs = new Map();
@@ -278,13 +287,14 @@ export async function generateFixtures(mode, { concurrency = resolveConcurrency(
       ? Object.fromEntries(artifact.recipes.map((r, i) => [r.id, entries[i]])) : entries;
     outputs.set(artifact.path, encode(output));
   }
-  const lock = { schemaVersion: 1, quintVersion: '0.32.0', inputs: inputs(book), artifacts: Object.fromEntries([...outputs].map(([path, text]) => [path, hash(text)])) };
+  const lock = { schemaVersion: 1, quintVersion: '0.32.0', settings: exportSettings(execution), inputs: inputs(book),
+    artifacts: Object.fromEntries([...outputs].map(([path, text]) => [path, hash(text)])) };
   outputs.set(lockPath, encode(lock));
   for (const [path, output] of outputs) {
     if (mode === '--write') writeFileSync(resolve(root, path), output);
     else if (read(path) !== output) fail(`${path}: fresh Quint output differs; run --write and review`);
   }
-  return verifyFixtures(book);
+  return verifyFixtures(book, execution);
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv.length !== 3) fail('Usage: node formal/generated-fixtures.mjs --write|--check|--verify');

@@ -211,9 +211,12 @@ module dialcache_envelope_vectors {
   run escapedCompressedMarkerRemainsLiteralTest = init
     .then(execute({ command: "envelope", bytes: List(0,1,255), decoderSucceeds: true, decodedBytes: List(65), ...DEFAULT }))
     .expect(result.read.outcome == "passthrough" and result.read.bytes == List(1,255))
+  run escapedBinaryMarkerRemainsLiteralTest = init
+    .then(execute(requestFor(8)))
+    .expect(result.read.bytes == List(2))
   run unknownLegacyZeroPrefixRemainsUntouchedTest = init
-    .then(execute({ command: "envelope", bytes: List(0,3,255), ...DEFAULT }))
-    .expect(result.read.bytes == List(0,3,255))
+    .then(execute(requestFor(9)))
+    .expect(result.read.bytes == List(0,3))
   run corruptCompressionPreservesMarkedBytesTest = init
     .then(execute({ command: "decode", bytes: List(1,255), ...DEFAULT }))
     .expect(result.read.outcome == "fallback_raw" and result.read.bytes == List(1,255))
@@ -229,8 +232,11 @@ module dialcache_envelope_vectors {
     .then(execute({ command: "write", thresholdBytes: 64, ...writeFixture(11) }))
     .expect(result.originalBytes == 64 and result.typescript.outcome == "compressed" and result.go.outcome == "compressed")
   run compressionTieKeepsRawRepresentationTest = init
-    .then(execute({ command: "write", ...writeFixture(2) }))
+    .then(execute(requestFor(192)))
     .expect(result.typescript.outcome == "not_smaller" and result.typescript.storedBytes == 18)
+  run goCompressionTieKeepsRawRepresentationTest = init
+    .then(execute(requestFor(219)))
+    .expect(result.go.outcome == "not_smaller" and result.go.storedBytes == 19)
   run shrinkComparedWithEscapedRawBytesTest = init
     .then(execute({ command: "write", ...writeFixture(5) }))
     .expect(result.originalBytes == 18 and result.escaped.length() == 19

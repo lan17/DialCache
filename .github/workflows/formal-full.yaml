@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       exploration:
-        description: Explore a fresh seed in both ports in addition to pinned acceptance.
+        description: Explore a fresh seed in every port in addition to pinned acceptance.
         type: boolean
         default: false
   schedule:
@@ -21,10 +21,11 @@ jobs:
   exploration:
     if: (github.event_name == 'schedule' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.exploration)
     runs-on: ubuntu-latest
-    # Run 34660598461 took 28 minutes. Hosted runners vary by about 2x between
-    # runs (run 34666226055 was 1.8x slower on every Quint phase), so every
-    # budget in this workflow leaves that headroom.
-    timeout-minutes: 60
+    # Run 35568655690 exhausted the old hour inside the expanded challenge
+    # campaign, before generation or native replay. Allow the model job's
+    # budget below plus time for the fresh corpus and every port; individual
+    # evaluator and replay commands retain their own hang bounds.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -51,8 +52,12 @@ jobs:
     # Scheduled workflows run the default branch; keep the intended main scope explicit.
     if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Run 34660598461 spent about 8.5 minutes on this work; a 2x slower runner needs 17.
-    timeout-minutes: 30
+    # Shared-library challenges now execute the importing profiles' partitions,
+    # including clean baselines and mutant checks cached by exact source closure.
+    # The expanded partition campaign was still running after an hour in
+    # run 35568655690. Leave room for the full campaign on slower runners
+    # without reducing models, histories or partitions.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -73,8 +78,8 @@ jobs:
           retention-days: 14
 
   # The single producer for every downstream lane: corpus generation, fixture
-  # recomputation and the shared witness evidence. Both port replays and both
-  # mutation measurements depend only on this job's artifact and run in parallel.
+  # recomputation and the shared witness evidence. Every port replay and mutation
+  # measurement depend only on this job's artifact and run in parallel.
   generate:
     # Scheduled workflows run the default branch; keep the intended main scope explicit.
     if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
@@ -148,24 +153,27 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Each mutation lane is sharded over three runners. Every shard compiles,
-  # measures every unmodified baseline and evaluates the witness evidence
-  # itself, then measures a contiguous third of the catalog; the merge job
-  # refuses shards whose fingerprints or baselines disagree, so the merged
-  # report is exactly as strict as one sequential run. The lane was bounded
-  # by sequential mutants: run 34669546872 took 17 minutes unsharded. A shard
-  # runs the baselines (2-4 minutes) plus 4-5 mutants (2-4 minutes each);
-  # doubled for a slow runner that stays under 30.
+  # Each mutation lane is sharded. Every shard compiles, measures every
+  # unmodified baseline and evaluates the witness evidence itself, then
+  # measures a contiguous slice of the catalog; the merge job refuses shards
+  # whose fingerprints or baselines disagree, so the merged report is exactly
+  # as strict as one sequential run. The lane is bounded by sequential
+  # mutants: about 1 minute per TypeScript mutant on a fast runner and about 2
+  # on the slow class (13 mutants took 17 minutes unsharded in run
+  # 34669546872). test/formal-validation.test.ts pins the mutants a shard may
+  # hold so that the baselines (2-4 minutes), the slow-class mutant cost and
+  # one hung cohort's 9-minute bound fit the timeout; growing the catalog past
+  # that fails the pull request until the matrix grows.
   typescript-mutations:
     needs: generate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6]
     env:
-      MUTATION_SHARD: ${{ matrix.shard }}/3
-    timeout-minutes: 30
+      MUTATION_SHARD: ${{ matrix.shard }}/6
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -173,6 +181,7 @@ jobs:
         with:
           name: formal-traces
           path: .formal-traces
+      # The runner provisions a private Docker Redis server for generated invalidation vectors.
       - name: Measure one shard of TypeScript assertion-based fault detection
         run: make mutations-ts
       # The shard directory alone: the merge job downloads every shard into
@@ -279,22 +288,24 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # The Go lane bounded the whole workflow: 13 mutants each replaying the
-  # generated cohort for about 105 s on a fast runner, strictly in sequence.
-  # Run 34660598461 took 25 minutes; runs 34669546872 and 34670045249 took 47
-  # and 48 on the slow runner class. A shard compiles, runs the baselines
-  # (2-4 minutes) and 4-5 mutants (2-4 minutes each); doubled for a slow
-  # runner that stays under 40, and one hung cohort adds its 8-minute test
-  # bound before the shard fails.
+  # The Go lane bounds the whole workflow: every mutant replays the generated
+  # cohort, about 1.6 minutes per mutant on a fast runner and about 3 on the
+  # slow class (13 mutants took 25 minutes in run 34660598461 and 47-48 in
+  # runs 34669546872 and 34670045249), strictly in sequence. A shard compiles,
+  # runs the baselines (2-4 minutes) and its slice of the catalog; one hung
+  # cohort adds its 8-minute test bound before the shard fails.
+  # test/formal-validation.test.ts pins the mutants a shard may hold within
+  # the timeout, so catalog growth fails the pull request until the matrix
+  # grows.
   go-mutations:
     needs: generate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     env:
-      MUTATION_SHARD: ${{ matrix.shard }}/3
+      MUTATION_SHARD: ${{ matrix.shard }}/10
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -305,6 +316,7 @@ jobs:
         with:
           name: formal-traces
           path: .formal-traces
+      # The runner provisions a private Docker Redis server for generated invalidation vectors.
       - name: Measure one shard of Go assertion-based fault detection
         run: make mutations-go
       - name: Preserve this shard's Go mutation evidence

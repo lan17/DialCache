@@ -1,4 +1,5 @@
 module dialcache_runtime_policy {
+  import cache_rules.* from "./cache-rules"
   // Selected rules from C09, C16-C18 and C22: valid overlays and insertion policy.
   // Runtime/baseline records are environment inputs; captured* and snapshot
   // belong to an invocation. Entry timestamps are abstracted to insertion TTLs.
@@ -69,7 +70,7 @@ module dialcache_runtime_policy {
       remoteTtl: remoteTtl,
       remoteRamp: effectiveRamp(runtime.remoteRamp, baseline.remoteRamp, remoteTtl),
       requestLocal: inherit(runtime.requestLocal, baseline.requestLocal, 0),
-      coalesce: inherit(runtime.coalesce, baseline.coalesce, 1),
+      coalesce: inherit(runtime.coalesce, baseline.coalesce, if (libraryCoalescingDefault) 1 else 0),
       recoveryAge: inherit(runtime.recoveryAge, baseline.recoveryAge, 0),
       shadowRamp: inherit(runtime.shadowRamp, baseline.shadowRamp, 0)
     }
@@ -184,9 +185,7 @@ module dialcache_runtime_policy {
     s.snapshot.remoteRamp > 0,
     s' = {
       remoteEntryPresent: true,
-      remotePhysicalTtlAtInsert:
-        if (s.snapshot.recoveryAge > s.snapshot.remoteTtl) s.snapshot.recoveryAge
-        else s.snapshot.remoteTtl,
+      remotePhysicalTtlAtInsert: remoteRetentionFor(s.snapshot.remoteTtl, s.snapshot.recoveryAge),
       remoteInsertionTtl: s.snapshot.remoteTtl,
       remoteInsertionRecoveryAge: s.snapshot.recoveryAge,
       ...s

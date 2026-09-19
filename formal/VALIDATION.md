@@ -9,11 +9,11 @@ lists tool prerequisites and focused reproduction commands.
 | Task | Command | Evidence |
 | --- | --- | --- |
 | Routine implementation checks | `make check` | Native tests, coverage, package, docs and source audits |
-| Full portable acceptance | `make formal` | Rust model checks, generated histories, TS replay, shared witness evaluation, Go replay, exact completion inventories; no Java |
+| Full portable acceptance | `make formal` | Quint model checks with the Rust evaluator, generated histories, shared witness evaluation, TypeScript/Go/Rust replay, exact completion inventories; no Java |
 | Finite symbolic rules | `make model-check` | Scheduled bounded checks with checksummed standalone Apalache; requires Java 21, `tar` and pinned Quint |
 | Challenge implementation assertions | `make mutations` | Compiling semantic faults tested against every completed port |
 | Real server behavior | `make integration` | Redis, Valkey, Cluster and cross-language interoperability |
-| Explore another schedule sample | `make explore` | Separate source snapshot, recorded random seed, both-port replay |
+| Explore another schedule sample | `make explore` | Separate source snapshot, recorded random seed, every port's replay |
 | Check composed profiles against their previous text | `make differential` | Lint baseline, then both-direction replay against the merge base with `origin/main`; fails on any disagreement or trace growth above the model's bound |
 | All required local lanes | `make ci NODE22_BIN=/absolute/path/to/node22/bin/node` | Native, formal, separate symbolic, integration and mutation runs |
 
@@ -22,10 +22,11 @@ every scheduled model, the public regressions and the model mutation challenges.
 It produces nothing the port lanes consume, so the hosted workflow runs it as a
 `check-models` job beside generation; only the aggregate waits for it.
 `make formal-generate` runs `node formal/witnesses.mjs evaluate --profile all`
-immediately after generation, before either port replays. That shared,
+immediately after generation, before any port replays. That shared,
 language-neutral step is the sole producer of `.formal-traces/go-parity-witnesses/`;
 the TypeScript suite only checks the same gate. `make formal-ts`, `make formal-go`,
-`make mutations-ts` and `make mutations-go` depend only on the generated corpus
+`make formal-rust`, `make mutations-ts`, `make mutations-go` and
+`make mutations-rust` depend only on the generated corpus
 and that witness evidence, so the hosted workflow runs them in parallel and the
 aggregate requires all of them.
 
@@ -33,7 +34,16 @@ The pull request lane's `differential` job runs `make differential` against the
 base branch whenever a Quint input changes: a composed profile that changes any
 driver-asserted observation of its previous corpus, or accepts an input the
 previous text refused, fails unless the manifest declares the change by bumping
-its `differential.behaviorVersion`. Its report is migration evidence, not a
+its `differential.behaviorVersion`. The job is a matrix of four shards,
+`differential (1)` to `differential (4)`: each checks the lint baseline and the
+kernel fixtures, then replays its assigned composed profiles
+(`DIFFERENTIAL_SHARD=<index>/4`). Profiles are assigned by estimated replay
+time, largest first into the least-loaded shard, with deterministic ties.
+The advisory weights in `differential.mjs` include estimates for new profiles;
+they change placement only. Every profile still runs both directions through
+one bounded worker pool per job, with completed/total batches and elapsed time
+logged after each batch. Each shard preserves reports and replay logs as the
+`formal-differential-<index>` artifact. These are migration evidence, not a
 conformance completion report; the profile lanes still run.
 
 The evaluator ends with a per-profile witness report: required labels with at
@@ -67,7 +77,7 @@ identify the revision and completed local or hosted validation.
 ## Reading a completion report
 
 Evidence lives under `.formal-traces/` and in the workflow's uploaded artifacts.
-The prepared `ts-context.json` and `go-context.json` bind the specification,
+The prepared `ts-context.json`, `go-context.json` and `rust-context.json` bind the specification,
 implementation, harness, corpus and required case inventory. Their matching
 completion reports require every scheduled case to pass. A changed input,
 missing result, skipped case, duplicate result or stale report fails acceptance.
@@ -75,6 +85,7 @@ missing result, skipped case, duplicate result or stale report fails acceptance.
 ```sh
 node formal/conformance.mjs check .formal-traces/ts-completion.json .formal-traces/ts-context.json
 node formal/conformance.mjs check .formal-traces/go-completion.json .formal-traces/go-context.json
+node formal/conformance.mjs check .formal-traces/rust-completion.json .formal-traces/rust-context.json
 ```
 
 Keep reports with their source/corpus fingerprints and native assertion output.
@@ -84,51 +95,101 @@ and environmental assumptions are defined once in
 
 ## Mutation evidence
 
+Each TypeScript or Go mutation report includes a `boundary` entry for every mapped
+challenge. A separate coordinator replay continues after observation mismatches
+and records the differing fields at every step; it preserves the normal driver
+and settlement checks. `confirmed` means the intended checkpoint differs on a
+consequential field or a newly differing counter; `side-effect-only` means other
+observations differ, and `not-divergent` means the history still agrees.
+`unreached` records an incomplete history, missing recording, or driver failure.
+Exported-vector model runs carry `origin: vector`; both ports execute the named
+native API against the exact vector samples and must earn `confirmed` on the
+declared fields. Clean boundary baselines must complete without divergences.
+The mutation gate requires `confirmed` for every mapping with an exported
+history or vector reproducer in both ports, alongside the required-cohort gate.
+It recomputes verdicts from current declarations and recordings: missing
+mapping entries, stale checkpoints and absent clean baselines fail, even when
+the report claims confirmation. Historical `unreproduced` states remain
+readable, but both current backlogs are empty and the execution audit forbids
+reopening them. A mapped fault cannot replace its portable evidence with a
+model run that exports no vector.
+
+Read the evidence with `node formal/mutation-reports.mjs boundary --report
+<report.json>`. Raw native assertion reports remain available for diagnosis;
+without a completed boundary recording, inspection reports `unreached` and
+does not reconstruct evidence from assertion text. Ungated inspection can read
+historical reports; it does not validate the current checkout. `--gate`
+additionally requires a complete report whose catalog, measured source inputs, recorded configuration
+and exact corpus fingerprints match the checkout. Keep the measured corpus
+artifact when checking a downloaded report; regenerating it may change its
+bytes. Missing fingerprints fail the gated command, as does any exported
+history or vector boundary that is not `confirmed`. Historical `vector` gap
+states remain readable but do not satisfy current vector declarations.
+
 Model mutations challenge the specification's independent properties.
 Implementation mutations challenge the assertions that connect generated
-histories to real TS/Go behavior. Report these measurements separately, including
+histories to real TypeScript, Go and Rust behavior. Report these measurements separately, including
 survivors. Structural invariants and semantic obligations are also different
 units; a total invariant count is not a measure of specification strength.
 
 Every mutation must compile, its unmodified baseline must pass, and detection
 must come from a semantic assertion or invariant counterexample. A tool failure,
-missing witness, crash or timeout is a failed measurement. The selected fault
+missing witness, crash or timeout is a failed measurement. An unhandled
+rejection under a mutant is the mutant settling a promise the suite was not
+awaiting at that moment; the report records it beside the failed assertions,
+and on its own it is a failed measurement, never a detection. The selected fault
 catalogs and per-run reports define the denominator; do not infer a percentage
 of all possible defects from their scores.
 
-The model catalog in `execution.json` covers every scheduled model: currently 72
-challenges over 68 distinct faults, with no waivers. Its report distinguishes
-those two counts and marks a filtered `--only` run as partial; only the complete
-run is evidence. A challenge with a deterministic reproducer is additionally
+The model catalog in `execution.json` covers every scheduled model with no
+waivers; `node formal/execution.mjs` reports the challenge and distinct fault
+counts. Its report distinguishes those two counts and marks a filtered `--only`
+run as partial; only the complete run is evidence. Every challenge's deterministic reproducer is additionally
 replayed on the clean and mutated model and must fail only under the fault, at
 the expectation the manifest declares; the report records that outcome per
-challenge, and `node formal/execution.mjs` reports how many challenges still
-wait in `reproducerBacklog`.
+challenge. Missing reproducers fail validation.
 
-The weekly full workflow shards each mutation lane over three runners. The Go
-lane bounded the whole run: its 13 mutants replay the generated cohort in strict
-sequence, 25 minutes on a fast runner and 47 to 48 minutes on the slow class
-(runs 34669546872 and 34670045249; the TypeScript lane took 17). Each shard
-measures every unmodified baseline itself, so its evidence stands on the
-environment it ran in, then measures a contiguous third of the catalog. A merge
+Each challenge also maps to the native mutant that injects the same wrong
+behavior into both ports through its `nativeMutants` entry, or explains why no
+native line exists; `node formal/execution.mjs` checks the mapping against
+the mutant catalog (`formal/mutations.json`, one entry per fault with a
+TypeScript and a Go section), anchors every catalog edit in the port text, and
+rejects a missing mapping or explanation. The mutation lanes must detect every mapped mutant in
+their generated cohort, so a mapped challenge is evidence that the corpus
+would catch that mistake in a port, not only that the model would. See the
+[authoring rules](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
+
+The weekly full workflow shards each mutation lane over the workflow matrix;
+`test/formal-validation.test.ts` pins how many mutants a shard may hold within
+its timeout, so catalog growth fails the pull request until the matrix grows.
+The Go lane bounded the whole run
+when it had 13 mutants on three shards (25 minutes on a fast runner, 47 to 48
+minutes on the slow class, runs 34669546872 and 34670045249; the TypeScript lane
+took 17), and its cost grows with the catalog: about 1.6 minutes per Go mutant
+and one per TypeScript mutant on a fast runner, twice that on the slow class.
+Each shard measures every unmodified baseline itself, so its evidence stands
+on the environment it ran in, then measures a contiguous slice of the catalog. A merge
 job per language reads the shard reports and writes the complete report. It
 refuses a missing, duplicated or failed shard, shards whose source, catalog,
 corpus or witness fingerprints or baseline results differ, and coverage that is
 not the catalog exactly once in order. Only the merged report is complete
-evidence; a shard report is never `complete`. Shard budgets are 30 minutes
-(TypeScript) and 40 (Go): the baselines plus four or five mutants, doubled for a
-slow runner. The Go mutation runner still bounds each `go test` invocation at
-8 minutes to catch a hung mutant, not to pace a slow runner. The Rust lane
-(`make mutations-rust`, 45-minute shard budget) compiles each mutant in
-release mode and replays the generated cohort in about a minute; its runner
-bounds each cargo invocation at 25 minutes. Locally,
-`MUTATION_SHARD=1/3 make mutations-ts` (then `2/3` and `3/3`) reproduces one
-shard under `.formal-traces/semantic/shards/1-of-3/`, and
+evidence; a shard report is never `complete`. Each TypeScript/Go shard's budget
+is 40 minutes: the baselines plus its slice of the catalog at the slow runner's
+per-mutant cost, plus one hung cohort's bound. The Go mutation runner still
+bounds each `go test` invocation at 8 minutes to catch a hung mutant, not to
+pace a slow runner. Locally, `MUTATION_SHARD=<index>/<count> make mutations-ts`
+for every index of the workflow matrix reproduces the shards under
+`.formal-traces/semantic/shards/<index>-of-<count>/`, and
 `make mutations-merge-ts` assembles the report that an unsharded
-`make mutations-ts` writes; the Go and Rust targets mirror this.
+`make mutations-ts` writes; the Go and Rust targets mirror this. The Rust
+lane compiles in release mode and bounds each cargo invocation at 25 minutes.
+Its separate catalog and evidence scope are described in
+[SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md#reproduction-and-ci).
+`MUTATION_ONLY=M18 make mutations-ts` measures one mutant into a partial
+report for authoring; it is never complete evidence.
 
 The workflow's `formal-full` aggregate job retains a small `formal-summary` artifact for 90
-days: both completion and context reports, the Go replay summary, the model
+days: every port's completion and context reports, the Go replay summary, the model
 properties `report.json` from the `check-models` job, the symbolic `report.json`
 and, on scheduled or exploration runs, each exploration `report.json`. Trace
 corpora, model check counterexamples and mutation evidence keep the 14-day
@@ -149,8 +210,11 @@ is never reported as a failure.
 ## Exploratory runs
 
 `make explore` selects and records a fresh seed, copies current tracked and new
-source files, and runs Rust model checks and both native replays in that isolated
-snapshot. It does not run the separate symbolic lane or require Java.
+source files, and runs all unmodified Rust model checks and regressions,
+generation, witness checks and every native replay in that isolated snapshot.
+It omits the identical pinned model-fault campaign, which remains mandatory in
+`make formal-check`, `make formal` and `make ci`. It does not run the separate
+symbolic lane or require Java.
 It preserves the pinned acceptance corpus and reports in the original checkout.
 The weekly full workflow runs this lane alongside pinned validation. Exploration
 does not produce an acceptance completion: its separate report distinguishes
@@ -159,14 +223,14 @@ A witness-check failure can mean an unreached boundary or invalid witness
 evidence; inspect the native report before attributing it to sampling. Go replay
 still runs after a TypeScript witness-check failure. The exploration report
 keeps that seed's witness report under `witnesses`. The witness step itself is
-tolerated so both ports replay, but its baseline gate decides the outcome
-afterwards: when every required label is present and both ports pass yet a
+tolerated so every port replays, but its baseline gate decides the outcome
+afterwards: when every required label is present and all ports pass yet a
 gated label's sampled hits collapsed against the recorded baseline (below the
 tolerance and more than `freshSeedSigma` Poisson deviations below the recorded
 count, or to zero), the report ends with `coverage-gate-failure` and the lane
 fails. That is a statement about exploration quality on that seed, not about
 native behavior. Exploration also refuses to pass without a completed witness
-report for its own seed: when both ports passed but the tolerated evaluator
+report for its own seed: when all ports passed but the tolerated evaluator
 step wrote no report, or an unreadable or incomplete one, or one judged under
 another seed or covering fewer profiles than the snapshot's own manifest
 schedules (a saved run is judged against the inventory it was saved with), the

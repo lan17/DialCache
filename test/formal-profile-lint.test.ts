@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,7 @@ type Report = {
   main: string;
   modules: string[];
   tableSize: number;
+  shapes: { states: Array<{ variable: string; fields: string[] }>; count: number; violations: Array<{ rule: string; variable: string; fields: string[]; detail: string }> };
   composition: { kernelModules: string[]; actions: string[]; publicActions: string[]; reachableDefinitions: number; stateAssigningDefinitions: string[]; libraryTransitions: string[]; count: number; violations: CompositionViolation[] };
   witnessIsolation: {
     witnessVariables: string[];
@@ -42,7 +43,8 @@ const fixtureNames = [
   "kernel", "kernel-leaky", "library", "profile-clean", "profile-thick", "profile-nested-let", "profile-lambda-assign", "profile-shadow",
   "profile-witness-choice", "profile-witness-projection", "profile-witness-guard", "profile-witness-deep", "profile-witness-domain",
   "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick", "composition-nondet-inline",
-  "composition-action-argument", "composition-wiring-passes",
+  "composition-action-argument", "composition-wiring-passes", "composition-lambda-argument", "composition-named-operator-argument",
+  "composition-lambda-through-helper", "library-alias", "composition-alias-typed-operator-position", "composition-aliased-transition",
 ];
 // Quint's effect checker rejects an operator constant that reads a variable
 // (QNT201), so this route can only be shown on the parsed IR; the lint must
@@ -54,6 +56,111 @@ const witness = { witnessPattern: "^witnessed$" };
 const quintAvailable = spawnSync("quint", ["--version"], { encoding: "utf8" }).status === 0;
 const quintTimeout = 60_000;
 const cli = (...args: string[]) => spawnSync(process.execPath, ["formal/lint-profiles.mjs", ...args], { cwd: root, encoding: "utf8" });
+
+describe("atomic profile restrictions", () => {
+  it("requires every atomic-release profile to schedule the payload safety property", () => {
+    const baseline = JSON.parse(readFileSync(root + "formal/profile-lint-baseline.json", "utf8")) as Baseline;
+    const manifest = JSON.parse(readFileSync(root + "formal/execution.json", "utf8")) as { models: Array<{ profile?: string; path: string; invariants: string[] }> };
+    const atomic = new Set(["serving::begin", "serving::release", "receipts::release", "remote_writes::releaseJudged", "shadow::begin", "shadow::release", "local_faults::begin"]);
+    for (const profile of baseline.profiles.filter(profile => profile.libraryTransitions.some(transition => atomic.has(transition)))) {
+      const model = manifest.models.find(model => model.profile === profile.id)!;
+      expect(model.invariants, profile.id).toContain("atomicPathSeedsDecodableFrames");
+      expect(readFileSync(root + model.path, "utf8"), profile.id).toMatch(/val atomicPathSeedsDecodableFrames\s*=\s*Payloads::atomicSafe\(s\)/);
+    }
+  });
+});
+
+describe.skipIf(!quintAvailable)("kernel shape restrictions", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dialcache-lint-shapes-"));
+  afterAll(() => rmSync(directory, { recursive: true, force: true }));
+  for (const [module, transitions] of Object.entries({
+    shadow: ["beginDark", "settleHeld", "beginHeld", "begin", "settleJob"], metrics: ["begin", "settleLoader"],
+    local_faults: ["begin", "settle"], remote_io: ["begin"],
+    compression: ["settleLoader"], adapter_replies: ["settleRead"], remote_writes: ["settleLoader"],
+  })) writeFileSync(join(directory, `${module}.qnt`), `module ${module} {\n${transitions.map(name =>
+    `pure def ${name}(state: { n: int | r }): { n: int | r } = state`).join("\n")}\n}`);
+  async function inspect(name: string, fields: string, initial: string, transition: string, extra = "", other = false) {
+    const path = join(directory, `${name}.qnt`);
+    writeFileSync(path, `module ${name} {
+      import shadow as Shadow from "./shadow"
+      import metrics as Metrics from "./metrics"
+      import local_faults as Faults from "./local_faults"
+      import remote_io as Remote from "./remote_io"
+      import compression as Compression from "./compression"
+      import adapter_replies as Replies from "./adapter_replies"
+      import remote_writes as Writes from "./remote_writes"
+      ${extra}
+      type State = ${fields}
+      var s: State
+      ${other ? "var other: { n: int }" : ""}
+      var input: int
+      action init = all { s' = ${initial}, input' = 0 ${other ? ", other' = { n: 0 }" : ""} }
+      action step = all { s' = ${transition}, input' = 1 ${other ? ", other' = Shadow::beginDark(other)" : ""} }
+    }`);
+    const checked = spawnSync("quint", ["typecheck", path], { cwd: root, encoding: "utf8" });
+    expect(checked.status, checked.stdout + checked.stderr).toBe(0);
+    return lintModel(path, { kernelModules: ["shadow", "metrics", "local_faults", "remote_io", "compression", "adapter_replies", "remote_writes"] });
+  }
+
+  it("requires a lifecycle for jointly held reads and dumps, including type aliases", async () => {
+    const fields = "More[{ dumps: List[int], n: int }]", initial = "{ reads: List(), dumps: List(), n: 0 }";
+    const alias = "type More[r] = { reads: List[int] | r }";
+    for (const [name, transition] of [["dark", "Shadow::beginDark(s)"], ["effects", "Metrics::settleLoader(s)"], ["served", "Shadow::beginHeld(s)"]]) {
+      expect((await inspect(name!, fields, initial, transition!, alias)).shapes.count).toBe(0);
+    }
+    const bad = await inspect("mixed_held", fields, initial, "Remote::begin(s)", alias);
+    expect(bad.shapes.violations).toEqual([expect.objectContaining({ rule: "held-effects", fields: ["reads", "dumps"] })]);
+    expect(cli(join(directory, "mixed_held.qnt"), "--kernel=shadow,metrics,local_faults,remote_io").status).toBe(1);
+  }, quintTimeout);
+
+  it("requires the dark lifecycle when jobs carry a caller source budget", async () => {
+    const fields = "{ jobs: List[int], sourceBudget: int, n: int }", initial = "{ jobs: List(), sourceBudget: 10, n: 0 }";
+    expect((await inspect("dark_budget", fields, initial, "Shadow::settleHeld(s)")).shapes.count).toBe(0);
+    const bad = await inspect("served_budget", fields, initial, "Shadow::beginHeld(s)");
+    expect(bad.shapes.violations).toEqual([
+      expect.objectContaining({ rule: "held-effects", fields: ["jobs", "sourceBudget"], detail: expect.stringContaining("require one of") }),
+      expect.objectContaining({ rule: "held-effects", fields: ["jobs", "sourceBudget"], detail: expect.stringContaining("cannot compose shadow::beginHeld") }),
+    ]);
+    await expect(computeBaseline({ profiles: [{ id: "served-budget", model: join(directory, "served_budget.qnt") }] })).rejects.toThrow(/unsupported kernel shape/);
+  }, quintTimeout);
+
+  it("rejects incompatible shadow lifecycles even beside valid dark transitions", async () => {
+    const fields = "{ jobs: List[int], sourceBudget: int, n: int }", initial = "{ jobs: List(), sourceBudget: 10, n: 0 }";
+    for (const name of ["begin", "settleJob", "beginHeld"]) {
+      const bad = await inspect(`mixed_${name}`, fields, initial, `Shadow::${name}(Shadow::beginDark(s))`);
+      expect(bad.shapes.violations).toEqual([expect.objectContaining({ rule: "held-effects", detail: expect.stringContaining(`cannot compose shadow::${name}`) })]);
+    }
+  }, quintTimeout);
+
+  it("does not use a transition assigned to another state as shape evidence", async () => {
+    for (const [name, fields, initial] of [
+      ["isolated_budget", "{ jobs: List[int], sourceBudget: int, n: int }", "{ jobs: List(), sourceBudget: 10, n: 0 }"],
+      ["isolated_refill", "{ reads: List[int], dumps: List[int], n: int }", "{ reads: List(), dumps: List(), n: 0 }"],
+    ]) {
+      const bad = await inspect(name!, fields!, initial!, "Remote::begin(s)", "", true);
+      expect(bad.shapes.violations).toEqual([expect.objectContaining({ rule: "held-effects", variable: "s", detail: expect.stringContaining("require one of") })]);
+    }
+  }, quintTimeout);
+
+  it("requires local-fault transitions and rejects healthy held work even alongside them", async () => {
+    const fields = "{ localFailed: bool, n: int }", initial = "{ localFailed: false, n: 0 }";
+    expect((await inspect("local_fault", fields, initial, "Faults::begin(s)")).shapes.count).toBe(0);
+    expect((await inspect("ignored_fault", fields, initial, "s")).shapes.violations).toEqual([
+      expect.objectContaining({ rule: "local-fault", detail: expect.stringContaining("require one of") }),
+    ]);
+    const bad = await inspect("faulted_held", fields, initial, "Remote::begin(Faults::settle(s))");
+    expect(bad.shapes.violations).toEqual([expect.objectContaining({ rule: "local-fault", detail: expect.stringContaining("cannot compose remote_io::begin") })]);
+    for (const [name, transition, target] of [
+      ["faulted_compression", "Compression::settleLoader", "compression::settleLoader"],
+      ["faulted_reply", "Replies::settleRead", "adapter_replies::settleRead"],
+      ["faulted_write", "Writes::settleLoader", "remote_writes::settleLoader"],
+      ["faulted_metrics", "Metrics::begin", "metrics::begin"],
+    ]) {
+      const wrapper = await inspect(name!, fields, initial, `${transition}(Faults::settle(s))`);
+      expect(wrapper.shapes.violations).toEqual([expect.objectContaining({ rule: "local-fault", detail: expect.stringContaining(`cannot compose ${target}`) })]);
+    }
+  }, quintTimeout);
+});
 
 describe("profile lint baseline diff", () => {
   const baseline: Baseline = { schemaVersion: 3, quintVersion: "0.32.0", kernelModules: ["serving"], profiles: [
@@ -176,6 +283,59 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
       { definition: "bumpWrapper", detail: "igt over cache state in the value of the argument delta of bumpBy", chain: ["bumpWrapper"] },
       { definition: "bumpWrapper", detail: "ite over cache state in the value of the argument delta of bumpBy", chain: ["bumpWrapper"] },
       { definition: "scaleBy", detail: "imul over cache state in the value of s", chain: ["scaleWrapper", "scaleBy"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a higher-order kernel definition a profile instantiates with a lambda, whatever its body does", async () => {
+    const report = await lintModel(fixture("composition-lambda-argument"), { kernelModules: ["library"] });
+    expect(report.composition.publicActions).toEqual(["init", "bumpWrapper", "step"]);
+    // The lambda's body composes a library transition; the call to the fold itself is the violation.
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "higher-order library::repeat instantiated in the value of s", chain: ["bumpWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a higher-order kernel definition a profile instantiates with an operator passed by name", async () => {
+    const report = await lintModel(fixture("composition-named-operator-argument"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    // The operator's own body reads only its parameters, which the walk cannot
+    // taint; the judgment is the higher-order definition, not the argument.
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "higher-order library::repeat instantiated in the value of s", chain: ["bumpWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a higher-order kernel definition instantiated inside a profile helper, in the helper", async () => {
+    const report = await lintModel(fixture("composition-lambda-through-helper"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "repeatWith", detail: "higher-order library::repeat instantiated in the value of s", chain: ["bumpWrapper", "repeatWith"] },
+    ]);
+  }, quintTimeout);
+
+  it("judges a kernel definition whose operator parameter is typed through an alias, or a chain of aliases, as higher-order", async () => {
+    const report = await lintModel(fixture("composition-alias-typed-operator-position"), { kernelModules: ["library_alias"] });
+    expect(report.composition.libraryTransitions).toEqual(["library_alias::bump", "library_alias::repeatChained", "library_alias::repeatVia"]);
+    // Quint records `each: Step[r]` as the alias name, not as an operator type;
+    // the typedef it resolves to is the operator type, so every instantiation
+    // is reported, the one passing the kernel's own step included.
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "higher-order library_alias::repeatVia instantiated in the value of s", chain: ["bumpWrapper"] },
+      { definition: "chainedWrapper", detail: "higher-order library_alias::repeatChained instantiated in the value of s", chain: ["chainedWrapper"] },
+      { definition: "kernelStepWrapper", detail: "higher-order library_alias::repeatVia instantiated in the value of s", chain: ["kernelStepWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("judges a kernel definition applied through a profile alias as the kernel's application", async () => {
+    const report = await lintModel(fixture("composition-aliased-transition"), { kernelModules: ["library"] });
+    // `bumpAlias` and `repeatAlias` resolve to the kernel definitions: both
+    // transitions are recorded under the kernel's names, so aliasing cannot
+    // empty the list the composed-violations gate keys on, and the
+    // higher-order fold is reported at the wrapper that applies it.
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "repeatWrapper", detail: "higher-order library::repeat instantiated in the value of s", chain: ["repeatWrapper"] },
     ]);
   }, quintTimeout);
 
@@ -370,7 +530,7 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
   it("matches the committed baseline for every conformance profile", async () => {
     const { expected, actual, differences } = await checkBaseline();
     expect(differences).toEqual([]);
-    expect(actual.profiles.length).toBe(15);
+    expect(actual.profiles.length).toBe((JSON.parse(readFileSync(new URL("../formal/profiles.json", import.meta.url), "utf8")) as { profiles: unknown[] }).profiles.length);
     expect(expected.kernelModules).toEqual(kernelModulesOf());
     // A composed profile has no composition violation; every other count is
     // that profile's migration work list.
@@ -407,6 +567,6 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
   it("passes baseline --check from the CLI on the committed file", () => {
     const result = cli("baseline", "--check");
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain(`${baselinePath} matches 15 profiles`);
+    expect(result.stdout).toContain(`${baselinePath} matches ${JSON.parse(readFileSync(join(root, baselinePath), "utf8")).profiles.length} profiles`);
   }, 180_000);
 });

@@ -15,7 +15,9 @@
     "recovery:miss",
     "recovery:deserialization_error",
     "source-deadline",
-    "failed-recovery-keeps-source-error"
+    "failed-recovery-keeps-source-error",
+    "later-source-survives-earlier-deadline",
+    "later-source-expires-at-own-deadline"
   ],
   "layers": [
     "absent-remote-maintenance-preserves-local",
@@ -43,7 +45,8 @@
     "local-hit-stops-remote-and-source",
     "request-hit-stops-lower-traversal",
     "source-publication-probed-in-all-three-layers",
-    "tracked-remote-disabled-local-hit"
+    "tracked-remote-disabled-local-hit",
+    "tracked-local-only-hit"
   ],
   "admission": [
     "outcome:match",
@@ -63,7 +66,8 @@
     "decode-timeout-keeps-slot",
     "confirmation-timeout-keeps-slot",
     "unselected-hit-skips-job",
-    "uncoalesced-hit-overlap"
+    "uncoalesced-hit-overlap",
+    "later-served-shadow-keeps-own-job-budget"
   ],
   "scope": [
     "failure-layer:request_local",
@@ -191,7 +195,9 @@
     "sparse-empty-provider-inherits-local-hit",
     "sparse-empty-provider-inherits-remote-hit",
     "uncoalesced-local-settled-hit",
-    "uncoalesced-remote-settled-hit"
+    "uncoalesced-remote-settled-hit",
+    "remote-hit-local-ttl-outlives-remote-freshness",
+    "independent-remote-last-completion-probed"
   ],
   "shadow": [
     "outcome:match",
@@ -273,6 +279,8 @@
     "late-dark-read-reports-offset-without-reviving-job"
   ],
   "effects": [
+    "adapter-frame-last-fresh-millisecond-hits",
+    "adapter-frame-exact-expiry-refills-and-reuses",
     "event:request",
     "event:disabled",
     "event:miss",
@@ -461,5 +469,63 @@
     "policy-wait-does-not-spend-source-budget",
     "invalid-enabled-key-preserves-source-deadline",
     "abandoned-source-cannot-replace-successful-retry"
+  ],
+  "dark-layers": [
+    "inspection-counts-process-followers-and-oldest",
+    "inspection-isolates-instances-and-wall-shifts",
+    "inspection-excludes-request-and-uncoalesced",
+    "inspection-clears-timeout-before-raw-settlement",
+    "inspection-excludes-unfinished-shadow",
+    "rejected-dark-source-seeds-no-layer",
+    "uncoalesced-publication-keeps-dark-leader",
+    "held-dark-fill-keeps-captured-retention",
+    "dark-fill-at-watermark-is-fenced",
+    "dark-frame-at-watermark-is-fenced",
+    "held-dark-fill-rechecks-fence-after-rollback",
+    "stale-visible-dark-c0-fills-unfenced",
+    "undecodable-held-dark-c0-is-not-repaired",
+    "unsupported-encoding-ends-dark-read",
+    "dark-source-deadline-attributed-to-local",
+    "dark-flights-are-instance-local",
+    "closed-scope-bypasses-dark-work",
+    "held-dark-capacity-is-instance-local",
+    "held-dark-dump-error-preserves-source",
+    "dark-source-local-publication-stops-job",
+    "held-dark-c0-age-at-verdict",
+    "future-dark-c0-reports-offset-and-fills",
+    "action:beginCall",
+    "action:releaseRead",
+    "action:releaseLoad",
+    "action:resolveLoader",
+    "action:rejectLoader",
+    "action:releaseDump",
+    "action:releaseWrite",
+    "action:advance",
+    "action:policy",
+    "action:seed",
+    "action:invalidate",
+    "action:closeScope",
+    "action:rollbackWall",
+    "action:readFault",
+    "action:loadFault",
+    "action:dumpFault",
+    "action:writeFault",
+    "local-entry-expires-at-its-ttl",
+    "request-follower-joins-leader",
+    "transient-request-dark-error-uses-request-layer",
+    "later-dark-source-keeps-own-budget",
+    "timed-out-dark-read-retains-capacity-until-raw-release",
+    "timed-out-dark-decode-retains-capacity-until-raw-release",
+    "timed-out-dark-confirmation-retains-capacity-until-raw-release",
+    "timed-out-dark-dump-retains-capacity-until-raw-release",
+    "timed-out-dark-write-retains-capacity-until-raw-release"
+  ],
+  "shadow-read-deadlines": [
+    "c0-read-timeout-retains-raw-capacity",
+    "c1-read-timeout-retains-raw-capacity",
+    "job-then-read-timeout-has-one-verdict",
+    "confirmation-keeps-captured-read-budget",
+    "confirmation-read-budget-starts-at-dispatch",
+    "timely-shadow-read-cancels-deadline-and-fills"
   ]
 }

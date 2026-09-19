@@ -118,7 +118,7 @@ func (r *memoryRemote) Read(_ context.Context, key, watermarkKey string) (ReadRe
 	}
 	return DecodeFrame(raw, watermarkKey != "", watermark), nil
 }
-func (r *memoryRemote) Write(_ context.Context, key string, frame Frame, ttl int64) error {
+func (r *memoryRemote) Write(_ context.Context, key string, frame Frame, ttl time.Duration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.writes++
@@ -129,7 +129,7 @@ func (r *memoryRemote) Write(_ context.Context, key string, frame Frame, ttl int
 	if err != nil {
 		return err
 	}
-	r.values[key] = remoteEntry{raw: raw, expires: r.clock.ElapsedMS() + ttl}
+	r.values[key] = remoteEntry{raw: raw, expires: r.clock.ElapsedMS() + ms(ttl)}
 	return nil
 }
 func (r *memoryRemote) Invalidate(_ context.Context, key string, now, buffer int64) error {
@@ -151,7 +151,7 @@ type callResult struct {
 	err   error
 }
 type coreDriver struct {
-	cache        *Cache[int64]
+	cache        *Cache
 	remote       *memoryRemote
 	clock        *manualClock
 	mu           sync.Mutex
@@ -163,11 +163,11 @@ type coreDriver struct {
 func newCoreDriver() *coreDriver {
 	d := &coreDriver{clock: &manualClock{wall: 1788868800000}, source: 1, loaders: make(map[string]int64), events: make(chan Event, 64)}
 	d.remote = &memoryRemote{clock: d.clock, values: make(map[string]remoteEntry), watermarks: make(map[string]string)}
-	d.cache = New(Options[int64]{Clock: d.clock, Remote: d.remote, Codec: integerCodec{}, LocalCapacity: 10000, Observe: func(event Event) {
+	d.cache = MustNew(WithClock(d.clock), WithRemote(d.remote), WithLocalCapacity(10000), WithObserver(func(event Event) {
 		if event.Kind == "coalesced" {
 			d.events <- event
 		}
-	}})
+	}))
 	return d
 }
 func (d *coreDriver) loader(counter string, gate <-chan struct{}, started chan<- struct{}) func(context.Context) (int64, error) {
@@ -185,14 +185,14 @@ func (d *coreDriver) loader(counter string, gate <-chan struct{}, started chan<-
 		return value, nil
 	}
 }
-func coreOperation(useCase string) Operation {
-	return Operation{Identity: Identity{Namespace: "urn", KeyType: "user_id", ID: "123", UseCase: useCase}}
+func coreOperation(useCase string) Operation[int64] {
+	return Operation[int64]{Identity: Identity{Namespace: "urn", KeyType: "user_id", ID: "123", UseCase: useCase}, Codec: integerCodec{}}
 }
-func (d *coreDriver) enabled(op Operation, counter string) (int64, error) {
+func (d *coreDriver) enabled(op Operation[int64], counter string) (int64, error) {
 	var value int64
-	err := d.cache.Enable(context.Background(), func(ctx context.Context) error {
+	err := d.cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 		var err error
-		value, err = d.cache.GetOrLoad(ctx, op, d.loader(counter, nil, nil))
+		value, err = GetOrLoad(ctx, d.cache, op, d.loader(counter, nil, nil))
 		return err
 	})
 	return value, err
@@ -202,7 +202,7 @@ func (d *coreDriver) enabled(op Operation, counter string) (int64, error) {
 // observer callback (or an unexpected second loader) establishes overlap. A
 // warm-cache first call instead establishes its completion through its result.
 // The timeout only detects a deadlocked implementation; it schedules no work.
-func (d *coreDriver) pair(op Operation, counter string) (int64, error) {
+func (d *coreDriver) pair(op Operation[int64], counter string) (int64, error) {
 	watchdog := time.NewTimer(5 * time.Second)
 	defer watchdog.Stop()
 	gate := make(chan struct{})
@@ -211,9 +211,9 @@ func (d *coreDriver) pair(op Operation, counter string) (int64, error) {
 	load := d.loader(counter, gate, started)
 	call := func() {
 		var value int64
-		err := d.cache.Enable(context.Background(), func(ctx context.Context) error {
+		err := d.cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 			var err error
-			value, err = d.cache.GetOrLoad(ctx, op, load)
+			value, err = GetOrLoad(ctx, d.cache, op, load)
 			return err
 		})
 		results <- callResult{value, err}
@@ -297,26 +297,26 @@ func (d *coreDriver) apply(input obj) error {
 		if err != nil {
 			return err
 		}
-		op := Operation{Identity: Identity{Namespace: "urn", KeyType: bs(identity["keyType"]), ID: bs(identity["id"]), UseCase: bs(identity["useCase"]), Tracked: bb(identity["tracked"])}, Policy: policy}
+		op := Operation[int64]{Identity: Identity{Namespace: "urn", KeyType: bs(identity["keyType"]), ID: bs(identity["id"]), UseCase: bs(identity["useCase"]), Tracked: bb(identity["tracked"])}, Policy: policy}
 		counter := bs(input["counter"])
 		d.remote.failReads(bb(input["readFailure"]))
 		defer d.remote.failReads(false)
 		var value int64
 		switch input["mode"] {
 		case "outside":
-			value, err = d.cache.GetOrLoad(context.Background(), op, d.loader(counter, nil, nil))
+			value, err = GetOrLoad(context.Background(), d.cache, op, d.loader(counter, nil, nil))
 		case "single":
 			value, err = d.enabled(op, counter)
 		case "coalesced-pair":
 			value, err = d.pair(op, counter)
 		case "request-pair":
-			err = d.cache.Enable(context.Background(), func(ctx context.Context) error {
+			err = d.cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 				var err error
-				value, err = d.cache.GetOrLoad(ctx, op, d.loader(counter, nil, nil))
+				value, err = GetOrLoad(ctx, d.cache, op, d.loader(counter, nil, nil))
 				if err != nil {
 					return err
 				}
-				second, err := d.cache.GetOrLoad(ctx, op, d.loader(counter, nil, nil))
+				second, err := GetOrLoad(ctx, d.cache, op, d.loader(counter, nil, nil))
 				if err != nil {
 					return err
 				}
@@ -487,17 +487,24 @@ func TestCoreParserAndObservationBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The negative controls edit the compact text of the history, so they read
+	// the same whatever spacing the committed encoding uses.
+	compact := new(bytes.Buffer)
+	if err := json.Compact(compact, raw); err != nil {
+		t.Fatal(err)
+	}
+	raw = compact.Bytes()
 	for name, malformed := range map[string][]byte{
 		"empty":               []byte(`{"states":[]}`),
-		"missing input":       bytes.Replace(raw, []byte(`"input": {`), []byte(`"missingInput": {`), 1),
-		"explicit arguments":  bytes.Replace(raw, []byte(`"#bigint": "-1"`), []byte(`"#bigint": "0"`), 1),
+		"missing input":       bytes.Replace(raw, []byte(`"input":{`), []byte(`"missingInput":{`), 1),
+		"explicit arguments":  bytes.Replace(raw, []byte(`"#bigint":"-1"`), []byte(`"#bigint":"0"`), 1),
 		"init only":           initOnly,
-		"unknown action":      bytes.Replace(raw, []byte(`"mbt::actionTaken": "outsideCall"`), []byte(`"mbt::actionTaken": "inventedAction"`), 1),
-		"missing init":        bytes.Replace(raw, []byte(`"mbt::actionTaken": "init"`), []byte(`"mbt::actionTaken": "localCall"`), 1),
-		"arguments":           bytes.Replace(raw, []byte(`"mbt::nondetPicks": {}`), []byte(`"mbt::nondetPicks": {"choice":1}`), 1),
-		"unsafe integer":      bytes.Replace(raw, []byte(`"#bigint": "1"`), []byte(`"#bigint": "9007199254740992"`), 1),
+		"unknown action":      bytes.Replace(raw, []byte(`"mbt::actionTaken":"outsideCall"`), []byte(`"mbt::actionTaken":"inventedAction"`), 1),
+		"missing init":        bytes.Replace(raw, []byte(`"mbt::actionTaken":"init"`), []byte(`"mbt::actionTaken":"localCall"`), 1),
+		"arguments":           bytes.Replace(raw, []byte(`"mbt::nondetPicks":{}`), []byte(`"mbt::nondetPicks":{"choice":1}`), 1),
+		"unsafe integer":      bytes.Replace(raw, []byte(`"#bigint":"1"`), []byte(`"#bigint":"9007199254740992"`), 1),
 		"missing observation": bytes.Replace(raw, []byte(`"sourceVersion"`), []byte(`"missingField"`), 1),
-		"duplicate action":    bytes.Replace(raw, []byte(`"mbt::actionTaken": "init"`), []byte(`"mbt::actionTaken": "init", "mbt::actionTaken": "init"`), 1),
+		"duplicate action":    bytes.Replace(raw, []byte(`"mbt::actionTaken":"init"`), []byte(`"mbt::actionTaken":"init","mbt::actionTaken":"init"`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if bytes.Equal(raw, malformed) {

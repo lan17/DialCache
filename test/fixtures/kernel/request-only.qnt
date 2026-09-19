@@ -13,7 +13,7 @@ module request_only {
   import diagnostics as Diag from "../../../formal/kernel/diagnostics"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: true }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: true, policyProvider: true }
   pure val ALL: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: true }
   pure val NO_REQUEST: Resolution = { layers: { request: false, local: true, remote: true }, coalesce: true }
 

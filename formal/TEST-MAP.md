@@ -7,10 +7,10 @@ slice, then read the exact case and check scope. A link to a test file does not
 mean that every assertion in it is modeled.
 
 [CONTRACTS.md](./CONTRACTS.md) assigns obligations;
-[semantic-cases.json](./semantic-cases.json) maps cases to histories and vectors;
-[quint-case-audit.json](./quint-case-audit.json) states each checked clause;
+[semantic-cases.json](./semantic-cases.json) maps cases to histories and vectors
+and states, on each Quint citation, the clause it checks;
 [feature-coverage.json](./feature-coverage.json) keeps native adaptations separate.
-All 240 reviewed behavioral cases now have checked Quint references and
+All reviewed behavioral cases now have checked Quint references and
 Quint-driven implementation evidence. This accounts for known cases, not every
 input or feature combination. [VALIDATION.md](./VALIDATION.md) describes the
 validation workflow and report requirements.
@@ -33,9 +33,9 @@ measured through the composing profile's scheduled invariants.
 | --- | --- | --- | --- |
 | Enablement and scopes | Core verification; core/scope/layers profiles | `dialcache-local`, `dialcache-request-local`: disabled pass-through, nested scopes, memo ownership, closure/replacement and later public reuse | Bounded context trees, calls and instances |
 | Traversal, local TTL and LRU | Core/policy verification; policy/layers/local-clock profiles | `dialcache-local`, `dialcache-config-ramp`: first hit, value/absence reuse, promotion without renewal, zero capacity and common native millisecond grid | Selected capacities/keys; custom-clock resolution remains native |
-| Coalescing and independent calls | Flight-deadlines verification; effects/policy/layers/independent profiles | `dialcache-coalescing`, `dialcache-liveness`: leader/follower results, remaining budget, independent source/error/read identities and publication order | Bounded overlap and operation identities; no fairness proof |
+| Coalescing and independent calls | Effects/policy/layers/independent profiles | `dialcache-coalescing`, `dialcache-liveness`: leader/follower results, remaining budget, independent source/error/read identities and publication order | Bounded overlap and operation identities; no fairness proof |
 | Runtime policy | Runtime-policy verification; policy/runtime-boundaries/scope profiles | `dialcache-config-ramp`: sparse leaves, null versus omission, defaults, invalid policy, cohort equality and captured snapshots | Native malformed host objects and static API validation remain separate |
-| Source/read budgets | Flight-deadlines verification; effects/source-budgets/independent profiles | `dialcache-liveness`, `dialcache-redis-read-deadline`: time begins at actual work, separate budgets, exact deadlines, cancellation and late settlement | Selected integer budgets; precise native timer boundaries have binding tests |
+| Source/read budgets | Effects/source-budgets/independent profiles | `dialcache-liveness`, `dialcache-redis-read-deadline`: time begins at actual work, separate budgets, exact deadlines, cancellation and late settlement | Selected integer budgets; precise native timer boundaries have binding tests |
 | Cache failures | Core/recovery verification; effects/local-failure/recovery-read profiles | `dialcache-redis`, `dialcache-local`: original source outcomes, failure-specific refill/publication authority and independent probes | Native storage/clock seams inject local faults; not arbitrary heap corruption |
 | Tracked invalidation | Tracked verification; effects/layers/recovery-read profiles | `dialcache-invalidation`, `redis-payload`, real/cluster tests: acquired snapshots, both observed-fence checks, marker existence/TTL and delayed writes | Atomic primary snapshots and watermark durability are assumptions |
 | Stale recovery | Stale-recovery verification; recovery/recovery-read/independent profiles | `dialcache-stale-on-error`, `dialcache-stale-recovery-policy`: F/M boundaries, original errors, lazy decode, retained bytes, closed scopes and no shared publication | Recovery-read selected-shadow mode admits only stale seeds and failed sources |

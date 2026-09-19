@@ -32,7 +32,7 @@ module dialcache_source_budgets_conformance {
   // One key on one instance, no persistent request scope, a 1 s local TTL and
   // no remote layer; every reply enables the local layer with sharing.
   pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true
   }
   pure val LOCAL: Resolution = { layers: { request: false, local: true, remote: false }, coalesce: true }
   pure val TTLS: Ttls = { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }
@@ -56,6 +56,7 @@ module dialcache_source_budgets_conformance {
     owners: List[int],
     memoSlots: List[int],
     held: List[Gate::Held],
+    deadlines: List[Deadlines::Due],
     started: List[int],
     budgets: List[int],
     settledAt: List[int],
@@ -100,6 +101,7 @@ module dialcache_source_budgets_conformance {
       owners: List(),
       memoSlots: List(),
       held: List(),
+      deadlines: List(),
       started: List(),
       budgets: List(),
       settledAt: List(),

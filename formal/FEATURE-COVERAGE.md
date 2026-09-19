@@ -15,7 +15,7 @@ Use [CONTRACTS.md](./CONTRACTS.md) for the obligations and
 
 ## What is accounted for
 
-The current catalogs give all **240 behavioral cases** a checked Quint
+The current catalogs give every cataloged behavioral case a checked Quint
 reference and Quint-driven implementation evidence. Wire obligations have
 separate generated primitive artifacts and complementary fixed vectors; native
 cases remain separate API, value, clock, exporter and adapter obligations.
@@ -25,8 +25,7 @@ Use these sources for current totals and execution requirements:
 
 | Inventory | Authoritative source |
 | --- | --- |
-| Behavioral/wire cases and evidence links | [semantic-cases.json](./semantic-cases.json) |
-| Checked clauses and explicit limits | [quint-case-audit.json](./quint-case-audit.json) |
+| Behavioral/wire cases, evidence links and the reviewed scope of each Quint citation | [semantic-cases.json](./semantic-cases.json) |
 | Native cases and feature families | [feature-coverage.json](./feature-coverage.json) |
 | Profiles and input encodings | [profiles.json](./profiles.json) |
 | Models, properties, sampled histories, exported regressions and wire artifacts | [execution.json](./execution.json) |
@@ -101,8 +100,8 @@ and [formal-witness-attribution.test.ts](../test/formal-witness-attribution.test
 exercise this distinction. They test evidence attribution, so they receive no
 positive behavioral-case or mutation-detection credit.
 
-Each Quint citation also has a reviewed scope in
-[quint-case-audit.json](./quint-case-audit.json). A cutoff-preservation regression
+Each Quint citation in [semantic-cases.json](./semantic-cases.json) also carries
+its reviewed scope. A cutoff-preservation regression
 does not establish Redis TTL preservation, and a generic source-deadline
 property does not establish separate budgets for two independent calls.
 Definitions describe behavior; only scheduled invariants/regressions count as
@@ -157,6 +156,14 @@ work, and composes retained bytes with physical expiry and compressed recovery.
 Shadow-layers covers mixed served/dark capacity, request/local publication and
 captured fill policy. Scheduled public-action regressions anchor these corners
 without relying on random selection.
+
+Dark-layers also requires competing-key rejection after the whole-job timeout
+while C0 read, decode, C1 read, dump or write remains unfinished, then admission
+only after that raw effect settles. Shadow-read-deadlines separately exercises
+C0/C1 read expiry, cancellation and raw-capacity retention, including both
+read/job deadline orderings. Confirmation keeps its admitted read budget after
+a runtime change and starts that budget at its own dispatch. These histories
+replay in both ports; a whole-job timeout alone does not establish a read deadline.
 
 Those additions do not enumerate arbitrary request trees, operation/key/instance
 sets, capacities or simultaneous failures. The short shadow job budget limits

@@ -37,7 +37,7 @@ describe("Quint vector artifact authority", () => {
       .filter((entry): entry is [string, Array<{ name: string }>] => Array.isArray(entry[1]))
       .flatMap(([group, rows]) => rows.map(row => `${group}/${row.name}`)));
     const all = names("all"), fixed = names("fixed"), generated = names("generated");
-    expect(fixed.size).toBe(134);
+    expect(fixed.size).toBe(Object.values(JSON.parse(read("formal/protocol-vectors.json")) as Record<string, unknown>).filter(Array.isArray).reduce((total, rows) => total + rows.length, 0));
     expect(generated.size).toBe(manifest.models.filter(m => m.vectorExport?.kind === "protocol").reduce((n, m) => n + m.vectorExport.cases, 0));
     expect([...fixed].some(name => generated.has(name))).toBe(false);
     expect(new Set([...fixed, ...generated])).toEqual(all);

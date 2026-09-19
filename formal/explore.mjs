@@ -22,12 +22,15 @@ export function explorationSeed(value = `0x${randomBytes(8).toString('hex')}`) {
 }
 
 // Share model generation and native execution with acceptance. Exploration has
-// its own report: a seed's missing witness must not prevent the other port from
+// its own report: a seed's missing witness must not prevent the other ports from
 // executing the histories. No acceptance completion/adaptation step runs here.
 export function explorationPlan(directory, seed, options = {}) {
   const normalized = explorationSeed(seed);
   return validationPlan('formal', { ...options, directory }).flatMap(step => {
     const script = step.args?.[0];
+    // This campaign uses the manifest's pinned seed, not the exploration seed.
+    // Full acceptance keeps it; exploration retains every unmodified model job.
+    if (script === 'formal/check-model-properties.mjs') return [];
     if (step.remove || ['formal/conformance-adapters.mjs', 'formal/check-go-replay.mjs', 'formal/check-rust-replay.mjs'].includes(script)
       || script === 'formal/conformance.mjs' && step.args[1] === 'check') return [];
     if (script === 'formal/conformance.mjs' && step.args[1] === 'prepare') {
@@ -35,9 +38,9 @@ export function explorationPlan(directory, seed, options = {}) {
     }
     if (script === 'formal/run-models.mjs') return [{ ...step, env: { ...step.env, QUINT_SEED: normalized } }];
     if (step.env?.DIALCACHE_MBT_TRACE_DIR) return [{ ...step, nativeReport: step.command === 'go' ? 'go' : step.command === 'cargo' ? 'rust' : 'typescript' }];
-    // A seed's missing witness is classified by both native reports. The shared
-    // evaluator runs before either replay and still writes evidence for complete
-    // profiles; its exit status must not stop either port from executing that
+    // A seed's missing witness is classified by every native report. The shared
+    // evaluator runs before native replay and still writes evidence for complete
+    // profiles; its exit status must not stop any port from executing that
     // seed's histories.
     // The evaluator learns the corpus seed from the same variable run-models.mjs
     // reads, so its baseline gate applies the exploration rule to this seed.

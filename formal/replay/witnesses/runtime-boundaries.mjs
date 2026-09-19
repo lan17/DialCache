@@ -64,7 +64,7 @@ export function runtimeBoundaryTraceWitnesses(history, recorder = standaloneReco
         if (falsyProbes.size === 4) recorder.credit(`falsy-values:${layerNames[layer]}`);
         if (equality !== undefined && layer !== 0 && Math.floor(policy / 3) === 2
           && publication.policy < 12 && Math.floor(publication.policy / 3) === 2
-          && publication.loader > equality.loader && value !== equality.value) recorder.credit(`exact-serving-cohort:${layerNames[layer]}`);
+          && publication.loader >= equality.loadersAtSettlement && value !== equality.value) recorder.credit(`exact-serving-cohort:${layerNames[layer]}`);
         if (priorPublication !== undefined && publication.loader < priorPublication.loader
           && value !== priorPublication.value && !defaultSharing && layer === 0
           && publication.policy % 3 === 0 && priorPublication.policy % 3 === 0) recorder.credit("inherited-false-request-last-writer");
@@ -103,9 +103,21 @@ export function runtimeBoundaryTraceWitnesses(history, recorder = standaloneReco
       priorPublication = publication;
       publication = { loader, value, policy: source.policy };
     } else if (layer !== 0 && source.policy < 12 && Math.floor(source.policy / 3) === 1
-      && source.reads === 0 && step.writes === before.writes) equality = { loader, value };
-    else if (publication !== undefined && source.reads === 0 && step.writes === before.writes
-      && (source.policy >= 14 && source.policy <= 17 || source.policy === 21 || source.policy === 13 && layer === 0)) {
+      && source.reads === 0 && step.writes === before.writes) {
+      // The above-sample publication must come from a source that started at or
+      // after this settlement. In the local fixture reads and writes stay 0, so
+      // a source that overlapped the equality source and published later is
+      // indistinguishable from a port that admits the key at equality.
+      equality = { loader, value, loadersAtSettlement: step.loaders };
+    } else if (publication !== undefined && source.reads === 0 && step.writes === before.writes
+      && (source.policy >= 14 && source.policy <= 17 && fixture < 6 && (source.policy === 14 || source.policy === 16 || layer !== 0)
+        || source.policy === 21 || source.policy === 13 && layer === 0)) {
+      // An invalid or null leaf (14-17) only shows a bypass where the layer
+      // holding the publication would be on under a coerced or inherited
+      // reading: fixtures 6-8 enable that layer only through a runtime-TTL
+      // reply, so a new loader with no read there proves nothing. Policies 15
+      // and 17 (requestLocal) are publicly identical to 13 in the request
+      // fixtures, so they need a shared layer.
       preserved = { policy: source.policy, publication, bypassValue: value };
     }
   }

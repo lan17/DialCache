@@ -1,7 +1,6 @@
 package dialcache
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,33 +35,20 @@ func featurePaths(p string) ([]string, error) {
 	return []string{filepath.Join("..", "formal", p+"-smoke.itf.json")}, nil
 }
 
+// The exported regressions of a profile are the histories under
+// <corpus>/../regressions/<profile>/. Which runs a model exports is read from
+// its Quint text by formal/execution.mjs, and the gate over this package's
+// report (formal/check-go-replay.mjs) requires exactly those histories, so
+// this reader lists the directory rather than the manifest.
 func featureRegressionPaths(profile, directory string) ([]string, error) {
-	raw, err := os.ReadFile("../formal/execution.json")
+	paths, err := filepath.Glob(filepath.Join(directory, "..", "regressions", profile, "*.itf.json"))
 	if err != nil {
 		return nil, err
 	}
-	var manifest struct {
-		Models []struct {
-			Profile     string   `json:"profile"`
-			Regressions []string `json:"replayRegressions"`
-		} `json:"models"`
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("missing Quint regressions for %s", profile)
 	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return nil, err
-	}
-	paths := []string{}
-	for _, model := range manifest.Models {
-		if model.Profile != profile {
-			continue
-		}
-		for _, name := range model.Regressions {
-			path := filepath.Join(directory, "..", "regressions", profile, name+".itf.json")
-			if _, err := os.Stat(path); err != nil {
-				return nil, fmt.Errorf("missing Quint regression %s: %w", name, err)
-			}
-			paths = append(paths, path)
-		}
-	}
+	sort.Strings(paths)
 	return paths, nil
 }
 func TestFeatureConformance(t *testing.T) {
@@ -79,8 +65,22 @@ func TestFeatureConformance(t *testing.T) {
 			t.Fatalf("unknown selected feature profile: %s", selected)
 		}
 	}
-	count := 0
-	executedProfiles := map[string]bool{}
+	// Each profile owns its counter. Cleanup runs after all parallel children,
+	// so the summary never races with replay or accepts an empty -run selection.
+	counts := map[string]*int{}
+	t.Cleanup(func() {
+		count, executedProfiles := 0, 0
+		for _, replayed := range counts {
+			count += *replayed
+			if *replayed > 0 {
+				executedProfiles++
+			}
+		}
+		if count == 0 {
+			t.Fatal("no feature traces selected")
+		}
+		t.Logf("specification=0.1.0 featureProfiles=%d replayed=%d", executedProfiles, count)
+	})
 	names := []string{}
 	for name := range profiles {
 		if name != "core" && name != "effects" && name != "local-clock" {
@@ -96,42 +96,48 @@ func TestFeatureConformance(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(paths) > 0 {
+		if len(paths) == 0 {
+			continue
+		}
+		count := 0
+		counts[name] = &count
+		t.Run(name, func(t *testing.T) {
+			// Go's -parallel flag bounds the number of profile coordinators.
+			// Recordings retain their single-writer, ordered JSONL output.
+			if os.Getenv("DIALCACHE_REPLAY_DIVERGENCES") == "" {
+				t.Parallel()
+			}
+			coordinator := newReplayCoordinator(t)
 			requireBehaviorProfile(t, name)
-		}
-		actions := map[string]bool{}
-		for _, path := range paths {
-			prepared, err := coordinator.prepare(name, path, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, action := range ba(prepared["actions"]) {
-				actions[bs(action)] = true
-			}
-			t.Run(name+"/"+filepath.Base(path), func(t *testing.T) {
-				count++
-				executedProfiles[name] = true
-				synctest.Test(t, func(t *testing.T) {
-					d := newBehaviorDriver(t, bm(prepared["fixture"]))
-					defer d.close()
-					if err := coordinator.replay(d, prepared); err != nil {
-						t.Error(err)
-					}
+			actions := map[string]bool{}
+			for _, path := range paths {
+				prepared, err := coordinator.prepare(name, path, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, action := range ba(prepared["actions"]) {
+					actions[bs(action)] = true
+				}
+				t.Run(filepath.Base(path), func(t *testing.T) {
+					count++
+					synctest.Test(t, func(t *testing.T) {
+						d := newBehaviorDriver(t, bm(prepared["fixture"]))
+						defer d.close()
+						if err := coordinator.replay(d, prepared); err != nil {
+							t.Error(err)
+						}
+					})
 				})
-			})
-		}
-		if os.Getenv("DIALCACHE_FEATURE_TRACE_DIR") != "" && os.Getenv("DIALCACHE_FEATURE_TRACE_FILE") == "" {
-			for _, action := range ba(profiles[name]) {
-				if !actions[bs(action)] {
-					t.Errorf("%s corpus omits action %s", name, action)
+			}
+			if os.Getenv("DIALCACHE_FEATURE_TRACE_DIR") != "" && os.Getenv("DIALCACHE_FEATURE_TRACE_FILE") == "" {
+				for _, action := range ba(profiles[name]) {
+					if !actions[bs(action)] {
+						t.Errorf("%s corpus omits action %s", name, action)
+					}
 				}
 			}
-		}
+		})
 	}
-	if count == 0 {
-		t.Fatal("no feature traces selected")
-	}
-	t.Logf("specification=0.1.0 featureProfiles=%d replayed=%d", len(executedProfiles), count)
 }
 
 func TestFeatureParserRejectsMissingAndUnsafeInputs(t *testing.T) {

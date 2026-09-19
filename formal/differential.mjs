@@ -5,11 +5,15 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { copySources, importClosure, isKernelSource, isQuintSourcePath, root, validateExecution } from './execution.mjs';
+import { copySources, importClosure, isKernelSource, isQuintSourcePath, modelSchedule, root, scanDeclarationBodies, validateExecution } from './execution.mjs';
 import { parseWithSourceMap, scheduleHistories, spliceDeclarations } from './generated-fixtures.mjs';
+import { parseShard } from './mutation-reports.mjs';
 import { normalizeTraceFiles } from './replay-inputs.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 import { parseTrace, profiles } from './replay/features.mjs';
+import { localClockDescriptor } from './replay/local-clock.mjs';
+import { effectsDescriptor } from './replay/effects.mjs';
+import { diffPaths } from './replay/divergence.mjs';
 import { generationArguments } from './run-models.mjs';
 
 // Corpus differential for a composed profile (#165).
@@ -46,6 +50,21 @@ export const defaultOutput = '.formal-traces/differential';
 export const maxBytesPerStateRatio = 1.2;
 export const advisoryWallRatio = 1.5;
 export const cursorVariable = 'replayCursor';
+// The explicit-input descriptors the differential replays: the feature
+// profiles' (formal/replay/features.mjs) and the local-clock profile's, whose
+// driver has its own runner (formal/replay/local-clock.mjs). A descriptor may
+// bind an input name to the public action a reference tree declares for it
+// (`actionBindings`): the binding exists for the local-clock texts from
+// before the wrapper rename (`call` their parametrized action, `callCache`
+// the public wrapper) and applies only where the tree's declaration of the
+// input name is a parametrized action (`boundAction`). It is transitional:
+// once the merge base with main carries the renamed text, delete the
+// local-clock descriptor's binding, `boundAction` with its two call sites in
+// prepareReplay, the `.d.mts` field and their tests.
+// A descriptor may bring its own parser (`parseTrace`) where the profile's
+// drivers assert a record the shared parser does not read: the effects
+// descriptor reads both the composed and the retired layout into one record.
+export const replayDescriptors = { ...profiles, 'local-clock': localClockDescriptor, effects: effectsDescriptor };
 
 const gitShow = (revision, path, cwd) => execFileSync('git', ['show', `${revision}:${path}`], { cwd, encoding: 'utf8', maxBuffer: 1 << 26 });
 
@@ -69,18 +88,31 @@ export function resolveMergeBase(revision, { cwd = root } = {}) {
 
 // The reference manifests are read as recorded at their revision and checked
 // only for the shape this tool consumes; the working tree's validator applies
-// to the working tree's inventory, not to another revision's.
+// to the working tree's inventory, not to another revision's. A revision that
+// recorded its exported regressions keeps them; one that reads them from the
+// Quint text (formal/execution.mjs modelSchedule) has them read from that
+// tree's text here.
 export function readManifests(directory) {
   const execution = JSON.parse(readFileSync(resolve(directory, 'formal/execution.json'), 'utf8'));
   const registry = JSON.parse(readFileSync(resolve(directory, 'formal/profiles.json'), 'utf8'));
   if (!Array.isArray(execution.models) || !execution.settings || !Array.isArray(registry.profiles)) throw new Error(`${directory}: unsupported manifests`);
+  execution.models = execution.models.map(model => model.regressions !== undefined || typeof model.path !== 'string' ? model
+    : { ...model, ...modelSchedule(model, scanDeclarationBodies(readFileSync(resolve(directory, model.path), 'utf8'))) });
   return { execution, registry };
 }
 function generationModel(manifests, profileId) {
   const model = manifests.execution.models.find(candidate => candidate.profile === profileId);
   if (!model || !model.generate || typeof model.path !== 'string' || !Array.isArray(model.invariants)) return undefined;
   const entry = manifests.registry.profiles.find(candidate => candidate.id === profileId);
-  return { ...model, behaviorVersion: model.differential?.behaviorVersion ?? 0, schemaVersion: entry?.version ?? null, settings: manifests.execution.settings };
+  return { ...model, behaviorVersion: model.differential?.behaviorVersion ?? 0, maxBytesPerStateRatio: model.differential?.maxBytesPerStateRatio ?? null,
+    schemaVersion: entry?.version ?? null, settings: manifests.execution.settings };
+}
+// The bound on trace bytes per state a run applies: the model's own
+// declaration (differential.maxBytesPerStateRatio in formal/execution.json)
+// when it has one, else the lane's default.
+export function bytesBound(model) {
+  return model.maxBytesPerStateRatio === null || model.maxBytesPerStateRatio === undefined
+    ? { maxBytesPerStateRatio, source: 'default' } : { maxBytesPerStateRatio: model.maxBytesPerStateRatio, source: 'model' };
 }
 
 // What to do for one profile given both revisions' manifests. A profile the
@@ -92,8 +124,8 @@ export function differentialPlan(referenceManifests, candidateManifests, profile
   const reference = generationModel(referenceManifests, profileId);
   if (!candidate && !reference) throw new Error(`No generation profile named ${profileId} in either revision's formal/execution.json`);
   if (!candidate) return { action: 'skip', reason: 'profile removed: the candidate does not generate it', reference };
-  const descriptor = profiles[profileId];
-  if (!descriptor || !descriptor.explicitInputs) throw new Error(`Profile ${profileId} has no explicit-input feature descriptor in formal/replay/features.mjs; the differential replays explicit inputs only`);
+  const descriptor = replayDescriptors[profileId];
+  if (!descriptor || !descriptor.explicitInputs) throw new Error(`Profile ${profileId} has no explicit-input replay descriptor (formal/replay/features.mjs or the local-clock descriptor); the differential replays explicit inputs only`);
   if (!reference) return { action: 'skip', reason: 'new profile: the reference revision does not generate it', candidate, descriptor };
   if (reference.behaviorVersion !== candidate.behaviorVersion) {
     return { action: 'skip', reason: `intended divergence: behaviorVersion ${reference.behaviorVersion} -> ${candidate.behaviorVersion}`, reference, candidate, descriptor };
@@ -106,14 +138,9 @@ export function differentialPlan(referenceManifests, candidateManifests, profile
 
 // The step-by-step comparison. Inputs are compared first; then every asserted
 // channel of the step, naming the differing channel and field.
-function differing(expected, actual, prefix = '') {
-  if (isDeepStrictEqual(expected, actual)) return [];
-  const composite = value => value !== null && typeof value === 'object';
-  if (composite(expected) && composite(actual) && Array.isArray(expected) === Array.isArray(actual)) {
-    const keys = Array.isArray(expected) ? [...Array(Math.max(expected.length, actual.length)).keys()] : Object.keys({ ...expected, ...actual }).sort();
-    return keys.flatMap(key => differing(expected[key], actual[key], `${prefix}${key}.`));
-  }
-  return [`${prefix.slice(0, -1)} ${JSON.stringify(actual)} (reference ${JSON.stringify(expected)})`];
+function differing(expected, actual) {
+  const valueAt = (value, path) => path === '$' ? value : path.split('.').reduce((part, key) => part?.[key], value);
+  return diffPaths(expected, actual).map(path => `${path} ${JSON.stringify(valueAt(actual, path))} (reference ${JSON.stringify(valueAt(expected, path))})`);
 }
 export function compareHistory(reference, replayed) {
   const length = Math.min(reference.steps.length, replayed.steps.length);
@@ -200,7 +227,7 @@ export async function generateCorpus(tree, model, { timeoutMs } = {}) {
 export function loadHistories(directory, descriptor) {
   if (!existsSync(directory)) return [];
   return readdirSync(directory).filter(name => name.endsWith('.itf.json')).sort()
-    .map(name => parseTrace(JSON.parse(readFileSync(resolve(directory, name), 'utf8')), name, descriptor));
+    .map(name => (descriptor.parseTrace ?? parseTrace)(JSON.parse(readFileSync(resolve(directory, name), 'utf8')), name, descriptor));
 }
 
 // A run that stops early still writes its trace: the agreeing prefix plus one
@@ -242,12 +269,13 @@ export async function prepareReplay(tree, model, descriptor, histories, { chunk,
   const moduleName = parsed.modules.at(-1).name;
   const declarations = new Map(parsed.modules.find(candidate => candidate.name === moduleName).declarations.map(declaration => [declaration.name, declaration]));
   const source = readFileSync(resolve(tree, model.path), 'utf8');
+  const bound = action => boundAction(declarations, descriptor, action);
   // A history whose input the tree has no public action for cannot be
   // scheduled: it disagrees at that step; the others are replayed.
   const verdicts = new Array(histories.length);
   const scheduled = [];
   histories.forEach((history, index) => {
-    const unknown = history.steps.findIndex(step => !declarations.has(step.action));
+    const unknown = history.steps.findIndex(step => !declarations.has(bound(step.action)));
     if (unknown === -1) scheduled.push({ history, index });
     else verdicts[index] = { path: history.path, agree: false, step: unknown, action: history.steps[unknown].action, choice: history.steps[unknown].choice,
       reason: `${moduleName} has no public action ${history.steps[unknown].action} (step ${unknown})` };
@@ -256,7 +284,7 @@ export async function prepareReplay(tree, model, descriptor, histories, { chunk,
     const workspace = resolve(output, `replay-${position}`);
     rmSync(workspace, { recursive: true, force: true });
     copySources(tree, workspace);
-    const schedule = scheduleHistories(source, declarations, sourceMap, batch.map(({ history }) => history.steps.map(step => [step.action, step.choice])),
+    const schedule = scheduleHistories(source, declarations, sourceMap, batch.map(({ history }) => history.steps.map(step => [bound(step.action), step.choice])),
       { prefix: 'replay', cursor: cursorVariable });
     const runs = schedule.schedules.flatMap((entry, index) => [
       ...(entry.steps ? [`action replaySchedule${index} = ${entry.step}`] : []),
@@ -288,12 +316,25 @@ export async function prepareReplay(tree, model, descriptor, histories, { chunk,
   return { tasks, collect: results => { for (const [position, verdict] of results.flat()) verdicts[position] = verdict; return verdicts; } };
 }
 
+// The public action a tree schedules for an input name: the name itself when
+// the tree declares it as a parameterless action; else the descriptor's
+// binding for it, when the tree declares that (a reference text from before a
+// wrapper was renamed declares the input name as its parametrized action and
+// the bound name as the public wrapper); else the name, which the schedule
+// then refuses as it would any parametrized declaration.
+export function boundAction(declarations, descriptor, action) {
+  const declaration = declarations.get(action);
+  if (declaration && declaration.expr?.kind !== 'lambda') return action;
+  const alternative = descriptor?.actionBindings?.[action];
+  return alternative && declarations.has(alternative) ? alternative : action;
+}
+
 // The replayed history a trace records. A run refused at its first input or
 // at init leaves fewer than the two states a trace needs: one recorded state
 // is the initialization the reference also took, none is a refused init.
 export function replayedHistory(raw, reference, descriptor) {
   const recorded = recordedStates(raw);
-  if (recorded.states.length >= 2) return parseTrace(recorded, reference.path, descriptor);
+  if (recorded.states.length >= 2) return (descriptor.parseTrace ?? parseTrace)(recorded, reference.path, descriptor);
   return { path: reference.path, steps: recorded.states.length === 1 ? reference.steps.slice(0, 1) : [] };
 }
 
@@ -313,8 +354,11 @@ export function composedProfiles(manifest, { cwd = root } = {}) {
 // a revision (its Quint sources and manifests exported as recorded), the
 // candidate is a copy of the working tree with its manifests validated.
 export function prepare(reference, { cwd = root, output = defaultOutput } = {}) {
+  // The working tree's manifest is validated as written (the validator refuses
+  // a manifest that lists the schedule its Quint text states); the manifests
+  // the run consumes carry that schedule read from the text.
+  validateExecution(JSON.parse(readFileSync(resolve(cwd, 'formal/execution.json'), 'utf8')));
   const candidateManifests = readManifests(cwd);
-  validateExecution(candidateManifests.execution);
   const revision = resolveMergeBase(reference, { cwd });
   for (const stale of ['reference', 'candidate']) rmSync(resolve(cwd, output, stale), { recursive: true, force: true });
   const referenceTree = resolve(cwd, output, 'reference', revision.slice(0, 12));
@@ -334,10 +378,41 @@ export function selectProfiles(prepared) {
     ...composedProfiles(prepared.candidate.manifests.execution, { cwd: prepared.candidate.tree })])].sort();
 }
 
+// Advisory replay seconds, rounded from Actions run 35634905259. Its slowest
+// alphabetical shard took 47 minutes while another took eight. Effects and the
+// two new profiles were skipped there; estimate their cost from similarly sized
+// corpora instead of assigning zero. New names get a middle-sized estimate.
+// These weights only place whole profiles; they never select or drop histories.
+const replaySeconds = {
+  admission: 170, 'dark-layers': 400, effects: 700, independent: 280,
+  layers: 450, 'local-clock': 80, 'local-failure': 70, policy: 260,
+  recovery: 500, 'recovery-read': 250, 'runtime-boundaries': 220, scope: 170,
+  shadow: 1300, 'shadow-layers': 350, 'shadow-read-deadlines': 100, 'source-budgets': 140,
+};
+// Place expensive profiles first in the least-loaded shard. Sorted names break
+// equal-cost ties; shard index breaks equal-load ties, independently of input
+// order. Every name lands in exactly one shard, for any positive shard count.
+export function shardProfiles(names, index, count) {
+  for (const [label, value] of [['index', index], ['count', count]]) {
+    if (!Number.isSafeInteger(value) || value < 1) throw new Error(`Shard ${label} must be a positive integer; got ${String(value)}`);
+  }
+  if (index > count) throw new Error(`Shard index ${index} exceeds the shard count ${count}; use 1 <= index <= count`);
+  const cost = name => Object.hasOwn(replaySeconds, name) ? replaySeconds[name] : 250;
+  const ordered = [...new Set(names)].sort().sort((left, right) => cost(right) - cost(left));
+  const shards = Array.from({ length: Math.min(count, ordered.length) }, () => ({ names: [], seconds: 0 }));
+  for (const name of ordered) {
+    const shard = shards.reduce((lightest, candidate) => candidate.seconds < lightest.seconds ? candidate : lightest);
+    shard.names.push(name);
+    shard.seconds += cost(name);
+  }
+  return shards[index - 1]?.names.sort() ?? [];
+}
+
 // A generation whose inputs are byte-identical in both revisions is the same
 // deterministic computation under the pinned Quint and seed: nothing to compare.
 export function closureSkip(referenceModel, candidateModel, referenceSources, candidateSources) {
-  const generationInputs = model => ({ settings: model.settings, generate: model.generate, invariants: model.invariants, replayRegressions: model.replayRegressions ?? [] });
+  // The exported list is compared as a set: a reference revision may record it in hand order while the candidate derives declaration order.
+  const generationInputs = model => ({ settings: model.settings, generate: model.generate, invariants: model.invariants, replayRegressions: [...(model.replayRegressions ?? [])].sort() });
   return isDeepStrictEqual(referenceSources, candidateSources) && isDeepStrictEqual(generationInputs(referenceModel), generationInputs(candidateModel))
     ? 'identical import closure and generation settings' : null;
 }
@@ -375,7 +450,17 @@ export async function runDifferential(profileId, prepared, { chunk = defaultChun
   const started = performance.now();
   const forwardReplay = await prepareReplay(candidateTree, candidateModel, descriptor, referenceHistories, { chunk, output: resolve(outputDirectory, 'forward') });
   const reverseReplay = await prepareReplay(referenceTree, referenceModel, descriptor, candidateHistories, { chunk, output: resolve(outputDirectory, 'reverse') });
-  const results = await runPool([...forwardReplay.tasks, ...reverseReplay.tasks], { concurrency });
+  log(`${profileId}: ${forwardReplay.tasks.length} forward and ${reverseReplay.tasks.length} reverse replay batches, up to ${concurrency} concurrent processes.`);
+  const progress = (direction, tasks) => {
+    let completed = 0;
+    return tasks.map((task, index) => async () => {
+      const batchStarted = performance.now();
+      const result = await task();
+      log(`${profileId} ${direction}: ${++completed}/${tasks.length} batches complete; batch ${index + 1} replayed ${result.length} histories in ${seconds(performance.now() - batchStarted)} (${seconds(performance.now() - started)} elapsed).`);
+      return result;
+    });
+  };
+  const results = await runPool([...progress('forward', forwardReplay.tasks), ...progress('reverse', reverseReplay.tasks)], { concurrency });
   const forward = forwardReplay.collect(results.slice(0, forwardReplay.tasks.length));
   const reverse = reverseReplay.collect(results.slice(forwardReplay.tasks.length));
   const replayMs = performance.now() - started;
@@ -383,6 +468,7 @@ export async function runDifferential(profileId, prepared, { chunk = defaultChun
     disagreed: verdicts.filter(verdict => !verdict.agree).length, disagreements: verdicts.filter(verdict => !verdict.agree).slice(0, 20).map(verdict => ({ direction: name, ...verdict })) });
   const referenceSize = bytesPerState(referenceCorpus.directory);
   const candidateSize = bytesPerState(candidateCorpus.directory);
+  const bound = bytesBound(candidateModel);
   return write({
     ...withSources,
     forward: direction('forward', forward, referenceHistories.length - referenceHistories.filter(history => history.path.startsWith('regression:')).length, referenceHistories.filter(history => history.path.startsWith('regression:')).length),
@@ -391,20 +477,21 @@ export async function runDifferential(profileId, prepared, { chunk = defaultChun
       wallRatio: referenceCorpus.generationMs ? candidateCorpus.generationMs / referenceCorpus.generationMs : null,
       reference: referenceSize, candidate: candidateSize,
       bytesPerStateRatio: referenceSize.bytesPerState ? candidateSize.bytesPerState / referenceSize.bytesPerState : null,
-      maxBytesPerStateRatio },
+      maxBytesPerStateRatio: bound.maxBytesPerStateRatio, maxBytesPerStateRatioSource: bound.source },
     replay: { chunk, wallMs: Math.round(replayMs) },
   });
 }
 
 // The run's verdict: any disagreement in either direction fails, as does trace
-// growth beyond the bound. Wall time is advisory: the two generations run
-// concurrently and hosted runners are noisy.
+// growth beyond the bound (the model's own or the default). Wall time is
+// advisory: the two generations run concurrently and hosted runners are noisy.
+const boundText = generation => `bound x${generation.maxBytesPerStateRatio.toFixed(2)} (${generation.maxBytesPerStateRatioSource ?? 'default'})`;
 export function verdict(report) {
   const reasons = [];
   if (report.skipped) return { failed: false, reasons: [`skipped: ${report.skipped}`] };
   for (const name of ['forward', 'reverse']) if (report[name].disagreed) reasons.push(`${report[name].disagreed} ${name} disagreement(s)`);
   const ratio = report.generation.bytesPerStateRatio;
-  if (ratio !== null && ratio > report.generation.maxBytesPerStateRatio) reasons.push(`bytes per state grew x${ratio.toFixed(3)}, above the bound x${report.generation.maxBytesPerStateRatio}`);
+  if (ratio !== null && ratio > report.generation.maxBytesPerStateRatio) reasons.push(`bytes per state grew x${ratio.toFixed(3)}, above the ${boundText(report.generation)}`);
   const advisory = report.generation.wallRatio !== null && report.generation.wallRatio > advisoryWallRatio
     ? [`advisory: generation wall time x${report.generation.wallRatio.toFixed(2)} exceeds x${advisoryWallRatio} (concurrent generations; not gated)`] : [];
   return { failed: reasons.length > 0, reasons: [...reasons, ...advisory] };
@@ -420,7 +507,7 @@ export function formatReport(report) {
       ` replay ${seconds(report.replay.wallMs)} at ${report.replay.chunk} per process.`,
     `generation wall ${seconds(report.generation.referenceMs)} -> ${seconds(report.generation.candidateMs)} (${ratio(report.generation.wallRatio, 2)}, advisory),` +
       ` bytes/state ${report.generation.reference.bytesPerState.toFixed(0)} -> ${report.generation.candidate.bytesPerState.toFixed(0)}` +
-      ` (${ratio(report.generation.bytesPerStateRatio, 3)}, bound x${report.generation.maxBytesPerStateRatio})`,
+      ` (${ratio(report.generation.bytesPerStateRatio, 3)}, ${boundText(report.generation)})`,
   ];
   for (const name of ['forward', 'reverse']) {
     for (const disagreement of report[name].disagreements) lines.push(`  ${name} ${disagreement.path}: ${disagreement.reason}`);
@@ -430,22 +517,26 @@ export function formatReport(report) {
   return lines.join('\n');
 }
 
-const usage = `Usage: node formal/differential.mjs <profile> | --composed [--reference=<revision>] [--chunk=<n>] [--out=<directory>]
+const usage = `Usage: node formal/differential.mjs <profile> | --composed [--shard=<index>/<count>] [--reference=<revision>] [--chunk=<n>] [--out=<directory>]
 
 Generates <profile>'s corpus and exported regressions from the merge base with
 <revision> (default origin/main) and from the working tree, each with its own
 manifest entry and the lane's command; replays every reference history through
 the working tree's text and every working-tree history through the reference
 text; fails on any step whose driver-asserted observation differs, on an input
-either text refuses, or on trace bytes per state above x${maxBytesPerStateRatio}.
+either text refuses, or on trace bytes per state above x${maxBytesPerStateRatio} (or above
+the model's own differential.maxBytesPerStateRatio when it declares one).
 A profile whose differential.behaviorVersion or observation schema version
 differs between the revisions is reported as an intended divergence and not
 compared; a profile the reference does not generate is reported as new.
 A profile whose import closure and generation settings are byte-identical in
 both revisions is reported as unchanged and not regenerated. --composed selects
 every profile that imports a kernel module in either revision; one the working
-tree no longer generates is reported as removed. Only profiles with an
-explicit-input driver descriptor (formal/replay/features.mjs) can be replayed.
+tree no longer generates is reported as removed. --shard=<index>/<count>, with
+--composed only, replays the index-th of count shards balanced by estimated
+profile replay time (the hosted lane runs four). Only profiles with an
+explicit-input driver descriptor (formal/replay/features.mjs, or the local-clock
+descriptor in formal/replay/local-clock.mjs) can be replayed.
 Reports:
 report.json under --out (default ${defaultOutput}/<profile>).`;
 
@@ -456,13 +547,29 @@ async function main(argv) {
     const separator = argument.indexOf('=');
     if (separator === -1) options[argument.slice(2)] = true; else options[argument.slice(2, separator)] = argument.slice(separator + 1);
   }
-  if (options.help || (positional.length !== 1 && !options.composed) || (positional.length && options.composed)) { console.log(usage); return 2; }
+  if (options.help) { console.log(usage); return 2; }
+  // --shard is refused before any tree is prepared, and parsed by the function
+  // the runner (formal/validation.mjs) applies to DIFFERENTIAL_SHARD: neither
+  // accepts a value the other rejects.
+  if (options.shard !== undefined && !options.composed) throw new Error('--shard applies to --composed only; a single named profile is replayed whole');
+  if ((positional.length !== 1 && !options.composed) || (positional.length && options.composed)) { console.log(usage); return 2; }
   const chunk = options.chunk === undefined ? defaultChunk : Number(options.chunk);
   if (!Number.isSafeInteger(chunk) || chunk < 1) throw new Error('--chunk must be a positive integer');
+  let shard;
+  if (options.shard !== undefined) {
+    try { shard = parseShard(options.shard); }
+    catch { throw new Error(`--shard must be <index>/<count> with 1 <= index <= count (for example 2/4); got ${JSON.stringify(options.shard)}`); }
+  }
   const settings = { chunk, ...(typeof options.out === 'string' ? { output: options.out } : {}) };
   const prepared = prepare(typeof options.reference === 'string' ? options.reference : 'origin/main', { output: settings.output ?? defaultOutput });
-  const selected = options.composed ? selectProfiles(prepared) : positional;
-  if (!selected.length) { console.log('No profile imports a kernel module in either revision; nothing to replay.'); return 0; }
+  const composed = options.composed ? selectProfiles(prepared) : positional;
+  if (!composed.length) { console.log('No profile imports a kernel module in either revision; nothing to replay.'); return 0; }
+  const selected = shard ? shardProfiles(composed, shard.index, shard.count) : composed;
+  if (shard) {
+    const others = composed.filter(profileId => !selected.includes(profileId));
+    console.log(`Shard ${shard.index}/${shard.count} covers ${selected.length ? selected.join(', ') : 'no profile'}; left to the other shards: ${others.length ? others.join(', ') : 'none'}.`);
+    if (!selected.length) { console.log(`Nothing to replay in shard ${shard.index}/${shard.count}: ${composed.length} composed profile(s) fill only the first ${composed.length} shard(s).`); return 0; }
+  }
   console.log(`Reference ${prepared.reference.revision.slice(0, 12)}; profiles: ${selected.join(', ')}.`);
   let failed = false;
   for (const profileId of selected) {

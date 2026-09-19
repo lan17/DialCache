@@ -2,9 +2,9 @@ import type { Trace as EffectsTrace } from "../effects.mjs";
 import type { Trace as FeatureTrace } from "../features.mjs";
 import type { LocalClockTrace } from "../local-clock.mjs";
 import type { WitnessProvenance, WitnessRecorder } from "./recorder.mjs";
-import type { PrivateHistory, RawHistory } from "./trace.mjs";
+import type { PrivateHistory } from "./trace.mjs";
 export type FeatureHistory = FeatureTrace & PrivateHistory;
-export type EffectsHistory = EffectsTrace & RawHistory;
+export type EffectsHistory = EffectsTrace & PrivateHistory;
 export type WitnessHistory = FeatureHistory | EffectsHistory | LocalClockTrace;
 export type WitnessCorpus = FeatureHistory[] | EffectsHistory[] | LocalClockTrace[];
 export interface HistorySequences {

@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseShard } from './mutation-reports.mjs';
+import { parseOnly, parseShard } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const replayTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts',
@@ -30,13 +30,13 @@ export const targetDescriptions = {
   'formal-rust': 'Complete prepared Rust replay of the generated corpus in release mode',
   'fixtures-check': 'Recompute every committed model-derived artifact with pinned Quint',
   'kernel-fixtures': 'Typecheck the kernel library fixtures (test/fixtures/kernel) and run every run they declare',
-  differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions',
+  differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions (DIFFERENTIAL_SHARD=<index>/<count> replays one shard balanced by estimated profile replay time, as the hosted lane does with four)',
   explore: 'Explore a new recorded seed and replay every port in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
-  mutations: 'Measure TypeScript, Go and Rust semantic mutations over the generated corpus and shared witness evidence',
-  'mutations-ts': 'Measure TypeScript semantic mutations over the generated corpus (MUTATION_SHARD=<index>/<count> measures one shard)',
-  'mutations-go': 'Measure Go semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard)',
-  'mutations-rust': 'Measure Rust semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard)',
+  mutations: 'Measure TypeScript, Go and Rust semantic mutations over generated histories, real Redis vectors and shared witnesses (Docker)',
+  'mutations-ts': 'Measure TypeScript semantic mutations over generated histories and real Redis vectors; requires Docker (MUTATION_SHARD=<index>/<count> measures one shard; MUTATION_ONLY=<id>,<id> measures the named mutants into a partial report)',
+  'mutations-go': 'Measure Go semantic mutations over generated histories, real Redis vectors and shared witnesses; requires Docker (MUTATION_SHARD=<index>/<count> measures one shard; MUTATION_ONLY=<id>,<id> measures the named mutants into a partial report)',
+  'mutations-rust': 'Measure Rust semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard; MUTATION_ONLY=<id>,<id> measures the named mutants into a partial report)',
   'mutations-merge-ts': 'Merge TypeScript mutation shards into the complete report; refuses inconsistent or missing shards',
   'mutations-merge-go': 'Merge Go mutation shards into the complete report; refuses inconsistent or missing shards',
   'mutations-merge-rust': 'Merge Rust mutation shards into the complete report; refuses inconsistent or missing shards',
@@ -54,20 +54,43 @@ export function expandTargets(target) {
 }
 
 // MUTATION_SHARD=<index>/<count> narrows one measurement lane to a shard of
-// its catalog; the merge target later assembles the complete report. Only the
-// two leaf lanes accept it: an aggregate that silently ignored it would run the
-// complete measurement the caller did not ask for.
+// its catalog; the merge target later assembles the complete report.
+// MUTATION_ONLY=<id>,<id> measures only the named mutants into a partial
+// report that is never evidence. Only the three leaf lanes accept them: an
+// aggregate that silently ignored them would run the complete measurement the
+// caller did not ask for.
 const shardedTargets = ['mutations-ts', 'mutations-go', 'mutations-rust'];
-export function mutationShardArguments(target, environment = process.env) {
-  const value = environment.MUTATION_SHARD;
-  if (value === undefined) return [];
+export function mutationSelectionArguments(target, environment = process.env) {
+  const set = [['MUTATION_SHARD', environment.MUTATION_SHARD], ['MUTATION_ONLY', environment.MUTATION_ONLY]].filter(([, value]) => value !== undefined);
+  if (!set.length) return [];
+  const stated = set.map(([name, value]) => `${name}=${value}`).join(' ');
   if (!shardedTargets.includes(target)) {
-    if (expandTargets(target).some(name => shardedTargets.includes(name))) throw new Error(`MUTATION_SHARD=${value} applies only to make mutations-ts, make mutations-go and make mutations-rust; unset it to run the complete measurement with make ${target}.`);
+    if (expandTargets(target).some(name => shardedTargets.includes(name))) throw new Error(`${stated} applies only to make mutations-ts, make mutations-go and make mutations-rust; unset it to run the complete measurement with make ${target}.`);
     return [];
   }
-  // The measurement scripts parse the same value; one implementation decides
-  // what is well-formed, so the runner cannot accept a shard the script rejects.
-  try { parseShard(value); } catch { throw new Error(`MUTATION_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/3); got ${JSON.stringify(value)}.`); }
+  if (set.length > 1) throw new Error(`${stated}: MUTATION_SHARD and MUTATION_ONLY exclude each other; a partial run is never merged.`);
+  const [[name, value]] = set;
+  // The measurement scripts parse the same values; one implementation decides
+  // what is well-formed, so the runner cannot accept a value the script rejects.
+  if (name === 'MUTATION_SHARD') {
+    try { parseShard(value); } catch { throw new Error(`MUTATION_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/3); got ${JSON.stringify(value)}.`); }
+    return [`--shard=${value}`];
+  }
+  try { parseOnly(value); } catch { throw new Error(`MUTATION_ONLY must be <id>,<id> naming distinct mutant ids (for example M14,M15); got ${JSON.stringify(value)}.`); }
+  return [`--only=${value}`];
+}
+
+// DIFFERENTIAL_SHARD=<index>/<count> narrows make differential to one
+// shard balanced by estimated profile replay time (formal/differential.mjs
+// shardProfiles), the way the hosted lane's four-shard matrix does; every shard
+// keeps the lint baseline and the kernel fixtures, so each is self-contained.
+// No aggregate includes the differential, so other targets ignore the variable.
+// The script parses the value with the same function: the runner cannot accept
+// a value the script rejects.
+export function differentialShardArguments(target, environment = process.env) {
+  const value = environment.DIFFERENTIAL_SHARD;
+  if (value === undefined || !expandTargets(target).includes('differential')) return [];
+  try { parseShard(value); } catch { throw new Error(`DIFFERENTIAL_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/4); got ${JSON.stringify(value)}.`); }
   return [`--shard=${value}`];
 }
 
@@ -127,8 +150,12 @@ export function validationPlan(target, { directory = root, environment = process
   // The complete replay outlives Go's default 10-minute test timeout on a slow
   // runner (run 34667733523 was killed at 10m0s); bound it explicitly, under
   // the go-parity job budget. The smoke run keeps the default.
+  // Opt-in native workers need inputs from the mutation/vector coordinator.
+  // Exclude exactly those roots from the full corpus command so the completed
+  // report can keep rejecting every actual skip, including required cases.
   const nativeGo = full => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
-    'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m'] : []), './...'),
+    'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m',
+      '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver)$'] : []), './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   // The Rust conformance harness is one cargo test target. Without directory
   // selectors it replays the committed smoke histories; with them it replays
@@ -138,7 +165,8 @@ export function validationPlan(target, { directory = root, environment = process
     'test', ...(full ? ['--release'] : []), '--all-features', '--test', 'conformance'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory, DIALCACHE_RUST_REPORT: resolve(directory, '.formal-traces/rust-replay.jsonl') } } : {}) });
   const node22 = floorExecutable(environment, runnerNode, nodeVersion) ?? '<NODE22_BIN>';
-  const shard = mutationShardArguments(target, environment);
+  const selection = mutationSelectionArguments(target, environment);
+  const differentialShard = differentialShardArguments(target, environment);
   const plans = {
     'check-ts': [pnpm('Typecheck TypeScript', 'typecheck'), pnpm('Run TypeScript unit tests with coverage', 'test'),
       pnpm('Build package', 'build'), pnpm('Check packed package on Node 24', 'test:package')],
@@ -154,16 +182,17 @@ export function validationPlan(target, { directory = root, environment = process
     smoke: [tsReplay(false), nativeGo(false), nativeRust(false)],
     'fixtures-check': [node('Recompute all committed Quint artifacts', 'formal/generate-artifacts.mjs', '--check')],
     'kernel-fixtures': [kernelFixtures],
-    differential: [lintBaseline, kernelFixtures, node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${environment.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`)],
+    differential: [lintBaseline, kernelFixtures, node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${environment.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`, ...differentialShard)],
     explore: [node('Explore and replay an isolated alternate-seed corpus', 'formal/explore.mjs')],
     'model-check': [node('Symbolically verify the scheduled finite rules', 'formal/check-symbolic-models.mjs')],
     // The model check is evidence about the Quint models (typechecks, bounded
     // runs, regressions and the mutation challenges). Nothing downstream reads
     // its output, so it is a sibling of generation rather than a prefix of it.
-    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'), lintBaseline, kernelFixtures],
+    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'),
+      node('Measure every pinned model fault', 'formal/check-model-properties.mjs'), lintBaseline, kernelFixtures],
     // Generation is the single shared producer: the corpus, wire artifacts and
-    // witness evidence depend only on the models. Both ports' replays and both
-    // mutation measurements read that output and can run in parallel off it.
+    // witness evidence depend only on the models. Every port replay and mutation
+    // measurement read that output and can run in parallel off it.
     'formal-generate': [invalidate('ts', 'go', 'rust'),
       node('Generate complete corpus and recompute wire artifacts', 'formal/run-models.mjs', 'generate'),
       node('Recompute committed Quint smoke and witness fixtures', 'formal/generated-fixtures.mjs', '--check'), witnesses],
@@ -180,9 +209,9 @@ export function validationPlan(target, { directory = root, environment = process
       node('Prepare Rust execution context', 'formal/conformance.mjs', 'prepare', 'rust', reportPath('rust', 'context')), nativeRust(true),
       { ...node('Check complete Rust native report', 'formal/check-rust-replay.mjs'), stdoutFile: '.formal-traces/rust-replay-summary.json' },
       { ...node('Adapt Rust native assertion report', 'formal/conformance-adapters.mjs', 'rust', '.formal-traces/rust-replay.jsonl', reportPath('rust', 'context')), stdoutFile: reportPath('rust', 'completion') }, completion('rust')],
-    'mutations-ts': [node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs', ...shard)],
-    'mutations-go': [node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs', ...shard)],
-    'mutations-rust': [node('Measure Rust semantic mutations', 'formal/measure-rust-semantics.mjs', ...shard)],
+    'mutations-ts': [node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs', ...selection)],
+    'mutations-go': [node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs', ...selection)],
+    'mutations-rust': [node('Measure Rust semantic mutations', 'formal/measure-rust-semantics.mjs', ...selection)],
     // The merge needs neither Quint nor Go: it reads shard reports, checks
     // them against each other and this checkout, and writes the complete report.
     'mutations-merge-ts': [node('Merge TypeScript mutation shards', 'formal/merge-mutation-reports.mjs', 'ts')],
@@ -233,7 +262,7 @@ export function checkPrerequisites(target, { directory = root, environment = pro
     try { probe('tar', ['--version'], { directory, environment }); }
     catch (error) { throw new Error(`Symbolic checking requires tar to unpack the pinned Apalache archive. ${error.message}`); }
   }
-  if (targets.some(name => name.startsWith('integration-'))) probe('docker', ['info', '--format', '{{.ServerVersion}}'], { directory, environment });
+  if (targets.some(name => name.startsWith('integration-') || ['mutations-ts', 'mutations-go'].includes(name))) probe('docker', ['info', '--format', '{{.ServerVersion}}'], { directory, environment });
   if (targets.includes('package-floor')) {
     const executable = floorExecutable(environment, runnerNode, nodeVersion);
     if (!executable || !isAbsolute(executable)) throw new Error('Node 22.15.0 is required for package-floor. Set NODE22_BIN=/absolute/path/to/node22/bin/node (or run make package-floor under exact Node 22.15.0). No runtime is downloaded automatically.');
@@ -384,7 +413,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(Object.entries(targetDescriptions).map(([name, description]) => `make ${name.padEnd(width)} ${description}`).join('\n'));
     console.log('\nPrerequisites: frozen pnpm install; Node 24, pinned pnpm; Go 1.27.1 / cargo 1.98.1 / Docker where required; Quint 0.32.0 for formal-check, formal-generate, fixtures-check, explore and model-check; Java 21 and tar for model-check and ci.');
     console.log('formal-check is the Quint evidence lane (models, regressions, challenges); the port and mutation lanes read only the formal-generate output and do not wait for it.');
-    console.log('Sharded mutation runs: MUTATION_SHARD=1/3 make mutations-ts (then 2/3, 3/3, on any machines with the same corpus), then make mutations-merge-ts; the merged report is the only complete evidence.');
+    console.log('Sharded mutation runs: MUTATION_SHARD=<index>/<count> make mutations-ts for every index, matching the workflow matrix, on any machines with the same corpus, then make mutations-merge-ts; the merged report is the only complete evidence.');
+    console.log('One mutant locally: MUTATION_ONLY=M01,M02 make mutations-ts (or mutations-go / mutations-rust) writes a partial report under partial/ and leaves the complete report alone.');
+    console.log('Sharded differential runs: DIFFERENTIAL_SHARD=<index>/<count> make differential replays one shard balanced by estimated profile replay time, matching the pull request workflow\'s four-shard matrix; every shard checks the lint baseline and the kernel fixtures.');
     console.log('Full local CI: make ci NODE22_BIN=/absolute/path/to/node22/bin/node (exact 22.15.0).');
   } else {
     try { await runTarget(target); }

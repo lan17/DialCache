@@ -4,7 +4,10 @@
 // scheduled profiles hold fixed (their wall skew is 0 and their replies carry
 // constant TTLs): the retention and freshness boundaries, per-reply freshness,
 // writes and fences with the two clocks apart, unfenced refills at a wall
-// clock of zero, and a watermark stamped with the wall clock that never lowers.
+// clock of zero, a watermark stamped with the wall clock that no invalidation
+// lowers (only a marker's expiry does, `markers`), and the fence of an atomic
+// miss (C58): none after a visible frame the read declined, the watermark
+// after a frame it fenced.
 module frame_clocks {
   import conformance_observations.* from "../../../formal/conformance-observations"
   import encodings.* from "../../../formal/kernel/encodings"
@@ -26,7 +29,7 @@ module frame_clocks {
   pure val ROLLBACK_MS = 1000
   pure val KEY = 0
   pure val LAYOUT: Serving::Layout =
-    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false }
+    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false, policyProvider: true }
   // The fixture's TTLs: a 1 s freshness, a 1 s retention and a 1 s local TTL.
   pure val TTLS: Ttls = { localMs: LOCAL_MS, freshMs: FRESH_MS, retentionMs: RETENTION_MS }
   pure val REMOTE_ONLY: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: true }
@@ -79,7 +82,7 @@ module frame_clocks {
     input' = { name: "shiftWall", choice: ms }
   }
   action invalidate = all {
-    s' = Serving::invalidate(s, 0),
+    s' = Serving::invalidate(s, 0, 0),
     input' = { name: "invalidate", choice: 0 }
   }
 
@@ -249,7 +252,34 @@ module frame_clocks {
     .then(begin(TTLS))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.reads == 1 and s.o.loads == 1 and s.o.loaders == 0)
 
-  // A watermark never lowers: an invalidation after a wall rollback keeps the
+  // C58 on the atomic path: a visible frame the read declined as stale
+  // (stamped after the watermark, past the reply's freshness) carries no
+  // fence, so the refill is written at the very wall instant the read observed.
+  run visibleStaleMissCarriesNoFenceTest = trackedInit
+    .then(invalidate)
+    .then(elapse(1))
+    .then(seed(VALUE_ONE, LONG_RETENTION_MS))
+    .then(elapse(FRESH_MS))
+    .then(begin(TTLS))
+    .expect(s.o.reads == 1 and s.o.loads == 0 and s.o.loaders == 1 and s.sources.nth(0).fence == NO_FENCE
+      and Remote::visible(s, KEY, LAYOUT.operationsPerEntity) and not(Remote::fresh(s, KEY, FRESH_MS)))
+    .then(settle(0, VALUE_TWO))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.dumps == 1 and s.o.writes == 1 and s.remoteValues == List(VALUE_TWO, NO_VALUE)
+      and s.created == List(INITIAL_TIME_MS + 1 + FRESH_MS, 0))
+
+  // A frame stamped at the watermark is not visible to a tracked reader: the
+  // miss carries the watermark as its fence, and the refill at that same wall
+  // instant is refused while the fenced frame stays stored.
+  run frameAtTheWatermarkKeepsTheMissFenceTest = trackedInit
+    .then(seed(VALUE_ONE, LONG_RETENTION_MS))
+    .then(invalidate)
+    .then(begin(TTLS))
+    .expect(s.watermark == List(INITIAL_TIME_MS) and not(Remote::visible(s, KEY, LAYOUT.operationsPerEntity))
+      and s.o.loads == 0 and s.o.loaders == 1 and s.sources.nth(0).fence == INITIAL_TIME_MS)
+    .then(settle(0, VALUE_TWO))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.dumps == 0 and s.o.writes == 0 and s.remoteValues == List(VALUE_ONE, NO_VALUE))
+
+  // An invalidation never lowers a watermark: one after a wall rollback keeps the
   // earlier watermark, its fenced refill is not stored, and once the wall
   // clock is past the frame's stamp again the frame is still fenced although
   // it is retained and fresh.

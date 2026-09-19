@@ -20,7 +20,7 @@ type boundaryRemote struct {
 func (r boundaryRemote) Read(ctx context.Context, _, _ string) (ReadResult, error) {
 	return r.read(ctx)
 }
-func (r boundaryRemote) Write(_ context.Context, _ string, frame Frame, _ int64) error {
+func (r boundaryRemote) Write(_ context.Context, _ string, frame Frame, _ time.Duration) error {
 	if r.write != nil {
 		return r.write(frame)
 	}
@@ -62,17 +62,17 @@ func TestInlineFallbackDeadlineSnapshot(t *testing.T) {
 					}
 					return ReadResult{Kind: "miss", Reason: "value_absent"}, nil
 				}, write: func(Frame) error { writes.Add(1); return nil }}
-				options := Options[any]{Remote: remote, DisableCompression: true, RemoteReadTimeoutMS: 1000}
+				opts := []Option{WithRemote(remote), WithoutCompression(), WithRemoteReadTimeout(time.Second)}
 				if stage == "policy" {
-					options.PolicyProvider = func(context.Context, Identity) (any, error) { close(admitted); <-release; return nil, nil }
+					opts = append(opts, WithPolicyProvider(func(context.Context, Identity) (RuntimePolicy, error) { close(admitted); <-release; return nil, nil }))
 				}
-				cache := New(options)
+				cache := MustNew(opts...)
 				deadline := int64(10)
-				operation := Operation{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "snapshot", UseCase: "get"}, Policy: Policy{RemoteTTLMS: 60000}, FallbackTimeoutMS: &deadline}
+				operation := Operation[any]{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "snapshot", UseCase: "get"}, Policy: Policy{RemoteTTL: time.Duration(60000) * time.Millisecond}, SourceTimeout: time.Duration(deadline) * time.Millisecond}
 				completed := make(chan error, 1)
 				go func() {
-					completed <- cache.Enable(context.Background(), func(ctx context.Context) error {
-						_, err := cache.GetOrLoad(ctx, operation, func(context.Context) (any, error) { <-sourceRelease; return 1, nil })
+					completed <- cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+						_, err := GetOrLoad(ctx, cache, operation, func(context.Context) (any, error) { <-sourceRelease; return 1, nil })
 						return err
 					})
 				}()
@@ -86,7 +86,7 @@ func TestInlineFallbackDeadlineSnapshot(t *testing.T) {
 				select {
 				case err := <-completed:
 					var timeout *FallbackTimeoutError
-					if !errors.As(err, &timeout) || timeout.TimeoutMS != 10 {
+					if !errors.As(err, &timeout) || timeout.Timeout != 10*time.Millisecond {
 						t.Fatalf("accepted 10ms deadline changed: %v", err)
 					}
 				default:
@@ -133,8 +133,8 @@ func TestInvalidWriterTimestampsFailOpenAndReportWriteErrors(t *testing.T) {
 							}
 							return (JSONCodec[any]{}).Encode(value)
 						}}
-						cache := New(Options[any]{Clock: clock, Remote: remote, Codec: codec, DisableCompression: true, ShadowOutcome: func(event Event) { outcomes <- event }, Observe: func(event Event) { eventsMu.Lock(); events = append(events, event); eventsMu.Unlock() }})
-						operation := Operation{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "timestamp", UseCase: "get", Tracked: true}, Policy: Policy{RemoteTTLMS: 60000}}
+						cache := MustNew(WithClock(clock), WithRemote(remote), WithoutCompression(), WithShadowOutcomes(func(event Event) { outcomes <- event }), WithObserver(func(event Event) { eventsMu.Lock(); events = append(events, event); eventsMu.Unlock() }))
+						operation := Operation[any]{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "timestamp", UseCase: "get", Tracked: true}, Policy: Policy{RemoteTTL: time.Duration(60000) * time.Millisecond}, Codec: codec}
 						if dark {
 							zero, full := float64(0), float64(100)
 							operation.Policy.RemoteRamp = &zero
@@ -143,8 +143,8 @@ func TestInvalidWriterTimestampsFailOpenAndReportWriteErrors(t *testing.T) {
 						result := make(chan any, 1)
 						failures := make(chan error, 1)
 						go func() {
-							failures <- cache.Enable(context.Background(), func(ctx context.Context) error {
-								value, err := cache.GetOrLoad(ctx, operation, func(context.Context) (any, error) { <-sourceRelease; return 7, nil })
+							failures <- cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+								value, err := GetOrLoad(ctx, cache, operation, func(context.Context) (any, error) { <-sourceRelease; return 7, nil })
 								result <- value
 								return err
 							})
@@ -202,15 +202,13 @@ func TestInstanceCapacitySafeIntegerBounds(t *testing.T) {
 	} // Larger-than-safe values cannot exist in a 32-bit int.
 	maximum := uint64(MaxSafeInteger)
 	invalid := int(maximum + 1)
-	for _, options := range []Options[any]{{LocalCapacity: invalid}, {ShadowMaxInFlight: invalid}} {
-		panicked := false
-		func() { defer func() { panicked = recover() != nil }(); New(options) }()
-		if !panicked {
-			t.Fatalf("unsafe capacity accepted: local=%d shadow=%d", options.LocalCapacity, options.ShadowMaxInFlight)
+	for name, option := range map[string]Option{"local": WithLocalCapacity(invalid), "shadow": WithShadowCapacity(invalid)} {
+		if _, err := New(option); !errors.Is(err, ErrInvalidOption) {
+			t.Fatalf("unsafe %s capacity accepted: %v", name, err)
 		}
 	}
 	// Construction sets a capacity bound; it does not preallocate that many entries.
-	_ = New(Options[any]{LocalCapacity: int(maximum), ShadowMaxInFlight: int(maximum)})
+	_ = MustNew(WithLocalCapacity(int(maximum)), WithShadowCapacity(int(maximum)))
 }
 
 type boundaryLogger struct {
@@ -240,7 +238,7 @@ func TestLoggerFailuresPreserveSourceAndMaintenanceResults(t *testing.T) {
 	t.Run("invalidation", func(t *testing.T) {
 		logger := &boundaryLogger{panicOnCall: true}
 		problem := errors.New("original invalidation failure")
-		cache := New(Options[any]{Remote: boundaryRemote{invalidate: func() error { return problem }}, Logger: logger, Observe: func(Event) { panic("observer failure") }})
+		cache := MustNew(WithRemote(boundaryRemote{invalidate: func() error { return problem }}), WithLogger(logger), WithObserver(func(Event) { panic("observer failure") }))
 		if err := cache.Invalidate(context.Background(), Identity{Namespace: "boundary", KeyType: "id", ID: "maintenance"}, 0); err != problem {
 			t.Fatalf("maintenance rejection changed: %v", err)
 		}
@@ -263,19 +261,19 @@ func TestLoggerFailuresPreserveSourceAndMaintenanceResults(t *testing.T) {
 				}
 				return nil
 			}}
-			options := Options[any]{Remote: remote, Logger: logger, DisableCompression: true, Observe: func(Event) { panic("observer failure") }}
+			opts := []Option{WithRemote(remote), WithLogger(logger), WithoutCompression(), WithObserver(func(Event) { panic("observer failure") })}
 			if stage == "policy" {
-				options.PolicyProvider = func(context.Context, Identity) (any, error) { return nil, problem }
+				opts = append(opts, WithPolicyProvider(func(context.Context, Identity) (RuntimePolicy, error) { return nil, problem }))
 			}
-			operation := Operation{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "logging", UseCase: "get"}, Policy: Policy{RemoteTTLMS: 60000}}
+			operation := Operation[any]{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "logging", UseCase: "get"}, Policy: Policy{RemoteTTL: time.Duration(60000) * time.Millisecond}}
 			if stage == "key" {
 				operation.IdentityProvider = func() (Identity, error) { return Identity{}, problem }
 			}
-			cache := New(options)
+			cache := MustNew(opts...)
 			var value any
-			err := cache.Enable(context.Background(), func(ctx context.Context) error {
+			err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 				var err error
-				value, err = cache.GetOrLoad(ctx, operation, func(context.Context) (any, error) { return 7, nil })
+				value, err = GetOrLoad(ctx, cache, operation, func(context.Context) (any, error) { return 7, nil })
 				return err
 			})
 			if err != nil || value != 7 {
@@ -293,47 +291,16 @@ func TestLoggerFailuresPreserveSourceAndMaintenanceResults(t *testing.T) {
 		remote := boundaryRemote{read: func(context.Context) (ReadResult, error) {
 			return ReadResult{Kind: "hit", Frame: Frame{CreatedAtMS: uint64(time.Now().UnixMilli() - 1500), Payload: []byte("1")}}, nil
 		}}
-		cache := New(Options[any]{Remote: remote, Logger: logger, DisableCompression: true, ShouldRecover: func(error) (bool, error) { return false, errors.New("predicate failure") }})
-		operation := Operation{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "predicate", UseCase: "get"}, Policy: Policy{RemoteTTLMS: 1000, StaleOnErrorMaxAgeMS: &maximumAge}}
-		err := cache.Enable(context.Background(), func(ctx context.Context) error {
-			_, err := cache.GetOrLoad(ctx, operation, func(context.Context) (any, error) { return nil, sourceError })
+		cache := MustNew(WithRemote(remote), WithLogger(logger), WithoutCompression(), WithStaleRecovery(func(error) (bool, error) { return false, errors.New("predicate failure") }))
+		operation := Operation[any]{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "predicate", UseCase: "get"}, Policy: Policy{RemoteTTL: time.Duration(1000) * time.Millisecond, StaleOnErrorMaxAge: Ptr(time.Duration(maximumAge) * time.Millisecond)}}
+		err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+			_, err := GetOrLoad(ctx, cache, operation, func(context.Context) (any, error) { return nil, sourceError })
 			return err
 		})
 		if err != sourceError || logger.warnings.Load() != 1 {
 			t.Fatalf("predicate/logger changed original rejection: %v warnings=%d", err, logger.warnings.Load())
 		}
 	})
-}
-
-func TestInvalidOperationCodecFailsOpenWithoutDefaultSubstitution(t *testing.T) {
-	var writes atomic.Int64
-	errorsObserved := map[string]int{}
-	var lock sync.Mutex
-	remote := boundaryRemote{read: func(context.Context) (ReadResult, error) {
-		return ReadResult{Kind: "hit", Frame: Frame{CreatedAtMS: uint64(time.Now().UnixMilli()), Payload: []byte("1")}}, nil
-	}, write: func(Frame) error { writes.Add(1); return nil }}
-	cache := New(Options[any]{Remote: remote, DisableCompression: true, Logger: &boundaryLogger{panicOnCall: true}, Observe: func(event Event) {
-		if event.Kind == "error" {
-			lock.Lock()
-			errorsObserved[event.Data["error"].(string)]++
-			lock.Unlock()
-		}
-	}})
-	operation := Operation{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "codec", UseCase: "get"}, Policy: Policy{RemoteTTLMS: 60000}, Codec: struct{}{}}
-	var value any
-	err := cache.Enable(context.Background(), func(ctx context.Context) error {
-		var err error
-		value, err = cache.GetOrLoad(ctx, operation, func(context.Context) (any, error) { return 7, nil })
-		return err
-	})
-	if err != nil || value != 7 || writes.Load() != 0 {
-		t.Fatalf("invalid operation codec silently substituted: value=%v err=%v writes=%d", value, err, writes.Load())
-	}
-	lock.Lock()
-	defer lock.Unlock()
-	if errorsObserved["serialization_load"] != 1 || errorsObserved["serialization_dump"] != 1 {
-		t.Fatalf("missing codec errors: %#v", errorsObserved)
-	}
 }
 
 func TestLocalStorageWriteFailureKeepsSourceResult(t *testing.T) {
@@ -343,17 +310,17 @@ func TestLocalStorageWriteFailureKeepsSourceResult(t *testing.T) {
 	// PreciseClock.ElapsedTime. Faulting that public clock boundary exercises
 	// the real local-write panic isolation without touching private state.
 	clock := &boundaryFaultClock{origin: time.Now()}
-	cache := New(Options[any]{Clock: clock, Logger: logger, Observe: func(event Event) {
+	cache := MustNew(WithClock(clock), WithLogger(logger), WithObserver(func(event Event) {
 		if event.Kind == "error" && event.Data["error"] == "cache_write" {
 			writeErrors.Add(1)
 		}
-	}})
+	}))
 	clock.faultElapsedMS.Store(true)
-	operation := Operation{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "local", UseCase: "get"}, Policy: Policy{LocalTTLMS: 1000}}
+	operation := Operation[any]{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "local", UseCase: "get"}, Policy: Policy{LocalTTL: time.Duration(1000) * time.Millisecond}}
 	var value any
-	err := cache.Enable(context.Background(), func(ctx context.Context) error {
+	err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 		var err error
-		value, err = cache.GetOrLoad(ctx, operation, func(context.Context) (any, error) { return 7, nil })
+		value, err = GetOrLoad(ctx, cache, operation, func(context.Context) (any, error) { return 7, nil })
 		return err
 	})
 	if err != nil || value != 7 || writeErrors.Load() != 1 || logger.warnings.Load() != 1 {

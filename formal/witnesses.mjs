@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readExecution, root } from './execution.mjs';
+import { readExecution, root, scheduleExecution } from './execution.mjs';
 import { witnessEvidence, writeWitnessEvidence } from './replay/witnesses/evidence.mjs';
 import { checkWitnesses, readWitnessRegistry, witnessProfiles } from './replay/witnesses/index.mjs';
 
@@ -100,7 +100,9 @@ export function traceKind(path, directories) {
   throw new Error(`${path}: outside the sampled and regression corpus directories`);
 }
 
-export function witnessCorpus(profile, tracesRoot, execution = readExecution(), directory = root) {
+// `execution` is the scheduled manifest (scheduleExecution): the exported
+// regressions it names complete the profile's corpus.
+export function witnessCorpus(profile, tracesRoot, execution = scheduleExecution(), directory = root) {
   const model = execution.models.find(candidate => candidate.profile === profile);
   if (model === undefined) throw new Error(`${profile}: no scheduled model in formal/execution.json`);
   const output = model.generate?.outputDirectory;
@@ -117,7 +119,7 @@ export function witnessCorpus(profile, tracesRoot, execution = readExecution(), 
   return { paths, kinds, directories };
 }
 
-export function witnessCorpusPaths(profile, tracesRoot, execution = readExecution(), directory = root) {
+export function witnessCorpusPaths(profile, tracesRoot, execution = scheduleExecution(), directory = root) {
   return witnessCorpus(profile, tracesRoot, execution, directory).paths;
 }
 
@@ -237,7 +239,7 @@ export function formatReport(report) {
 }
 
 export function evaluateProfiles(options, { directory = root, log = message => console.log(message), environment = process.env } = {}) {
-  const execution = readExecution();
+  const execution = scheduleExecution();
   const registry = readWitnessRegistry(resolve(directory, 'formal/coverage-witnesses.json'));
   const outputDirectory = resolve(directory, options.out);
   const baselinePath = resolve(directory, options.baseline);

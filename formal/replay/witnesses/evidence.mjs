@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { replaySources } from "../sources.mjs";
 
@@ -15,9 +15,15 @@ export function witnessInputs(profile, directory = ".") {
   const execution = JSON.parse(readFileSync(resolve(directory, "formal/execution.json"), "utf8"));
   const entry = registry.profiles.find(candidate => candidate.id === profile);
   if (entry === undefined) throw new Error(`Unknown witness profile ${profile}`);
+  // Every Quint library: each source under formal/ and formal/kernel/ that no
+  // scheduled model claims, in sorted order (formal/execution.mjs libraryPaths;
+  // the replay closure stays self-contained, and Go derives the same list).
+  const models = new Set(execution.models.map(model => model.path));
+  const libraries = ["formal", "formal/kernel"].flatMap(folder => existsSync(resolve(directory, folder)) ? readdirSync(resolve(directory, folder))
+    .filter(name => name.endsWith(".qnt")).map(name => `${folder}/${name}`) : []).sort().filter(path => !models.has(path));
   const inputs = [...new Set(["formal/profiles.json", "formal/coverage-witnesses.json", "formal/execution.json",
     `formal/dialcache-${profile}-conformance.qnt`, "formal/conformance-observations.qnt",
-    ...execution.libraries, ...replaySources(directory), ...(entry.witnessSources ?? [])])];
+    ...libraries, ...replaySources(directory), ...(entry.witnessSources ?? [])])];
   const foreign = inputs.filter(path => /^(test|src|go)\//.test(path));
   if (foreign.length) throw new Error(`Witness inputs must be language neutral; remove ${foreign.join(", ")} from witnessSources`);
   return inputs;

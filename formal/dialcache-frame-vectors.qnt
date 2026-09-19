@@ -59,7 +59,7 @@ module dialcache_frame_vectors {
       val payload = request.bytes.slice(10, request.bytes.length())
       if (request.tracked and timestamp == 0)
         { kind: "miss", reason: "unclassified", fence: fence, ...EMPTY }
-      else if (request.tracked and fence >= 0 and not(fenceAllows(timestamp, fence)))
+      else if (request.tracked and fence >= 0 and not(readFenceAllows(request.tracked, timestamp, fence)))
         { kind: "miss", reason: "watermark_fenced", fence: fence, ...EMPTY }
       else if (encoding != 0 and encoding != 1) { kind: "payload_encoding_error", ...EMPTY }
       else { kind: "hit", timestamp: timestamp, payloadType: if (encoding == 1) "binary" else "string",
@@ -189,6 +189,9 @@ module dialcache_frame_vectors {
   run payloadUnpairedSurrogateUsesReplacementTest = init
     .then(execute({ command: "encode", units: List(55296,65), ...DEFAULT }))
     .expect(result.bytes == List(1,0,0,0,0,0,0,0,1,0,239,191,189,65))
+  run frameAtWatermarkIsDeclinedTest = init
+    .then(execute(requestFor(546)))
+    .expect(result.kind == "miss" and result.reason == "watermark_fenced" and result.fence == 1)
   run trackedFencePrecedesEncodingErrorTest = init
     .then(execute({ command: "decode", tracked: true, watermarkPresent: true,
       watermark: List(49), bytes: framed(1,255,List(65)), ...DEFAULT }))

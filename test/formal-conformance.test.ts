@@ -12,6 +12,11 @@ import { DialCache, DialCacheKeyConfig, type DialCacheConfig } from "../src/inde
 import { record } from "./formal/itf.js";
 import { FakeRedis } from "./fake-redis.js";
 
+// The exported core regressions are the model's public-only runs, read from its Quint text.
+const { scheduleExecution } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
+  scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
+};
+
 class ConformanceDriver {
   readonly redis = new FakeRedis();
   readonly dialcache: DialCache;
@@ -96,7 +101,7 @@ class ConformanceDriver {
   snapshot(): Observation {
     return {
       sourceVersion: this.sourceVersion,
-      lastResult: this.lastResult,
+      lastResult: this.lastResult === undefined ? { absent: true } : this.lastResult,
       ...this.counters,
       redisReads: this.redis.getCalls + this.redis.mGetCalls,
       redisWrites: this.redis.setCalls,
@@ -126,10 +131,7 @@ function loadTraces(generatedDir: string | undefined): Trace[] {
   const root = resolve(generatedDir);
   const paths = readdirSync(root).filter((name) => name.endsWith(".itf.json")).sort();
   if (paths.length === 0) throw new Error(`${root}: no .itf.json conformance traces found`);
-  const execution = JSON.parse(readFileSync(resolve("formal/execution.json"), "utf8")) as {
-    models: Array<{ profile?: string; replayRegressions?: string[] }>;
-  };
-  const regressions = execution.models.find(model => model.profile === "core")?.replayRegressions ?? [];
+  const regressions = scheduleExecution().models.find(model => model.profile === "core")?.replayRegressions ?? [];
   return [
     ...paths.map((name) => readItfTrace(resolve(root, name))),
     ...regressions.map(name => readItfTrace(resolve(root, "..", "regressions", "core", `${name}.itf.json`))),

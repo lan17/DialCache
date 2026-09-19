@@ -1,8 +1,11 @@
 # Executable DialCache specification
 
 Quint defines the portable contracts that TypeScript, Go, Rust and future ports
-must preserve. Native drivers execute external commands against the real libraries;
-generated expectations stay in the test coordinator.
+must preserve. TypeScript is the executable reference those contracts formalize; a
+disagreement between the two is settled by a distinguishing regression and a
+recorded decision, not by editing the easier side. Native drivers execute
+external commands against the real libraries; generated expectations stay in
+the test coordinator.
 
 ## Start with your task
 
@@ -45,7 +48,7 @@ calling the helper they are meant to challenge.
 Read [cache-rules.qnt](./cache-rules.qnt) and
 [cache-contract.qnt](./cache-contract.qnt) for shared judgments and acquired
 ownership records. [SPEC.md](./SPEC.md#definition-ownership-and-executable-connections)
-maps them to the five checked profile connections.
+maps them to the four checked profile connections.
 [dialcache-rule-checks.qnt](./dialcache-rule-checks.qnt) supplies the finite
 symbolic boundary checks.
 
@@ -55,10 +58,8 @@ The verification models emphasize individual ownership or safety boundaries:
 | --- | --- |
 | [dialcache-core.qnt](./dialcache-core.qnt) | Enabled scopes, traversal and publication |
 | [dialcache-runtime-policy.qnt](./dialcache-runtime-policy.qnt) | Sparse overlays and captured policy |
-| [dialcache-flight-deadlines.qnt](./dialcache-flight-deadlines.qnt) | Flights, deadlines and abandoned sources |
 | [dialcache-tracked-invalidation.qnt](./dialcache-tracked-invalidation.qnt) | Acquired snapshots, watermarks and delayed writes |
 | [dialcache-stale-recovery.qnt](./dialcache-stale-recovery.qnt) | Retained bytes, age checks and recovery authority |
-| [dialcache-shadow-validation.qnt](./dialcache-shadow-validation.qnt) | Diagnostic C0/source/C1 work and fills |
 | [dialcache-redis-protocol.qnt](./dialcache-redis-protocol.qnt) | Frame/fence validation order |
 
 Conformance profiles expose external commands that every language driver replays:
@@ -80,16 +81,20 @@ Conformance profiles expose external commands that every language driver replays
 | [shadow-layers](./dialcache-shadow-layers-conformance.qnt) | Dark fills and local/request reuse; independent sources and mixed served/dark capacity |
 | [local-clock](./dialcache-local-clock-conformance.qnt) | Fractional environment time and the shared whole-millisecond process-local expiry grid |
 | [source-budgets](./dialcache-source-budgets-conformance.qnt) | Default/unbounded/finite source deadlines, held policy, followers, outside calls and key failures |
+| [dark-layers](./dialcache-dark-layers-conformance.qnt) | Held dark work across request/local reuse, source deadlines, instance isolation, captured fill policy, tracked fences and clock rollback |
+| [shadow-read-deadlines](./dialcache-shadow-read-deadlines-conformance.qnt) | Separate C0/C1 read deadlines, raw capacity ownership, cancellation, captured read policy and whole-job ordering |
 
 These profiles deliberately bound callers, keys, contexts, capacities, payloads
 and time. Their introduction does not imply that every product of those domains
 is explored. [profiles.json](./profiles.json) records profile versions, input
 encodings, smoke traces and implementation declarations.
 
-The [kernel library](./kernel/README.md) states each portable rule once as pure
-transitions; a composed profile assigns state only through them. The layers,
-runtime-boundaries, scope, source-budgets and policy profiles are composed today, each
-verified by the corpus differential; the other profiles remain authoritative and their totals are unchanged.
+The [kernel library](./kernel/README.md) states shared portable rules as pure
+transitions; a composed profile assigns state only through them. Every profile
+except core composes this library. The corpus differential checks that changes
+preserve existing profiles' observable behavior; a new profile establishes its
+behavior through independent properties, consequential witnesses and replay in
+both implementations.
 
 ## Generating and replaying behavior
 
@@ -104,7 +109,9 @@ The archive is cached under `~/.cache/dialcache/apalache/0.56.1/`; for offline
 use, supply `APALACHE_ARCHIVE=/absolute/path/to/apalache-0.56.1.tgz`. Supplied
 archives must pass the same checksum check.
 
-Real-server tests require Docker. The package floor requires exact Node 22.15.0
+Real-server tests and native mutation campaigns require Docker. Each mutation
+shard starts a private Redis 6.2 server, replays all generated invalidation
+vectors against the production Lua, and removes its own container afterward. The package floor requires exact Node 22.15.0
 provided through `NODE22_BIN`. `make help` lists targets and prerequisites.
 `make model-check` and `make ci` additionally require Java 21 and `tar`, because
 the pinned Apalache distribution is unpacked from a checksummed tarball; both
@@ -127,14 +134,19 @@ make ci NODE22_BIN=/absolute/path/to/node22/bin/node
 
 `make formal-check` is the Quint evidence lane: it typechecks and runs every
 scheduled model with the Rust evaluator, the public regressions and the model
-mutation challenges. `make formal-generate` runs generation, fixture
+mutation challenges. Its first command, `node formal/run-models.mjs check`,
+runs only the unmodified model checks and regressions; the next step runs the
+complete pinned fault campaign. `make formal` and `make ci` require both steps.
+`make explore` retains the model checks, generation and all port replays but
+omits that identical pinned campaign; its result remains non-acceptance evidence.
+`make formal-generate` runs generation, fixture
 recomputation and the shared witness evaluation; `make formal-ts`,
-`make formal-go` and `make formal-rust` then complete each port's replay
-against that exact corpus. `make mutations-ts`, `make mutations-go` and
+`make formal-go` and `make formal-rust` then complete each port's replay against
+that exact corpus. `make mutations-ts`, `make mutations-go` and
 `make mutations-rust` split the fault campaigns. The parity and mutation lanes
 depend only on the generated corpus and shared witness evidence, so hosted CI
-runs all six in parallel and none of them waits for the model check, which
-runs beside generation; the aggregate requires every lane.
+runs all six in parallel and none of them waits for the
+model check, which runs beside generation; the aggregate requires every lane.
 `make fixtures-check` recomputes committed artifacts; after an intentional model
 edit, update them with `node formal/generate-artifacts.mjs --write` first.
 `make ci` includes the separate symbolic checks after `make formal`, as well as
@@ -179,10 +191,27 @@ Core/effects use `DIALCACHE_MBT_TRACE_FILE` or `DIALCACHE_EFFECTS_TRACE_FILE`
 and their corresponding tests. Local-clock uses feature selectors with
 `test/formal-local-clock.test.ts` and the Go local-clock replay.
 
+## Shared verification and replay rules
+
+The verification models and portable profiles share transition judgments for
+local expiry, coalescing defaults, remote retention, tracked publication,
+recovery acquisition and watermark reads. Their primary invariants remain
+independently stated. Each mapped fault must violate its original property,
+fail the declared expectation in a deterministic Quint run, and reach the same
+public assertion in completed TypeScript and Go recordings.
+
+The fractional local-clock profile retains the raw insertion instant beside
+its expiry. This lets its portable history distinguish a precise-clock TTL
+from the required whole-millisecond TTL while also detecting a hit that renews
+expiry. Protocol classifiers use the same fence judgment as generated byte
+vectors and behavioral remote reads; vector recordings select the exact
+reviewed row for each language binding.
+
 ## Evidence and scope
 
-[execution.json](./execution.json) schedules model properties, regressions,
-exports and bounds. [profiles.json](./profiles.json) declares the replay profiles.
+[execution.json](./execution.json) schedules model properties, exports and
+bounds; every run a scheduled model declares is one of its regressions.
+[profiles.json](./profiles.json) declares the replay profiles.
 [SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md) explains witness and mutation evidence.
 Query the inventories instead of copying changing totals between documents:
 

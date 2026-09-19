@@ -1,26 +1,51 @@
 import { profiles, parseTrace, featureInput, assertFeatureObservation, type Trace } from "../formal/replay/features.mjs";
+import { SettlementLedger } from "../formal/replay/settlement.mjs";
 import { checkCorpus, loadCorpus } from "../formal/replay/witnesses/index.mjs";
 import { readFileSync, readdirSync } from "node:fs";
+import { isObservationComparison } from "../formal/replay/divergence.mjs";
 import { resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BehaviorDriver } from "./formal/behavior-driver.js";
+import { BehaviorDriver, type Input } from "./formal/behavior-driver.js";
 import type { Profile } from "./formal/feature-profile.js";
 
-async function replay(profile: Profile, trace: Trace) {
-  const driver = new BehaviorDriver(typeof profile.fixture === "function" ? profile.fixture(trace.steps[0]!.choice) : profile.fixture);
+// `settle: false` is the harness control of the negative below only;
+// conformance replays never pass it.
+async function replay(profile: Profile, trace: Trace, harness: { settle?: boolean } = {}) {
+  const fixture = typeof profile.fixture === "function" ? profile.fixture(trace.steps[0]!.choice) : profile.fixture;
+  const driver = new BehaviorDriver(fixture, {}, harness);
+  // The ledger the coordinator keeps for a session: every command issued here,
+  // checked against the driver's receipt before each observation is compared.
+  const ledger = new SettlementLedger(fixture, profile.setup);
   try {
     for (const input of profile.setup) await driver.apply(input);
+    // One snapshot per step: the inputs of the next step are derived from the
+    // observation the previous step was asserted against.
+    let observed = driver.snapshot();
     for (const [i, step] of trace.steps.entries()) {
       const { action, choice } = step;
+      const context = `${trace.path} step ${i} action ${action} choice ${choice}`;
+      const mismatch = (cause: unknown) => new Error(`${context}\nexpected: ${JSON.stringify({ o: step.expected, d: step.diagnostics, io: step.io })}\nactual: ${JSON.stringify(driver.snapshot())}\nreceipt: ${JSON.stringify(driver.receipt())}\nreplay: DIALCACHE_FEATURE_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false`, { cause });
+      let inputs: Input[] = [];
       try {
         // Only named actions/choices and actual effect IDs enter the driver.
         // The model observation and its private state cannot control execution.
-        if (action !== "init") await driver.apply(featureInput(profile, action, choice, driver.snapshot(), { wallMs: Date.now() }));
-        assertFeatureObservation(profile, step, driver.snapshot());
-      } catch (cause) {
-        throw new Error(`${trace.path} step ${i} action ${action} choice ${choice}\nexpected: ${JSON.stringify({ o: step.expected, d: step.diagnostics, io: step.io })}\nactual: ${JSON.stringify(driver.snapshot())}\nreplay: DIALCACHE_FEATURE_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false`, { cause });
+        if (action !== "init") inputs = [featureInput(profile, action, choice, observed, { wallMs: Date.now() })];
+        for (const input of inputs) await driver.apply(input);
+      } catch (cause) { throw mismatch(cause); }
+      ledger.issue(inputs);
+      observed = driver.snapshot();
+      // Settlement is checked first and outside the comparison wrapper: a
+      // violation is the driver's own infrastructure failure and must never
+      // carry the expected/actual markers the mutation lanes credit.
+      try { ledger.assert(driver.receipt(), observed, { wallMs: Date.now() }); }
+      catch (cause) { throw new Error([`${context}: ${(cause as Error).message}`, driver.settlementDiagnostic()].filter(Boolean).join("\n"), { cause }); }
+      try { assertFeatureObservation(profile, step, observed); } catch (cause) {
+        // Mutation diagnostics must compare the same projection as the assertion,
+        // rather than the model's o/d/io records against the raw driver snapshot.
+        if (isObservationComparison(cause)) throw new Error(`${context}\ncomparison: projected-v1\nexpected: ${JSON.stringify(cause.expected)}\nactual: ${JSON.stringify(cause.actual)}`, { cause });
+        throw mismatch(cause);
       }
     }
   } finally { await driver.dispose(); }
@@ -33,9 +58,11 @@ const single = process.env.DIALCACHE_FEATURE_TRACE_FILE;
 const directory = process.env.DIALCACHE_FEATURE_TRACE_DIR;
 const selectedProfile = process.env.DIALCACHE_FEATURE_PROFILE;
 if (selectedProfile !== undefined && !Object.hasOwn(profiles, selectedProfile)) throw new Error(`Unknown selected feature profile: ${selectedProfile}`);
-const execution = JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as {
-  models: Array<{ profile?: string; replayRegressions?: string[] }>;
+// The exported regressions are each profile model's public-only runs, read from its Quint text.
+const { scheduleExecution } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
+  scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
 };
+const execution = scheduleExecution();
 for (const [name, profile] of Object.entries(profiles)) {
   if (selectedProfile !== undefined && selectedProfile !== name) continue;
   const paths = single !== undefined ? (single.includes(`/${name}/`) || single.endsWith(`${name}-smoke.itf.json`) ? [resolve(single)] : [])
@@ -97,6 +124,13 @@ for (const [name, profile] of Object.entries(profiles)) {
         const trace = structuredClone(traces[0]!);
         trace.steps[1]!.expected.writes += 1;
         await expect(replay(profile, trace)).rejects.toThrow(/step 1 action.*\nexpected:.*\nactual:/s);
+      });
+      it("fails a driver that skips settlement by settlement violation, never by mismatch", async () => {
+        const path = resolve(`formal/${name}-smoke.itf.json`);
+        const trace = parseTrace(JSON.parse(readFileSync(path, "utf8")), path, profile);
+        const error = await replay(profile, trace, { settle: false }).then(() => "passed", (cause: unknown) => String(cause));
+        expect(error).toMatch(/Settlement violation: \d+ runnable task\(s\) at observation/);
+        expect(error).not.toMatch(/expected:[\s\S]*actual:/);
       });
     }
   });

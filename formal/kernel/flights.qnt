@@ -60,20 +60,34 @@ module flights {
       ...state
     }, if (coalesce) slot else NO_OWNER, index)
   }
+  // A source no caller owns (a served hit's diagnostic source, `shadow`): it
+  // joins the sources under the next index and is registered nowhere, so
+  // `ownedBy` is empty for it and its settlement completes no caller.
+  pure def registerDetached(state: Registry[r, p], source: Source[p]): Registry[r, p] =
+    { sources: state.sources.append(source), ...state }
   // A closed scope forgets its request flights along with its memo row.
   pure def forgetScope(state: Registry[r, p], context: int, keysPerScope: int): Registry[r, p] = {
     requestFlights: state.requestFlights.indices().fold(state.requestFlights, (out, slot) =>
       if (slot / keysPerScope == context) out.replaceAt(slot, NO_OWNER) else out),
     ...state
   }
-  pure def settleSource(state: Registry[r, p], index: int, result: int): Registry[r, p] = {
-    sources: state.sources.replaceAt(index, { result: result, ...state.sources.nth(index) }),
+  // A source's outcome is recorded when its work settles or its deadline
+  // completes it; the registries forget the flight when it completes its
+  // callers: at once for a settlement, later for a flight that first recovers
+  // a retained value, which stays joinable until then.
+  pure def recordResult(state: Registry[r, p], index: int, result: int): Registry[r, p] =
+    { sources: state.sources.replaceAt(index, { result: result, ...state.sources.nth(index) }), ...state }
+  pure def forgetSource(state: Registry[r, p], index: int): Registry[r, p] = {
     processFlights: state.processFlights.foldl(List(), (out, owner) => out.append(if (owner == index) NO_OWNER else owner)),
     requestFlights: state.requestFlights.foldl(List(), (out, owner) => out.append(if (owner == index) NO_OWNER else owner)),
     ...state
   }
   pure def ownedBy(state: Registry[r, p], index: int): Set[int] =
     state.owners.indices().filter(call => state.owners.nth(call) == index)
+  // The newest source, for a profile whose drivers settle the latest loader
+  // rather than one named by index (the local-failure drivers resolve
+  // `loaders - 1`) and for an inline source settled by the call that started it.
+  pure def latest(state: Registry[r, p]): int = state.sources.length() - 1
 
   // Opt-in record: the identity of the last admitted caller, for a property
   // that no source completes a caller for another instance or key.
@@ -82,4 +96,35 @@ module flights {
     callerKeys: state.callerKeys.append(call.key),
     ...state
   }
+
+  // Optional public inspection channel. Admission receipts preserve the source
+  // registration instant and the recorded join scope for each caller; they do
+  // not change flight ownership. A snapshot includes registered process work
+  // only: request followers, detached jobs and abandoned raw work are absent.
+  type Inspection = { instance: int, activeLeaders: int, activeFollowers: int, oldestLeaderAgeMs: int }
+  pure val NO_LEADER_AGE = -1
+  type Inspected[r, p, q] = {
+    now: int, skew: int, sources: List[Source[{ instance: int | p }]], owners: List[int],
+    processFlights: List[int], inspectionStarted: List[int], inspectionJoins: List[str],
+    d: { coalesced: List[str], inspections: List[Inspection] | q } | r
+  }
+  pure def recordInspectionAdmission(before: Inspected[r, p, q], after: Inspected[r, p, q]): Inspected[r, p, q] = {
+    inspectionStarted: if (after.sources.length() > before.sources.length()) before.inspectionStarted.append(before.now) else before.inspectionStarted,
+    inspectionJoins: before.inspectionJoins.append(
+      if (after.d.coalesced.length() > before.d.coalesced.length()) after.d.coalesced.nth(after.d.coalesced.length() - 1) else ""),
+    ...after
+  }
+  pure def inspectProcess(state: Inspected[r, p, q], instance: int, keysPerInstance: int): Inspected[r, p, q] = {
+    val registered = state.processFlights.indices().filter(slot => slot / keysPerInstance == instance
+      and state.processFlights.nth(slot) != NO_OWNER).map(slot => state.processFlights.nth(slot))
+    val joined = state.owners.indices().filter(caller => state.inspectionJoins.nth(caller) == "process"
+      and registered.contains(state.owners.nth(caller)))
+    val oldest = registered.fold(state.now, (at, owner) => if (state.inspectionStarted.nth(owner) < at) state.inspectionStarted.nth(owner) else at)
+    val snapshot = {
+      instance: instance, activeLeaders: registered.size(), activeFollowers: joined.size(),
+      oldestLeaderAgeMs: if (registered.size() == 0) NO_LEADER_AGE else state.now - oldest
+    }
+    { d: { inspections: state.d.inspections.append(snapshot), ...state.d }, ...state }
+  }
+
 }

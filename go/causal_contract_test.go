@@ -1,6 +1,7 @@
 package dialcache
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -17,11 +18,15 @@ type behaviorCausalEvent struct {
 	outcome    string
 }
 
+type behaviorPropertyAssertion struct{ message string }
+
+func (e *behaviorPropertyAssertion) Error() string { return e.message }
+
 // The mutation runner accepts only explicit property assertions as causal
 // evidence. Invalid monitor input and missing ownership remain ordinary errors.
 func behaviorPropertyFailure(rule, condition string, event obj) error {
 	event["condition"] = condition
-	return fmt.Errorf("CAUSAL_PROPERTY_FAILURE rule=%s event=%s", rule, bjson(event))
+	return &behaviorPropertyAssertion{fmt.Sprintf("CAUSAL_PROPERTY_FAILURE rule=%s event=%s", rule, bjson(event))}
 }
 
 // This necessary C25/C26 condition links actual external invocation contexts,
@@ -36,6 +41,7 @@ func assertBehaviorCausality(history []behaviorCausalEvent) error {
 	sources := map[int]*source{}
 	owners := map[int]bool{}
 	previous := int64(-1)
+	var assertion error
 	for index, e := range history {
 		fail := func(reason string) error { return fmt.Errorf("C25/C26 causal event %d: %s", index, reason) }
 		if e.at < previous {
@@ -65,20 +71,27 @@ func assertBehaviorCausality(history []behaviorCausalEvent) error {
 				return fail("write has no observed source ownership")
 			}
 			if s.owner != e.owner {
-				return behaviorPropertyFailure("C26", "write belongs to a different invocation's source", obj{"event": e.kind, "index": index, "atMs": e.at, "source": e.id, "owner": e.owner, "sourceOwner": s.owner})
+				if assertion == nil {
+					assertion = behaviorPropertyFailure("C26", "write belongs to a different invocation's source", obj{"event": e.kind, "index": index, "atMs": e.at, "source": e.id, "owner": e.owner, "sourceOwner": s.owner})
+				}
 			}
 			if s.outcome != "resolve" {
-				return behaviorPropertyFailure("C26", "write requires that exact source's successful settlement", obj{"event": e.kind, "index": index, "atMs": e.at, "source": e.id, "owner": e.owner, "outcome": s.outcome})
+				if assertion == nil {
+					assertion = behaviorPropertyFailure("C26", "write requires that exact source's successful settlement", obj{"event": e.kind, "index": index, "atMs": e.at, "source": e.id, "owner": e.owner, "outcome": s.outcome})
+				}
 			}
 			if s.budget >= 0 && s.settled-s.started >= s.budget {
-				return behaviorPropertyFailure("C25", "late raw settlement cannot authorize publication", obj{"event": e.kind, "index": index, "atMs": e.at, "source": e.id, "owner": e.owner, "startedAtMs": s.started, "settledAtMs": s.settled, "budgetMs": s.budget})
+				if assertion == nil {
+					assertion = behaviorPropertyFailure("C25", "late raw settlement cannot authorize publication", obj{"event": e.kind, "index": index, "atMs": e.at, "source": e.id, "owner": e.owner, "startedAtMs": s.started, "settledAtMs": s.settled, "budgetMs": s.budget})
+				}
 			}
 		default:
 			return fail("unknown causal event")
 		}
 	}
-	return nil
+	return assertion
 }
+
 func (d *behaviorDriver) assertPublicationCausality() error {
 	d.mu.Lock()
 	events := append([]behaviorCausalEvent(nil), d.causal...)
@@ -139,5 +152,32 @@ func TestCausalEvidenceExcludesMalformedMonitorInputs(t *testing.T) {
 	d := &behaviorDriver{history: []behaviorHistory{{event: "sourceStart", id: 0, at: 0}, {event: "sourceSettlement", id: 0, at: 10, outcome: "resolve"}, {event: "fallbackCompletion", at: 10, duration: 10}}}
 	if err := d.assertEffectsHistory(); err == nil || !strings.Contains(err.Error(), "CAUSAL_PROPERTY_FAILURE rule=C25 event={") {
 		t.Fatalf("deadline violation lacks structured semantic evidence: %v", err)
+	}
+}
+
+func TestBoundaryRecordingContinuesOnlyCompletePropertyChecks(t *testing.T) {
+	d := &behaviorDriver{history: []behaviorHistory{{event: "sourceStart", id: 0, at: 0}, {event: "sourceSettlement", id: 0, at: 10, outcome: "resolve"}, {event: "fallbackCompletion", at: 10, duration: 10}}}
+	property := d.assertEffectsHistory()
+	t.Setenv("DIALCACHE_REPLAY_DIVERGENCES", "")
+	if replayRecordingError(property) == nil {
+		t.Fatal("ordinary replay ignored a semantic assertion")
+	}
+	t.Setenv("DIALCACHE_REPLAY_DIVERGENCES", "recording.jsonl")
+	if replayRecordingError(property) != nil {
+		t.Fatal("recording stopped before comparing the public observation")
+	}
+	for _, malformed := range []error{errors.New("driver command failed"), fmt.Errorf("CAUSAL_PROPERTY_FAILURE rule=C25 event={}")} {
+		if replayRecordingError(malformed) == nil {
+			t.Fatal("untagged driver failure was ignored")
+		}
+	}
+	// An earlier semantic failure cannot conceal an unvalidated later event.
+	d.history = append(d.history, behaviorHistory{event: "sourceSettlement", id: 99, at: 10, outcome: "resolve"})
+	if replayRecordingError(d.assertEffectsHistory()) == nil {
+		t.Fatal("earlier semantic failure concealed malformed effects history")
+	}
+	history := []behaviorCausalEvent{{kind: "sourceStart", id: 0, owner: 0, at: 0, budget: 10}, {kind: "sourceSettlement", id: 0, at: 10, outcome: "resolve"}, {kind: "writeDispatch", id: 0, owner: 0, at: 10}, {kind: "sourceSettlement", id: 99, at: 10, outcome: "resolve"}}
+	if replayRecordingError(assertBehaviorCausality(history)) == nil {
+		t.Fatal("earlier semantic failure concealed malformed publication history")
 	}
 }

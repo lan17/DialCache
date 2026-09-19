@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,10 +10,10 @@ type History = { path: string; steps: Step[] };
 type Verdict = { path: string; agree: boolean; step?: number; action?: string; choice?: number; reason?: string; fields?: string[] };
 type Manifests = { execution: { settings: Record<string, unknown>; models: Array<Record<string, unknown>> }; registry: { profiles: Array<{ id: string; version?: number }> } };
 type Model = { path: string; generate: { outputDirectory: string; traces: number }; invariants: string[]; replayRegressions?: string[]; settings: { backend: string; seed: string };
-  behaviorVersion: number; schemaVersion: number | null };
+  behaviorVersion: number; maxBytesPerStateRatio: number | null; schemaVersion: number | null };
 type Plan = { action: "skip" | "compare"; reason?: string; reference?: Model; candidate: Model; descriptor: unknown };
 type Report = { profile: string; skipped?: string; forward: { disagreed: number }; reverse: { disagreed: number };
-  generation: { bytesPerStateRatio: number | null; maxBytesPerStateRatio: number; wallRatio: number | null } };
+  generation: { bytesPerStateRatio: number | null; maxBytesPerStateRatio: number; maxBytesPerStateRatioSource?: string; wallRatio: number | null } };
 const differential = await import(new URL("../formal/differential.mjs", import.meta.url).href) as {
   compareHistory(reference: History, replayed: History): { agree: boolean; step?: number; action?: string; choice?: number; reason?: string; fields?: string[] };
   chunked<T>(items: T[], size: number): T[][];
@@ -26,10 +26,16 @@ const differential = await import(new URL("../formal/differential.mjs", import.m
   readManifests(directory: string): Manifests;
   replayHistories(tree: string, model: Model, descriptor: unknown, histories: History[], options: { chunk: number; output: string; concurrency: number }): Promise<Verdict[]>;
   composedProfiles(manifest: { models: Array<{ path: string; profile?: string }> }, options?: { cwd?: string }): string[];
+  prepare(reference: string, options?: { cwd?: string; output?: string }): { reference: { revision: string; tree: string; manifests: Manifests }; candidate: { tree: string; manifests: Manifests } };
+  runDifferential(profileId: string, prepared: ReturnType<typeof differential.prepare>, options: { chunk: number; output: string; concurrency: number; log: (message: string) => void }): Promise<Report>;
   selectProfiles(prepared: { reference: { manifests: Manifests; tree: string }; candidate: { manifests: Manifests; tree: string } }): string[];
+  shardProfiles(names: string[], index: number, count: number): string[];
   closureSkip(reference: Model, candidate: Model, referenceSources: Record<string, string>, candidateSources: Record<string, string>): string | null;
+  bytesBound(model: Pick<Model, "maxBytesPerStateRatio">): { maxBytesPerStateRatio: number; source: string };
   verdict(report: Report): { failed: boolean; reasons: string[] };
   formatReport(report: Report): string;
+  boundAction(declarations: Map<string, unknown>, descriptor: unknown, action: string): string;
+  replayDescriptors: Record<string, { explicitInputs?: boolean; actionBindings?: Record<string, string> }>;
   defaultChunk: number;
   cursorVariable: string;
   maxBytesPerStateRatio: number;
@@ -128,14 +134,38 @@ describe("corpus differential comparison", () => {
       .toMatchObject({ action: "skip", reason: "intended divergence: behaviorVersion 0 -> 1" });
     expect(differential.differentialPlan(manifests([layersModel()], 2), manifests([layersModel()], 3), "layers"))
       .toMatchObject({ action: "skip", reason: "intended divergence: observation schema version 2 -> 3" });
+    // A model's own bytes-per-state bound travels with the plan; without one the lane's default applies.
+    expect(differential.differentialPlan(manifests([layersModel()]), manifests([layersModel({ differential: { maxBytesPerStateRatio: 1.4 } })]), "layers"))
+      .toMatchObject({ action: "compare", reference: { maxBytesPerStateRatio: null }, candidate: { maxBytesPerStateRatio: 1.4 } });
     // A profile the candidate no longer generates is a visible removal, reported rather than compared; a profile neither revision generates is a misuse.
     expect(differential.differentialPlan(manifests([layersModel()]), manifests([]), "layers")).toMatchObject({ action: "skip", reason: /profile removed/ });
     expect(() => differential.differentialPlan(manifests([]), manifests([]), "layers")).toThrow(/No generation profile named layers in either revision/);
     // A generated profile without an explicit-input driver descriptor is refused by name, not misreported.
-    const effects = (extra: Record<string, unknown> = {}) => ({ path: "formal/dialcache-effects-conformance.qnt", profile: "effects", invariants: ["a"], regressions: [],
-      generate: { maxSamples: 4, maxSteps: 4, traces: 2, outputDirectory: ".formal-traces/effects" }, ...extra });
-    const effectsManifests = (models: Array<Record<string, unknown>>): Manifests => ({ execution: { settings: { backend: "rust", threads: 1, seed: "0xd1a1ca", verbosity: 1 }, models }, registry: { profiles: [{ id: "effects", version: 1 }] } });
-    expect(() => differential.differentialPlan(effectsManifests([effects()]), effectsManifests([effects()]), "effects")).toThrow(/effects has no explicit-input feature descriptor/);
+    const teleport = (extra: Record<string, unknown> = {}) => ({ path: "formal/dialcache-teleport-conformance.qnt", profile: "teleport", invariants: ["a"], regressions: [],
+      generate: { maxSamples: 4, maxSteps: 4, traces: 2, outputDirectory: ".formal-traces/teleport" }, ...extra });
+    const teleportManifests = (models: Array<Record<string, unknown>>): Manifests => ({ execution: { settings: { backend: "rust", threads: 1, seed: "0xd1a1ca", verbosity: 1 }, models }, registry: { profiles: [{ id: "teleport", version: 1 }] } });
+    expect(() => differential.differentialPlan(teleportManifests([teleport()]), teleportManifests([teleport()]), "teleport")).toThrow(/teleport has no explicit-input replay descriptor/);
+    // The local-clock and effects profiles, whose drivers have their own runners, replay through their own descriptors beside the
+    // feature profiles; the effects descriptor brings its own parser for the record its drivers assert.
+    expect(Object.keys(differential.replayDescriptors)).toEqual(expect.arrayContaining(["layers", "policy", "local-clock", "effects"]));
+    expect(differential.differentialPlan(differential.readManifests(root), differential.readManifests(root), "effects"))
+      .toMatchObject({ action: "compare", descriptor: { explicitInputs: true, parseTrace: expect.any(Function), actions: { adapterReply: { choices: Array.from({ length: 16 }, (_, i) => i + 1) }, releaseRead: { choices: "index" }, tick: {} } } });
+    expect(differential.differentialPlan(differential.readManifests(root), differential.readManifests(root), "local-clock"))
+      .toMatchObject({ action: "compare", descriptor: { explicitInputs: true, actions: { call: { choices: [0, 1, 2, 3] } }, actionBindings: { call: "callCache" } } });
+  });
+
+  it("schedules an input through the descriptor binding only where the tree declares the input name as a parametrized action", () => {
+    const lambda = { name: "call", kind: "def", qualifier: "action", expr: { kind: "lambda" } };
+    const wrapper = { name: "callCache", kind: "def", qualifier: "action", expr: { kind: "app" } };
+    const descriptor = { actionBindings: { call: "callCache" } };
+    // A reference text from before the wrapper was renamed: `call` is its parametrized action, `callCache` the public one.
+    expect(differential.boundAction(new Map<string, unknown>([["call", lambda], ["callCache", wrapper]]), descriptor, "call")).toBe("callCache");
+    // A tree whose `call` is public schedules it directly; the binding is not consulted.
+    expect(differential.boundAction(new Map<string, unknown>([["call", { ...wrapper, name: "call" }], ["callCache", wrapper]]), descriptor, "call")).toBe("call");
+    // Without a binding, or without the bound declaration, the name stands and the schedule refuses it as any parametrized declaration.
+    expect(differential.boundAction(new Map<string, unknown>([["call", lambda]]), undefined, "call")).toBe("call");
+    expect(differential.boundAction(new Map<string, unknown>([["call", lambda]]), descriptor, "call")).toBe("call");
+    expect(differential.boundAction(new Map<string, unknown>(), descriptor, "teleport")).toBe("teleport");
   });
 
   it("fails the run on a disagreement in either direction or trace growth beyond the bound; wall time is advisory", () => {
@@ -147,7 +177,16 @@ describe("corpus differential comparison", () => {
     expect(differential.verdict(report({ forward: { disagreed: 2 } }))).toMatchObject({ failed: true, reasons: ["2 forward disagreement(s)"] });
     expect(differential.verdict(report({ reverse: { disagreed: 1 } }))).toMatchObject({ failed: true, reasons: ["1 reverse disagreement(s)"] });
     expect(differential.maxBytesPerStateRatio).toBe(1.2);
-    expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.25 } }))).toMatchObject({ failed: true, reasons: [expect.stringMatching(/x1\.250, above the bound x1\.2/)] });
+    expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.25 } }))).toMatchObject({ failed: true, reasons: [expect.stringMatching(/x1\.250, above the bound x1\.20 \(default\)/)] });
+    // A model's declared bound replaces the default, and the report names where the bound came from.
+    expect(differential.bytesBound({ maxBytesPerStateRatio: null })).toEqual({ maxBytesPerStateRatio: 1.2, source: "default" });
+    expect(differential.bytesBound({ maxBytesPerStateRatio: 1.4 })).toEqual({ maxBytesPerStateRatio: 1.4, source: "model" });
+    const declared = { maxBytesPerStateRatio: 1.4, maxBytesPerStateRatioSource: "model" };
+    expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.3, ...declared } }))).toEqual({ failed: false, reasons: [] });
+    expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.45, ...declared } }))).toMatchObject({ failed: true, reasons: [expect.stringMatching(/x1\.450, above the bound x1\.40 \(model\)/)] });
+    const full = { profile: "layers", forward: { agreed: 2, sampled: 1, regressions: 1, disagreed: 0, disagreements: [] }, reverse: { agreed: 2, sampled: 1, regressions: 1, disagreed: 0, disagreements: [] },
+      replay: { chunk: 16, wallMs: 1000 }, generation: { referenceMs: 1000, candidateMs: 1000, wallRatio: 1, reference: { bytesPerState: 100 }, candidate: { bytesPerState: 130 }, bytesPerStateRatio: 1.3, ...declared } };
+    expect(differential.formatReport(full as unknown as Report)).toContain("(x1.300, bound x1.40 (model))");
     expect(differential.verdict(report({ generation: { wallRatio: 2 } }))).toEqual({ failed: false, reasons: [expect.stringMatching(/^advisory: generation wall time x2\.00/)] });
     expect(differential.verdict({ profile: "layers", skipped: "new profile" } as unknown as Report)).toEqual({ failed: false, reasons: ["skipped: new profile"] });
     expect(differential.formatReport({ profile: "layers", skipped: "intended divergence: behaviorVersion 0 -> 1" } as unknown as Report)).toBe("layers: not compared (intended divergence: behaviorVersion 0 -> 1).");
@@ -161,12 +200,29 @@ describe("corpus differential comparison", () => {
     expect(differential.closureSkip(model(), model(), sources, { ...sources })).toBe("identical import closure and generation settings");
     expect(differential.closureSkip(model(), model(), sources, { ...sources, "formal/kernel/serving.qnt": "cc" })).toBeNull();
     expect(differential.closureSkip(model(), model({ invariants: ["a", "b"] }), sources, { ...sources })).toBeNull();
+    expect(differential.closureSkip(model({ replayRegressions: ["bTest", "aTest"] }), model({ replayRegressions: ["aTest", "bTest"] }), sources, { ...sources })).toBe("identical import closure and generation settings");
+    expect(differential.closureSkip(model({ replayRegressions: ["aTest"] }), model({ replayRegressions: ["aTest", "bTest"] }), sources, { ...sources })).toBeNull();
     expect(differential.closureSkip(model(), model({ generate: { outputDirectory: "x", traces: 4 } }), sources, { ...sources })).toBeNull();
     expect(differential.closureSkip(model(), model({ settings: { backend: "rust", seed: "0x1" } }), sources, { ...sources })).toBeNull();
   });
 
+  // A fixture-export test, not a unit test: prepare spawns about 65 git processes, and hosted runners are slower.
+  it("validates the working tree's manifest as written and derives the schedule of both revisions", () => {
+    const output = mkdtempSync(join(tmpdir(), "differential-prepare-"));
+    try {
+      const prepared = differential.prepare("HEAD", { output });
+      expect(prepared.reference.revision).toMatch(/^[0-9a-f]{40}$/);
+      for (const side of [prepared.reference, prepared.candidate]) {
+        expect(readFileSync(join(side.tree, "formal/dialcache-layers-conformance.qnt"), "utf8")).toContain("module dialcache_layers_conformance");
+        const layers = side.manifests.execution.models.find(model => model.profile === "layers") as { regressions?: string[]; replayRegressions?: string[] };
+        expect(layers.regressions?.length).toBeGreaterThan(0);
+        expect(layers.replayRegressions?.length).toBeGreaterThan(0);
+      }
+    } finally { rmSync(output, { recursive: true, force: true }); }
+  }, 30_000);
+
   it("selects the composed profiles by their kernel imports in either revision, following helper libraries, and lists every Quint source", () => {
-    expect(differential.composedProfiles(readExecution())).toEqual(["policy", "scope", "layers", "runtime-boundaries", "source-budgets"]);
+    expect(differential.composedProfiles(readExecution())).toEqual(["effects", "recovery", "policy", "shadow", "scope", "admission", "layers", "independent", "recovery-read", "local-failure", "runtime-boundaries", "shadow-layers", "local-clock", "source-budgets", "dark-layers", "shadow-read-deadlines"]);
     // A profile composed only at the reference (a rewrite off the library) is still selected.
     const referenceTree = mkdtempSync(join(tmpdir(), "differential-reference-"));
     const candidateTree = mkdtempSync(join(tmpdir(), "differential-candidate-"));
@@ -203,6 +259,63 @@ describe("corpus differential comparison", () => {
     expect(sources).toContain("formal/kernel/serving.qnt");
     expect([...sources].sort()).toEqual(sources);
   });
+
+  it("balances profiles deterministically, assigns every name once, and refuses an index outside 1..count", () => {
+    const names = ["shadow", "admission", "recovery-read", "effects", "layers", "recovery", "scope", "new-profile", "shadow"];
+    const sorted = [...new Set(names)].sort();
+    for (const count of [1, 2, 3, 4, 7, 9]) {
+      const shards = Array.from({ length: count }, (_, position) => differential.shardProfiles(names, position + 1, count));
+      // The union is the input with no name repeated, whatever the input's order.
+      expect(shards.flat().sort(), `${count} shards`).toEqual(sorted);
+      expect(shards.flat(), `${count} shards`).toHaveLength(sorted.length);
+      expect(shards, `${count} shards`).toEqual(Array.from({ length: count }, (_, position) => differential.shardProfiles(sorted, position + 1, count)));
+    }
+    // Keep the dominant shadow workload apart from the next-largest profiles.
+    const shards = Array.from({ length: 4 }, (_, position) => differential.shardProfiles(names, position + 1, 4));
+    expect(shards.find(shard => shard.includes("shadow"))).toEqual(["shadow"]);
+    expect(shards.find(shard => shard.includes("effects"))).not.toContain("recovery");
+    expect(differential.shardProfiles(names, 1, 1)).toEqual(sorted);
+    // A shard past the number of profiles is empty, not an error.
+    expect(differential.shardProfiles(["a", "b"], 3, 3)).toEqual([]);
+    expect(differential.shardProfiles([], 1, 4)).toEqual([]);
+    const refused: Array<[number, number]> = [[0, 4], [5, 4], [-1, 4], [1.5, 4], [1, 2.5], [Number.NaN, 4], [1, 0], [1, Number.POSITIVE_INFINITY]];
+    for (const [index, count] of refused) {
+      expect(() => differential.shardProfiles(names, index, count), `${index}/${count}`).toThrow(/Shard (index|count) must be a positive integer|exceeds the shard count/);
+    }
+  });
+
+  it("keeps the measured slow profiles apart for the full composed inventory, including currently skipped profiles", () => {
+    const names = differential.composedProfiles(readExecution());
+    const shards = Array.from({ length: 4 }, (_, position) => differential.shardProfiles(names, position + 1, 4));
+    expect(shards.flat().sort()).toEqual([...names].sort());
+    const shadow = shards.find(shard => shard.includes("shadow"))!;
+    expect(shadow).not.toEqual(expect.arrayContaining(["layers"]));
+    expect(shadow).not.toEqual(expect.arrayContaining(["recovery"]));
+    expect(shadow).not.toEqual(expect.arrayContaining(["effects"]));
+    expect(shards.flat()).toEqual(expect.arrayContaining(["effects", "dark-layers", "shadow-read-deadlines"]));
+    // Names without timing history still distribute evenly and deterministically.
+    expect([1, 2, 3].map(index => differential.shardProfiles(["z", "a", "b", "c"], index, 3)))
+      .toEqual([["a", "z"], ["b"], ["c"]]);
+  });
+
+  it("refuses --shard outside --composed and a malformed shard before preparing any tree", () => {
+    const output = mkdtempSync(join(tmpdir(), "differential-shard-"));
+    try {
+      const run = (...args: string[]) => spawnSync(process.execPath, [resolve(root, "formal/differential.mjs"), ...args, `--out=${output}`], { cwd: root, encoding: "utf8" });
+      for (const args of [["layers", "--shard=1/4"], ["--shard=1/4", "--reference=HEAD"]]) {
+        const result = run(...args);
+        expect(result.status, args.join(" ")).toBe(1);
+        expect(result.stderr, args.join(" ")).toMatch(/--shard applies to --composed only/);
+      }
+      for (const value of ["0/4", "5/4", "2", "a/b", "1/4/2"]) {
+        const result = run("--composed", `--shard=${value}`);
+        expect(result.status, value).toBe(1);
+        expect(result.stderr, value).toMatch(/--shard must be <index>\/<count> with 1 <= index <= count/);
+      }
+      // Refused before any tree is exported: nothing is written under --out.
+      expect(readdirSync(output)).toEqual([]);
+    } finally { rmSync(output, { recursive: true, force: true }); }
+  });
 });
 
 describe.skipIf(!quintAvailable)("corpus differential replay through a tree", () => {
@@ -214,6 +327,46 @@ describe.skipIf(!quintAvailable)("corpus differential replay through a tree", ()
   };
   const smokeHistory = (descriptor: unknown) => parseTrace(JSON.parse(readFileSync(resolve(root, "formal/layers-smoke.itf.json"), "utf8")), "layers-smoke", descriptor);
   const copyTree = (into: string) => { copySources(root, into); return into; };
+
+  it("reports every replay batch in both directions while preserving all history verdicts", async () => {
+    const reference = copyTree(join(output, "progress-reference"));
+    const candidate = copyTree(join(output, "progress-candidate"));
+    const smallCorpus = (traces: number) => {
+      const manifests = differential.readManifests(root);
+      const model = manifests.execution.models.find(model => model.profile === "layers")!;
+      Object.assign(model, { generate: { ...(model.generate as object), maxSamples: traces, maxSteps: 4, traces }, replayRegressions: [] });
+      return manifests;
+    };
+    const prepared = {
+      reference: { revision: "test-reference", tree: reference, manifests: smallCorpus(2) },
+      candidate: { tree: candidate, manifests: smallCorpus(3) },
+    };
+    // Different corpus sizes prevent the unchanged-input skip and exercise an
+    // uneven final batch without changing either model's behavior.
+    const run = async (name: string) => {
+      const logs: string[] = [];
+      const report = await differential.runDifferential("layers", prepared,
+        { chunk: 2, output: join(output, name), concurrency: 2, log: message => logs.push(message) });
+      expect(report.forward).toMatchObject({ sampled: 2, regressions: 0 });
+      expect(report.reverse).toMatchObject({ sampled: 3, regressions: 0 });
+      expect(logs).toContain("layers: 1 forward and 2 reverse replay batches, up to 2 concurrent processes.");
+      const batches = logs.filter(line => line.includes("batches complete"));
+      expect(batches).toHaveLength(3);
+      expect(batches.filter(line => line.startsWith("layers forward:"))).toEqual([
+        expect.stringMatching(/^layers forward: 1\/1 batches complete; batch 1 replayed 2 histories in [\d.]+ s \([\d.]+ s elapsed\)\.$/),
+      ]);
+      const reverse = batches.filter(line => line.startsWith("layers reverse:"));
+      expect(reverse[0]).toContain("1/2 batches complete");
+      expect(reverse[1]).toContain("2/2 batches complete");
+      expect(reverse.filter(line => line.includes("batch 1 replayed 2 histories"))).toHaveLength(1);
+      expect(reverse.filter(line => line.includes("batch 2 replayed 1 histories"))).toHaveLength(1);
+      return report;
+    };
+    const clean = await run("progress-clean");
+    expect(clean.forward.disagreed).toBe(0);
+    expect(clean.reverse.disagreed).toBe(0);
+    expect(differential.verdict(clean).failed).toBe(false);
+  }, 180_000);
 
   it("shares one constrained clone per input pair across the histories of a chunk", async () => {
     const { model } = layers();
@@ -259,6 +412,29 @@ describe.skipIf(!quintAvailable)("corpus differential replay through a tree", ()
     const [verdict] = await differential.replayHistories(candidate, model, descriptor, [smokeHistory(descriptor)], { chunk: 64, output: join(output, "mutant-out"), concurrency: 1 });
     expect(verdict!.agree).toBe(false);
     expect(verdict!.fields).toEqual(["expected.loaders"]);
+  }, 180_000);
+
+  it("replays a local-clock history through a reference text whose call is the parametrized action, through the descriptor binding", async () => {
+    const plan = differential.differentialPlan(differential.readManifests(root), differential.readManifests(root), "local-clock");
+    const model = plan.candidate;
+    const descriptor = plan.descriptor as { explicitInputs: true; actions: Record<string, { choices: number[] }>; actionBindings: Record<string, string> };
+    const reference = copyTree(join(output, "pre-rename"));
+    const profile = join(reference, model.path);
+    const renamed = readFileSync(profile, "utf8");
+    expect(renamed).toContain("action callWith(instance: int, offered: int)");
+    // The text before the wrapper was renamed: `call` parametrized, `callCache` the public wrapper `step` selects.
+    const older = renamed.replaceAll("callWith", "call").replace("action call = {", "action callCache = {").replace("advanceTicks, call }", "advanceTicks, callCache }");
+    expect(older).toContain("action call(instance: int, offered: int)");
+    expect(older).toContain("action step = any { constructInstance, advanceTicks, callCache }");
+    writeFileSync(profile, older);
+    const smoke = parseTrace(JSON.parse(readFileSync(resolve(root, "formal/local-clock-smoke.itf.json"), "utf8")), "local-clock-smoke", descriptor);
+    expect(smoke.steps.filter(entry => entry.action === "call").length).toBeGreaterThan(0);
+    const [verdict] = await differential.replayHistories(reference, model, descriptor, [smoke], { chunk: 16, output: join(output, "pre-rename-out"), concurrency: 1 });
+    expect(verdict).toEqual({ path: "local-clock-smoke", agree: true });
+    // Without the binding the older text declares `call` as a parametrized action no schedule can select.
+    const { actionBindings: _bindings, ...unbound } = descriptor;
+    await expect(differential.replayHistories(reference, model, unbound, [smoke], { chunk: 16, output: join(output, "pre-rename-unbound"), concurrency: 1 }))
+      .rejects.toThrow(/parameterless public action/);
   }, 180_000);
 
   it("names the input a candidate refuses, with the evaluator's diagnostic", async () => {

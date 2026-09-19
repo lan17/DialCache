@@ -2,22 +2,35 @@
   "schemaVersion": 3,
   "quintVersion": "0.32.0",
   "kernelModules": [
+    "adapter_replies",
     "calls",
     "clock",
+    "compression",
     "config_errors",
     "deadlines",
     "diagnostics",
     "encodings",
     "flights",
+    "instances",
     "layer_policy",
+    "local_faults",
+    "local_grid",
     "local_storage",
+    "markers",
+    "metrics",
+    "payloads",
     "policy_gate",
     "policy_overlay",
     "receipts",
+    "recovery",
     "remote_frames",
+    "remote_io",
+    "remote_writes",
     "request_memo",
     "runtime_policy",
-    "serving"
+    "serving",
+    "shadow",
+    "shadow_reads"
   ],
   "profiles": [
     {
@@ -31,8 +44,25 @@
       "id": "effects",
       "model": "formal/dialcache-effects-conformance.qnt",
       "module": "dialcache_effects_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 64
+      "libraryTransitions": [
+        "adapter_replies::queue",
+        "clock::advance",
+        "clock::shiftWall",
+        "metrics::advance",
+        "metrics::begin",
+        "metrics::frameReadReceipt",
+        "metrics::invalidate",
+        "metrics::releaseDump",
+        "metrics::releaseWrite",
+        "metrics::settleLoad",
+        "metrics::settleLoader",
+        "metrics::settleRead",
+        "remote_frames::seedFrame",
+        "remote_io::latestLoad",
+        "remote_writes::latestDump",
+        "remote_writes::latestWrite"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "scope",
@@ -52,8 +82,18 @@
       "id": "recovery",
       "model": "formal/dialcache-recovery-conformance.qnt",
       "module": "dialcache_recovery_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 80
+      "libraryTransitions": [
+        "clock::shiftWall",
+        "diagnostics::advance",
+        "diagnostics::beginRead",
+        "diagnostics::settleLoad",
+        "diagnostics::settleLoader",
+        "remote_frames::seedAged",
+        "remote_io::latestLoad",
+        "serving::closeScope",
+        "serving::invalidate"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "policy",
@@ -78,15 +118,38 @@
       "id": "shadow",
       "model": "formal/dialcache-shadow-conformance.qnt",
       "module": "dialcache_shadow_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 96
+      "libraryTransitions": [
+        "clock::shiftWall",
+        "remote_frames::seedFrame",
+        "remote_io::latestOrdinal",
+        "remote_writes::latestDump",
+        "remote_writes::latestWrite",
+        "serving::invalidate",
+        "shadow::advanceHeld",
+        "shadow::beginDark",
+        "shadow::latestLoad",
+        "shadow::latestRead",
+        "shadow::releaseDump",
+        "shadow::releaseLoad",
+        "shadow::releaseRead",
+        "shadow::releaseWrite",
+        "shadow::settleHeld"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "admission",
       "model": "formal/dialcache-admission-conformance.qnt",
       "module": "dialcache_admission_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 65
+      "libraryTransitions": [
+        "remote_frames::seedFrame",
+        "shadow::advance",
+        "shadow::beginHeld",
+        "shadow::settleLoad",
+        "shadow::settleLoader",
+        "shadow::settleRead"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "layers",
@@ -108,22 +171,50 @@
       "id": "independent",
       "model": "formal/dialcache-independent-conformance.qnt",
       "module": "dialcache_independent_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 66
+      "libraryTransitions": [
+        "deadlines::advance",
+        "deadlines::begin",
+        "deadlines::settleLoad",
+        "deadlines::settleLoader",
+        "deadlines::settleRead",
+        "remote_frames::seedAged",
+        "serving::invalidate"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "recovery-read",
       "model": "formal/dialcache-recovery-read-conformance.qnt",
       "module": "dialcache_recovery_read_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 80
+      "libraryTransitions": [
+        "compression::settleLoader",
+        "compression::settleRead",
+        "markers::advance",
+        "markers::invalidate",
+        "markers::observe",
+        "remote_frames::seedAged",
+        "remote_frames::storeFrame",
+        "remote_io::begin",
+        "remote_io::latestLoad",
+        "remote_io::latestOrdinal",
+        "remote_io::latestRead",
+        "remote_io::settleLoad",
+        "serving::closeScope"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "local-failure",
       "model": "formal/dialcache-local-failure-conformance.qnt",
       "module": "dialcache_local_failure_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 24
+      "libraryTransitions": [
+        "flights::latest",
+        "layer_policy::resolution",
+        "local_faults::begin",
+        "local_faults::settle",
+        "remote_frames::seedFrame"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "runtime-boundaries",
@@ -143,15 +234,26 @@
       "id": "shadow-layers",
       "model": "formal/dialcache-shadow-layers-conformance.qnt",
       "module": "dialcache_shadow_layers_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 98
+      "libraryTransitions": [
+        "remote_frames::seedAged",
+        "shadow::advance",
+        "shadow::begin",
+        "shadow::releaseDump",
+        "shadow::releaseWrite",
+        "shadow::settle"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "local-clock",
       "model": "formal/dialcache-local-clock-conformance.qnt",
       "module": "dialcache_local_clock_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 11
+      "libraryTransitions": [
+        "clock::advanceTicks",
+        "instances::construct",
+        "local_grid::call"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "source-budgets",
@@ -162,6 +264,44 @@
         "deadlines::advanceLocal",
         "deadlines::releaseLocal",
         "deadlines::settleLocal"
+      ],
+      "compositionViolations": 0
+    },
+    {
+      "id": "dark-layers",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "module": "dialcache_dark_layers_conformance",
+      "libraryTransitions": [
+        "clock::shiftWall",
+        "flights::inspectProcess",
+        "flights::recordIdentity",
+        "flights::recordInspectionAdmission",
+        "remote_frames::seedAged",
+        "serving::closeScope",
+        "serving::invalidate",
+        "shadow::advanceHeld",
+        "shadow::beginDark",
+        "shadow::releaseDump",
+        "shadow::releaseLoad",
+        "shadow::releaseRead",
+        "shadow::releaseWrite",
+        "shadow::settleHeld"
+      ],
+      "compositionViolations": 0
+    },
+    {
+      "id": "shadow-read-deadlines",
+      "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "module": "dialcache_shadow_read_deadlines_conformance",
+      "libraryTransitions": [
+        "remote_frames::seedFrame",
+        "shadow::releaseDump",
+        "shadow::releaseWrite",
+        "shadow::settleHeld",
+        "shadow_reads::advance",
+        "shadow_reads::begin",
+        "shadow_reads::releaseLoad",
+        "shadow_reads::releaseRead"
       ],
       "compositionViolations": 0
     }

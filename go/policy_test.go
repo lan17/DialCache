@@ -3,6 +3,7 @@ package dialcache
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 func policyTestPtr[T any](value T) *T { return &value }
@@ -20,25 +21,25 @@ func TestPolicySparseResolutionAndSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := ResolvePolicy(base, map[string]any{
+	resolved, err := ResolvePolicy(base, JSONPolicy{
 		"ttlSec": map[string]any{"remote": 4.0},
 		"ramp":   map[string]any{"local": 0.0},
 		"shadow": map[string]any{"logMismatches": false},
-	}, policyTestIdentity(), PolicyDefaults{RemoteReadTimeoutMS: 20})
+	}, policyTestIdentity(), PolicyDefaults{RemoteReadTimeout: 20 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resolved.RequestLocal || resolved.Coalesce || resolved.Local.Enabled || resolved.Local.Reason != "ramped_down" || !resolved.Local.Configured || resolved.Local.TTLMS != 1000 || !resolved.Remote.Enabled || resolved.Remote.TTLMS != 4000 || resolved.StaleOnErrorMaxAgeMS != 5000 || resolved.RemoteReadTimeoutMS != 30 || !resolved.Shadow.Enabled || resolved.Shadow.LogMismatches {
+	if !resolved.RequestLocal || resolved.Coalesce || resolved.Local.Enabled || resolved.Local.Reason != "ramped_down" || !resolved.Local.Configured || resolved.Local.TTL != time.Second || !resolved.Remote.Enabled || resolved.Remote.TTL != 4*time.Second || resolved.StaleOnErrorMaxAge != 5*time.Second || resolved.RemoteReadTimeout != 30*time.Millisecond || !resolved.Shadow.Enabled || resolved.Shadow.LogMismatches {
 		t.Fatalf("wrong sparse policy: %+v", resolved)
 	}
 	copy := SnapshotPolicy(base)
-	*base.RemoteReadTimeoutMS = 99
+	*base.RemoteReadTimeout = 99 * time.Millisecond
 	*base.Shadow.Ramp = 0
-	if *copy.RemoteReadTimeoutMS != 30 || *copy.Shadow.Ramp != 100 {
+	if *copy.RemoteReadTimeout != 30*time.Millisecond || *copy.Shadow.Ramp != 100 {
 		t.Fatal("static snapshot retained mutable leaves")
 	}
 	inherit, err := ResolvePolicy(copy, nil, policyTestIdentity(), PolicyDefaults{})
-	if err != nil || !inherit.Local.Enabled || inherit.RemoteReadTimeoutMS != 30 {
+	if err != nil || !inherit.Local.Enabled || inherit.RemoteReadTimeout != 30*time.Millisecond {
 		t.Fatalf("null provider failed inheritance: %+v %v", inherit, err)
 	}
 }
@@ -63,15 +64,15 @@ func TestPolicyStaticValidation(t *testing.T) {
 	if _, err := ParsePolicy(map[string]any{"ttlSec": map[string]any{"remote": 31536000}, "remoteReadTimeoutMs": 2147483647}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidatePolicy(Policy{LocalTTLMS: 1500}); err == nil {
+	if err := ValidatePolicy(Policy{LocalTTL: time.Duration(1500) * time.Millisecond}); err == nil {
 		t.Fatal("accepted fractional second TTL")
 	}
 }
 
 func TestRuntimePolicyFailureScopes(t *testing.T) {
-	base := Policy{RequestLocal: true, LocalTTLMS: 1000, RemoteTTLMS: 2000}
+	base := Policy{RequestLocal: true, LocalTTL: time.Duration(1000) * time.Millisecond, RemoteTTL: time.Duration(2000) * time.Millisecond}
 	for _, overlay := range []any{false, []any{}, map[string]any{"ttlSec": nil}, map[string]any{"shadow": nil}, map[string]any{"requestLocal": nil}, map[string]any{"coalesce": 1}, map[string]any{"remoteReadTimeoutMs": 0}} {
-		if _, err := ResolvePolicy(base, overlay, policyTestIdentity(), PolicyDefaults{}); err == nil {
+		if _, err := ResolvePolicy(base, RawPolicy(overlay), policyTestIdentity(), PolicyDefaults{}); err == nil {
 			t.Fatalf("accepted invalid invocation policy: %#v", overlay)
 		}
 	}
@@ -87,25 +88,40 @@ func TestRuntimePolicyFailureScopes(t *testing.T) {
 		{map[string]any{"staleOnErrorMaxAgeSec": 0}, "", "", false},
 		{map[string]any{"ttlSec": map[string]any{"remote": -1}, "staleOnErrorMaxAgeSec": -1}, "", "invalid_ttl", false},
 	} {
-		r, err := ResolvePolicy(base, test.overlay, policyTestIdentity(), PolicyDefaults{})
+		r, err := ResolvePolicy(base, JSONPolicy(test.overlay), policyTestIdentity(), PolicyDefaults{})
 		if err != nil || !r.RequestLocal || !r.Coalesce || r.Local.Reason != test.local || r.Remote.Reason != test.remote || r.StaleOnErrorConfigError != test.recoveryError {
 			t.Fatalf("wrong failure scope: %#v => %+v %v", test.overlay, r, err)
 		}
 	}
-	missing, err := ResolvePolicy(Policy{}, map[string]any{"staleOnErrorMaxAgeSec": 3}, policyTestIdentity(), PolicyDefaults{})
+	missing, err := ResolvePolicy(Policy{}, JSONPolicy{"staleOnErrorMaxAgeSec": 3}, policyTestIdentity(), PolicyDefaults{})
 	if err != nil || !missing.StaleOnErrorConfigError || missing.Remote.Reason != "policy_disabled" {
 		t.Fatalf("missing remote TTL: %+v %v", missing, err)
 	}
 }
 
 func TestRecoveryRetentionAndShadowDiagnosticsRemainIndependent(t *testing.T) {
-	base := Policy{RemoteTTLMS: 1000, RemoteRamp: policyTestPtr(0.0), StaleOnErrorMaxAgeMS: policyTestPtr(int64(86400000))}
-	r, err := ResolvePolicy(base, map[string]any{"shadow": map[string]any{"ramp": 100, "logMismatches": "invalid"}}, policyTestIdentity(), PolicyDefaults{})
-	if err != nil || r.Remote.Enabled || !r.Remote.Configured || r.StaleOnErrorMaxAgeMS != 86400000 || !r.Shadow.Enabled || r.Shadow.ConfigError || !r.Shadow.LoggingConfigError || r.Shadow.LogMismatches {
+	base := Policy{RemoteTTL: time.Duration(1000) * time.Millisecond, RemoteRamp: policyTestPtr(0.0), StaleOnErrorMaxAge: Ptr(24 * time.Hour)}
+	r, err := ResolvePolicy(base, JSONPolicy{"shadow": map[string]any{"ramp": 100, "logMismatches": "invalid"}}, policyTestIdentity(), PolicyDefaults{})
+	if err != nil || r.Remote.Enabled || !r.Remote.Configured || r.StaleOnErrorMaxAge != 24*time.Hour || !r.Shadow.Enabled || r.Shadow.ConfigError || !r.Shadow.LoggingConfigError || r.Shadow.LogMismatches {
 		t.Fatalf("wrong independent options: %+v %v", r, err)
 	}
-	r, err = ResolvePolicy(base, map[string]any{"shadow": map[string]any{"ramp": nil}}, policyTestIdentity(), PolicyDefaults{})
+	r, err = ResolvePolicy(base, JSONPolicy{"shadow": map[string]any{"ramp": nil}}, policyTestIdentity(), PolicyDefaults{})
 	if err != nil || !r.Shadow.ConfigError || r.Shadow.Enabled || !r.Remote.Configured {
 		t.Fatalf("invalid shadow replaced serving policy: %+v %v", r, err)
+	}
+}
+
+func TestJSONPolicyIsAnObjectWhereverItAppears(t *testing.T) {
+	base := Policy{LocalTTL: time.Second, RemoteTTL: 2 * time.Second}
+	nested, err := ResolvePolicy(base, JSONPolicy{"ttlSec": JSONPolicy{"remote": 4}}, policyTestIdentity(), PolicyDefaults{})
+	if err != nil || nested.Remote.TTL != 4*time.Second || !nested.Local.Enabled {
+		t.Fatalf("nested JSONPolicy was not treated as an object: %+v %v", nested, err)
+	}
+	raw, err := ResolvePolicy(base, RawPolicy(JSONPolicy{"ramp": JSONPolicy{"local": 0}}), policyTestIdentity(), PolicyDefaults{})
+	if err != nil || raw.Local.Enabled || raw.Local.Reason != "ramped_down" || !raw.Remote.Enabled {
+		t.Fatalf("RawPolicy around JSONPolicy was not treated as an object: %+v %v", raw, err)
+	}
+	if _, err := ParsePolicy(JSONPolicy{"ttlSec": JSONPolicy{"local": 1}}); err != nil {
+		t.Fatalf("ParsePolicy rejected JSONPolicy containers: %v", err)
 	}
 }

@@ -140,6 +140,17 @@ describe("isolated exploratory validation", () => {
       ["formal/run-models.mjs", "check"], ["formal/run-models.mjs", "generate"], ["formal/witnesses.mjs", "evaluate"],
     ]);
     for (const step of seeded) expect(step.env?.QUINT_SEED).toBe("0x2a");
+    // Only the identical pinned fault campaign is omitted. Clean model
+    // checks/regressions, lint, fixtures, generation and witnesses remain.
+    expect(plan.filter(step => step.args?.[0]?.startsWith("formal/")).map(step => step.args)).toEqual([
+      ["formal/run-models.mjs", "check"],
+      ["formal/lint-profiles.mjs", "baseline", "--check"],
+      ["formal/check-kernel-fixtures.mjs"],
+      ["formal/run-models.mjs", "generate"],
+      ["formal/generated-fixtures.mjs", "--check"],
+      ["formal/witnesses.mjs", "evaluate", "--profile", "all"],
+      ["formal/check-go-parity.mjs"],
+    ]);
     const replays = plan.filter(step => step.nativeReport);
     expect(replays.map(step => step.nativeReport)).toEqual(["typescript", "go", "rust"]);
     for (const step of replays) expect(step.env?.DIALCACHE_FEATURE_TRACE_DIR).toBe(`${directory}/.formal-traces/features`);

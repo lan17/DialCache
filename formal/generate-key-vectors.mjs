@@ -4,7 +4,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { encodeJson } from './compact-json.mjs';
+
 const root = fileURLToPath(new URL('../', import.meta.url));
+// The corpus header stays indented; every vector row is one line.
+const encode = corpus => encodeJson(corpus, path => path.length === 2 && typeof path[1] === 'number');
 export const model = 'formal/dialcache-key-protocol.qnt';
 export const generator = 'formal/generate-key-vectors.mjs';
 export const artifact = 'formal/quint-key-vectors.json';
@@ -166,7 +170,7 @@ export function generateKeyVectors(mode) {
   if (result.status !== 0) throw new Error(`Quint key export failed: ${result.status}`);
   const groups = vectorsFromTrace(JSON.parse(readFileSync(output, 'utf8')));
   const corpus = { schemaVersion: 3, provenance: { model, sourceSha256: sourceHashes() }, ...groups };
-  const serialized = JSON.stringify(corpus, null, 2) + '\n';
+  const serialized = encode(corpus);
   if (mode === '--write') writeFileSync(resolve(root, artifact), serialized);
   else if (readFileSync(resolve(root, artifact), 'utf8') !== serialized) throw new Error('Committed key predictions differ from fresh Quint output');
   console.log(`Quint key vectors: ${expectedCases} computed inputs ${mode === '--check' ? 'verified' : 'written'}`);

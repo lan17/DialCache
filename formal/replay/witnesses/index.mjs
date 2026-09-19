@@ -16,15 +16,16 @@ import { createWitnessRecorder } from "./recorder.mjs";
 import { recoveryWitnesses } from "./recovery.mjs";
 import { recoveryAdmissionWitnesses } from "./recovery-admission.mjs";
 import { recoveryReadWitnesses } from "./recovery-read.mjs";
-import { recoveryShadowWitnesses } from "./recovery-shadow.mjs";
 import { runtimeWitnesses } from "./runtime.mjs";
 import { runtimeBoundaryWitnesses } from "./runtime-boundaries.mjs";
 import { scopeWitnesses } from "./scope.mjs";
 import { shadowWitnesses } from "./shadow.mjs";
 import { shadowDiagnosticsWitnesses } from "./shadow-diagnostics.mjs";
 import { shadowLayersWitnesses } from "./shadow-layers.mjs";
+import { darkLayersWitnesses } from "./dark-layers.mjs";
 import { sourceBudgetsWitnesses } from "./source-budgets.mjs";
-import { readTrace, traceStates, witnessStates } from "./trace.mjs";
+import { shadowReadDeadlinesWitnesses } from "./shadow-read-deadlines.mjs";
+import { readTrace, witnessStates } from "./trace.mjs";
 
 // One language-neutral witness evaluator for every profile with a completion
 // gate. Any port runs it over the same sampled histories and exported
@@ -38,10 +39,12 @@ export const witnessProfiles = [...Object.keys(featureProfiles), "effects", "loc
 
 // The shared strict parser for a profile's histories. Effects and feature
 // histories keep their raw ITF states for the classifiers keyed on explicit
-// inputs and public observations; feature histories also carry their decoded
-// private predictions.
+// inputs and public observations, and carry their decoded private
+// predictions for the fidelity checks.
 function historyParser(profile) {
-  if (profile === "effects") return (raw, path) => ({ ...parseEffectsTrace(raw, path), states: traceStates(raw, path) });
+  // Effects histories carry their decoded private predictions beside the
+  // parsed steps for the classifier's fidelity check, as feature histories do.
+  if (profile === "effects") return (raw, path) => ({ ...parseEffectsTrace(raw, path), ...witnessStates(raw, path) });
   if (profile === "local-clock") return parseLocalClockTrace;
   const definition = featureProfiles[profile];
   if (definition === undefined) throw new Error(`Unknown witness profile ${profile}`);
@@ -67,11 +70,12 @@ export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder
     case "layers": layersWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
     case "admission": admissionWitnesses(corpus, recorder); break;
     case "independent": independentWitnesses(corpus, recorder); break;
-    case "recovery": recoveryWitnesses(corpus, recorder); recoveryShadowWitnesses(profile, corpus, recorder); break;
-    case "shadow":
-      shadowWitnesses(corpus, recorder); recoveryShadowWitnesses(profile, corpus, recorder); shadowDiagnosticsWitnesses(corpus, recorder); break;
+    case "recovery": recoveryWitnesses(corpus, recorder); break;
+    case "shadow": shadowWitnesses(corpus, recorder); shadowDiagnosticsWitnesses(corpus, recorder); break;
     case "recovery-read": actionLabels(corpus, recorder); recoveryReadWitnesses(corpus, recorder); recoveryAdmissionWitnesses(corpus, recorder); break;
     case "shadow-layers": actionLabels(corpus, recorder); shadowLayersWitnesses(corpus, recorder); break;
+    case "shadow-read-deadlines": actionLabels(corpus, recorder); shadowReadDeadlinesWitnesses(corpus, recorder); break;
+    case "dark-layers": actionLabels(corpus, recorder); darkLayersWitnesses(corpus, recorder); break;
     case "local-failure": actionLabels(corpus, recorder); localFailureWitnesses(corpus, recorder); break;
     case "source-budgets": actionLabels(corpus, recorder); sourceBudgetsWitnesses(corpus, recorder); break;
     case "runtime-boundaries": flowLabels(corpus, false, recorder); runtimeBoundaryWitnesses(profile, corpus, recorder); break;

@@ -18,7 +18,10 @@ module layer_policy {
   // and the physical retention written with each remote frame. A layer whose
   // TTL is 0 is off (`gated`), and a source refills the remote layer iff it
   // captured a positive retention: a reply with `freshMs > 0` and
-  // `retentionMs` 0 reads the remote layer and never refills it.
+  // `retentionMs` 0 reads the remote layer and never refills it. That region
+  // is not native configuration: a positive staleOnErrorMaxAgeSec must exceed
+  // ttlSec.remote, and every profile decoder keeps retention at or above
+  // freshness (including policy overlays' fallback for invalid recovery ages).
   type Ttls = { localMs: int, freshMs: int, retentionMs: int }
   // The TTLs of a call that uses no layer: the bypass reply's.
   pure val NO_TTLS: Ttls = { localMs: 0, freshMs: 0, retentionMs: 0 }
@@ -43,6 +46,17 @@ module layer_policy {
       remote: resolved.layers.remote and ttls.freshMs > 0
     },
     coalesce: resolved.coalesce
+  }
+  // The TTLs of the layers a reply uses: a layer the reply leaves off has TTL
+  // 0, so after this a TTL is positive exactly when its layer is on. A
+  // traversal suspended at the remote layer (a held read) carries these
+  // instead of the resolution: `localMs > 0` says local participates,
+  // `freshMs` judges the frame at settlement, `retentionMs` is the refill
+  // retention and the recovery maximum.
+  pure def effectiveTtls(resolved: Resolution, ttls: Ttls): Ttls = {
+    localMs: if (resolved.layers.local) ttls.localMs else 0,
+    freshMs: if (resolved.layers.remote) ttls.freshMs else 0,
+    retentionMs: if (resolved.layers.remote) ttls.retentionMs else 0
   }
   // Sharing across callers exists only where a shared layer (local or remote)
   // participates; a request-only call is never coalesced across scopes.
