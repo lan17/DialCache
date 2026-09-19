@@ -1287,7 +1287,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "9280203fd477f26f728e8334a8541a8755f0977c32913b7db08cea0256077c25",
+      "sha256": "204d3c424f89c3014641e1027d464bacc7c6099ef3ee47ea373b30db92062841",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1296,9 +1296,9 @@
         {"line":146,"title":"Observation contract"},
         {"line":222,"title":"Generated fixtures and fast local tests"},
         {"line":257,"title":"Complete corpus and reusable acceptance checks"},
-        {"line":365,"title":"Witness evidence"},
-        {"line":455,"title":"Current limitations for a further port"},
-        {"line":469,"title":"New-port acceptance"}
+        {"line":370,"title":"Witness evidence"},
+        {"line":460,"title":"Current limitations for a further port"},
+        {"line":474,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1346,14 +1346,14 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "408c23982e53874489d1aa804c7ece96b7f487cf7e0a4a07552fcf914ca015d7",
+      "sha256": "d612ebd99ef15cfe0540524163e5fb904bb416171909aa20b5df24894d3f242c",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":7,"title":"Start with your task"},
         {"line":23,"title":"How the specification connects to code"},
         {"line":43,"title":"Models and composition profiles"},
         {"line":94,"title":"Generating and replaying behavior"},
-        {"line":181,"title":"Evidence and scope"}
+        {"line":182,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1533,7 +1533,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "8527fa4575ed1739abf134def472decac898060bb69f3e9b9ced4dfbe6e1c26d",
+      "sha256": "c859de57f5cb4c7c785f0510f009ef3a5f71154a0facf773fe9c2bebc7959c6a",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
         {"line":19,"title":"Use"},
