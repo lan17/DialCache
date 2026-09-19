@@ -124,14 +124,19 @@ impl Core {
 /// Exact process-scoped single-flight state of one instance.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ProcessCoalescingState {
+    /// Executions currently in flight on this instance, one per logical key.
     pub active_leaders: usize,
+    /// Callers currently waiting on those executions instead of running their own.
     pub active_followers: usize,
+    /// Milliseconds since the oldest in-flight execution started; `None`
+    /// when nothing is in flight.
     pub oldest_leader_age_ms: Option<u64>,
 }
 
 /// A point-in-time snapshot of cache-owned coalescing state.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CoalescingState {
+    /// Instance-wide single-flight state; request-scoped flights are not counted.
     pub process: ProcessCoalescingState,
 }
 
@@ -210,11 +215,14 @@ impl DialCacheBuilder {
         self
     }
 
+    /// Receives structured log events. Defaults to the `log` crate facade
+    /// under target `dialcache`.
     pub fn logger(mut self, logger: impl Logger) -> Self {
         self.logger = Some(Arc::new(logger));
         self
     }
 
+    /// Receives structured log events, shared.
     pub fn logger_arc(mut self, logger: Arc<dyn Logger>) -> Self {
         self.logger = Some(logger);
         self
@@ -279,6 +287,8 @@ impl DialCacheBuilder {
         self
     }
 
+    /// Replace the wall and elapsed clock. Defaults to
+    /// [`SystemClock`](crate::SystemClock).
     pub fn clock(mut self, clock: impl Clock) -> Self {
         self.clock = Some(Arc::new(clock));
         self
@@ -302,6 +312,10 @@ impl DialCacheBuilder {
         self
     }
 
+    /// Validate the configuration and create the instance. Rejects a
+    /// namespace containing `{` or `}`, a read budget outside
+    /// `1..=2_147_483_647` ms, a zero shadow cap, an invalid compression
+    /// config, or a missing runtime when the `tokio` feature is off.
     pub fn build(self) -> Result<DialCache, ConfigError> {
         if self.namespace.contains(['{', '}']) {
             return Err(ConfigError::invalid(
@@ -434,6 +448,8 @@ impl std::fmt::Debug for DialCache {
 }
 
 impl DialCache {
+    /// Start configuring an instance with the defaults documented on
+    /// [`DialCacheBuilder`]'s setters.
     pub fn builder() -> DialCacheBuilder {
         DialCacheBuilder::new()
     }

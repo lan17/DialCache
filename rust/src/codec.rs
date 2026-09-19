@@ -14,12 +14,15 @@ use crate::error::BoxError;
 /// their exact bytes. Compression envelopes wrap either form transparently.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Payload {
+    /// The serializer output. Read as UTF-8 unless `binary`; ill-formed text
+    /// sequences are replaced when the payload is stored.
     pub bytes: Vec<u8>,
     /// `true` for binary output, `false` for UTF-8 text.
     pub binary: bool,
 }
 
 impl Payload {
+    /// A UTF-8 text payload.
     pub fn text(text: impl Into<String>) -> Self {
         Payload {
             bytes: text.into().into_bytes(),
@@ -27,6 +30,7 @@ impl Payload {
         }
     }
 
+    /// An opaque binary payload, stored byte-exact.
     pub fn binary(bytes: impl Into<Vec<u8>>) -> Self {
         Payload {
             bytes: bytes.into(),
@@ -34,10 +38,12 @@ impl Payload {
         }
     }
 
+    /// Length in bytes.
     pub fn len(&self) -> usize {
         self.bytes.len()
     }
 
+    /// Whether the payload holds no bytes.
     pub fn is_empty(&self) -> bool {
         self.bytes.is_empty()
     }
@@ -55,13 +61,19 @@ impl Payload {
 /// [`FromSync`]. Every decode must return an independent value: the cache may
 /// retain one payload and decode it more than once.
 pub trait Codec<T>: Send + Sync + 'static {
+    /// Serialize `value`. A failure counts as a `serialization_dump` error
+    /// and skips the remote write.
     fn encode<'a>(&'a self, value: &'a T) -> BoxFuture<'a, Result<Payload, BoxError>>;
+    /// Deserialize `payload` into an independent value. A failure counts as
+    /// a `serialization_load` error and is treated as a miss.
     fn decode(&self, payload: Payload) -> BoxFuture<'_, Result<T, BoxError>>;
 }
 
 /// A synchronous codec. Wrap it in [`FromSync`] where a [`Codec`] is expected.
 pub trait SyncCodec<T>: Send + Sync + 'static {
+    /// Serialize `value` without awaiting.
     fn encode(&self, value: &T) -> Result<Payload, BoxError>;
+    /// Deserialize `payload` into an independent value without awaiting.
     fn decode(&self, payload: Payload) -> Result<T, BoxError>;
 }
 
@@ -94,10 +106,13 @@ pub const JSON_UNDEFINED_SENTINEL: &str = "__dialcache_json_undefined_v1__";
 pub struct JsonCodec;
 
 impl JsonCodec {
+    /// Serialize any `Serialize` value as compact JSON text.
     pub fn encode_value<T: Serialize>(value: &T) -> Result<Payload, BoxError> {
         Ok(Payload::text(serde_json::to_string(value)?))
     }
 
+    /// Deserialize JSON text, reading the TypeScript `undefined` sentinel as
+    /// JSON `null`.
     pub fn decode_value<T: DeserializeOwned>(payload: &Payload) -> Result<T, BoxError> {
         let text = payload.as_text();
         if text == JSON_UNDEFINED_SENTINEL {

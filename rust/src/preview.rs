@@ -23,10 +23,12 @@ pub fn clamp_utf8(value: &str, max_bytes: usize) -> String {
     result
 }
 
+/// Clamp a logical key to [`SHADOW_LOG_KEY_MAX_BYTES`].
 pub fn preview_key(key: &str) -> String {
     clamp_utf8(key, SHADOW_LOG_KEY_MAX_BYTES)
 }
 
+/// Clamp a value's JSON preview to [`SHADOW_LOG_VALUE_MAX_BYTES`].
 pub fn preview_value(json: &str) -> String {
     clamp_utf8(json, SHADOW_LOG_VALUE_MAX_BYTES)
 }

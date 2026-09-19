@@ -22,11 +22,15 @@ use crate::scope::Scope;
 /// The key of one call: the entity id and any secondary dimensions.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct KeySpec {
+    /// The entity identifier, spelled as text.
     pub id: String,
+    /// Secondary dimensions; absent values are dropped and names sorted when
+    /// the key is built.
     pub args: Vec<(String, ArgValue)>,
 }
 
 impl KeySpec {
+    /// A key with `id` and no secondary dimensions.
     pub fn new(id: impl ToString) -> Self {
         KeySpec {
             id: id.to_string(),
@@ -181,6 +185,7 @@ where
         self
     }
 
+    /// Replace the JSON codec; required by [`register_custom`](Self::register_custom).
     pub fn codec(mut self, codec: Arc<dyn Codec<T>>) -> Self {
         self.codec = Some(codec);
         self
@@ -357,10 +362,12 @@ where
     Args: Clone + Send + Sync + 'static,
     T: Send + Sync + 'static,
 {
+    /// The operation name given at registration.
     pub fn use_case(&self) -> &str {
         &self.inner.use_case
     }
 
+    /// The entity type given at registration.
     pub fn key_type(&self) -> &str {
         &self.inner.key_type
     }

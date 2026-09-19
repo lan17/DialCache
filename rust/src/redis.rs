@@ -105,6 +105,9 @@ pub fn invalidation_script_sha1() -> String {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("Invalid DialCache Redis reply: {message}")]
 pub struct RedisProtocolError {
+    /// What the reply violated: an unexpected reply type, a tracked read
+    /// without exactly two bulk values, a `SET` reply other than `OK`, or an
+    /// invalidation reply other than the integer `1`.
     pub message: String,
 }
 

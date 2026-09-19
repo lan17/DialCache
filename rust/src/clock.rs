@@ -38,6 +38,8 @@ pub struct SystemClock {
 }
 
 impl SystemClock {
+    /// A clock whose elapsed origin snaps to the process-wide millisecond
+    /// grid, so every default instance shares one local expiry grid.
     pub fn new() -> Self {
         let process = *PROCESS_ORIGIN.get_or_init(Instant::now);
         let now = Instant::now();

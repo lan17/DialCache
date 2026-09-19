@@ -54,9 +54,11 @@ const FUTURE_TIMESTAMP_OFFSET_BUCKETS: &[f64] = &[
 /// The wire schema of one collector: what a scrape exposes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CollectorSchema {
+    /// The event kind the collector receives.
     pub kind: MetricKind,
     /// The fully qualified metric name, prefix included.
     pub name: String,
+    /// The Prometheus help text, spelled as in the TypeScript adapter.
     pub help: &'static str,
     /// Label names in wire order.
     pub labels: &'static [&'static str],
@@ -65,6 +67,7 @@ pub struct CollectorSchema {
 }
 
 impl CollectorSchema {
+    /// `true` for the counter vectors; every other collector is a histogram.
     pub fn is_counter(&self) -> bool {
         self.kind.is_counter()
     }
@@ -210,13 +213,17 @@ pub enum PrometheusError {
     /// A collector with this name is already registered by someone else, or
     /// with another schema. Use a unique prefix or another registry.
     Conflict {
+        /// The fully qualified collector name that collided.
         name: String,
+        /// The registry's rejection.
         source: ::prometheus::Error,
     },
     /// The `prometheus` crate rejected a collector definition, which only a
     /// prefix that is not a valid metric name fragment can cause.
     InvalidCollector {
+        /// The fully qualified collector name that was rejected.
         name: String,
+        /// The crate's rejection.
         source: ::prometheus::Error,
     },
 }
