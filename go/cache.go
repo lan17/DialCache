@@ -157,8 +157,8 @@ func (c *Cache) IsEnabled(ctx context.Context) bool {
 }
 
 func (c *Cache) emit(event Event) {
-	if c.settings.observe != nil {
-		func() { defer func() { _ = recover() }(); c.settings.observe(event) }()
+	for _, observe := range c.settings.observers {
+		func() { defer func() { _ = recover() }(); observe(event) }()
 	}
 }
 

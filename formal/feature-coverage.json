@@ -770,13 +770,13 @@
           "test": "TestPolicyStaticValidation",
           "path": "go/policy_test.go",
           "scope": "Malformed option types and combinations reject; the maximum supported remote TTL/read budget is accepted and fractional-second static TTL is rejected.",
-          "sha256": "e0fbb4bc16d2700fafd39034cf1a82221eff0e65614253daf1161e6a0c542228"
+          "sha256": "baeb5c2514d70acc4e0e2a1f37de94302eac8a3b398dcec00dcefa536c53b462"
         },
         {
           "test": "TestRuntimePolicyFailureScopes",
           "path": "go/policy_test.go",
           "scope": "Malformed invocation-wide leaves fail resolution; invalid layer/recovery leaves retain the other active layers and their failure categories.",
-          "sha256": "e0fbb4bc16d2700fafd39034cf1a82221eff0e65614253daf1161e6a0c542228"
+          "sha256": "baeb5c2514d70acc4e0e2a1f37de94302eac8a3b398dcec00dcefa536c53b462"
         }
       ],
       "adaptation": "Native number and optional-value encodings differ; each binding must distinguish absent, explicitly disabled, malformed, and boundary values.",
@@ -830,7 +830,7 @@
           "test": "TestPolicySparseResolutionAndSnapshots",
           "path": "go/policy_test.go",
           "scope": "Nested runtime leaves merge independently, omitted leaves inherit, and captured nested pointer-valued defaults survive caller mutation.",
-          "sha256": "e0fbb4bc16d2700fafd39034cf1a82221eff0e65614253daf1161e6a0c542228"
+          "sha256": "baeb5c2514d70acc4e0e2a1f37de94302eac8a3b398dcec00dcefa536c53b462"
         }
       ],
       "adaptation": "Eager defaulting can erase inherited leaves even when ordinary effective-policy examples pass.",
@@ -893,7 +893,7 @@
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
-      "adaptation": "TypeScript explicit zero shadow capacity rejects. In Go, zero ShadowMaxInFlight denotes omission and selects the default capacity of one; LocalCapacitySet distinguishes explicit zero local storage from an omitted default.",
+      "adaptation": "Both bindings reject an explicit zero shadow capacity; in Go WithShadowCapacity(0) returns ErrInvalidOption. Go distinguishes an omitted local capacity, which keeps the default of 10,000, from WithLocalCapacity(0), which disables storage while retaining coalescing.",
       "gaps": []
     },
     {

@@ -86,12 +86,13 @@ func (x *execution[T]) codec() Codec[T] {
 	return JSONCodec[T]{}
 }
 
-// assertValue converts a shared in-process value back to T. A nil interface
-// value is the zero value of an interface T, such as a cached JSON null.
+// assertValue converts a shared in-process value back to T. A stored nil is
+// a value only for an interface T, such as a JSON null cached through any;
+// for every other T it belongs to a differently typed operation.
 func assertValue[T any](raw any) (T, bool) {
 	var zero T
 	if raw == nil {
-		return zero, true
+		return zero, any(zero) == nil
 	}
 	value, ok := raw.(T)
 	return value, ok

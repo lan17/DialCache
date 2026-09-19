@@ -56,7 +56,7 @@ defer done()
 value, err := displayName(ctx, "42")
 ```
 
-One `Cache` serves every value type: `Cached[T]` and `GetOrLoad[T]` are
+One `Cache` serves every value type: `Cached[T, Arg]` and `GetOrLoad[T]` are
 generic functions over the same instance, so one local capacity, coalescing
 table and shadow budget cover the whole process. Caching is off until `Enable`
 returns a request-scoped context; calls with any other context pass straight
@@ -166,9 +166,11 @@ The wire contract requires interoperable decompression, not identical
 compressed bytes.
 
 `WithObserver` receives backend-neutral events, and `WithMetrics` connects a
-`MetricsAdapter` with failure isolation. To enable shadow admission, also
-supply `WithShadowOutcomes`; it represents the optional shadow metric hook.
-Wire an exporter through one delivery path to avoid double-counting that event.
+`MetricsAdapter` with failure isolation; every configured observer and adapter
+receives each event. To enable shadow admission, also supply
+`WithShadowOutcomes`; it represents the optional shadow metric hook and
+receives the same verdict event the observers do, so wire an exporter through
+one of those paths to avoid double-counting it.
 `WithRecoveryOutcomes` is an optional separate recovery hook. Prometheus and
 DogStatsD adapters preserve metric names, labels, units and buckets; logical
 keys never become labels. `WithLogger` replaces the standard logger; either is

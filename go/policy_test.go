@@ -110,3 +110,18 @@ func TestRecoveryRetentionAndShadowDiagnosticsRemainIndependent(t *testing.T) {
 		t.Fatalf("invalid shadow replaced serving policy: %+v %v", r, err)
 	}
 }
+
+func TestJSONPolicyIsAnObjectWhereverItAppears(t *testing.T) {
+	base := Policy{LocalTTL: time.Second, RemoteTTL: 2 * time.Second}
+	nested, err := ResolvePolicy(base, JSONPolicy{"ttlSec": JSONPolicy{"remote": 4}}, policyTestIdentity(), PolicyDefaults{})
+	if err != nil || nested.Remote.TTL != 4*time.Second || !nested.Local.Enabled {
+		t.Fatalf("nested JSONPolicy was not treated as an object: %+v %v", nested, err)
+	}
+	raw, err := ResolvePolicy(base, RawPolicy(JSONPolicy{"ramp": JSONPolicy{"local": 0}}), policyTestIdentity(), PolicyDefaults{})
+	if err != nil || raw.Local.Enabled || raw.Local.Reason != "ramped_down" || !raw.Remote.Enabled {
+		t.Fatalf("RawPolicy around JSONPolicy was not treated as an object: %+v %v", raw, err)
+	}
+	if _, err := ParsePolicy(JSONPolicy{"ttlSec": JSONPolicy{"local": 1}}); err != nil {
+		t.Fatalf("ParsePolicy rejected JSONPolicy containers: %v", err)
+	}
+}

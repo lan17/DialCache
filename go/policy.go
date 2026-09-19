@@ -209,11 +209,17 @@ func optionalLeaf(config map[string]any, name string) (any, bool) {
 	return v, present && !IsAbsent(v)
 }
 func policyMap(value any, name string) (map[string]any, error) {
-	m, ok := value.(map[string]any)
-	if !ok || m == nil {
-		return nil, fmt.Errorf("%w: %s must be an object", ErrInvalidPolicy, name)
+	switch m := value.(type) {
+	case map[string]any:
+		if m != nil {
+			return m, nil
+		}
+	case JSONPolicy:
+		if m != nil {
+			return map[string]any(m), nil
+		}
 	}
-	return m, nil
+	return nil, fmt.Errorf("%w: %s must be an object", ErrInvalidPolicy, name)
 }
 func invalidPolicy(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalidPolicy, fmt.Sprintf(format, args...))

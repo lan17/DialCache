@@ -3,6 +3,7 @@ package dialcache
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 )
@@ -71,7 +72,7 @@ func (x *execution[T]) duration(kind, layer string, start time.Duration, extra m
 func GetOrLoad[T any](ctx context.Context, c *Cache, op Operation[T], load func(context.Context) (T, error)) (T, error) {
 	var zero T
 	if c == nil || load == nil {
-		return zero, errors.Join(ErrInvalidOperation, errors.New("GetOrLoad requires a cache and a source"))
+		return zero, fmt.Errorf("%w: GetOrLoad requires a cache and a source", ErrInvalidOperation)
 	}
 	if err := validateOperation(op); err != nil {
 		return zero, err

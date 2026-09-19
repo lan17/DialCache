@@ -194,7 +194,7 @@ type settings struct {
 	namespace         string
 	localCapacity     int
 	remoteReadTimeout time.Duration
-	observe           func(Event)
+	observers         []func(Event)
 	logger            Logger
 	policyProvider    PolicyProvider
 	shouldRecover     RecoveryPredicate
@@ -270,10 +270,16 @@ func WithLogger(logger Logger) Option {
 	}
 }
 
-// WithObserver receives every backend-neutral diagnostic event. Panics in the
-// observer are ignored; wire an exporter through one delivery path only.
+// WithObserver receives every backend-neutral diagnostic event. Every
+// configured observer and metrics adapter receives each event; panics in an
+// observer are ignored.
 func WithObserver(observe func(Event)) Option {
-	return func(s *settings) error { s.observe = observe; return nil }
+	return func(s *settings) error {
+		if observe != nil {
+			s.observers = append(s.observers, observe)
+		}
+		return nil
+	}
 }
 
 // WithMetrics connects a MetricsAdapter such as the Prometheus or DogStatsD
@@ -283,7 +289,7 @@ func WithMetrics(adapter MetricsAdapter) Option {
 		if adapter == nil {
 			return fmt.Errorf("%w: metrics adapter must not be nil", ErrInvalidOption)
 		}
-		s.observe = FailureIsolatedObserver(adapter.ObserveEvent)
+		s.observers = append(s.observers, FailureIsolatedObserver(adapter.ObserveEvent))
 		return nil
 	}
 }
