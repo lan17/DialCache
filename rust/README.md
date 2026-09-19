@@ -1,0 +1,167 @@
+# DialCache for Rust
+
+Rust implements the same portable behavior as the TypeScript library and the
+Go port: explicit request enablement, request/local/Redis layers,
+deterministic rollout, sparse runtime policy, request and process coalescing,
+tracked invalidation, source and read deadlines, stale recovery, dark and
+served-hit shadow validation, compression, and failure-isolated observability.
+
+The [Quint models](../formal/README.md) are the behavioral source of truth.
+The Rust conformance harness replays the same sampled histories and named
+public-action regressions as the other ports, plus the fixed scenarios and
+Quint-derived protocol vectors, through the shared Node replay coordinator.
+These are finite checks of the documented contract, not proof of every
+possible input or schedule.
+
+## Use
+
+The crate requires Rust 1.85 or later; CI pins 1.98.1 through
+`rust-toolchain.toml`. Applications own their Redis connection and its
+timeout, retry and resource budgets. The default runtime is tokio.
+
+```rust
+use std::sync::Arc;
+use dialcache::{DialCache, KeySpec, Policy};
+
+let cache = DialCache::builder()
+    .remote(dialcache::redis::RedisAdapter::new(connection)) // feature "redis"
+    .build()?;
+
+let display_name = cache
+    .use_case::<u64, String>("user", "displayName")
+    .policy(Policy::default().local_ttl_sec(1).remote_ttl_sec(60))
+    .tracked(true)
+    .key(|id: &u64| KeySpec::new(id))
+    .source(|_scope, id: u64| async move { Ok(load_display_name(id).await?) })
+    .register()?;
+
+let request = cache.enable_guard();
+let name: Arc<String> = display_name.get(request.scope(), 42).await?;
+```
+
+Caching is disabled by default. `DialCache::enable` (closure form) or
+`DialCache::enable_guard` (RAII form) opens the outermost enabled scope and
+hands out a `Scope`; pass it to every cached call made on behalf of that
+request, including calls made inside a source. Completing the callback or
+dropping the guard closes the scope: retained `Scope` clones no longer enable
+caching and late work cannot publish into the request memo.
+`DialCache::enable_in` and `DialCache::disable_in` derive nested scopes that
+share the outer request memo. `Scope::outside()` is the pass-through scope of
+work that runs on behalf of no request.
+
+`use_case` registers a typed use case once per instance and returns a
+`UseCase<Args, T>` handle; `get_or_load` runs one inline `Operation<T>` without
+registration. Both snapshot the static policy and the source budget before any
+asynchronous work. Values come back as `Arc<T>`: shared by reference, treat
+them as immutable. Use case `watermark` is reserved. `coalescing_state`
+reports actual process leaders, followers and the oldest leader age.
+
+Sources are `Fn(Scope, Args) -> Future<Output = Result<T, BoxError>>`. They may
+run again later for served-hit shadow validation, so they must be reusable.
+Source errors surface as `Error::Source(Arc<dyn Error>)`; every coalesced
+caller receives the same shared instance, so `Arc::ptr_eq` identifies one
+failure. A source deadline returns `Error::FallbackTimeout` and does not cancel
+the source. Dropping the future returned by `get` never cancels the execution:
+sources, publications and other callers keep their contracts.
+
+`KeySpec` takes the entity id and ordered secondary dimensions;
+`normalize_args` spells scalars the JavaScript way and orders names by UTF-16
+code units so the same identity produces the same Redis key in every language.
+Use the same namespace, key dimensions, codecs and policy across languages when
+sharing entries.
+
+## Configuration and effects
+
+`Policy` holds the static leaves: whole-second TTLs (`local_ttl_sec`,
+`remote_ttl_sec`), serving ramps, `request_local`, `coalesce`,
+`stale_on_error_max_age_sec`, `remote_read_timeout_ms` and `shadow`.
+`Policy::from_json` accepts the TypeScript JSON-shaped configuration.
+`Policy::enabled(ttl)` and `Policy::disabled()` are the two static helpers.
+A `policy_provider` returns a sparse `RuntimePolicy` overlay once per enabled
+invocation; `Ok(None)` inherits, present leaves replace operation leaves, and
+invalid leaves have the narrower consequences defined in Quint (an invalid TTL
+or ramp disables only that layer; an invalid flag or read deadline bypasses
+caching for the call).
+
+Defaults are namespace `urn`, local capacity 10,000, 50 ms remote reads,
+60,000 ms source calls (`SourceBudget::Default`; `SourceBudget::Unbounded`
+disables the deadline), sharing enabled, and shadow capacity one. Policy omits
+all cache layers by default. Invalid constructor configuration returns
+`ConfigError` from `build`; invalid operation configuration is returned before
+execution.
+
+`Remote` supplies atomic primary snapshots, complete client-stamped frame
+writes and surfaced invalidation errors. Writes are one native `SET`;
+invalidation dispatches `EVALSHA` and retries once with `EVAL`. No value write
+creates or extends a watermark. `DialCache::invalidate` affects shared remote
+authority; other processes' local entries and already acquired snapshots
+retain the documented lifetime rules.
+
+`Clock` separates wall time from elapsed time; `Runtime` supplies detached
+task admission and timers. The defaults are `SystemClock` (aligned to the
+process-wide millisecond grid used by local expiry) and `TokioRuntime`. The
+`test-util` feature ships `testing::TestExecutor`, a deterministic
+single-threaded executor with a virtual clock that runs the cache's detached
+work to quiescence on demand and delivers timers only when a test advances
+time; the conformance harness is built on it.
+
+## Values, codecs and observability
+
+`JsonCodec` (serde_json) is the default; `Codec<T>` is asynchronous, and
+`FromSync` adapts a synchronous `SyncCodec`. The TypeScript `undefined`
+sentinel decodes as JSON `null`, so `Option<T>` destinations read it as
+`None`. Compression defaults to a 4,096-byte threshold and zstd level 3;
+`disable_compression` stores payloads raw while reads still accept compressed
+entries. The wire contract requires interoperable decompression, not identical
+compressed bytes.
+
+`Observer` receives every public diagnostic as a typed `Event`. Shadow
+validation exists only to be observed, so a job is admitted only when the
+observer opts in through `observes_shadow_outcomes`; the bundled exporters do.
+`Logger` receives structured `LogEvent`s and defaults to the `log` facade.
+Mismatch logging is opt-in, confirmed, bounded, and previews values through
+the operation's `preview` (JSON for serde values). Observer and logger failures
+never change a cache, source or maintenance result.
+
+## Validation and reproducing a trace
+
+Use the repository [Make targets](../Makefile) from its root. CI pins Rust
+1.98.1, Go 1.27.1, Node 24 and pnpm 10.33.0. Rust conformance tests use the
+shared Node replay coordinator for command mappings and assertions; the crate
+itself has no Node dependency.
+
+```sh
+make check-rust     # fmt, clippy, unit tests, protocol vectors, fixed scenarios and committed smoke histories
+make formal         # Quint model checks, full corpus, then TypeScript, Go and Rust replay
+make formal-rust    # Complete prepared Rust replay of the generated corpus
+```
+
+Without overrides, `cargo test --all-features --test conformance` replays the
+committed smoke histories, every fixed scenario and every protocol vector.
+The same `DIALCACHE_*_TRACE_DIR` / `_TRACE_FILE` selectors as Go replay a
+directory or one history; `DIALCACHE_WITNESS_EVIDENCE_DIR` binds the shared
+witness evidence and `DIALCACHE_RUST_REPORT` names the JSONL assertion report
+the completion checker consumes. Reports and traces are kept in
+`.formal-traces/`.
+
+```sh
+DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/regressions/shadow/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest.itf.json" \
+  cargo test --manifest-path rust/Cargo.toml --all-features --test conformance
+```
+
+`tests/settlement_control.rs` is the no-settle control required of every
+port: a driver that reports observations before the settlement drain fails
+every behavior-driver-backed smoke history.
+
+## Adaptations
+
+- Explicit `Scope` handles replace the implicit async context of TypeScript
+  and the `context.Context` of Go.
+- Values are `Arc<T>`; sources return `Result<T, BoxError>`.
+- The default shadow comparator is `PartialEq`; `NaN` therefore differs from
+  itself where the TypeScript default treats it as equal.
+- Local storage failures are exposed through the `LocalStore` trait rather
+  than a clock fault.
+- The core replay, the Prometheus exporter and the Redis adapter follow their
+  Go counterparts; native Redis integration is not yet part of the completion
+  claim (see `formal/profiles.json`).

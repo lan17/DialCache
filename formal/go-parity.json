@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "7054107347f57a452e17de99f74310553b7af4350363c674e70ff8184d0610be",
     "executionSha256": "feee09a3487deb2694f8784b7e8d2d0ee28050dae03ac43ac2613608ce5ab1c6",
-    "sourceAuditSha256": "4bd6d53038723b133a52e17303342c5a7f46c395f250073d2e1c55fd1d87ea33",
+    "sourceAuditSha256": "09e9981795420d50cbd30d7f56ef4aeec750724961e794c2dd5526199dc91446",
     "quintCaseAuditSha256": "dcb576948a68a066e43259d4bee2b3cdadbe82e657ae9af99e4b21ed7b95dbb3",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
@@ -18305,14 +18305,14 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "4bd6d53038723b133a52e17303342c5a7f46c395f250073d2e1c55fd1d87ea33",
+    "sha256": "09e9981795420d50cbd30d7f56ef4aeec750724961e794c2dd5526199dc91446",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",
     "sources": [
       {
         "path": "README.md",
-        "sha256": "17cd061cde252e466ba94fced8615d3bc7d2a6b88cced14fe62c3572dc86c173",
+        "sha256": "73fd3028635e25c046ff3af486f58ea18b2754038b60c58e12c7d9cc2624bfa5",
         "entries": 6,
         "contracts": [
           "B01",
