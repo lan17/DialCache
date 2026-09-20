@@ -116,18 +116,23 @@ module remote_io {
   // and its flight registered (shared when the reply coalesces over a shared
   // layer) so a follower released while it is pending joins it. The flight's
   // publication authority is fixed when the read settles.
+  // A read held over a flight: counted, budgeted on the io channel (one row
+  // per dispatched read), the record under the drivers' next read index. A
+  // caller's read is dispatched here at release; a job's confirmation read is
+  // held the same way (`shadow`).
+  pure def holdRead(state: Held[r], flight: int, ttls: Ttls, budget: int): Held[r] = {
+    reads: state.reads.append({ read: state.o.reads, flight: flight, ttls: ttls }),
+    io: { budgets: state.io.budgets.append(budget), ...state.io },
+    o: { reads: state.o.reads + 1, ...state.o },
+    ...state
+  }
   pure def dispatchRead(state: Held[r], layout: Serving::Layout, judged: Serving::LayeredRelease, ttls: Ttls, budget: int): Held[r] = {
     val call = judged.call
     val registered = Flights::registerSource(state,
       Serving::sourceOf({ instance: call.instance, key: call.key, localMs: 0, fence: NO_FENCE, retentionMs: 0 },
         CALL_PENDING, judged.effective.coalesce and sharedLayers(judged.effective.layers)),
       judged.caller, judged.decision.slot, judged.effective.coalesce, Serving::identity(layout, call))
-    {
-      reads: registered.reads.append({ read: state.o.reads, flight: state.sources.length(), ttls: effectiveTtls(judged.effective, ttls) }),
-      io: { budgets: registered.io.budgets.append(budget), ...registered.io },
-      o: { reads: registered.o.reads + 1, ...registered.o },
-      ...registered
-    }
+    holdRead(registered, state.sources.length(), effectiveTtls(judged.effective, ttls), budget)
   }
   // The release applied from a judgment already made on this state
   // (`Serving::judgeRelease` with the remote layer unobserved): a traversal

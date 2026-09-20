@@ -32,8 +32,8 @@ module shadow_jobs {
   pure val SERVING: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: false }
   pure val DARK: Resolution = { layers: { request: false, local: false, remote: false }, coalesce: false }
   pure val TTLS: Ttls = { localMs: 0, freshMs: 1000, retentionMs: 5000 }
-  pure val SHADOWING: Shadow::Shadowing = { selected: true, capacity: 1, budgetMs: 100 }
-  pure val UNSELECTED: Shadow::Shadowing = { selected: false, capacity: 1, budgetMs: 100 }
+  pure val SHADOWING: Shadow::Shadowing = { selected: true, limits: { capacity: 1, budgetMs: 100 } }
+  pure val UNSELECTED: Shadow::Shadowing = { selected: false, limits: { capacity: 1, budgetMs: 100 } }
   pure def call(key: int): Call = { instance: 0, key: key, context: 1, enabled: true, keyFailed: false }
   // A call inside the one persistent scope, the scope a run can close.
   pure def scopedCall(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }
@@ -234,8 +234,8 @@ module shadow_jobs {
   // A budget delivered inside an advance is delivered at its own instant, in
   // registration order, before the clock reaches the target.
   run budgetsDeliverInRegistrationOrderTest = init
-    .then(beginWith(0, DARK, Recovery::ALLOW, { selected: true, capacity: 2, budgetMs: 100 })).then(advanceBy(10))
-    .then(beginWith(1, DARK, Recovery::ALLOW, { selected: true, capacity: 2, budgetMs: 100 }))
+    .then(beginWith(0, DARK, Recovery::ALLOW, { selected: true, limits: { capacity: 2, budgetMs: 100 } })).then(advanceBy(10))
+    .then(beginWith(1, DARK, Recovery::ALLOW, { selected: true, limits: { capacity: 2, budgetMs: 100 } }))
     .expect(s.deadlines.length() == 2)
     .then(advanceBy(1000))
     .expect(s.o.shadow == List("timeout", "timeout") and s.now == 1010 and s.deadlines == List()

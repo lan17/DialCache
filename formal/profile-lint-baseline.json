@@ -104,8 +104,15 @@
       "id": "admission",
       "model": "formal/dialcache-admission-conformance.qnt",
       "module": "dialcache_admission_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 65
+      "libraryTransitions": [
+        "remote_frames::seedFrame",
+        "shadow::advance",
+        "shadow::beginHeld",
+        "shadow::settleLoad",
+        "shadow::settleLoader",
+        "shadow::settleRead"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "layers",

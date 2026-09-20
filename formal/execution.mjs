@@ -503,7 +503,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'effects-late-source-accepted',
   'scope-late-source-repopulates-closed-memo',
   'scope-source-error-memoized',
-  'admission-duplicate-key-admitted',
   'layers-process-flight-crosses-instance',
   'layers-late-memo-into-closed-scope',
   'independent-fresh-frame-retained',

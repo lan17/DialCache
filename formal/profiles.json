@@ -121,7 +121,8 @@
         "formal/replay/witnesses/index.mjs",
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
-        "formal/replay/witnesses/admission.mjs"
+        "formal/replay/witnesses/admission.mjs",
+        "formal/replay/witnesses/fidelity.mjs"
       ],
       "inputEncoding": "explicit-v1"
     },

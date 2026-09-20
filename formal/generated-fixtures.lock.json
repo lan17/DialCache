@@ -10,7 +10,7 @@
     "formal/cohort-boundaries.qnt": "700f0b9ee734f2511b3c7f10138b9636cef93bc1045b653479a05be1766e3407",
     "formal/compact-json.mjs": "fe180d42ea438f915a011accf79728701fd51222877d39adbda8ea3ebf3f4bfb",
     "formal/conformance-observations.qnt": "76e26fb0c5802a13c63f0819071b5326b1586cab187c73d8b204ec7da70f5c2f",
-    "formal/dialcache-admission-conformance.qnt": "5fa092c302a54ecef517cf2dec44d6298f065188b203fcc4390fda694540f206",
+    "formal/dialcache-admission-conformance.qnt": "441b06924d7bc85c4f383891e2f06f44c5905b0847bd362266824c1354567430",
     "formal/dialcache-conformance.qnt": "3e91cad0afa6ba44353d651078fdf6284df0354ca82de0e3712dfe4f243244d7",
     "formal/dialcache-effects-conformance.qnt": "7d4f2fbade8c5cb9e2fdf9a44d71a90e10ecd868bb69db1c1b33b7bc7a166617",
     "formal/dialcache-independent-conformance.qnt": "d9b1e48724ce966905cae215ff0640a0a3dfb6248acb4d86f0d704d06416cc49",
@@ -23,7 +23,7 @@
     "formal/dialcache-runtime-boundaries-conformance.qnt": "80b33bf9efb34998e30b59df5872a797709cdb4842e47c59b8470e656c3b3d07",
     "formal/dialcache-scope-conformance.qnt": "7cde548402db5767ad3175baa9266f0c318b68c4cda4eb5b3f7727c350c24e1b",
     "formal/dialcache-shadow-conformance.qnt": "d0d95566594189a89401fe498f7b341c2864c3d62ea240e09aa427a7d8340425",
-    "formal/dialcache-shadow-layers-conformance.qnt": "8018002d0d6406a87080ffc2b2e5dbe8a74ae37ec553804c057c13e90aa3999c",
+    "formal/dialcache-shadow-layers-conformance.qnt": "73ba6119d0e26f740551c96875c0b41d49b647433c95a9fbb18271ce47ed0fef",
     "formal/dialcache-source-budgets-conformance.qnt": "fb9707785725add09358fb8c0c7cb764f86cd42e659ed1f4cc459fd5afe93574",
     "formal/fixture-recipes.json": "a0e48d32299b5a0f05a06c514655af5c16a78ca40e5eec2eb01b0945cada20d5",
     "formal/generated-fixtures.mjs": "f73a527cbbc0178be167c11ff8ff21985f05976379ae4054d5f61caa889e34c2",
@@ -46,12 +46,12 @@
     "formal/kernel/receipts.qnt": "d73f8ce5293f4b782d3bf12c0ee68c94068d256a931ed415e33f862ef88eec07",
     "formal/kernel/recovery.qnt": "af804a4ec6f8766c5931cb05bc173d9be7687e23c009e91d07de713ebbeee8bf",
     "formal/kernel/remote-frames.qnt": "5d856638784ab205f059377706c04f01e1bf8472891b5e8c5dd894b43623b52f",
-    "formal/kernel/remote-io.qnt": "036470e8a0e6f1f9f6929fb720bd2016ca1243bac90a0b88cab7a063a7b7d293",
+    "formal/kernel/remote-io.qnt": "c130e8c1c6bb675a621270b415da31edbbb0e6a5b6a34d1b79f5bf1f9555c325",
     "formal/kernel/remote-writes.qnt": "04592d49e14a905a3154e2dafb0f8cfa44384a1f495a302b76e5c6dde34491cd",
     "formal/kernel/request-memo.qnt": "e7897bfe9949a4d31b8138b35c32a7df0939e81e1f9c13739340a794a3d5073f",
     "formal/kernel/runtime-policy.qnt": "41ebb180f8b8b561d0db43b237abbee04e69613521436f6c624241cfece536ae",
     "formal/kernel/serving.qnt": "6c0af5d10fc99afcf23fbe3e06091bff0b8b5e1a91a2c67ea3e2080555f1f95e",
-    "formal/kernel/shadow.qnt": "00b8e713faedcae0a21f53159332cf15136e36ac2ef6774f5bb1edfeabf65929"
+    "formal/kernel/shadow.qnt": "89fc43ef1d5806a9eb0257d566ba3abbb5fe69970ecc42985a4e90b733259ade"
   },
   "artifacts": {
     "formal/conformance-smoke.itf.json": "be38ab847b7a5d4c15914bd6bd2fd2fd72cb2fc9af7edb15ba209c53f2ccfa37",

@@ -140,7 +140,7 @@ module dialcache_shadow_layers_conformance {
     not(ordinaryStaleCandidate(choice % KEYS)),
     input' = { name: "beginCall", choice: choice },
     s' = Shadow::begin(s, LAYOUT, call(choice), s.resolved, s.ttls, Recovery::ALLOW,
-      { selected: s.shadow, capacity: JOB_CAPACITY, budgetMs: JOB_BUDGET_MS })
+      { selected: s.shadow, limits: { capacity: JOB_CAPACITY, budgetMs: JOB_BUDGET_MS } })
   }
   action beginCall = {
     nondet choice = 0.to(14).oneOf()
