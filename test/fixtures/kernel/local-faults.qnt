@@ -5,8 +5,10 @@
 // (so a settlement after the fault clears publishes nothing locally while
 // memoizing and refilling), that a remote hit under the fault warms nothing,
 // that a settlement under the fault stores nothing locally while its callers
-// receive the value and the remote refill proceeds, and that a healthy call
-// after the fault clears publishes again.
+// receive the value and the remote refill proceeds, that a healthy call
+// after the fault clears publishes again, and that the fault leaves the
+// layers and the coalescing as the reply resolved them: two callers under
+// the fault share one source exactly as two healthy callers do.
 module local_faults_fixture {
   import conformance_observations.* from "../../../formal/conformance-observations"
   import encodings.* from "../../../formal/kernel/encodings"
@@ -97,6 +99,26 @@ module local_faults_fixture {
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
     .then(settle(VALUE_TWO))
     .expect(s.localValues == List(VALUE_TWO))
+
+  // The fault hides the local value for the read and withdraws the warm, not
+  // the layer or the coalescing: with the remote layer off, two transient
+  // callers under the fault join one shared source (owners equal, one
+  // loader) exactly as two healthy callers do, over a present local entry
+  // neither faulted caller reads; the faulted source captures no local TTL,
+  // so its settlement after the fault clears leaves the entry as it was.
+  run faultedCallersShareOneSourceTest = init
+    .then(begin(TRANSIENT, NO_REMOTE_LAYER)).then(begin(TRANSIENT, NO_REMOTE_LAYER))
+    .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 1
+      and s.owners == List(0, 0) and s.sources.nth(0).shared and s.sources.nth(0).localMs == TTL_MS)
+    .then(settle(VALUE_ONE))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.localValues == List(VALUE_ONE))
+    .then(fault(true)).then(begin(TRANSIENT, NO_REMOTE_LAYER)).then(begin(TRANSIENT, NO_REMOTE_LAYER))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING, CALL_PENDING) and s.o.loaders == 2
+      and s.owners == List(0, 0, 1, 1) and s.sources.nth(1).shared and s.sources.nth(1).localMs == 0
+      and s.o.reads == 0)
+    .then(fault(false)).then(settle(VALUE_TWO))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.localValues == List(VALUE_ONE)
+      and s.o.writes == 0)
 
   // A rejected source under the fault publishes nothing anywhere and leaves
   // the entry the fault protected.

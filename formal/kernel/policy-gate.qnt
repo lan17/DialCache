@@ -11,6 +11,12 @@ module policy_gate {
   type Held = { policyCall: int, caller: int, call: Call }
   type Gated[r] = { held: List[Held] | r }
 
+  // The key is the policy-call count at admission (`serving::entered`), which
+  // advances only where the layout has a policy provider: a composition that
+  // holds replies across steps needs `serving::Layout.policyProvider`, since
+  // without one every held caller would share key 0, `entry` would return the
+  // first and `release` drop them all. A layout without a provider composes
+  // immediate replies only, which hold and release within one step.
   pure def hold(state: Gated[r], policyCall: int, caller: int, call: Call): Gated[r] =
     { held: state.held.append({ policyCall: policyCall, caller: caller, call: call }), ...state }
   pure def holding(state: Gated[r]): bool = state.held.length() > 0

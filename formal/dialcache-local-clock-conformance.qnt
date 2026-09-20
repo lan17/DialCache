@@ -139,6 +139,10 @@ module dialcache_local_clock_conformance {
     and s.owners.indices().forall(caller => s.owners.nth(caller) < 0 or s.o.calls.nth(caller) == s.sources.nth(s.owners.nth(caller)).result)
     and INSTANCE_IDS.forall(instance => s.localValues.nth(instance) == NO_VALUE
       or s.sources.indices().exists(i => s.sources.nth(i).instance == instance and s.sources.nth(i).result == s.localValues.nth(instance)))
+  // A default instance resolves policy from its key's configuration and makes
+  // no provider call, whatever it serves or starts (the layout's
+  // `policyProvider: false`, read by `Serving::entered`).
+  val noProviderMakesNoPolicyCall = s.o.policyCalls == 0
 
   run fractionalInsertionExpiresAtWholeMillisecondTest = init
     .then(construct(0)).then(elapse(700)).then(callWith(0, VALUE_ONE))

@@ -375,7 +375,8 @@
       "invariants": [
         "clockIsOnTheGrid",
         "callsServeLiveEntriesOrRunTheSource",
-        "publicCallsMatchSources"
+        "publicCallsMatchSources",
+        "noProviderMakesNoPolicyCall"
       ],
       "profile": "local-clock",
       "generate": {

@@ -4556,7 +4556,7 @@
       "case": "C27.local-read-failure",
       "reference": "formal/kernel/local-faults.qnt:begin",
       "kind": "helper",
-      "scope": "Admission under an armed fault withdraws the reply's local TTL, so the traversal reads nothing from local storage, a remote hit warms nothing and the source it starts captures no local TTL (publication-ineligible whatever the switch says at settlement)."
+      "scope": "Admission under an armed fault judges the layered release with the fault as its argument (serving.judgeReleaseUnder) and applies it (serving.releaseJudged): the traversal reads nothing from local storage, a remote hit warms nothing and the source it starts captures no local TTL (publication-ineligible whatever the switch says at settlement), while the layers and the coalescing stay as the reply resolved them."
     },
     {
       "case": "C27.local-write-failure",

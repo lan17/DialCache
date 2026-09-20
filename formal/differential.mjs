@@ -50,9 +50,14 @@ export const cursorVariable = 'replayCursor';
 // The explicit-input descriptors the differential replays: the feature
 // profiles' (formal/replay/features.mjs) and the local-clock profile's, whose
 // driver has its own runner (formal/replay/local-clock.mjs). A descriptor may
-// bind an input name to the public action a tree declares for it
-// (`actionBindings`, the rule fixture recipes use): the binding applies only
-// where the tree's declaration of the input name is a parametrized action.
+// bind an input name to the public action a reference tree declares for it
+// (`actionBindings`): the binding exists for the local-clock texts from
+// before the wrapper rename (`call` their parametrized action, `callCache`
+// the public wrapper) and applies only where the tree's declaration of the
+// input name is a parametrized action (`boundAction`). It is transitional:
+// once the merge base with main carries the renamed text, delete the
+// local-clock descriptor's binding, `boundAction` with its two call sites in
+// prepareReplay, the `.d.mts` field and their tests.
 export const replayDescriptors = { ...profiles, 'local-clock': localClockDescriptor };
 
 const gitShow = (revision, path, cwd) => execFileSync('git', ['show', `${revision}:${path}`], { cwd, encoding: 'utf8', maxBuffer: 1 << 26 });

@@ -9,9 +9,9 @@
   },
   "inputs": {
     "semanticCasesSha256": "5d79666037ed2433fcabf837422ad86fe3e4450c2846b7e224bd31837e6eaa35",
-    "executionSha256": "137930eed33c601b50f5c855ec1bb65b97a372ed18e58f054a1e18553257c74e",
+    "executionSha256": "3eb9678d41a356bfc4a9e55a02480c0ead31f817b0154b0047e1eb21c509d1f6",
     "sourceAuditSha256": "c7b993023c75160feac4ccf631800f99514d236df00ebc7c943d9e5dd8651039",
-    "quintCaseAuditSha256": "bb3ca0d5e93902f6b7306e0072aaf3c6408eae544a88810d8e69fc3e5e7084cb",
+    "quintCaseAuditSha256": "0062643e7dc94107d6810d481eda520362ea422c268065ba44110dcaa270714c",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d"
@@ -29,7 +29,7 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 33,
-    "scheduledInvariants": 225,
+    "scheduledInvariants": 226,
     "scheduledRegressions": 434,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
