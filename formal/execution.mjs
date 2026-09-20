@@ -490,8 +490,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'local-failure-source-error-published',
   'runtime-boundaries-inclusive-cohort',
   'runtime-boundaries-inherited-sharing-ignores-default',
-  'shadow-layers-inclusive-c0-freshness',
-  'shadow-layers-fill-uses-current-retention',
   'local-clock-hit-renews-insertion',
   'source-budgets-outside-call-has-deadline',
   'source-budgets-settled-flight-stays-registered',

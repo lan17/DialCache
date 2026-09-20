@@ -274,48 +274,6 @@
       "remoteValue": true,
       "scope": true
     },
-    "shadow-layers": {
-      "calls": true,
-      "dumps": true,
-      "jobs": true,
-      "localExpires": true,
-      "localValues": true,
-      "localWriters": true,
-      "memo": true,
-      "now": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "policy": {
-        "choice": true,
-        "freshMs": true,
-        "local": true,
-        "request": true,
-        "retainedMs": true,
-        "serving": true,
-        "shadow": true
-      },
-      "remoteCreated": true,
-      "remoteExpires": true,
-      "remoteValues": true,
-      "sources": true,
-      "work": true,
-      "writes": true
-    },
     "local-clock": {
       "constructed": true,
       "entries": true,
@@ -1343,7 +1301,7 @@
             ["policy", 12],
             ["beginCall", 9]
           ],
-          "projection": "shadow-layers"
+          "projection": "observations"
         }
       ]
     },

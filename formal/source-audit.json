@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "ddcf33a04520e11890716e68dd15437440fed1084a977739034e72b64bed9441",
+      "sha256": "ccfb9d9abaa181ed0c8d613378cbfc7edcc383b22f564ca8427138022da10cde",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},

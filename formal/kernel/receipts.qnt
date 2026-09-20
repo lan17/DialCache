@@ -8,8 +8,8 @@ module receipts {
   // may have been warmed by the release and is kept here as read. A
   // receipted variant of the layered release: the release is judged once
   // (`serving::layeredRelease`) on the pre-release state, the slot is read
-  // from that same state, and the release itself is applied beside them; the
-  // traversal never reads the receipt.
+  // from that same state, and that one judgment is applied beside them
+  // (`serving::releaseJudged`); the traversal never reads the receipt.
   import encodings.* from "./encodings"
   import layer_policy.* from "./layer-policy"
   import serving as Serving from "./serving"
@@ -45,7 +45,7 @@ module receipts {
         localValue: state.localValues.nth(Serving::identity(layout, judged.call)),
         localExpires: state.localExpires.nth(Serving::identity(layout, judged.call))
       },
-      ...Serving::release(state, layout, policyCall, resolved, ttls)
+      ...Serving::releaseJudged(state, layout, judged, policyCall, ttls)
     }
   }
 }

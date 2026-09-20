@@ -232,11 +232,12 @@ module serving {
         Remote::fenceFor(state, call.key, layout.operationsPerEntity, remote.visible)), CALL_PENDING, resolved.coalesce and sharedLayers(layers)),
       caller, slot, resolved.coalesce, identity(layout, call))
   }
-  // A source no caller owns, started for diagnostic work beside the
-  // traversal: it counts against the profile, is probed as not participating
-  // (it started under no caller's scope), carries no publication authority
-  // (no local TTL, no retention, no fence) and, owned by nobody, completes no
-  // caller when it settles.
+  // A source no caller owns, started for work beside the traversal (the
+  // diagnostic source a served hit's shadow job runs, `shadow`): it counts
+  // against the profile, is probed as not participating (it started under no
+  // caller's scope), carries no publication authority (no local TTL, no
+  // retention, no fence) and, owned by nobody, completes no caller when it
+  // settles.
   pure def startDetachedSource(state: Served[r], layout: Layout, who: { instance: int, key: int | q }): Served[r] =
     Flights::registerDetached(started(state, layout, false),
       sourceOf({ instance: who.instance, key: who.key, localMs: 0, fence: NO_FENCE, retentionMs: 0 }, CALL_PENDING, false))
@@ -303,7 +304,8 @@ module serving {
   // read, or a read not made) and the decision. The remote observation is a
   // parameter: an atomic release
   // observes the frame (`layeredRelease`, the judgment `release` applies and
-  // a variant composed around it, `receipts`, judges on the same state); a
+  // the variants composed around it, `receipts`, `remote_writes` and
+  // `shadow`, judge on the same state); a
   // held release (`remote_io`) judges the same traversal with the remote layer
   // unobserved, so a decision that reaches it is `Starts` with the remote
   // layer on and the read is dispatched instead. It is judged on the state
@@ -359,10 +361,9 @@ module serving {
   // source with the authority the read fixed.
   //
   // `releaseJudged` applies a judgment already made on this state, so a
-  // variant that records beside the release judges once through
-  // `layeredRelease` and applies the same judgment (`receipts` judges its
-  // record on the pre-release state the same way); `release` is its
-  // composition with the atomic judgment.
+  // variant that records beside the release (`receipts`, `remote_writes`,
+  // `shadow`) judges once through `layeredRelease` and applies the same
+  // judgment; `release` is its composition with the atomic judgment.
   pure def releaseJudged(state: Served[r], layout: Layout, judged: LayeredRelease, policyCall: int, ttls: Ttls): Served[r] = {
     val applied = applyRelease(state, layout, judged, policyCall, ttls)
     val observed = if (judged.effective.layers.remote and reachesRemote(judged.decision.outcome)) {

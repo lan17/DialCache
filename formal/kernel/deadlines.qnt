@@ -42,15 +42,15 @@ module deadlines {
   // A profile whose drivers bound sources composes the budgeted variants of
   // the local lifecycle; one whose drivers hold and bound remote reads and
   // loaders composes the held variants. A module that bounds work of its own
-  // kind composes `Scheduled` alone, the clock and the pending deadlines
-  // (kind 2 is reserved for a job registry): its profile's callers run no
-  // source deadline, so that shape has no `sourceBudget` and no source
-  // registers one. The fold's expiry is passed only from inside the kernel,
-  // by the two instantiations here and by such a module's own expiry; a
-  // profile never passes an operator to the library (the composition lint
-  // reports an argument in a parameter position a kernel definition declares
-  // with an operator type, `expire` here, unless it names a kernel
-  // definition, following aliases and let-bound names).
+  // kind composes `Scheduled` alone, the clock and the pending deadlines (the
+  // shadow job registry, kind 2): its profile's callers run no source
+  // deadline, so that shape has no `sourceBudget` and no source registers
+  // one. The fold's expiry is passed only from inside the kernel, by the two
+  // instantiations here and by such a module's own expiry; a profile never
+  // passes an operator to the library (the composition lint reports an
+  // argument in a parameter position a kernel definition declares with an
+  // operator type, `expire` here, unless it names a kernel definition,
+  // following aliases and let-bound names).
   import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
@@ -61,14 +61,14 @@ module deadlines {
   import clock as Clock from "./clock"
 
   pure val UNBOUNDED = -1
-  // Kinds of bounded work; a shadow job (kind 2) is its module's to add.
+  // Kinds of bounded work; kind 2 is the shadow job registry's, `shadow`.
   pure val READ = 0
   pure val SOURCE = 1
 
   type Due = { kind: int, index: int, at: int }
   // The pending deadlines beside the clock: what registration, forgetting and
   // instant-ordered delivery read. A module that bounds work of its own kind
-  // composes this shape alone.
+  // (`shadow`'s jobs) composes this shape alone.
   type Scheduled[r] = { now: int, deadlines: List[Due] | r }
   // The budgeted shape adds the configured source budget and, per loader
   // ordinal, whether its external work has been delivered (a loader its

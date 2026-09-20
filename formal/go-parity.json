@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "21af44a072de654cf95bafab39de1da50ea53ef9e69e1397e3c4735179b39a12",
-    "executionSha256": "87f0d00c6634df4d0e2ced559ea7a159e505aae37c5a080c3510d4c63a18f599",
-    "sourceAuditSha256": "4d39d512662347140aabd1d83f7fe3d090ddf84d956c6541e08578d9f74ed755",
-    "quintCaseAuditSha256": "78b62b2e470e93f0517250fc6db50c55ee117f9fce23fd8364a16f5a397c3012",
+    "semanticCasesSha256": "3ca79f325d99912830efab5defe0a9b5302bacb274fbcc78a3838875ce2eca6c",
+    "executionSha256": "a1aec1a54c87163e023527ba582b10abb2a6b103a882786e40ca824b8677c4d5",
+    "sourceAuditSha256": "68b765959cffac2a9e49c72d758ee053cf23bbc2f8d58bf1190ea89634da5c85",
+    "quintCaseAuditSha256": "8367e331f3d8214eb0ab2cf0d5d18a95218d764942fc47418387bb26e96fae3d",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d"
@@ -28,13 +28,13 @@
     "casesWithQuintRegressionReplay": 168,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
-    "quintModels": 32,
-    "scheduledInvariants": 221,
-    "scheduledRegressions": 431,
+    "quintModels": 33,
+    "scheduledInvariants": 224,
+    "scheduledRegressions": 432,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 267
+    "exportedRegressionHistories": 268
   },
   "profiles": [
     {
@@ -508,6 +508,7 @@
         "retainedFreshC0StillComparesAfterFreshnessBoundaryTest",
         "expiredC0CanFillAndServeNewValueTest",
         "acquiredMissDoesNotRereadBeforeFillTest",
+        "localEntryExpiresAtItsInsertionTtlTest",
         "darkPropagatedTimeoutIsSourceFailureTest",
         "servedPropagatedTimeoutPreservesHitTest"
       ],
@@ -927,9 +928,9 @@
       "quintDefinitions": [
         "formal/dialcache-shadow-validation.qnt:callerEarlierLayerHit",
         "formal/dialcache-shadow-validation.qnt:admitJob",
-        "formal/dialcache-shadow-layers-conformance.qnt:begin",
-        "formal/dialcache-shadow-layers-conformance.qnt:publishFreshHit",
-        "formal/dialcache-shadow-layers-conformance.qnt:publishSource"
+        "formal/kernel/shadow.qnt:begin",
+        "formal/kernel/serving.qnt:warm",
+        "formal/kernel/serving.qnt:publish"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1774,7 +1775,8 @@
         "formal/dialcache-rule-checks.qnt:localBoundaryIsExclusive",
         "formal/dialcache-rule-checks.qnt:localGridUsesWholeMilliseconds",
         "formal/dialcache-source-budgets-conformance.qnt:localEntryExpiresAfterItsTtlTest",
-        "formal/dialcache-recovery-read-conformance.qnt:localEntryExpiresAtItsInsertionTtlTest"
+        "formal/dialcache-recovery-read-conformance.qnt:localEntryExpiresAtItsInsertionTtlTest",
+        "formal/dialcache-shadow-layers-conformance.qnt:localEntryExpiresAtItsInsertionTtlTest"
       ],
       "requiredGenerated": [
         {
@@ -1800,7 +1802,8 @@
       "quintReplays": [
         "policy/localHitDoesNotRenewInsertionTtlTest",
         "source-budgets/localEntryExpiresAfterItsTtlTest",
-        "recovery-read/localEntryExpiresAtItsInsertionTtlTest"
+        "recovery-read/localEntryExpiresAtItsInsertionTtlTest",
+        "shadow-layers/localEntryExpiresAtItsInsertionTtlTest"
       ],
       "generatedVectors": []
     },
@@ -2553,10 +2556,10 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:admit",
-        "formal/dialcache-shadow-layers-conformance.qnt:beginWrite",
-        "formal/dialcache-shadow-layers-conformance.qnt:dumpReply",
-        "formal/dialcache-shadow-layers-conformance.qnt:writeReply"
+        "formal/kernel/shadow.qnt:admitJobs",
+        "formal/kernel/remote-writes.qnt:holdDump",
+        "formal/kernel/shadow.qnt:releaseDump",
+        "formal/kernel/shadow.qnt:releaseWrite"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -2881,9 +2884,9 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:policyFor",
-        "formal/dialcache-shadow-layers-conformance.qnt:admit",
-        "formal/dialcache-shadow-layers-conformance.qnt:publishSource"
+        "formal/dialcache-shadow-layers-conformance.qnt:shadowFor",
+        "formal/kernel/shadow.qnt:admitJobs",
+        "formal/kernel/serving.qnt:publish"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -6506,9 +6509,9 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:admit",
-        "formal/dialcache-shadow-layers-conformance.qnt:tick",
-        "formal/dialcache-shadow-layers-conformance.qnt:settle"
+        "formal/kernel/shadow.qnt:admitJobs",
+        "formal/kernel/shadow.qnt:expireJob",
+        "formal/kernel/remote-writes.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -6560,8 +6563,8 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:policyFor",
-        "formal/dialcache-shadow-layers-conformance.qnt:admit"
+        "formal/dialcache-shadow-layers-conformance.qnt:shadowFor",
+        "formal/kernel/shadow.qnt:admitJobs"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -6638,8 +6641,8 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:begin",
-        "formal/dialcache-shadow-layers-conformance.qnt:startCaller"
+        "formal/kernel/shadow.qnt:begin",
+        "formal/kernel/serving.qnt:startSource"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -7054,7 +7057,7 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:settleJob"
+        "formal/kernel/shadow.qnt:settleJob"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -7212,9 +7215,9 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:startCaller",
-        "formal/dialcache-shadow-layers-conformance.qnt:admit",
-        "formal/dialcache-shadow-layers-conformance.qnt:settle"
+        "formal/kernel/serving.qnt:startSource",
+        "formal/kernel/shadow.qnt:admitJobs",
+        "formal/kernel/remote-writes.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -7260,9 +7263,9 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:admit",
-        "formal/dialcache-shadow-layers-conformance.qnt:tick",
-        "formal/dialcache-shadow-layers-conformance.qnt:settle"
+        "formal/kernel/shadow.qnt:admitJobs",
+        "formal/kernel/shadow.qnt:expireJob",
+        "formal/kernel/remote-writes.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -10394,8 +10397,8 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:tick",
-        "formal/dialcache-shadow-layers-conformance.qnt:settle"
+        "formal/kernel/shadow.qnt:expireJob",
+        "formal/kernel/remote-writes.qnt:settle"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10435,8 +10438,8 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:tick",
-        "formal/dialcache-shadow-layers-conformance.qnt:settle"
+        "formal/kernel/shadow.qnt:expireJob",
+        "formal/kernel/remote-writes.qnt:settle"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10475,8 +10478,8 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:settle",
-        "formal/dialcache-shadow-layers-conformance.qnt:settleJob"
+        "formal/kernel/remote-writes.qnt:settle",
+        "formal/kernel/shadow.qnt:settleJob"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10515,8 +10518,8 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:settle",
-        "formal/dialcache-shadow-layers-conformance.qnt:settleJob"
+        "formal/kernel/remote-writes.qnt:settle",
+        "formal/kernel/shadow.qnt:settleJob"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10561,9 +10564,9 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:publishSource",
-        "formal/dialcache-shadow-layers-conformance.qnt:begin",
-        "formal/dialcache-shadow-layers-conformance.qnt:settleJob"
+        "formal/kernel/serving.qnt:publish",
+        "formal/kernel/shadow.qnt:begin",
+        "formal/kernel/shadow.qnt:settleJob"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10609,9 +10612,9 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:finishCaller",
-        "formal/dialcache-shadow-layers-conformance.qnt:begin",
-        "formal/dialcache-shadow-layers-conformance.qnt:settleJob"
+        "formal/kernel/serving.qnt:complete",
+        "formal/kernel/shadow.qnt:begin",
+        "formal/kernel/shadow.qnt:settleJob"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10651,9 +10654,9 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:startCaller",
-        "formal/dialcache-shadow-layers-conformance.qnt:admit",
-        "formal/dialcache-shadow-layers-conformance.qnt:settle"
+        "formal/kernel/serving.qnt:startSource",
+        "formal/kernel/shadow.qnt:admitJobs",
+        "formal/kernel/remote-writes.qnt:settle"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10692,8 +10695,8 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:startCaller",
-        "formal/dialcache-shadow-layers-conformance.qnt:settle"
+        "formal/kernel/serving.qnt:startSource",
+        "formal/kernel/remote-writes.qnt:settle"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10855,9 +10858,9 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:fresh",
-        "formal/dialcache-shadow-layers-conformance.qnt:admit",
-        "formal/dialcache-shadow-layers-conformance.qnt:settleJob"
+        "formal/kernel/remote-frames.qnt:observe",
+        "formal/kernel/shadow.qnt:admitJobs",
+        "formal/kernel/shadow.qnt:settleJob"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10897,8 +10900,8 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:admit",
-        "formal/dialcache-shadow-layers-conformance.qnt:settleJob"
+        "formal/kernel/shadow.qnt:admitJobs",
+        "formal/kernel/shadow.qnt:settleJob"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -10937,8 +10940,8 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:admit",
-        "formal/dialcache-shadow-layers-conformance.qnt:settleJob"
+        "formal/kernel/shadow.qnt:admitJobs",
+        "formal/kernel/shadow.qnt:settleJob"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -11121,7 +11124,7 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-shadow-layers-conformance.qnt:admit"
+        "formal/kernel/shadow.qnt:admitJobs"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -18439,7 +18442,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "4d39d512662347140aabd1d83f7fe3d090ddf84d956c6541e08578d9f74ed755",
+    "sha256": "68b765959cffac2a9e49c72d758ee053cf23bbc2f8d58bf1190ea89634da5c85",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",

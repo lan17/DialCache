@@ -2,6 +2,18 @@ module dialcache_shadow_layers_conformance {
   import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
   import cohort_boundaries.* from "./cohort-boundaries"
+  import encodings.* from "./kernel/encodings"
+  import calls.* from "./kernel/calls"
+  import layer_policy.* from "./kernel/layer-policy"
+  import serving as Serving from "./kernel/serving"
+  import remote_frames as Remote from "./kernel/remote-frames"
+  import remote_writes as Writes from "./kernel/remote-writes"
+  import shadow as Shadow from "./kernel/shadow"
+  import deadlines as Deadlines from "./kernel/deadlines"
+  import recovery as Recovery from "./kernel/recovery"
+  import flights as Flights from "./kernel/flights"
+  import clock as Clock from "./kernel/clock"
+  import policy_gate as Gate from "./kernel/policy-gate"
   // Composition: request/local reuse, independent caller sources, and one
   // per-instance registry shared by served-hit and ramped-down shadow jobs.
   // C18/C21/C47/C49/C54 govern captured policy, admission, and publication.
@@ -13,8 +25,13 @@ module dialcache_shadow_layers_conformance {
   // Three keys, two instances, three persistent scopes, twelve caller starts.
   // Coalescing is explicitly off. Ordinary stale-recovery reads are excluded;
   // dark acquisition includes stale bytes to distinguish its lack of recovery.
-  // The explicit input envelope is the portable driver input, including in
-  // deterministic regression traces. Expected cache/ownership state is not.
+  // Every rule is a kernel transition (formal/kernel): the layered atomic
+  // release with held refills and atomic stale-on-error (remote_writes), the
+  // shadow job registry beside it (shadow) with its budgets (deadlines), the
+  // frames a seed stores (remote_frames). This module owns the bounded state,
+  // the fixture decoding (the layers, TTLs and cohort selection a policy code
+  // resolves to, the frame a seed choice names), the input choices and the
+  // guards. The explicit input envelope is the portable driver input.
 
   pure val KEYS = 3
   pure val INSTANCES = 2
@@ -24,8 +41,6 @@ module dialcache_shadow_layers_conformance {
   pure val JOB_BUDGET_MS = 60000
   pure val LOCAL_TTL_MS = 60000
   pure val SEED_TTL_MS = 180000
-  pure val NO_OWNER = -1
-  pure val NO_VALUE = 0
   pure val DARK_ALL = 0
   pure val DARK_REQUEST = 1
   pure val DARK_LOCAL = 2
@@ -41,257 +56,95 @@ module dialcache_shadow_layers_conformance {
   pure val SERVED_ALL = 12
   pure val SERVED_CHANGED_FILL = 13
   pure val SHADOW_SAMPLE_NUMERATOR = 3203834406
-  pure val WAITING_SOURCE = 0
-  pure val SERIALIZING = 1
-  pure val WRITING = 2
-  pure val FINISHED = 3
+  // Three keys per instance and per scope row, three persistent scopes, one
+  // operation per entity; the drivers probe each source's scope.
+  pure val LAYOUT: Serving::Layout = {
+    keysPerInstance: KEYS, keysPerScope: KEYS, persistentContexts: SCOPES, operationsPerEntity: 1, probeSourceScope: true
+  }
 
-  type Policy = {
-    request: bool, local: bool, serving: bool, shadow: bool,
-    freshMs: int, retainedMs: int, choice: int
-  }
-  type Call = { source: int, hit: int, slot: int }
-  type Source = {
-    call: int, instance: int, key: int, slot: int, local: bool,
-    remote: bool, retainedMs: int, result: int
-  }
-  type Job = {
-    source: int, instance: int, key: int, dark: bool, cached: int,
-    admittedAt: int, cachedCreated: int, freshMs: int,
-    policyChoice: int, retainedMs: int, phase: int,
-    timedOut: bool
-  }
-  type Write = {
-    source: int, job: int, key: int, retainedMs: int,
-    phase: int, stamp: int
-  }
+  // State: the layered shape with its held refills, recovery snapshots and
+  // shadow jobs with their budgets, and the policy in force decoded once at
+  // the policy input (the code, for the guards; the layers, TTLs and cohort
+  // selection the traversal and the jobs read).
   type State = {
-    o: Observation, now: int, policy: Policy,
-    calls: List[Call], sources: List[Source], jobs: List[Job],
-    work: List[Write], dumps: List[int], writes: List[int],
-    memo: List[int], localValues: List[int], localExpires: List[int],
-    remoteValues: List[int], remoteCreated: List[int], remoteExpires: List[int],
-    localWriters: List[int]
+    o: Observation,
+    now: int, skew: int, remoteAvailable: bool, tracked: bool, capacity: int,
+    readFailed: bool, dumpFailed: bool, writeFailed: bool,
+    policy: int, resolved: Resolution, ttls: Ttls, shadow: bool,
+    closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
+    localValues: List[int], localExpires: List[int], lru: List[List[int]],
+    remoteValues: List[int], created: List[int], expires: List[int], watermark: List[int],
+    sources: List[Serving::LayeredSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held],
+    dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite], retained: List[Recovery::Snapshot],
+    jobs: List[Shadow::Job], deadlines: List[Deadlines::Due]
   }
   var s: State
   var input: { name: str, choice: int }
 
-  pure def zeros(n: int): List[int] =
-    0.to(n - 1).fold(List(), (out, _) => out.append(0))
-  pure def policyFor(choice: int): Policy = {
-    request: Set(DARK_ALL, DARK_REQUEST, DARK_CHANGED_FILL, SERVED_ALL).contains(choice),
-    local: Set(DARK_ALL, DARK_LOCAL, DARK_INVALID_SHADOW, DARK_CHANGED_FILL, SERVED_ALL).contains(choice),
-    serving: Set(SERVED_NONE, SERVED_NO_SHADOW, SERVED_ALL, SERVED_CHANGED_FILL).contains(choice),
-    shadow: if (Set(COHORT_BELOW, COHORT_AT, COHORT_ABOVE).contains(choice))
-      cohortAdmits(SHADOW_SAMPLE_NUMERATOR,
-        thresholdForRelation(SHADOW_SAMPLE_NUMERATOR, choice - COHORT_BELOW))
-      else not(Set(SERVED_NO_SHADOW, DARK_NO_SHADOW, DARK_INVALID_SHADOW,
-        SERVED_CHANGED_FILL).contains(choice)),
-    freshMs: if (Set(DARK_CHANGED_FILL, SERVED_CHANGED_FILL).contains(choice)) 120000 else 60000,
-    retainedMs: if (Set(DARK_CHANGED_FILL, SERVED_CHANGED_FILL).contains(choice)) 180000 else 120000,
-    choice: choice
+  // Input decoding (reads no state) -------------------------------------------
+  pure def zeros(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(0))
+  pure def slots(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(NO_OWNER))
+  pure def changedFill(choice: int): bool = choice == DARK_CHANGED_FILL or choice == SERVED_CHANGED_FILL
+  pure def cohortCode(choice: int): bool = Set(COHORT_BELOW, COHORT_AT, COHORT_ABOVE).contains(choice)
+  // The layers a policy code enables; no reply coalesces.
+  pure def resolvedFor(choice: int): Resolution = {
+    layers: {
+      request: Set(DARK_ALL, DARK_REQUEST, DARK_CHANGED_FILL, SERVED_ALL).contains(choice),
+      local: Set(DARK_ALL, DARK_LOCAL, DARK_INVALID_SHADOW, DARK_CHANGED_FILL, SERVED_ALL).contains(choice),
+      remote: Set(SERVED_NONE, SERVED_NO_SHADOW, SERVED_ALL, SERVED_CHANGED_FILL).contains(choice)
+    },
+    coalesce: false
   }
+  // A 60 s local insertion TTL; the changed-fill codes carry a 120 s freshness
+  // and a 180 s retention, the others 60 s and 120 s.
+  pure def ttlsFor(choice: int): Ttls = {
+    localMs: LOCAL_TTL_MS,
+    freshMs: if (changedFill(choice)) 120000 else 60000,
+    retentionMs: if (changedFill(choice)) 180000 else 120000
+  }
+  // Whether the fixture key's cohort is selected: the drivers' shadow ramp is
+  // a full ramp, none (an invalid ramp admits nobody), or a cohort boundary
+  // compared strictly against the published numerator (C47).
+  pure def shadowFor(choice: int): bool =
+    if (cohortCode(choice)) cohortAdmits(SHADOW_SAMPLE_NUMERATOR, thresholdForRelation(SHADOW_SAMPLE_NUMERATOR, choice - COHORT_BELOW))
+    else not(Set(SERVED_NO_SHADOW, DARK_NO_SHADOW, DARK_INVALID_SHADOW, SERVED_CHANGED_FILL).contains(choice))
   pure def instance(context: int): int = if (context == 2 or context == 4) 1 else 0
-  pure def liveJobs(state: State): Set[int] =
-    state.jobs.indices().filter(i => state.jobs.nth(i).phase != FINISHED)
-  pure def frame(state: State, key: int): int =
-    if (state.now < state.remoteExpires.nth(key)) state.remoteValues.nth(key) else NO_VALUE
-  pure def fresh(state: State, key: int): int =
-    if (freshAgeAllowed(state.remoteCreated.nth(key), state.now, state.policy.freshMs)) frame(state, key) else NO_VALUE
-  pure def ordinaryStaleCandidate(state: State, key: int): bool =
-    frame(state, key) > NO_VALUE and fresh(state, key) == NO_VALUE
-      and recoveryAgeAllowed(state.remoteCreated.nth(key), state.now, state.policy.retainedMs)
+  pure def call(choice: int): Call =
+    { instance: instance(choice / KEYS), key: choice % KEYS, context: choice / KEYS, enabled: true, keyFailed: false }
+  pure def seedValue(choice: int): int = if (choice % 4 == 1) VALUE_TWO else VALUE_ONE
+  pure def seedAge(choice: int): int = if (choice % 4 == 2) 59999 else if (choice % 4 == 3) 60000 else 0
 
-  action init = all {
-    input' = { name: "init", choice: -1 },
-    s' = {
-      o: empty, now: 100000, policy: policyFor(DARK_ALL),
-      calls: List(), sources: List(), jobs: List(), work: List(),
-      dumps: List(), writes: List(), memo: zeros(SCOPES * KEYS),
-      localValues: zeros(INSTANCES * KEYS), localExpires: zeros(INSTANCES * KEYS),
-      remoteValues: zeros(KEYS), remoteCreated: zeros(KEYS), remoteExpires: zeros(KEYS),
-      localWriters: 0.to(INSTANCES * KEYS - 1).fold(List(), (out, _) => out.append(NO_OWNER))
-    }
+  // The initial fixture: the policy of code 0 in force, nothing stored.
+  pure val INITIAL: State = {
+      o: empty,
+      now: 100000, skew: 0, remoteAvailable: true, tracked: true, capacity: KEYS,
+      readFailed: false, dumpFailed: false, writeFailed: false,
+      policy: DARK_ALL, resolved: resolvedFor(DARK_ALL), ttls: ttlsFor(DARK_ALL), shadow: shadowFor(DARK_ALL),
+      closed: List(false, false, false), memo: zeros(SCOPES * KEYS), requestFlights: slots(SCOPES * KEYS), processFlights: slots(INSTANCES * KEYS),
+      localValues: zeros(INSTANCES * KEYS), localExpires: zeros(INSTANCES * KEYS), lru: List(List(), List()),
+      remoteValues: zeros(KEYS), created: zeros(KEYS), expires: zeros(KEYS), watermark: zeros(KEYS),
+      sources: List(), owners: List(), memoSlots: List(), held: List(),
+      dumps: List(), writes: List(), retained: List(), jobs: List(), deadlines: List()
   }
+  action init = all { input' = { name: "init", choice: -1 }, s' = INITIAL }
 
-  // Public cache/source results are owned by callers. Detached served-hit
-  // sources never enter this path and cannot warm request or local storage.
-  pure def finishCaller(state: State, call: int, value: int): State = {
-    val entry = state.calls.nth(call)
-    {
-      o: { calls: state.o.calls.replaceAt(call, value), ...state.o },
-      memo: if (entry.slot >= 0 and value != SOURCE_ERROR)
-        state.memo.replaceAt(entry.slot, value) else state.memo,
-      ...state
-    }
-  }
-  pure def publishSource(state: State, source: int): State = {
-    val entry = state.sources.nth(source)
-    val localSlot = entry.instance * KEYS + entry.key
-    finishCaller({
-      localValues: if (entry.local)
-        state.localValues.replaceAt(localSlot, entry.result) else state.localValues,
-      localExpires: if (entry.local)
-        state.localExpires.replaceAt(localSlot, state.now + LOCAL_TTL_MS) else state.localExpires,
-      localWriters: if (entry.local)
-        state.localWriters.replaceAt(localSlot, source) else state.localWriters,
-      ...state
-    }, entry.call, entry.result)
-  }
-  // A validated serving hit can warm the active local layer. This publication
-  // belongs to the foreground read; a dark C0 and a diagnostic source cannot
-  // use it. Source ownership checks deliberately exclude this separate origin.
-  pure def publishFreshHit(state: State, call: int, inst: int, key: int, value: int): State = {
-    val slot = inst * KEYS + key
-    finishCaller({
-      localValues: if (state.policy.local)
-        state.localValues.replaceAt(slot, value) else state.localValues,
-      localExpires: if (state.policy.local)
-        state.localExpires.replaceAt(slot, state.now + LOCAL_TTL_MS) else state.localExpires,
-      localWriters: if (state.policy.local)
-        state.localWriters.replaceAt(slot, NO_OWNER) else state.localWriters,
-      ...state
-    }, call, value)
-  }
-  pure def finishJob(state: State, job: int, outcome: str): State = {
-    val entry = state.jobs.nth(job)
-    {
-      jobs: state.jobs.replaceAt(job, { phase: FINISHED, ...entry }),
-      o: { shadow: if (entry.timedOut) state.o.shadow else state.o.shadow.append(outcome), ...state.o },
-      ...state
-    }
-  }
-  pure def beginWrite(state: State, source: int, job: int, retainedMs: int): State = {
-    val entry = state.sources.nth(source)
-    {
-      work: state.work.append({ source: source, job: job, key: entry.key,
-        retainedMs: retainedMs, phase: SERIALIZING, stamp: 0 }),
-      dumps: state.dumps.append(state.work.length()),
-      jobs: if (job >= 0) state.jobs.replaceAt(job, {
-        phase: SERIALIZING, ...state.jobs.nth(job)
-      }) else state.jobs,
-      o: { dumps: state.o.dumps + 1, ...state.o },
-      ...state
-    }
-  }
+  // Guards (may read state) ------------------------------------------------------
+  // An ordinary stale-recovery read is excluded: a visible frame past the
+  // reply's freshness but inside its retention under a serving policy.
+  def ordinaryStaleCandidate(key: int): bool = s.resolved.layers.remote and Remote::visible(s, key, 1)
+    and retainedAgeAllowed(s.created.nth(key), Clock::wallOf(s), s.ttls.freshMs, s.ttls.retentionMs)
 
-  // A job shares the source result, never the caller's cache-publication path.
-  // Its C0 payload is acquired once. Later replacement only affects C1.
-  pure def settleJob(state: State, job: int): State = {
-    val entry = state.jobs.nth(job)
-    val result = state.sources.nth(entry.source).result
-    if (entry.timedOut) finishJob(state, job, "timeout")
-    else if (result == SOURCE_ERROR) finishJob(state, job, "source_error")
-    else if (entry.cached == NO_VALUE) beginWrite(state, entry.source, job, entry.retainedMs)
-    else {
-      val decoded = { o: { loads: state.o.loads + 1, ...state.o }, ...state }
-      if (entry.cached == result) finishJob(decoded, job, "match")
-      else finishJob({ o: { reads: decoded.o.reads + 1, ...decoded.o }, ...decoded }, job,
-        if (frame(state, entry.key) == entry.cached) "mismatch" else "superseded")
-    }
-  }
-  pure def admit(state: State, source: int, dark: bool, cached: int): State = {
-    val entry = state.sources.nth(source)
-    val active = liveJobs(state)
-    val duplicate = active.exists(i => state.jobs.nth(i).instance == entry.instance
-      and state.jobs.nth(i).key == entry.key)
-    val full = active.filter(i => state.jobs.nth(i).instance == entry.instance).size() >= JOB_CAPACITY
-    if (not(state.policy.shadow)) state
-    else if (duplicate or full) {
-      o: { shadow: state.o.shadow.append("dropped"), ...state.o }, ...state
-    } else {
-      jobs: state.jobs.append({ source: source, instance: entry.instance,
-        key: entry.key, dark: dark, cached: cached, admittedAt: state.now,
-        cachedCreated: state.remoteCreated.nth(entry.key), freshMs: state.policy.freshMs,
-        policyChoice: state.policy.choice, retainedMs: state.policy.retainedMs,
-        phase: WAITING_SOURCE, timedOut: false }),
-      o: { reads: state.o.reads + (if (dark) 1 else 0), ...state.o },
-      ...state
-    }
-  }
-  pure def startCaller(state: State, call: int, inst: int, key: int, slot: int): State = {
-    val source = state.sources.length()
-    val started = {
-      sources: state.sources.append({ call: call, instance: inst, key: key, slot: slot,
-        local: state.policy.local and not(state.policy.serving),
-        remote: state.policy.serving, retainedMs: state.policy.retainedMs, result: CALL_PENDING }),
-      calls: state.calls.replaceAt(call, { source: source, ...state.calls.nth(call) }),
-      o: { loaders: state.o.loaders + 1, sourceScopes: state.o.sourceScopes.append(true), ...state.o },
-      ...state
-    }
-    if (state.policy.serving) started else admit(started, source, true, fresh(state, key))
-  }
-  pure def servedJob(state: State, inst: int, key: int, value: int): State = {
-    val source = state.sources.length()
-    val provisional = {
-      sources: state.sources.append({ call: NO_OWNER, instance: inst, key: key,
-        slot: NO_OWNER, local: false, remote: false, retainedMs: 0, result: CALL_PENDING }),
-      ...state
-    }
-    val admitted = admit(provisional, source, false, value)
-    if (admitted.jobs.length() == state.jobs.length()) {
-      sources: state.sources, ...admitted
-    } else {
-      o: { loaders: state.o.loaders + 1, sourceScopes: state.o.sourceScopes.append(false), ...admitted.o },
-      ...admitted
-    }
-  }
-  pure def begin(state: State, choice: int): State = {
-    val context = choice / KEYS
-    val key = choice % KEYS
-    val inst = instance(context)
-    val slot = if (context < SCOPES and state.policy.request) context * KEYS + key else NO_OWNER
-    val localSlot = inst * KEYS + key
-    val requestHit = if (slot >= 0) state.memo.nth(slot) else NO_VALUE
-    val localHit = if (state.policy.local and localEntryLiveAt(state.now, state.localExpires.nth(localSlot)))
-      state.localValues.nth(localSlot) else NO_VALUE
-    val remoteHit = if (state.policy.serving) fresh(state, key) else NO_VALUE
-    val hit = if (requestHit > NO_VALUE) requestHit else if (localHit > NO_VALUE) localHit else remoteHit
-    val call = state.calls.length()
-    val entered = {
-      calls: state.calls.append({ source: NO_OWNER, hit: hit, slot: slot }),
-      o: { calls: state.o.calls.append(CALL_PENDING), policyCalls: state.o.policyCalls + 1, ...state.o },
-      ...state
-    }
-    if (requestHit > NO_VALUE or localHit > NO_VALUE) finishCaller(entered, call, hit)
-    else {
-      val read = {
-        o: { reads: entered.o.reads + (if (state.policy.serving) 1 else 0),
-          loads: entered.o.loads + (if (remoteHit > NO_VALUE) 1 else 0), ...entered.o },
-        ...entered
-      }
-      if (remoteHit > NO_VALUE)
-        servedJob(publishFreshHit(read, call, inst, key, hit), inst, key, hit)
-      else startCaller(read, call, inst, key, slot)
-    }
-  }
   action beginAt(choice: int): bool = all {
-    s.calls.length() < MAX_CALLS,
-    not(Set(COHORT_BELOW, COHORT_AT, COHORT_ABOVE).contains(s.policy.choice)) or choice % KEYS == 0,
-    not(s.policy.serving and ordinaryStaleCandidate(s, choice % KEYS)),
+    s.o.calls.length() < MAX_CALLS,
+    not(cohortCode(s.policy)) or choice % KEYS == 0,
+    not(ordinaryStaleCandidate(choice % KEYS)),
     input' = { name: "beginCall", choice: choice },
-    s' = begin(s, choice)
+    s' = Shadow::begin(s, LAYOUT, call(choice), s.resolved, s.ttls, Recovery::ALLOW,
+      { selected: s.shadow, capacity: JOB_CAPACITY, budgetMs: JOB_BUDGET_MS })
   }
   action beginCall = {
     nondet choice = 0.to(14).oneOf()
     beginAt(choice)
-  }
-
-  pure def settle(state: State, source: int, value: int): State = {
-    val entry = state.sources.nth(source)
-    val settled = { sources: state.sources.replaceAt(source, { result: value, ...entry }), ...state }
-    // The ordinary serving path still classifies its original source error,
-    // even when acquisition retained no candidate. A dark source never does.
-    val failed = if (value == SOURCE_ERROR and entry.remote) {
-      o: { classifications: settled.o.classifications + 1,
-        recovery: settled.o.recovery.append("miss"), ...settled.o }, ...settled
-    } else settled
-    val caller = if (entry.call < 0) failed
-      else if (value == SOURCE_ERROR) finishCaller(failed, entry.call, value)
-      else if (entry.remote) beginWrite(settled, source, NO_OWNER, entry.retainedMs)
-      else publishSource(settled, source)
-    caller.jobs.indices().filter(i => caller.jobs.nth(i).source == source
-      and caller.jobs.nth(i).phase == WAITING_SOURCE).fold(caller, (updated, job) => settleJob(updated, job))
   }
   action resolveAt(choice: int): bool = {
     val source = (choice - 1) / 2
@@ -299,7 +152,7 @@ module dialcache_shadow_layers_conformance {
       s.sources.indices().contains(source),
       s.sources.nth(source).result == CALL_PENDING,
       input' = { name: "resolveLoader", choice: choice },
-      s' = settle(s, source, (choice - 1) % 2 + 1)
+      s' = Shadow::settle(s, LAYOUT, source, (choice - 1) % 2 + 1, false)
     }
   }
   action resolveLoader = {
@@ -310,94 +163,46 @@ module dialcache_shadow_layers_conformance {
     s.sources.indices().contains(choice),
     s.sources.nth(choice).result == CALL_PENDING,
     input' = { name: "rejectLoader", choice: choice },
-    s' = settle(s, choice, SOURCE_ERROR)
+    s' = Shadow::settle(s, LAYOUT, choice, SOURCE_ERROR, false)
   }
   action rejectLoader = {
     nondet choice = s.sources.indices().filter(i => s.sources.nth(i).result == CALL_PENDING).oneOf()
     rejectAt(choice)
   }
+  // A propagated timeout settles as a source error; the recovery rules see it
+  // as a timeout (under ALLOW the same classification).
   action rejectTimeoutAt(choice: int): bool = all {
     s.sources.indices().contains(choice),
     s.sources.nth(choice).result == CALL_PENDING,
     input' = { name: "rejectTimeout", choice: choice },
-    s' = settle(s, choice, SOURCE_ERROR)
+    s' = Shadow::settle(s, LAYOUT, choice, SOURCE_ERROR, true)
   }
   action rejectTimeout = {
     nondet choice = s.sources.indices().filter(i => s.sources.nth(i).result == CALL_PENDING).oneOf()
     rejectTimeoutAt(choice)
   }
-
-  pure def dumpReply(state: State, index: int): State = {
-    val workIndex = state.dumps.nth(index)
-    val work = state.work.nth(workIndex)
-    if (work.job >= 0 and state.jobs.nth(work.job).timedOut) {
-      work: state.work.replaceAt(workIndex, { phase: FINISHED, ...work }),
-      ...finishJob(state, work.job, "timeout")
-    } else {
-      work: state.work.replaceAt(workIndex, { phase: WRITING, stamp: state.now, ...work }),
-      writes: state.writes.append(workIndex),
-      jobs: if (work.job >= 0) state.jobs.replaceAt(work.job, {
-        phase: WRITING, ...state.jobs.nth(work.job)
-      }) else state.jobs,
-      o: { writes: state.o.writes + 1, writeTtls: state.o.writeTtls.append(work.retainedMs), ...state.o },
-      ...state
-    }
-  }
   action releaseDumpAt(choice: int): bool = all {
-    s.dumps.indices().contains(choice),
-    s.work.nth(s.dumps.nth(choice)).phase == SERIALIZING,
+    Writes::holdsDump(s, choice),
     input' = { name: "releaseDump", choice: choice },
-    s' = dumpReply(s, choice)
+    s' = Shadow::releaseDump(s, LAYOUT, choice, s.dumpFailed)
   }
   action releaseDump = {
-    nondet choice = s.dumps.indices().filter(i => s.work.nth(s.dumps.nth(i)).phase == SERIALIZING).oneOf()
+    nondet choice = s.dumps.indices().map(i => s.dumps.nth(i).dump).oneOf()
     releaseDumpAt(choice)
   }
-  pure def writeReply(state: State, index: int): State = {
-    val workIndex = state.writes.nth(index)
-    val work = state.work.nth(workIndex)
-    val value = state.sources.nth(work.source).result
-    val stored = {
-      work: state.work.replaceAt(workIndex, { phase: FINISHED, ...work }),
-      remoteValues: state.remoteValues.replaceAt(work.key, value),
-      remoteCreated: state.remoteCreated.replaceAt(work.key, work.stamp),
-      remoteExpires: state.remoteExpires.replaceAt(work.key, state.now + work.retainedMs),
-      ...state
-    }
-    if (work.job >= 0) finishJob(stored, work.job, "filled")
-    else publishSource(stored, work.source)
-  }
   action releaseWriteAt(choice: int): bool = all {
-    s.writes.indices().contains(choice),
-    s.work.nth(s.writes.nth(choice)).phase == WRITING,
+    Writes::holdsWrite(s, choice),
     input' = { name: "releaseWrite", choice: choice },
-    s' = writeReply(s, choice)
+    s' = Shadow::releaseWrite(s, LAYOUT, choice, s.writeFailed)
   }
   action releaseWrite = {
-    nondet choice = s.writes.indices().filter(i => s.work.nth(s.writes.nth(i)).phase == WRITING).oneOf()
+    nondet choice = s.writes.indices().map(i => s.writes.nth(i).write).oneOf()
     releaseWriteAt(choice)
-  }
-
-  pure def tick(state: State, elapsed: int): State = {
-    val advanced = { now: state.now + elapsed, ...state }
-    state.jobs.indices().fold(advanced, (updated, index) => {
-      val job = updated.jobs.nth(index)
-      if (job.phase == FINISHED or job.timedOut or deadlinePendingAt(updated.now, job.admittedAt + JOB_BUDGET_MS)) updated
-      else {
-        jobs: updated.jobs.replaceAt(index, {
-          timedOut: true,
-          phase: if (job.dark and job.phase == WAITING_SOURCE) FINISHED else job.phase,
-          ...job
-        }),
-        o: { shadow: updated.o.shadow.append("timeout"), ...updated.o },
-        ...updated
-      }
-    })
   }
   action advanceBy(choice: int): bool = all {
     s.now + choice <= 600000,
     input' = { name: "advance", choice: choice },
-    s' = tick(s, choice)
+    s' = Shadow::advance(s, choice)
   }
   action advance = {
     nondet choice = Set(1, JOB_BUDGET_MS, 120000).oneOf()
@@ -405,24 +210,15 @@ module dialcache_shadow_layers_conformance {
   }
   action setPolicy(choice: int): bool = all {
     input' = { name: "policy", choice: choice },
-    s' = { policy: policyFor(choice), ...s }
+    s' = { policy: choice, resolved: resolvedFor(choice), ttls: ttlsFor(choice), shadow: shadowFor(choice), ...s }
   }
   action policy = {
     nondet choice = 0.to(SERVED_CHANGED_FILL).oneOf()
     setPolicy(choice)
   }
-  action seedAt(choice: int): bool = {
-    val key = choice / 4
-    val age = if (choice % 4 == 2) 59999 else if (choice % 4 == 3) 60000 else 0
-    all {
-      input' = { name: "seed", choice: choice },
-      s' = {
-        remoteValues: s.remoteValues.replaceAt(key, if (choice % 4 == 1) VALUE_TWO else VALUE_ONE),
-        remoteCreated: s.remoteCreated.replaceAt(key, s.now - age),
-        remoteExpires: s.remoteExpires.replaceAt(key, s.now + SEED_TTL_MS),
-        ...s
-      }
-    }
+  action seedAt(choice: int): bool = all {
+    input' = { name: "seed", choice: choice },
+    s' = Remote::seedAged(s, choice / 4, seedValue(choice), seedAge(choice), SEED_TTL_MS)
   }
   action seed = {
     nondet choice = 0.to(11).oneOf()
@@ -431,53 +227,60 @@ module dialcache_shadow_layers_conformance {
   action step = any { beginCall, resolveLoader, rejectLoader, rejectTimeout,
     releaseDump, releaseWrite, advance, policy, seed }
 
-  // Independent checks use captured source/job facts, not admission helpers.
+  // Invariants over the library records ---------------------------------------
+  // A job's identity is its source's (instance, key).
+  def jobInstance(i: int): int = s.sources.nth(s.jobs.nth(i).source).instance
+  def jobKey(i: int): int = s.sources.nth(s.jobs.nth(i).source).key
+  def owned(source: int): bool = Flights::ownedBy(s, source).size() > 0
   val boundedSharedJobRegistry = 0.to(INSTANCES - 1).forall(inst =>
-    s.jobs.indices().filter(i => s.jobs.nth(i).instance == inst
-      and s.jobs.nth(i).phase != FINISHED).size() <= JOB_CAPACITY)
-  val oneJobPerInstanceKey = s.jobs.indices().forall(a => s.jobs.indices().forall(b =>
-    a == b or s.jobs.nth(a).phase == FINISHED or s.jobs.nth(b).phase == FINISHED
-      or s.jobs.nth(a).instance != s.jobs.nth(b).instance or s.jobs.nth(a).key != s.jobs.nth(b).key))
-  val localPublicationBelongsToCaller = s.localWriters.indices().forall(slot => {
-    val owner = s.localWriters.nth(slot)
-    owner < 0 or (s.sources.nth(owner).call >= 0 and s.sources.nth(owner).local
-      and s.sources.nth(owner).result == s.localValues.nth(slot)
-      and s.sources.nth(owner).result > CALL_PENDING and s.sources.nth(owner).result != SOURCE_ERROR)
-  })
+    Shadow::liveJobs(s).filter(i => jobInstance(i) == inst).size() <= JOB_CAPACITY)
+  val oneJobPerInstanceKey = Shadow::liveJobs(s).forall(a => Shadow::liveJobs(s).forall(b =>
+    a == b or jobInstance(a) != jobInstance(b) or jobKey(a) != jobKey(b)))
+  // Every source is a drivers' loader; a source is probed as participating
+  // exactly when a caller owns it (a served job's detached source is not).
   val sourcesRemainIndependentOfJobs = s.o.loaders == s.sources.length()
-    and s.o.sourceScopes == s.sources.foldl(List(), (scopes, source) => scopes.append(source.call >= 0))
-  val hitResultsAreImmutable = s.calls.indices().forall(call =>
-    s.calls.nth(call).hit == NO_VALUE or s.o.calls.nth(call) == s.calls.nth(call).hit)
-  val callerSourceOwnsItsResult = s.calls.indices().forall(call => {
-    val owner = s.calls.nth(call).source
-    owner < 0 or s.o.calls.nth(call) == CALL_PENDING
-      or s.o.calls.nth(call) == s.sources.nth(owner).result
+    and s.o.sourceScopes.length() == s.sources.length()
+    and s.sources.indices().forall(i => s.o.sourceScopes.nth(i) == owned(i))
+  // A caller its source owns is pending or holds that source's result (a
+  // remote caller stays pending until its refill's write is released).
+  val callerSourceOwnsItsResult = s.owners.indices().forall(call => {
+    val owner = s.owners.nth(call)
+    owner < 0 or s.o.calls.nth(call) == CALL_PENDING or s.o.calls.nth(call) == s.sources.nth(owner).result
   })
-  val disabledCohortsNeverOwnJobs = s.jobs.indices().forall(i =>
-    not(Set(SERVED_NO_SHADOW, DARK_NO_SHADOW, DARK_INVALID_SHADOW,
-      COHORT_BELOW, COHORT_AT, SERVED_CHANGED_FILL).contains(s.jobs.nth(i).policyChoice)))
+  // Only a source that read the remote layer (here: one that captured a
+  // retention, since every serving reply carries one and no read fails) is
+  // classified when it fails, and every such failure reports a miss.
   val darkJobsNeverRecover = {
-    val ordinaryFailures = s.sources.indices().filter(i =>
-      s.sources.nth(i).remote and s.sources.nth(i).result == SOURCE_ERROR).size()
+    val ordinaryFailures = s.sources.select(source => source.retentionMs > 0 and source.result == SOURCE_ERROR).length()
     s.o.classifications == ordinaryFailures
       and s.o.recovery == 0.to(ordinaryFailures - 1).fold(List(), (out, _) => out.append("miss"))
   }
-  val fillKeepsCapturedRetention = s.work.indices().forall(i => s.work.nth(i).job < 0
-    or s.work.nth(i).retainedMs == s.jobs.nth(s.work.nth(i).job).retainedMs)
-  val servedJobsNeverWrite = s.work.indices().forall(i => s.work.nth(i).job < 0 or s.jobs.nth(s.work.nth(i).job).dark)
+  // A job's held fill carries the retention the job captured at admission.
+  val fillKeepsCapturedRetention = s.dumps.indices().forall(i =>
+      Shadow::jobsOf(s, s.dumps.nth(i).source, Shadow::SERIALIZING).forall(j => s.dumps.nth(i).retentionMs == s.jobs.nth(j).retentionMs))
+    and s.writes.indices().forall(i =>
+      Shadow::jobsOf(s, s.writes.nth(i).source, Shadow::WRITING).forall(j => s.writes.nth(i).retentionMs == s.jobs.nth(j).retentionMs))
+  // A served job carries the hit it was admitted with and never fills.
+  val servedJobsNeverWrite = s.jobs.indices().forall(i => s.jobs.nth(i).dark
+    or (s.jobs.nth(i).cached > NO_VALUE and s.jobs.nth(i).phase != Shadow::SERIALIZING and s.jobs.nth(i).phase != Shadow::WRITING))
   val timedOutDarkSourceWaitReleases = s.jobs.indices().forall(i =>
-    not(s.jobs.nth(i).dark and s.jobs.nth(i).timedOut and s.jobs.nth(i).phase == WAITING_SOURCE))
-  val unboundedCallerKeepsPendingSource = s.sources.indices().forall(i =>
-    s.sources.nth(i).call < 0 or s.sources.nth(i).result != CALL_PENDING
-      or s.o.calls.nth(s.sources.nth(i).call) == CALL_PENDING)
-  val retainedC0WasFreshWhenAcquired = s.jobs.indices().forall(i => {
-    val job = s.jobs.nth(i)
-    job.cached == NO_VALUE or job.admittedAt - job.cachedCreated < job.freshMs
-  })
-  val retentionComesFromAdmissionPolicy = s.jobs.indices().forall(i => {
-    val job = s.jobs.nth(i)
-    job.retainedMs == (if (job.policyChoice == DARK_CHANGED_FILL) 180000 else 120000)
-  })
+    not(s.jobs.nth(i).dark and s.jobs.nth(i).timedOut and s.jobs.nth(i).phase == Shadow::WAITING_SOURCE))
+  val unboundedCallerKeepsPendingSource = s.owners.indices().forall(call =>
+    s.owners.nth(call) < 0 or s.sources.nth(s.owners.nth(call)).result != CALL_PENDING
+      or s.o.calls.nth(call) == CALL_PENDING)
+  // A source no caller owns carries no publication authority.
+  val detachedSourcesCarryNoAuthority = s.sources.indices().forall(i => owned(i)
+    or (s.sources.nth(i).localMs == 0 and s.sources.nth(i).retentionMs == 0 and s.sources.nth(i).fence == NO_FENCE))
+  // Every pending deadline is a live job's whose budget has not expired, and
+  // every such job has exactly one.
+  val jobBudgetsBelongToLiveJobs = s.deadlines.indices().forall(i => {
+    val due = s.deadlines.nth(i)
+    due.kind == Shadow::JOB and Shadow::live(s.jobs.nth(due.index)) and not(s.jobs.nth(due.index).timedOut)
+  }) and s.jobs.indices().forall(i => not(Shadow::live(s.jobs.nth(i)) and not(s.jobs.nth(i).timedOut))
+    or Deadlines::deadlinesOf(s, Shadow::JOB, i).length() == 1)
+  // Every held dump or write serializes an accepted result.
+  val heldWorkHasAcceptedResults = s.dumps.indices().forall(i => accepted(s.sources.nth(s.dumps.nth(i).source).result))
+    and s.writes.indices().forall(i => accepted(s.sources.nth(s.writes.nth(i).source).result))
 
   // Each regression uses only public input transitions. Later calls distinguish
   // real storage reuse/publication from a counter or an internal phase alone.
@@ -623,8 +426,11 @@ module dialcache_shadow_layers_conformance {
     .expect(s.o.calls == List(VALUE_TWO) and s.o.loads == 1 and s.o.reads == 2
       and s.o.writes == 0 and s.o.shadow == List("mismatch"))
 
+  // The C0 read at exactly the freshness boundary acquires nothing: the job
+  // holds a dump at settlement instead of decoding and comparing.
   run expiredC0CanFillAndServeNewValueTest = init
     .then(setPolicy(DARK_NONE)).then(seedAt(3)).then(beginAt(9)).then(resolveAt(2))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.reads == 1 and s.o.loads == 0 and s.o.dumps == 1 and s.o.shadow == List())
     .then(releaseDumpAt(0)).then(releaseWriteAt(0))
     .then(setPolicy(SERVED_NO_SHADOW)).then(beginAt(9))
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.loaders == 1
@@ -636,6 +442,19 @@ module dialcache_shadow_layers_conformance {
     .expect(s.o.reads == 1 and s.o.writes == 1 and s.o.shadow == List("filled"))
     .then(setPolicy(SERVED_NO_SHADOW)).then(beginAt(9))
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.reads == 2 and s.o.loaders == 1)
+
+  // A local entry inserted for the local TTL expires at that instant exactly
+  // (the same strict expiry the old text stated): a hit at its insertion, a
+  // miss exactly the TTL later. The source settles one millisecond after its
+  // call so the two advances the drivers offer (1 ms, 60 s) reach the expiry
+  // instant itself rather than the millisecond after it.
+  run localEntryExpiresAtItsInsertionTtlTest = init
+    .then(setPolicy(DARK_INVALID_SHADOW)).then(beginAt(9)).then(advanceBy(1)).then(resolveAt(1))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 1 and s.o.shadow == List())
+    .then(beginAt(9))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1)
+    .then(advanceBy(LOCAL_TTL_MS)).then(beginAt(9))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
 
   run darkPropagatedTimeoutIsSourceFailureTest = init
     .then(setPolicy(DARK_NONE)).then(beginAt(9)).then(rejectTimeoutAt(0))

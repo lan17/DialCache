@@ -20,9 +20,11 @@
     "recovery",
     "remote_frames",
     "remote_io",
+    "remote_writes",
     "request_memo",
     "runtime_policy",
-    "serving"
+    "serving",
+    "shadow"
   ],
   "profiles": [
     {
@@ -170,8 +172,15 @@
       "id": "shadow-layers",
       "model": "formal/dialcache-shadow-layers-conformance.qnt",
       "module": "dialcache_shadow_layers_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 98
+      "libraryTransitions": [
+        "remote_frames::seedAged",
+        "shadow::advance",
+        "shadow::begin",
+        "shadow::releaseDump",
+        "shadow::releaseWrite",
+        "shadow::settle"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "local-clock",

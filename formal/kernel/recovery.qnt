@@ -6,10 +6,12 @@ module recovery {
   // record and judgments; `remote_io` consults them at read settlement
   // (`retain`), at loader failure (`failure`, `missed`) and at recovery-decode
   // settlement (`recovered`), and drops the snapshot when the flight
-  // completes. No profile composes a recovery transition: a held profile
-  // passes the classifier in force to `remote_io::settleRead` (`NONE` where
-  // stale-on-error is not configured, so no snapshot is ever created and
-  // every judgment reads NO_SNAPSHOT).
+  // completes; `remote_writes` consults the same judgments on the atomic
+  // path, retaining at release and deciding a source failure at once. No
+  // profile composes a recovery transition: a profile passes the classifier
+  // in force to `remote_io::settleRead` or `remote_writes::release` (`NONE`
+  // where stale-on-error is not configured, so no snapshot is ever created
+  // and every judgment reads NO_SNAPSHOT).
   //
   // The rules: a candidate is the frame the read found visible whose payload
   // code decodes to a value (`payloads::valueOf`; a code whose bytes fail to
@@ -27,8 +29,9 @@ module recovery {
   // but the built-in timeout-only default); recovery is allowed by ALLOW, or
   // by TIMEOUT_ONLY for a timeout (a delivered or late deadline, or a
   // propagated timeout the profile names; `failure` decides which errors are
-  // timeouts, judged once for whichever path consults it, `remote_io::failed`
-  // today); DENY never recovers, and a profile decodes a
+  // timeouts, judged once for the path that consults it: the held one,
+  // `remote_io::failed`, or the atomic one, `remote_writes::failed`); DENY
+  // never recovers, and a profile decodes a
   // classifier that throws to DENY, as the implementations do. A recovery
   // decode is held while the candidate's age still allows it
   // (`cache_rules.recoveryAgeAllowed`, no fresh lower bound: a wall rollback
@@ -97,12 +100,13 @@ module recovery {
     { o: { classifications: state.o.classifications + (if (classifies(snapshot)) 1 else 0), ...state.o }, ...state }
   pure def recordOutcome(state: Recovering[r], label: str): Recovering[r] =
     { o: { recovery: state.o.recovery.append(label), ...state.o }, ...state }
-  // A loader failure judged once for whichever path consults it: the
+  // A loader failure judged once for the held and the atomic path: the
   // classification counted; whether recovery is allowed (the classifier, and
   // whether the failure is a timeout: a deadline error, or a propagated
   // timeout the profile names); whether the candidate then serves (recovery
   // allowed and its age still admitted). What follows is the path's: a held
-  // recovery decode (`remote_io::failed`).
+  // recovery decode (`remote_io::failed`) or an immediate one
+  // (`remote_writes::failed`).
   type Failure[r] = { state: Recovering[r], recovers: bool, serves: bool }
   pure def failure(state: Recovering[r], snapshot: Snapshot, error: int, timeout: bool): Failure[r] = {
     val counted = classified(state, snapshot)

@@ -2193,6 +2193,12 @@
       "scope": "An untracked source warms the local slot for its 1 s insertion TTL; the transient caller hits at 999 ms and reads again at exactly 1000 ms, so the boundary is exclusive."
     },
     {
+      "case": "C09.fixed-local-ttl",
+      "reference": "formal/dialcache-shadow-layers-conformance.qnt:localEntryExpiresAtItsInsertionTtlTest",
+      "kind": "regression",
+      "scope": "A dark-invalid-shadow caller's source settles 1 ms after its call and warms the local slot for 60 s; the hit at that insertion and the miss at exactly 60 000 ms after it make the boundary exclusive (the drivers' advances are 1 ms, 60 s and 120 s)."
+    },
+    {
       "case": "C38.value-work-does-not-extend-marker",
       "reference": "formal/dialcache-recovery-read-conformance.qnt:expiredMarkerIsGoneTest",
       "kind": "regression",
@@ -4590,307 +4596,307 @@
     },
     {
       "case": "C49.local-publication",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:publishSource",
+      "reference": "formal/kernel/serving.qnt:publish",
       "kind": "helper",
       "scope": "With request memo disabled, a present C0=1 cannot satisfy a later dark caller before source settlement; source=2 alone becomes the subsequent local hit. A separate absent-C0 history proves source publication precedes the held shadow fill write and a local hit stops new shadow admission."
     },
     {
       "case": "C49.local-publication",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:begin",
+      "reference": "formal/kernel/shadow.qnt:begin",
       "kind": "helper",
       "scope": "With request memo disabled, a present C0=1 cannot satisfy a later dark caller before source settlement; source=2 alone becomes the subsequent local hit. A separate absent-C0 history proves source publication precedes the held shadow fill write and a local hit stops new shadow admission."
     },
     {
       "case": "C49.local-publication",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settleJob",
+      "reference": "formal/kernel/shadow.qnt:settleJob",
       "kind": "helper",
       "scope": "With request memo disabled, a present C0=1 cannot satisfy a later dark caller before source settlement; source=2 alone becomes the subsequent local hit. A separate absent-C0 history proves source publication precedes the held shadow fill write and a local hit stops new shadow admission."
     },
     {
       "case": "C49.request-publication",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:finishCaller",
+      "reference": "formal/kernel/serving.qnt:complete",
       "kind": "helper",
       "scope": "With local disabled, present C0=1 cannot satisfy a same-scope caller before source settlement; source=2 alone becomes that scope's memo hit. A sibling scope starts an independent source. The absent-C0 history proves request publication precedes held shadow fill."
     },
     {
       "case": "C49.request-publication",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:begin",
+      "reference": "formal/kernel/shadow.qnt:begin",
       "kind": "helper",
       "scope": "With local disabled, present C0=1 cannot satisfy a same-scope caller before source settlement; source=2 alone becomes that scope's memo hit. A sibling scope starts an independent source. The absent-C0 history proves request publication precedes held shadow fill."
     },
     {
       "case": "C49.request-publication",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settleJob",
+      "reference": "formal/kernel/shadow.qnt:settleJob",
       "kind": "helper",
       "scope": "With local disabled, present C0=1 cannot satisfy a same-scope caller before source settlement; source=2 alone becomes that scope's memo hit. A sibling scope starts an independent source. The absent-C0 history proves request publication precedes held shadow fill."
     },
     {
       "case": "C49.job-dedup-keeps-independent-sources",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:startCaller",
+      "reference": "formal/kernel/serving.qnt:startSource",
       "kind": "helper",
       "scope": "Same-key dark calls with coalesce=false create two independently controlled sources but one C0 read/job. The second settles to 2 without a fill; the owner settles to 1, fills once, and a later serving probe returns 1 while each caller retains its own result."
     },
     {
       "case": "C49.job-dedup-keeps-independent-sources",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "Same-key dark calls with coalesce=false create two independently controlled sources but one C0 read/job. The second settles to 2 without a fill; the owner settles to 1, fills once, and a later serving probe returns 1 while each caller retains its own result."
     },
     {
       "case": "C49.job-dedup-keeps-independent-sources",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/remote-writes.qnt:settle",
       "kind": "helper",
       "scope": "Same-key dark calls with coalesce=false create two independently controlled sources but one C0 read/job. The second settles to 2 without a fill; the owner settles to 1, fills once, and a later serving probe returns 1 while each caller retains its own result."
     },
     {
       "case": "C54.deduplication",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:startCaller",
+      "reference": "formal/kernel/serving.qnt:startSource",
       "kind": "helper",
       "scope": "Same-key dark calls with coalesce=false create two independently controlled sources but one C0 read/job. The second settles to 2 without a fill; the owner settles to 1, fills once, and a later serving probe returns 1 while each caller retains its own result."
     },
     {
       "case": "C54.deduplication",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "Same-key dark calls with coalesce=false create two independently controlled sources but one C0 read/job. The second settles to 2 without a fill; the owner settles to 1, fills once, and a later serving probe returns 1 while each caller retains its own result."
     },
     {
       "case": "C54.deduplication",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/remote-writes.qnt:settle",
       "kind": "helper",
       "scope": "Same-key dark calls with coalesce=false create two independently controlled sources but one C0 read/job. The second settles to 2 without a fill; the owner settles to 1, fills once, and a later serving probe returns 1 while each caller retains its own result."
     },
     {
       "case": "C49.no-stale-recovery",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:startCaller",
+      "reference": "formal/kernel/serving.qnt:startSource",
       "kind": "helper",
       "scope": "Dark acquisition sees physical C0 exactly F=60000ms old and younger than M=120000ms, with an always-allow recovery classifier. Source rejection preserves that one original error, emits source_error, and performs no classification, deserialization, recovery, or write."
     },
     {
       "case": "C49.no-stale-recovery",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/remote-writes.qnt:settle",
       "kind": "helper",
       "scope": "Dark acquisition sees physical C0 exactly F=60000ms old and younger than M=120000ms, with an always-allow recovery classifier. Source rejection preserves that one original error, emits source_error, and performs no classification, deserialization, recovery, or write."
     },
     {
       "case": "C21.invalid-dark-shadow",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:policyFor",
+      "reference": "formal/dialcache-shadow-layers-conformance.qnt:shadowFor",
       "kind": "helper",
       "scope": "Shadow ramp101 disables optional dark work while valid local policy remains active; source success is reusable locally by a later serving-enabled invocation, with zero Redis reads/writes or diagnostic jobs."
     },
     {
       "case": "C21.invalid-dark-shadow",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "Shadow ramp101 disables optional dark work while valid local policy remains active; source success is reusable locally by a later serving-enabled invocation, with zero Redis reads/writes or diagnostic jobs."
     },
     {
       "case": "C21.invalid-dark-shadow",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:publishSource",
+      "reference": "formal/kernel/serving.qnt:publish",
       "kind": "helper",
       "scope": "Shadow ramp101 disables optional dark work while valid local policy remains active; source success is reusable locally by a later serving-enabled invocation, with zero Redis reads/writes or diagnostic jobs."
     },
     {
       "case": "C54.unbounded-source-bounded-shadow",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:tick",
+      "reference": "formal/kernel/shadow.qnt:expireJob",
       "kind": "helper",
       "scope": "At the finite60000ms dark-job deadline an explicitly unbounded caller remains pending. A same-key second dark read is admitted, proving release of the old diagnostic slot; the first source later returns its value without late fill, while the second can start its own fill."
     },
     {
       "case": "C54.unbounded-source-bounded-shadow",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/remote-writes.qnt:settle",
       "kind": "helper",
       "scope": "At the finite60000ms dark-job deadline an explicitly unbounded caller remains pending. A same-key second dark read is admitted, proving release of the old diagnostic slot; the first source later returns its value without late fill, while the second can start its own fill."
     },
     {
       "case": "C54.unowned-caller-releases-slot",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:tick",
+      "reference": "formal/kernel/shadow.qnt:expireJob",
       "kind": "helper",
       "scope": "At the finite60000ms dark-job deadline an explicitly unbounded caller remains pending. A same-key second dark read is admitted, proving release of the old diagnostic slot; the first source later returns its value without late fill, while the second can start its own fill."
     },
     {
       "case": "C54.unowned-caller-releases-slot",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/remote-writes.qnt:settle",
       "kind": "helper",
       "scope": "At the finite60000ms dark-job deadline an explicitly unbounded caller remains pending. A same-key second dark read is admitted, proving release of the old diagnostic slot; the first source later returns its value without late fill, while the second can start its own fill."
     },
     {
       "case": "C47.requires-capacity",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "A served-hit job and dark job jointly fill two per-instance slots, so another key is dropped while its independent caller source still runs. At60000ms the dark-source wait releases its slot, but a timed-out served raw source still consumes the other. A distinct-key probe is dropped until that raw source settles, after which another probe admits. Late settlements do not replace served hits or fill expired jobs."
     },
     {
       "case": "C47.requires-capacity",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:tick",
+      "reference": "formal/kernel/shadow.qnt:expireJob",
       "kind": "helper",
       "scope": "A served-hit job and dark job jointly fill two per-instance slots, so another key is dropped while its independent caller source still runs. At60000ms the dark-source wait releases its slot, but a timed-out served raw source still consumes the other. A distinct-key probe is dropped until that raw source settles, after which another probe admits. Late settlements do not replace served hits or fill expired jobs."
     },
     {
       "case": "C47.requires-capacity",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/remote-writes.qnt:settle",
       "kind": "helper",
       "scope": "A served-hit job and dark job jointly fill two per-instance slots, so another key is dropped while its independent caller source still runs. At60000ms the dark-source wait releases its slot, but a timed-out served raw source still consumes the other. A distinct-key probe is dropped until that raw source settles, after which another probe admits. Late settlements do not replace served hits or fill expired jobs."
     },
     {
       "case": "C54.source-ownership",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "A served-hit job and dark job jointly fill two per-instance slots, so another key is dropped while its independent caller source still runs. At60000ms the dark-source wait releases its slot, but a timed-out served raw source still consumes the other. A distinct-key probe is dropped until that raw source settles, after which another probe admits. Late settlements do not replace served hits or fill expired jobs."
     },
     {
       "case": "C54.source-ownership",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:tick",
+      "reference": "formal/kernel/shadow.qnt:expireJob",
       "kind": "helper",
       "scope": "A served-hit job and dark job jointly fill two per-instance slots, so another key is dropped while its independent caller source still runs. At60000ms the dark-source wait releases its slot, but a timed-out served raw source still consumes the other. A distinct-key probe is dropped until that raw source settles, after which another probe admits. Late settlements do not replace served hits or fill expired jobs."
     },
     {
       "case": "C54.source-ownership",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/remote-writes.qnt:settle",
       "kind": "helper",
       "scope": "A served-hit job and dark job jointly fill two per-instance slots, so another key is dropped while its independent caller source still runs. At60000ms the dark-source wait releases its slot, but a timed-out served raw source still consumes the other. A distinct-key probe is dropped until that raw source settles, after which another probe admits. Late settlements do not replace served hits or fill expired jobs."
     },
     {
       "case": "C54.instance-isolation",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "A served and a dark job fill instance0; its third key is dropped, while the same key on instance1 admits a C0 read. Recorded source contexts distinguish the disabled served source from enabled independent caller sources."
     },
     {
       "case": "C05.first-hit",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:begin",
+      "reference": "formal/kernel/shadow.qnt:begin",
       "kind": "helper",
       "scope": "A later request/local hit bypasses remote reads and new shadow admission. Foreground validated remote bytes may warm local storage, but the detached diagnostic source never does: a differing diagnostic value preserves the served/local value or leaves an unpopulated local layer cold."
     },
     {
       "case": "C05.first-hit",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:publishFreshHit",
+      "reference": "formal/kernel/serving.qnt:warm",
       "kind": "helper",
       "scope": "A later request/local hit bypasses remote reads and new shadow admission. Foreground validated remote bytes may warm local storage, but the detached diagnostic source never does: a differing diagnostic value preserves the served/local value or leaves an unpopulated local layer cold."
     },
     {
       "case": "C05.first-hit",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:publishSource",
+      "reference": "formal/kernel/serving.qnt:publish",
       "kind": "helper",
       "scope": "A later request/local hit bypasses remote reads and new shadow admission. Foreground validated remote bytes may warm local storage, but the detached diagnostic source never does: a differing diagnostic value preserves the served/local value or leaves an unpopulated local layer cold."
     },
     {
       "case": "C47.requires-cohort",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:policyFor",
+      "reference": "formal/dialcache-shadow-layers-conformance.qnt:shadowFor",
       "kind": "helper",
       "scope": "For the tracked key{urn:id:0}#ShadowLayers and independent shadow FNV numerator3203834406, thresholds exactly one uint32unit below/equal/above the sample produce no-read/no-job below/equal and an actual C0 read/fill serialization above. Caller success remains independent of diagnostic admission."
     },
     {
       "case": "C47.requires-cohort",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "For the tracked key{urn:id:0}#ShadowLayers and independent shadow FNV numerator3203834406, thresholds exactly one uint32unit below/equal/above the sample produce no-read/no-job below/equal and an actual C0 read/fill serialization above. Caller success remains independent of diagnostic admission."
     },
     {
       "case": "C18.captured-shadow-fill",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "The job captures fresh60s/retention120s. Runtime policy changes to fresh120s/retention180s while its caller source and then serialization are held; dispatched write TTL remains120000ms. At that physical expiry a serving probe under the newer logical policy rejects its source and reports recovery miss, proving the old value was not retained for180s."
     },
     {
       "case": "C18.captured-shadow-fill",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:beginWrite",
+      "reference": "formal/kernel/remote-writes.qnt:holdDump",
       "kind": "helper",
       "scope": "The job captures fresh60s/retention120s. Runtime policy changes to fresh120s/retention180s while its caller source and then serialization are held; dispatched write TTL remains120000ms. At that physical expiry a serving probe under the newer logical policy rejects its source and reports recovery miss, proving the old value was not retained for180s."
     },
     {
       "case": "C18.captured-shadow-fill",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:dumpReply",
+      "reference": "formal/kernel/shadow.qnt:releaseDump",
       "kind": "helper",
       "scope": "The job captures fresh60s/retention120s. Runtime policy changes to fresh120s/retention180s while its caller source and then serialization are held; dispatched write TTL remains120000ms. At that physical expiry a serving probe under the newer logical policy rejects its source and reports recovery miss, proving the old value was not retained for180s."
     },
     {
       "case": "C18.captured-shadow-fill",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:writeReply",
+      "reference": "formal/kernel/shadow.qnt:releaseWrite",
       "kind": "helper",
       "scope": "The job captures fresh60s/retention120s. Runtime policy changes to fresh120s/retention180s while its caller source and then serialization are held; dispatched write TTL remains120000ms. At that physical expiry a serving probe under the newer logical policy rejects its source and reports recovery miss, proving the old value was not retained for180s."
     },
     {
       "case": "C51.retained-candidate-not-reclassified",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "C0 is acquired at age59999ms, then source=2 settles exactly at F=60000ms before the60000ms job deadline. Retained C0=1 is decoded once, one C1 payload read confirms mismatch, caller gets2, and no fill occurs."
     },
     {
       "case": "C51.retained-candidate-not-reclassified",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settleJob",
+      "reference": "formal/kernel/shadow.qnt:settleJob",
       "kind": "helper",
       "scope": "C0 is acquired at age59999ms, then source=2 settles exactly at F=60000ms before the60000ms job deadline. Retained C0=1 is decoded once, one C1 payload read confirms mismatch, caller gets2, and no fill occurs."
     },
     {
       "case": "C52.expired-miss-may-fill",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:fresh",
+      "reference": "formal/kernel/remote-frames.qnt:observe",
       "kind": "helper",
       "scope": "C0=1 acquired exactly at freshness age60000ms is a semantic miss despite physical presence. Source=2 fills once without decoding old bytes; a later serving probe reads2 and starts no new source."
     },
     {
       "case": "C52.expired-miss-may-fill",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "C0=1 acquired exactly at freshness age60000ms is a semantic miss despite physical presence. Source=2 fills once without decoding old bytes; a later serving probe reads2 and starts no new source."
     },
     {
       "case": "C52.expired-miss-may-fill",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settleJob",
+      "reference": "formal/kernel/shadow.qnt:settleJob",
       "kind": "helper",
       "scope": "C0=1 acquired exactly at freshness age60000ms is a semantic miss despite physical presence. Source=2 fills once without decoding old bytes; a later serving probe reads2 and starts no new source."
     },
     {
       "case": "C53.acquired-miss-no-reread",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:admit",
+      "reference": "formal/kernel/shadow.qnt:admitJobs",
       "kind": "helper",
       "scope": "An absent C0 is acquired, external storage is then seeded to1, and source=2 fills without rereading/reclassifying C0. Read count stays1 through write completion; a later serving probe observes2."
     },
     {
       "case": "C53.acquired-miss-no-reread",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settleJob",
+      "reference": "formal/kernel/shadow.qnt:settleJob",
       "kind": "helper",
       "scope": "An absent C0 is acquired, external storage is then seeded to1, and source=2 fills without rereading/reclassifying C0. Read count stays1 through write completion; a later serving probe observes2."
     },
     {
       "case": "C53.dark-propagated-timeout",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/remote-writes.qnt:settle",
       "kind": "helper",
       "scope": "The single dark caller source rejects its exact controlled nested timeout object at time0. Caller classification remains original source error and the diagnostic verdict is source_error, with no classification/recovery/serialization/write or own deadline event."
     },
     {
       "case": "C53.dark-propagated-timeout",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settleJob",
+      "reference": "formal/kernel/shadow.qnt:settleJob",
       "kind": "helper",
       "scope": "The single dark caller source rejects its exact controlled nested timeout object at time0. Caller classification remains original source error and the diagnostic verdict is source_error, with no classification/recovery/serialization/write or own deadline event."
     },
     {
       "case": "C53.served-propagated-timeout",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/remote-writes.qnt:settle",
       "kind": "helper",
       "scope": "The detached served-hit source runs with caching disabled and rejects its controlled nested timeout at time0. The caller keeps its already served C0=1 and the job reports source_error, with no write or own job deadline event."
     },
     {
       "case": "C53.served-propagated-timeout",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settleJob",
+      "reference": "formal/kernel/shadow.qnt:settleJob",
       "kind": "helper",
       "scope": "The detached served-hit source runs with caching disabled and rejects its controlled nested timeout at time0. The caller keeps its already served C0=1 and the job reports source_error, with no write or own job deadline event."
     },
     {
       "case": "C48.ordinary-miss",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:begin",
+      "reference": "formal/kernel/shadow.qnt:begin",
       "kind": "helper",
       "scope": "A serving-enabled remote miss with shadow100 starts exactly one enabled caller source; source success fills normally and a later no-shadow serving probe returns that value. No disabled diagnostic source or shadow verdict occurs."
     },
     {
       "case": "C48.ordinary-miss",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:startCaller",
+      "reference": "formal/kernel/serving.qnt:startSource",
       "kind": "helper",
       "scope": "A serving-enabled remote miss with shadow100 starts exactly one enabled caller source; source success fills normally and a later no-shadow serving probe returns that value. No disabled diagnostic source or shadow verdict occurs."
     },
     {
       "case": "C52.present-not-repaired",
-      "reference": "formal/dialcache-shadow-layers-conformance.qnt:settleJob",
+      "reference": "formal/kernel/shadow.qnt:settleJob",
       "kind": "helper",
       "scope": "Fresh present C0=1 and caller source=2 produce a confirmed mismatch with one C1 read and zero Redis writes. Local publication of2 belongs only to the caller source; diagnostic work never repairs the present C0."
     },
