@@ -43,24 +43,6 @@
       ]
     },
     {
-      "path": "formal/dialcache-flight-deadlines.qnt",
-      "invariants": [
-        "flightsRequireEligibleCaching",
-        "oneSourcePerRegisteredFlight",
-        "fallbackDeadlineStartsWithFallback",
-        "timedOutSourceCannotPublish",
-        "publicationRequiresAcceptedSource",
-        "noFlightWhenCoalescingIneligible",
-        "abandonedSourceIsNotAFlight",
-        "requestLayerOwnsOuterFlight",
-        "cacheHitNeverStartsSourceDeadline",
-        "outsideSourceHasNoDeadline",
-        "omittedSourceBudgetUsesSixtySeconds",
-        "disabledSourceDeadlineNeverTimesOut",
-        "independentAcceptanceChecksCapturedDeadline"
-      ]
-    },
-    {
       "path": "formal/dialcache-tracked-invalidation.qnt",
       "invariants": [
         "servedSnapshotClearedObservedFence",
@@ -116,17 +98,21 @@
     {
       "path": "formal/dialcache-effects-conformance.qnt",
       "invariants": [
+        "oneRequestPerRead",
+        "measurementsAreNonnegative",
+        "futureOffsetsArePositiveAtObservingLayer",
+        "oneSourceDurationPerSettlement",
         "oneRegisteredSource",
         "registeredFlightHasPendingCalls",
-        "writeRequiresAcceptedSource",
         "registeredReadOwnsFlight",
         "effectCountsMatchRecords",
-        "oneRequestPerRead",
-        "oneSourceDurationPerSettlement",
-        "measurementsAreNonnegative",
-        "futureOffsetsArePositiveAtObservingLayer"
+        "writeRequiresAcceptedSource",
+        "acceptedSourcesSettledBeforeTheirDeadline"
       ],
       "profile": "effects",
+      "differential": {
+        "maxBytesPerStateRatio": 1.45
+      },
       "generate": {
         "maxSamples": 4096,
         "maxSteps": 60,
@@ -552,13 +538,6 @@
       ]
     },
     {
-      "path": "formal/dialcache-effects-connection.qnt",
-      "invariants": [
-        "effectsDeadlineMatchesSourceStart",
-        "effectsPublicationMatchesAcceptedSource"
-      ]
-    },
-    {
       "path": "formal/dialcache-shadow-layers-connection.qnt",
       "invariants": [
         "servedCallersKeepTheirOutcome",
@@ -578,20 +557,6 @@
     }
   },
   "challenges": [
-    {
-      "id": "source-deadline-epoch",
-      "contract": "C23",
-      "source": "formal/dialcache-flight-deadlines.qnt",
-      "model": "formal/dialcache-flight-deadlines.qnt",
-      "invariant": "fallbackDeadlineStartsWithFallback",
-      "before": "fallbackDeadline: s.now + FALLBACK_TIMEOUT,",
-      "after": "fallbackDeadline: FALLBACK_TIMEOUT,",
-      "nativeMutants": {
-        "kind": "mapped",
-        "mutant": "M33",
-        "text": "M33 is the native twin of dialcache-flight-deadlines.qnt cacheMissStartsFallback recording the fallback deadline as the bare budget instead of now plus the budget: both ports judge a source settlement against a budget anchored at the clock origin rather than the source start, while the timer still fires at the source's own deadline. source-budgets/heldPolicyDoesNotSpendSourceBudgetTest and defaultSourceBudgetExpiresAtSixtySecondsTest are the expected evidence in both ports."
-      }
-    },
     {
       "id": "recovery-inclusive-maximum",
       "contract": "C45",
@@ -650,7 +615,7 @@
           "source-budgets": "The local projection has no remote frames; local expiry is localEntryLiveAt, not ageBeforeCeiling.",
           "layers": "Frames are seeded at age 0 under a 60 s freshness and the clock moves 1 ms per tick, so no history reaches an age boundary.",
           "core": "No scheduled history reaches an exact age boundary: every regression passes under the mutant (measured 2026-09-20).",
-          "effects": "No scheduled history reaches an exact age boundary: every regression passes under the mutant (measured 2026-09-20).",
+          "effects": "Frames are stamped at the wall clock and read within 600 ms under a 60 s freshness, and classifier NONE retains no snapshot, so no age judgment meets a boundary (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "local-failure": "Composes the remote freshness judgment (ageBeforeCeiling), but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets a ceiling (re-measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated (re-measured 2026-09-20 over the composed text).",
@@ -685,7 +650,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "effects": "The local layer is off (capacity 0 and no local TTL), so the mutated local lookup never serves an entry.",
           "recovery": "The local layer is off: capacity 0 and no local TTL, so local expiry is never judged.",
           "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read.",
           "admission": "The local layer is off in every reply and local storage is declared empty, so the mutated local storage rule is never executed.",
@@ -793,7 +758,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
+          "effects": "Classifier NONE: no snapshot is retained, so the mutated candidate retention is never executed.",
           "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
           "admission": "Passes Recovery::NONE at every read settlement, so no snapshot is retained and no recovery decode is held; the mutated text is never executed.",
           "local-failure": "Composes the layered traversal without the recovery module (no stale-on-error snapshot is retained), so the mutated candidate retention is never executed.",
@@ -830,11 +795,11 @@
           "formal/dialcache-recovery-read-connection.qnt",
           "recovery-read",
           "independent",
-          "recovery"
+          "recovery",
+          "effects"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
           "shadow": "Composes remote_io, but every reply leaves the remote layer off, so the caller never dispatches a read; the job's read is the shadow module's.",
           "admission": "Composes the held read dispatch, but every read serves a hit (the three keys always hold a frame fresh for the 60 s TTL inside the 600 ms bound) and Recovery::NONE retains no snapshot, so the retention the held read carries reaches only a served job's fill authority, which a served job never writes (measured 2026-09-20: every scheduled invariant and regression passes under the mutant).",
           "local-failure": "Composes the layered release with inline remote reads (serving.release), never remote_io's held read dispatch or decode, so the mutated text is never executed.",
@@ -871,11 +836,11 @@
           "formal/dialcache-independent-connection.qnt",
           "independent",
           "recovery-read",
-          "recovery"
+          "recovery",
+          "effects"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
           "shadow": "Composes remote_io, but every reply leaves the remote layer off, so the caller never dispatches a read; the job's read is the shadow module's.",
           "admission": "Composes the held read dispatch, but every read serves a hit (the three keys always hold a frame fresh for the 60 s TTL inside the 600 ms bound) and Recovery::NONE retains no snapshot, so the retention the held read carries reaches only a served job's fill authority, which a served job never writes (measured 2026-09-20: every scheduled invariant and regression passes under the mutant).",
           "local-failure": "Composes the layered release with inline remote reads (serving.release), never remote_io's held read dispatch or decode, so the mutated text is never executed.",
@@ -909,31 +874,42 @@
       }
     },
     {
-      "id": "effects-source-wrong-clock",
-      "contract": "C23",
-      "source": "formal/dialcache-effects-conformance.qnt",
-      "model": "formal/dialcache-effects-connection.qnt",
-      "invariant": "effectsDeadlineMatchesSourceStart",
-      "before": "activeLoader: x.sources.length(), deadline: x.now + SOURCE_BUDGET_MS,",
-      "after": "activeLoader: x.sources.length(), deadline: SOURCE_BUDGET_MS,",
-      "nativeMutants": {
-        "kind": "mapped",
-        "mutant": "M33",
-        "text": "Same native fault as source-deadline-epoch: M33 judges a source settlement against a budget anchored at the clock origin rather than the source start, which is dialcache-effects-conformance.qnt startSource recording the deadline as the bare budget instead of now plus the budget. With the effects budget of 10 ms every source settling later than 10 ms into a history is rejected; effects/readTimeoutStartsIndependentSourceDeadlineTest is the expected evidence."
-      }
-    },
-    {
       "id": "effects-wrong-acceptance-receipt",
       "contract": "C25",
-      "source": "formal/dialcache-effects-conformance.qnt",
-      "model": "formal/dialcache-effects-connection.qnt",
-      "invariant": "effectsPublicationMatchesAcceptedSource",
-      "before": "acceptedAt: s.now, acceptedWall: s.wall,",
-      "after": "acceptedAt: s.now + 1, acceptedWall: s.wall,",
+      "source": "formal/kernel/metrics.qnt",
+      "model": "formal/dialcache-effects-conformance.qnt",
+      "invariant": "measurementsAreNonnegative",
+      "before": "{ dumpStarted: loaders.dumpStarted.append(after.now), ...loaders }",
+      "after": "{ dumpStarted: loaders.dumpStarted.append(after.now + 1), ...loaders }",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "sourceDurationExcludesPublicationTest",
+        "failure": "amounts(\"fallback\") == List(0) and amounts(\"serialization\") == List(10)",
+        "family": "measurement-receipt",
+        "profiles": [
+          "effects"
+        ],
+        "exclusions": {
+          "core": "Does not import metrics; the mutated text is never executed.",
+          "recovery": "Does not import metrics; the mutated text is never executed.",
+          "policy": "Does not import metrics; the mutated text is never executed.",
+          "shadow": "Does not import metrics; the mutated text is never executed.",
+          "scope": "Does not import metrics; the mutated text is never executed.",
+          "admission": "Does not import metrics; the mutated text is never executed.",
+          "layers": "Does not import metrics; the mutated text is never executed.",
+          "independent": "Does not import metrics; the mutated text is never executed.",
+          "recovery-read": "Does not import metrics; the mutated text is never executed.",
+          "local-failure": "Does not import metrics; the mutated text is never executed.",
+          "runtime-boundaries": "Does not import metrics; the mutated text is never executed.",
+          "shadow-layers": "Does not import metrics; the mutated text is never executed.",
+          "local-clock": "Does not import metrics; the mutated text is never executed.",
+          "source-budgets": "Does not import metrics; the mutated text is never executed."
+        }
+      },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M36",
-        "text": "M36 is the native half of dialcache-effects-conformance.qnt settledSource recording acceptedAt one millisecond late: the model's acceptance receipt is bookkeeping with no native line, so the serialization-start stamp that both ports take one millisecond late is the only native acceptance receipt, and the dump duration comes out one millisecond short. effects/sourceDurationExcludesPublicationTest (dump amount 0.009 instead of 0.010) is the expected evidence."
+        "text": "M36 is the native twin of kernel/metrics.qnt stamping the dump's hold one millisecond late: the serialization-start stamp both ports take one millisecond late is the only native acceptance receipt, and the dump duration comes out one millisecond short. effects/sourceDurationExcludesPublicationTest (dump amount 0.009 instead of 0.010) is the expected evidence in both ports."
       }
     },
     {
@@ -956,14 +932,14 @@
           "scope",
           "runtime-boundaries",
           "source-budgets",
-          "admission"
+          "admission",
+          "effects"
         ],
         "exclusions": {
           "independent": "Coalescing is off in every reply: every flight has one owner, so completing the first owner completes them all.",
           "recovery-read": "One execution at a time: no follower ever joins a flight, so every flight has one owner.",
           "shadow-layers": "Coalescing is off in every reply: every flight has one owner.",
           "core": "Does not import the kernel library, so the mutated completion is never executed; its own completion rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated completion is never executed; its own completion rule is stated in its own text.",
           "shadow": "Coalescing is off and one caller runs at a time: every flight has one owner.",
           "local-failure": "Composes serving.complete through local_faults.settle, but admits one source at a time (no call begins while a source is pending), so every flight has one owner and the mutant's minimum-owner fold finishes the same call (measured 2026-09-20: every scheduled invariant and regression passes under the mutant).",
           "local-clock": "Composes serving.complete through serving.callLocal, whose inline source settles in the step that starts it, so no flight ever gains a second owner and the mutant's minimum-owner fold finishes the same call (measured 2026-09-20: every scheduled invariant and regression passes under the mutant)."
@@ -1042,7 +1018,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "effects": "Frames are stamped at the wall clock and read within 600 ms under a 60 s freshness, so no read meets the freshness boundary (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "local-failure": "Composes the remote freshness judgment, but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets the fresh boundary.",
           "local-clock": "Composes the local projection with no remote layer, so the freshness judgment is never executed.",
@@ -1200,11 +1176,11 @@
         "failure": "s.o.shadow == List(\"fill_fenced\") and s.o.writes == 0",
         "family": "fence-recheck-at-dispatch",
         "profiles": [
-          "shadow"
+          "shadow",
+          "effects"
         ],
         "exclusions": {
           "core": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "effects": "Does not import the kernel library; its own fence recheck is stated in its own text.",
           "scope": "Does not compose remote_writes, so the mutated dispatch is never executed.",
           "recovery": "Does not compose remote_writes, so the mutated dispatch is never executed.",
           "policy": "Does not compose remote_writes, so the mutated dispatch is never executed.",
@@ -1406,29 +1382,79 @@
     {
       "id": "effects-fenced-source-publishes",
       "contract": "C34",
-      "source": "formal/dialcache-effects-conformance.qnt",
+      "source": "formal/kernel/serving.qnt",
       "model": "formal/dialcache-effects-conformance.qnt",
       "invariant": "writeRequiresAcceptedSource",
-      "before": "else if (s.refill == REFILL_DENIED or not(fenceAllows(s.wall, s.observedFence))) {",
-      "after": "else if (s.refill == REFILL_DENIED) {",
+      "before": "accepted(value) and refillAllowed(state, source.retentionMs, source.fence)",
+      "after": "accepted(value) and source.retentionMs > 0",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "absentReplyWithFutureFenceBlocksRefillTest",
+        "failure": "s.o.calls == List(VALUE_ONE) and s.o.dumps == 0 and s.o.writes == 0",
+        "family": "first-fence-check",
+        "profiles": [
+          "effects",
+          "recovery",
+          "recovery-read"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated refill authority is never executed; its own fence check is stated in its own text.",
+          "policy": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "shadow": "Every reply leaves the remote layer off, so no caller source refills; the dark fill judges its fence through refillAllowed, which the mutant leaves intact.",
+          "scope": "The request-only projection never refills the remote layer, so refills is never judged.",
+          "admission": "Every read serves a hit and a served job's detached source never fills, so refills is never judged for a refill.",
+          "layers": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "independent": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "local-failure": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "runtime-boundaries": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "shadow-layers": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "local-clock": "The local projection has no remote layer, so refills is never judged.",
+          "source-budgets": "The local projection never refills the remote layer, so refills is never judged."
+        }
+      },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M39",
-        "text": "M39 is the native twin of dialcache-effects-conformance.qnt settledSource dropping the fenceAllows condition from its refill-denied branch: both ports drop the pre-serialization fence check, so a source accepted behind an observed fence is serialized while the post-serialization recheck still blocks the write. effects/absentReplyWithFutureFenceBlocksRefillTest (dumps 0 becomes 1) and witness effects:normalized-fence-blocks-publication are the expected evidence in both ports."
+        "text": "M39 is the native twin of kernel/serving.qnt refills dropping the fence half of refillAllowed: both ports drop the pre-serialization fence check, so a source accepted behind an observed fence is serialized while the post-serialization recheck still blocks the write. effects/absentReplyWithFutureFenceBlocksRefillTest (dumps 0 becomes 1) and witness effects:normalized-fence-blocks-publication are the expected evidence in both ports."
       }
     },
     {
       "id": "effects-late-source-accepted",
       "contract": "C25",
-      "source": "formal/dialcache-effects-conformance.qnt",
+      "source": "formal/kernel/deadlines.qnt",
       "model": "formal/dialcache-effects-conformance.qnt",
-      "invariant": "writeRequiresAcceptedSource",
-      "before": "    else if (not(deadlinePendingAt(s.now, s.deadline))) {\n      phase: IDLE, calls: finishPendingCalls(s.calls, CALL_TIMEOUT), ...measured\n    }",
-      "after": "    else if (false) {\n      phase: IDLE, calls: finishPendingCalls(s.calls, CALL_TIMEOUT), ...measured\n    }",
+      "invariant": "acceptedSourcesSettledBeforeTheirDeadline",
+      "before": "else if (reached(state, SOURCE, ordinal)) DEADLINE_ERROR else value",
+      "after": "else if (false) DEADLINE_ERROR else value",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "lateSourceResultIsADeadlineErrorTest",
+        "failure": "s.o.calls == List(DEADLINE_ERROR) and s.o.dumps == 0 and errorReasons == List(\"fallback\") and amounts(\"fallback\") == List(10)",
+        "family": "late-acceptance",
+        "profiles": [
+          "effects",
+          "shadow"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated arrival is never executed; its own deadline rule is stated in its own text.",
+          "recovery": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "policy": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
+          "scope": "Composes the request-only projection, which registers no deadline (deadlines reaches its closure through diagnostics alone), so arrival never runs.",
+          "admission": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "layers": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
+          "independent": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "recovery-read": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
+          "local-failure": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
+          "runtime-boundaries": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
+          "shadow-layers": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "local-clock": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
+          "source-budgets": "Its late settlements are delivered deadlines: arrival never finds a reached deadline undelivered (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant)."
+        }
+      },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M03",
-        "text": "M03 is exactly dialcache-effects-conformance.qnt settledSource disabling its deadline-elapsed branch: both ports accept an externally settled result after its elapsed deadline when the timer has not run. Already detected through effects/lateReadCannotBecomeHitTest and the late-resolve and late-reject witnesses in both ports."
+        "text": "M03 is the native twin of kernel/deadlines.qnt arrival accepting a result whose deadline was reached undelivered: both ports accept an externally settled result after its elapsed deadline when the timer has not run. effects/lateSourceResultIsADeadlineErrorTest and the late-resolve and late-reject witnesses are the expected evidence in both ports."
       }
     },
     {
@@ -1478,7 +1504,7 @@
         ],
         "exclusions": {
           "core": "Composes no kernel module, so request_memo.closeScope is never executed.",
-          "effects": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "effects": "No request scope (persistentContexts 0), so request_memo.closeScope never runs.",
           "recovery": "Closes a scope only through closeScope while the other scope's memo is empty in every scheduled history, so clearing every row clears exactly the closing scope's (measured 2026-09-20).",
           "policy": "Has no request scopes (persistentContexts 0 and no closeScope input), so the memo fold the fault mutates is never executed.",
           "shadow": "No request scope (persistentContexts 0) and no closeScope input.",
@@ -1636,7 +1662,7 @@
         ],
         "exclusions": {
           "core": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
-          "effects": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "effects": "Every deadline is a multiple of the 10 ms step from the origin, so the earliest due instant and the advance's target coincide (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "recovery": "Its one source deadline is 10 ms and every scheduled history that reaches it advances by exactly 10 ms or by 1000 ms with the candidate still inside its maximum, so delivering at the target yields the same channels (measured 2026-09-20).",
           "policy": "Does not compose the deadlines module: its sources have no budget.",
           "shadow": "Composes deadlines' delivery for a source deadline and a job budget registered at one instant, whose expiries read no clock, so delivering at the target instead of each due instant yields the same channels (measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
@@ -1678,7 +1704,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
+          "effects": "Classifier NONE: no snapshot is retained and no recovery decode is held, so the mutated recovery age check is never executed.",
           "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
           "admission": "Passes Recovery::NONE at every read settlement, so no snapshot is retained and no recovery decode is held; the mutated text is never executed.",
           "local-failure": "Composes the layered traversal without the recovery module (no stale-on-error snapshot is retained), so the mutated recovery age check is never executed.",
@@ -1717,7 +1743,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
+          "effects": "Classifier NONE: no snapshot is retained and no recovery decode is held, so the mutated recovery-decode settlement is never executed.",
           "recovery": "Local capacity is 0: Local::putLocal stores nothing, so the mutated warm changes no channel.",
           "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
           "admission": "Passes Recovery::NONE at every read settlement, so no snapshot is retained and no recovery decode is held; the mutated text is never executed.",
@@ -1756,7 +1782,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
+          "effects": "The 60 s retention is below the tracked cap, so the mutated cap never binds.",
           "recovery": "Every retention (2000, 5000) is under the tracked cap, so capped and raw retention coincide.",
           "shadow": "Every retention (60 s) is under the tracked cap, so capped and raw retention coincide (measured 2026-09-20 over the composed text: every regression passes under the mutant).",
           "admission": "Every retention (60000 ms) is under the one-hour physical cap, so the capped and raw retention coincide.",
@@ -1799,7 +1825,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
+          "effects": "Does not compose local_faults, so the mutated definition is never executed.",
           "recovery": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
           "policy": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
           "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read.",
@@ -1839,7 +1865,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
+          "effects": "No local TTL: warm with localMs 0 stores nothing whatever the value, so the mutated local publication is never observable.",
           "recovery": "Composes serving.publish only through remote_io.settleLoader, which publishes a settled value only when it is already accepted and classifies a rejected one without publishing, so the removed acceptance gate never decides (measured 2026-09-20: every scheduled invariant and regression passes under the mutant).",
           "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read.",
           "scope": "Composes the request-only projection, whose sources settle through serving.settleRequest, never serving.publish.",
@@ -1981,7 +2007,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
+          "effects": "Does not compose the fractional clock, so the mutated definition is never executed.",
           "recovery": "Never composes the fractional clock (clock.advanceTicks): its clock moves through diagnostics.advance and clock.shiftWall on the whole-millisecond grid, so the mutated projection is never executed.",
           "policy": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
           "shadow": "Does not compose the fractional clock.",
@@ -2029,7 +2055,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
+          "effects": "The local layer is off (capacity 0 and no local TTL), so the mutated promotion never runs.",
           "recovery": "The local layer is off: capacity 0 and no local TTL, so no local entry is ever written or hit and the mutated renewal is never executed.",
           "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read.",
           "scope": "Composes the request-only projection, which never reads local storage.",
@@ -2090,11 +2116,11 @@
           "recovery",
           "policy",
           "shadow",
-          "recovery-read"
+          "recovery-read",
+          "effects"
         ],
         "exclusions": {
           "core": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
-          "effects": "Uses only deadlinePendingAt and fenceAllows from cache-rules; no age judgment is evaluated.",
           "scope": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "layers": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
@@ -2156,11 +2182,11 @@
           "shadow-layers",
           "recovery",
           "admission",
-          "shadow"
+          "shadow",
+          "effects"
         ],
         "exclusions": {
           "core": "does not compose the deadlines module: its sources have no budget",
-          "effects": "does not compose the deadlines module: its sources have no budget",
           "policy": "does not compose the deadlines module: its sources have no budget",
           "scope": "does not compose the deadlines module: its sources have no budget",
           "layers": "does not compose the deadlines module: its sources have no budget",
@@ -2196,7 +2222,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "effects": "No request memo: the memo value is always absent, so the two traversal orders coincide.",
           "recovery": "No scheduled history admits a caller into a scope holding a memo while another scope's flight is pending, so the reordered arms decide alike (measured 2026-09-20).",
           "shadow": "Every reply leaves every layer off and coalescing off: decide's join and serve arms are never taken.",
           "admission": "Composes decide with the remote layer unobserved and no memo or local layer, so no layer value can precede a join and the reordered arms decide alike.",
@@ -2235,7 +2261,7 @@
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
-          "effects": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "effects": "Every reply coalesces, so the dropped conjunct is always true.",
           "recovery": "Coalescing is on in every reply, so the conjunct the fault removes is always true and no history observes it.",
           "shadow": "Every reply leaves every layer off and coalescing off: decide's join and serve arms are never taken.",
           "independent": "Composes decide with coalesce false and registers its flights unshared, so the process registry never names an owner and the dropped conjunct changes no decision.",
@@ -2273,7 +2299,7 @@
         ],
         "exclusions": {
           "core": "Composes no kernel module, so serving.settleLocal is never executed.",
-          "effects": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "effects": "Composes the held remote lifecycle: its loaders settle through remote_io, never the local projection's settleLocal, so the mutated text is never executed.",
           "recovery": "Composes the held remote lifecycle, whose loaders settle through remote_io.settleLoader, so serving.settleLocal is never executed.",
           "policy": "Composes no kernel module, so serving.settleLocal is never executed.",
           "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read, and publishes through serving.publish, never settleLocal.",
@@ -2311,7 +2337,7 @@
         ],
         "exclusions": {
           "core": "Composes no kernel module, so serving.settleLocal is never executed.",
-          "effects": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "effects": "Composes the held remote lifecycle: its loaders settle through remote_io, never the local projection's settleLocal, so the mutated text is never executed.",
           "recovery": "Composes the held remote lifecycle, whose loaders settle through remote_io.settleLoader, so serving.settleLocal is never executed.",
           "policy": "Composes no kernel module, so serving.settleLocal is never executed.",
           "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read, and publishes through serving.publish, never settleLocal.",
@@ -2334,7 +2360,6 @@
     }
   ],
   "reproducerBacklog": [
-    "source-deadline-epoch",
     "recovery-inclusive-maximum",
     "recovery-future-candidate",
     "local-precise-grid",
@@ -2343,8 +2368,6 @@
     "profile-source-wrong-clock",
     "profile-source-wrong-owner",
     "independent-wrong-recovered-value",
-    "effects-source-wrong-clock",
-    "effects-wrong-acceptance-receipt",
     "independent-source-wrong-clock",
     "independent-source-wrong-owner",
     "tracked-read-inclusive-fence",
@@ -2365,8 +2388,6 @@
     "envelope-vectors-escape-misses-binary-marker",
     "conformance-local-hit-returns-source",
     "conformance-remote-miss-skips-publication",
-    "effects-fenced-source-publishes",
-    "effects-late-source-accepted",
     "scope-late-source-repopulates-closed-memo",
     "scope-source-error-memoized",
     "layers-process-flight-crosses-instance",

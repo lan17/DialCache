@@ -38,7 +38,6 @@ caller ownership and permitted acceptance for the named scope:
 | recovery-read | [Acquired payload and recovery return](./dialcache-recovery-read-connection.qnt) |
 | recovery | [Retained flight snapshot and recovery](./dialcache-recovery-connection.qnt) |
 | independent | [Per-caller snapshots and source deadlines](./dialcache-independent-connection.qnt) |
-| effects | [Source start and accepted publication timing](./dialcache-effects-connection.qnt) |
 | source-budgets | [Captured source origin, budget and follower ownership](./dialcache-source-connection.qnt) |
 
 Properties have different roles. The boundary assertions in

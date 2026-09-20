@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "63f0c6f1ea3aef71e85eb25acdb4ef6103d6dbaacad4e06f96471d8ee9705235",
+      "sha256": "a005c06d3a35c3a028c3893abc2faf18cb5c48d2b66970c4f1c8013004988701",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1154,7 +1154,7 @@
     },
     {
       "path": "formal/CONTRACTS.md",
-      "sha256": "c7add8b75ef29e5b8618b78263a4ff3dc326bd550d8f03d0407d17c968061350",
+      "sha256": "5dd880c3ca427206a3c28fd0e26c4f0ff202e37a053f0b10ea050c3a5869b267",
       "entries": [
         {"line":1,"title":"Portable contract inventory"},
         {"line":11,"title":"Where the boundary lies"},
@@ -1347,14 +1347,14 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "e30f20a0a03f01a08f869d58158a59b43c130d7980ed828992fa555b58d478a2",
+      "sha256": "7edd8ccbb9d6dc4d3e528c085e6b4337b540f4e793f827b1a7867dc64f30c86a",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
         {"line":26,"title":"How the specification connects to code"},
         {"line":46,"title":"Models and composition profiles"},
-        {"line":96,"title":"Generating and replaying behavior"},
-        {"line":183,"title":"Evidence and scope"}
+        {"line":95,"title":"Generating and replaying behavior"},
+        {"line":182,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1381,17 +1381,17 @@
     },
     {
       "path": "formal/SPEC.md",
-      "sha256": "f82d1d7914d1bd61d5156baff1faba9a98a999603fd222db388c559d6e48adca",
+      "sha256": "04fab67afcdac644a24b622072c425a3ecca68e9689c61563e8c9144c6ab1f9a",
       "entries": [
         {"line":1,"title":"DialCache behavioral specification"},
         {"line":18,"title":"Definition ownership and executable connections"},
-        {"line":56,"title":"Meaning of conformance"},
-        {"line":88,"title":"State and environmental inputs"},
-        {"line":113,"title":"Admission, policy, and traversal"},
-        {"line":162,"title":"Remote acquisition and publication"},
-        {"line":203,"title":"Time, source acceptance, and progress"},
-        {"line":233,"title":"Recovery, shadow work, and invalidation races"},
-        {"line":271,"title":"Assumptions, evidence, and claims"}
+        {"line":55,"title":"Meaning of conformance"},
+        {"line":87,"title":"State and environmental inputs"},
+        {"line":112,"title":"Admission, policy, and traversal"},
+        {"line":161,"title":"Remote acquisition and publication"},
+        {"line":202,"title":"Time, source acceptance, and progress"},
+        {"line":232,"title":"Recovery, shadow work, and invalidation races"},
+        {"line":270,"title":"Assumptions, evidence, and claims"}
       ],
       "review": {
         "kind": "contract-guide",
@@ -1486,7 +1486,7 @@
     },
     {
       "path": "formal/TEST-MAP.md",
-      "sha256": "09e219d85671b11af9e55c7bd6be6cf8005d18d6a0579ae4fbb70a93de9cd48d",
+      "sha256": "5e900759ff92b754130a856e49b5e977b97a359bce6e725957cd40118fe167c7",
       "entries": [
         {"line":1,"title":"Formal contract and implementation evidence map"},
         {"line":18,"title":"Behavioral map"},

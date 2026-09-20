@@ -65,7 +65,7 @@ async function replay(trace: Trace, harness: { settle?: boolean } = {}) {
       let inputs: Input[] = [];
       try {
         // Only the action/choice and independently observed effect index enter execution.
-        inputs = inputsFor({ action: step.action, ...(step.choice === undefined ? {} : { choice: step.choice }) }, observed, { wallMs: Date.now() });
+        inputs = inputsFor({ action: step.action, choice: step.choice }, observed, { wallMs: Date.now() });
         for (const input of inputs) await driver.apply(input);
       } catch (cause) { throw mismatch(cause); }
       ledger.issue(inputs);
@@ -99,7 +99,7 @@ describe("generated pending-effect conformance", () => {
     delete raw.states[0].s.events;
     expect(() => parseTrace(raw, "missing-events")).toThrow();
     const trace = structuredClone(traces[0]!);
-    trace.steps[1]!.state.events.push({ event: "miss", location: "remote", detail: "value_absent", amount: 0 });
+    trace.steps[1]!.expected.events.push({ event: "miss", location: "remote", detail: "value_absent", amount: 0 });
     await expect(replay(trace)).rejects.toThrow(/step 1 action.*\nexpected:.*\nactual:/s);
   });
 

@@ -20,40 +20,29 @@
       "redisWrites": true
     },
     "effects": {
-      "acceptedAt": true,
-      "acceptedWall": true,
-      "activeLoader": true,
-      "activeRead": true,
-      "baseReadBudget": true,
-      "calls": true,
-      "deadline": true,
-      "decodeStarted": true,
-      "dumps": true,
-      "events": true,
-      "invalidations": true,
-      "loaders": true,
-      "loads": true,
-      "now": true,
-      "observedFence": true,
-      "observerFailed": true,
-      "phase": true,
-      "policyCalls": true,
-      "readAborts": true,
-      "readBudget": true,
-      "readBudgets": true,
-      "readStarted": true,
-      "readStates": true,
-      "reads": true,
-      "refill": true,
-      "reply": true,
-      "replyAt": true,
-      "sources": true,
-      "storedTimestamp": true,
-      "tracked": true,
-      "wall": true,
-      "watermark": true,
-      "writeTimestamp": true,
-      "writes": true
+      "o": {
+        "calls": true,
+        "classifications": true,
+        "comparisons": true,
+        "dumps": true,
+        "invalidations": true,
+        "loaders": true,
+        "loads": true,
+        "maintenance": true,
+        "policyCalls": true,
+        "reads": true,
+        "recovery": true,
+        "shadow": true,
+        "sourceScopes": true,
+        "writeTtls": true,
+        "writes": true
+      },
+      "io": {
+        "aborted": true,
+        "budgets": true,
+        "sourceErrors": true
+      },
+      "events": true
     },
     "scope": {
       "o": {
@@ -242,15 +231,6 @@
       "retained": true,
       "sources": true,
       "ttls": true
-    },
-    "effects-13": {
-      "calls": true,
-      "reads": true,
-      "loaders": true,
-      "loads": true,
-      "dumps": true,
-      "writes": true,
-      "events": true
     },
     "layers": {
       "capacity": true,
@@ -1138,32 +1118,32 @@
         {
           "id": "observerFailuresCannotPreventCacheHitTest",
           "regression": "observerFailuresCannotPreventCacheHitTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "observerFailuresCannotPreventPublicationTest",
           "regression": "observerFailuresCannotPreventPublicationTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "observerFailuresCannotReplaceSourceErrorTest",
           "regression": "observerFailuresCannotReplaceSourceErrorTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "writeStampAfterSerializationClearsInterveningFenceTest",
           "regression": "writeStampAfterSerializationClearsInterveningFenceTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "futureFrameReportsPositiveObservingOffsetTest",
           "regression": "futureFrameReportsPositiveObservingOffsetTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
           "regression": "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
-          "projection": "effects-13"
+          "projection": "effects"
         }
       ]
     },

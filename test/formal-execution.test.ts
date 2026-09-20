@@ -66,6 +66,13 @@ const scanSource = (source: string): Declarations => {
   return declarations;
 };
 const validate = (value: unknown, options?: Options) => validateExecution(value, { scanSource, ...options });
+// The effects text with one state-patching run appended (an inline `s'` assignment under `input' = input`), for the
+// negatives about runs that are scheduled but never exported; every run the profiles declare is public.
+const withPatchingRun = (path: string) => {
+  const source = readFileSync(root + path, "utf8");
+  if (path !== "formal/dialcache-effects-conformance.qnt") return source;
+  return source.replace(/\n}\s*$/, "\n  run patchedBudgetTest = tenMillisecondFixture.then(all { input' = input, s' = { readBudget: 30, ...s } }).expect(s.readBudget == 30)\n}\n");
+};
 const scheduled = () => scheduleExecution(manifest(), { scanSource });
 const liveReproducers = () => manifest().challenges.filter(challenge => challenge.reproducer).length;
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
@@ -233,11 +240,8 @@ describe("formal execution schedule", () => {
       const runs = classifyRuns(scanDeclarationBodies(readFileSync(root + model.path, "utf8")));
       expect(model.replayRegressions, model.path).toEqual(runs.publicOnly);
     }
-    // Every profile exports at least one history, and the classifier separates: effects keeps its
-    // state-patching fixtures out of replay.
+    // Every profile exports at least one history.
     for (const model of current.models.filter(model => model.profile)) expect(model.replayRegressions!.length, model.path).toBeGreaterThan(0);
-    const effectsModel = current.models.find(model => model.profile === "effects")!;
-    expect(effectsModel.regressions.length).toBeGreaterThan(effectsModel.replayRegressions!.length);
   });
 
   it("exports every public-only run and no state-patching run, by construction of the schedule", () => {
@@ -248,12 +252,12 @@ describe("formal execution schedule", () => {
       expect(runs.publicOnly.filter(name => !model.replayRegressions!.includes(name)), model.path).toEqual([]);
       expect(model.replayRegressions!.every(name => model.regressions.includes(name)), model.path).toBe(true);
     }
-    // A reproducer may cite a state-patching run only as a model-run, never as an exported regression.
+    // A reproducer may cite a state-patching run only as a model-run, never as an exported regression. No profile
+    // declares one any more, so the negative adds one to the effects text through the source reader.
     const patching = manifest();
     const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
-    patching.reproducerBacklog = patching.reproducerBacklog.filter(id => id !== effects.id);
-    effects.reproducer = { kind: "exported-regression", run: "followerKeepsAcceptedReadBudgetTest", failure: "s.phase == SOURCE_RUNNING and s.deadline == 10040 and s.readAborts == 1", family: "late-acceptance", profiles: ["effects"], exclusions: {} };
-    expect(() => validate(patching)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: followerKeepsAcceptedReadBudgetTest/);
+    effects.reproducer = { ...effects.reproducer!, kind: "exported-regression", run: "patchedBudgetTest", failure: "s.readBudget == 30" };
+    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
   });
 
   it("rejects a generated history whose choice leaves the driver domain at generation time", () => {
@@ -332,14 +336,14 @@ describe("formal execution schedule", () => {
     const current = manifest();
     const withReproducer = current.challenges.filter(challenge => challenge.reproducer);
     expect(withReproducer.map(challenge => challenge.id)).toEqual([
-      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "recovery-strands-followers", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "shadow-fenced-fill-writes", "shadow-fill-before-source", "scope-nested-close-evicts-outer-memo", "admission-duplicate-key-admitted", "admission-capacity-off-by-one", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "local-failure-write-fault-publishes", "local-failure-source-error-published", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "local-clock-hit-renews-insertion", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry",
+      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "effects-wrong-acceptance-receipt", "recovery-strands-followers", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "shadow-fenced-fill-writes", "shadow-fill-before-source", "effects-fenced-source-publishes", "effects-late-source-accepted", "scope-nested-close-evicts-outer-memo", "admission-duplicate-key-admitted", "admission-capacity-off-by-one", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "local-failure-write-fault-publishes", "local-failure-source-error-published", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "local-clock-hit-renews-insertion", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry",
     ]);
     expect(withReproducer.map(challenge => challenge.reproducer!.kind)).toEqual([
-      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
+      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
     ]);
     // The shared-rule fault of a verification model is pinned by a profile's exported regression.
     expect(withReproducer.find(challenge => challenge.id === "stale-recovery-future-candidate")!.reproducer).toMatchObject({
-      model: "formal/dialcache-policy-conformance.qnt", run: "wallRollbackRejectsFutureRemoteFrameTest", profiles: ["formal/dialcache-stale-recovery.qnt", "recovery", "policy", "shadow", "recovery-read"],
+      model: "formal/dialcache-policy-conformance.qnt", run: "wallRollbackRejectsFutureRemoteFrameTest", profiles: ["formal/dialcache-stale-recovery.qnt", "recovery", "policy", "shadow", "recovery-read", "effects"],
     });
     expect([...current.reproducerBacklog].sort()).toEqual(current.challenges.filter(challenge => !challenge.reproducer).map(challenge => challenge.id).sort());
     const unlisted = manifest();
@@ -587,15 +591,17 @@ describe("formal execution schedule", () => {
     // A shared-library fault lists or excludes every known profile.
     expect(() => validate(shared(r => { delete r.exclusions.core; delete r.exclusions.layers; }))).toThrow(/a shared-library fault must list or exclude every profile; missing core, layers/);
     expect(validate(shared(r => { delete r.exclusions.layers; r.profiles.push("layers"); })).reproducers).toBe(liveReproducers());
-    // A state-patching run is a scheduled regression but never exported.
+    // A state-patching run is a scheduled regression but never exported (the run is added to the effects text
+    // through the source reader: no profile declares one), and an exported run may not be cited as a model-run.
     const patching = manifest();
     const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
-    patching.reproducerBacklog = patching.reproducerBacklog.filter(id => id !== effects.id);
-    const budget = "s.phase == SOURCE_RUNNING and s.deadline == 10040 and s.readAborts == 1";
-    effects.reproducer = { kind: "exported-regression", run: "followerKeepsAcceptedReadBudgetTest", failure: budget, family: "late-acceptance", profiles: ["effects"], exclusions: {} };
-    expect(() => validate(patching)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: followerKeepsAcceptedReadBudgetTest/);
-    effects.reproducer = { kind: "model-run", run: "followerKeepsAcceptedReadBudgetTest", failure: budget, family: "late-acceptance", profiles: ["effects"], exclusions: {}, scope: "Patches the follower budget directly." };
-    expect(validate(patching)).toMatchObject({ reproducers: liveReproducers() + 1, reproducerBacklog: manifest().reproducerBacklog.length - 1 });
+    const budget = "s.readBudget == 30";
+    effects.reproducer = { ...effects.reproducer!, kind: "exported-regression", run: "patchedBudgetTest", failure: budget };
+    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
+    effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "patchedBudgetTest", failure: budget, scope: "Patches the read budget directly." };
+    expect(validate(patching, { readSource: withPatchingRun })).toMatchObject({ reproducers: liveReproducers(), reproducerBacklog: manifest().reproducerBacklog.length });
+    effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "lateSourceResultIsADeadlineErrorTest", failure: manifest().challenges.find(challenge => challenge.id === "effects-late-source-accepted")!.reproducer!.failure, scope: "Not a model-only run." };
+    expect(() => validate(patching)).toThrow(/lateSourceResultIsADeadlineErrorTest is exported; cite it as an exported-regression reproducer/);
     expect(() => validate(modelRun(r => { delete r.scope; }))).toThrow(/model-run reproducer needs a scope/);
     expect(() => validate(modelRun(r => { r.profiles = ["recovery"]; }))).toThrow(/must name known profiles and include formal\/dialcache-envelope-vectors\.qnt/);
     const exportedAsModelRun = manifest();

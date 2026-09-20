@@ -54,7 +54,7 @@ describe("shared replay input and expectation boundary", () => {
     const original = smoke(profile);
     const changed = structuredClone(original);
     for (const state of changed.states) {
-      const observation = profile === "core" || profile === "effects" ? state.s : state.s.o as Record<string, unknown>;
+      const observation = profile === "core" ? state.s : state.s.o as Record<string, unknown>;
       observation[profile === "core" ? "redisReads" : "reads"] = { "#bigint": "123456" };
     }
     const baseline = bindTrace(profile, original, "original");

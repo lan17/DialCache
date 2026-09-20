@@ -39,7 +39,8 @@
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
         "formal/replay/witnesses/effects.mjs",
-        "formal/replay/witnesses/effects-authority.mjs"
+        "formal/replay/witnesses/effects-authority.mjs",
+        "formal/replay/witnesses/fidelity.mjs"
       ]
     },
     {

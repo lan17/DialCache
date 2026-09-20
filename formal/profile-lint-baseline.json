@@ -2,6 +2,7 @@
   "schemaVersion": 3,
   "quintVersion": "0.32.0",
   "kernelModules": [
+    "adapter_replies",
     "calls",
     "clock",
     "compression",
@@ -15,6 +16,7 @@
     "local_faults",
     "local_storage",
     "markers",
+    "metrics",
     "payloads",
     "policy_gate",
     "policy_overlay",
@@ -40,8 +42,24 @@
       "id": "effects",
       "model": "formal/dialcache-effects-conformance.qnt",
       "module": "dialcache_effects_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 64
+      "libraryTransitions": [
+        "adapter_replies::queue",
+        "clock::advance",
+        "clock::shiftWall",
+        "metrics::advance",
+        "metrics::begin",
+        "metrics::invalidate",
+        "metrics::releaseDump",
+        "metrics::releaseWrite",
+        "metrics::settleLoad",
+        "metrics::settleLoader",
+        "metrics::settleRead",
+        "remote_frames::seedFrame",
+        "remote_io::latestLoad",
+        "remote_writes::latestDump",
+        "remote_writes::latestWrite"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "scope",

@@ -48,7 +48,7 @@ calling the helper they are meant to challenge.
 Read [cache-rules.qnt](./cache-rules.qnt) and
 [cache-contract.qnt](./cache-contract.qnt) for shared judgments and acquired
 ownership records. [SPEC.md](./SPEC.md#definition-ownership-and-executable-connections)
-maps them to the five checked profile connections.
+maps them to the four checked profile connections.
 [dialcache-rule-checks.qnt](./dialcache-rule-checks.qnt) supplies the finite
 symbolic boundary checks.
 
@@ -58,7 +58,6 @@ The verification models emphasize individual ownership or safety boundaries:
 | --- | --- |
 | [dialcache-core.qnt](./dialcache-core.qnt) | Enabled scopes, traversal and publication |
 | [dialcache-runtime-policy.qnt](./dialcache-runtime-policy.qnt) | Sparse overlays and captured policy |
-| [dialcache-flight-deadlines.qnt](./dialcache-flight-deadlines.qnt) | Flights, deadlines and abandoned sources |
 | [dialcache-tracked-invalidation.qnt](./dialcache-tracked-invalidation.qnt) | Acquired snapshots, watermarks and delayed writes |
 | [dialcache-stale-recovery.qnt](./dialcache-stale-recovery.qnt) | Retained bytes, age checks and recovery authority |
 | [dialcache-redis-protocol.qnt](./dialcache-redis-protocol.qnt) | Frame/fence validation order |

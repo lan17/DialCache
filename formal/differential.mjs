@@ -11,6 +11,7 @@ import { normalizeTraceFiles } from './replay-inputs.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 import { parseTrace, profiles } from './replay/features.mjs';
 import { localClockDescriptor } from './replay/local-clock.mjs';
+import { effectsDescriptor } from './replay/effects.mjs';
 import { generationArguments } from './run-models.mjs';
 
 // Corpus differential for a composed profile (#165).
@@ -58,7 +59,10 @@ export const cursorVariable = 'replayCursor';
 // once the merge base with main carries the renamed text, delete the
 // local-clock descriptor's binding, `boundAction` with its two call sites in
 // prepareReplay, the `.d.mts` field and their tests.
-export const replayDescriptors = { ...profiles, 'local-clock': localClockDescriptor };
+// A descriptor may bring its own parser (`parseTrace`) where the profile's
+// drivers assert a record the shared parser does not read: the effects
+// descriptor reads both the composed and the retired layout into one record.
+export const replayDescriptors = { ...profiles, 'local-clock': localClockDescriptor, effects: effectsDescriptor };
 
 const gitShow = (revision, path, cwd) => execFileSync('git', ['show', `${revision}:${path}`], { cwd, encoding: 'utf8', maxBuffer: 1 << 26 });
 
@@ -226,7 +230,7 @@ export async function generateCorpus(tree, model, { timeoutMs } = {}) {
 export function loadHistories(directory, descriptor) {
   if (!existsSync(directory)) return [];
   return readdirSync(directory).filter(name => name.endsWith('.itf.json')).sort()
-    .map(name => parseTrace(JSON.parse(readFileSync(resolve(directory, name), 'utf8')), name, descriptor));
+    .map(name => (descriptor.parseTrace ?? parseTrace)(JSON.parse(readFileSync(resolve(directory, name), 'utf8')), name, descriptor));
 }
 
 // A run that stops early still writes its trace: the agreeing prefix plus one
@@ -333,7 +337,7 @@ export function boundAction(declarations, descriptor, action) {
 // is the initialization the reference also took, none is a refused init.
 export function replayedHistory(raw, reference, descriptor) {
   const recorded = recordedStates(raw);
-  if (recorded.states.length >= 2) return parseTrace(recorded, reference.path, descriptor);
+  if (recorded.states.length >= 2) return (descriptor.parseTrace ?? parseTrace)(recorded, reference.path, descriptor);
   return { path: reference.path, steps: recorded.states.length === 1 ? reference.steps.slice(0, 1) : [] };
 }
 

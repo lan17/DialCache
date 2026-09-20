@@ -139,12 +139,15 @@ describe("corpus differential comparison", () => {
     expect(differential.differentialPlan(manifests([layersModel()]), manifests([]), "layers")).toMatchObject({ action: "skip", reason: /profile removed/ });
     expect(() => differential.differentialPlan(manifests([]), manifests([]), "layers")).toThrow(/No generation profile named layers in either revision/);
     // A generated profile without an explicit-input driver descriptor is refused by name, not misreported.
-    const effects = (extra: Record<string, unknown> = {}) => ({ path: "formal/dialcache-effects-conformance.qnt", profile: "effects", invariants: ["a"], regressions: [],
-      generate: { maxSamples: 4, maxSteps: 4, traces: 2, outputDirectory: ".formal-traces/effects" }, ...extra });
-    const effectsManifests = (models: Array<Record<string, unknown>>): Manifests => ({ execution: { settings: { backend: "rust", threads: 1, seed: "0xd1a1ca", verbosity: 1 }, models }, registry: { profiles: [{ id: "effects", version: 1 }] } });
-    expect(() => differential.differentialPlan(effectsManifests([effects()]), effectsManifests([effects()]), "effects")).toThrow(/effects has no explicit-input replay descriptor/);
-    // The local-clock profile, whose driver has its own runner, replays through its own descriptor beside the feature profiles.
-    expect(Object.keys(differential.replayDescriptors)).toEqual(expect.arrayContaining(["layers", "policy", "local-clock"]));
+    const teleport = (extra: Record<string, unknown> = {}) => ({ path: "formal/dialcache-teleport-conformance.qnt", profile: "teleport", invariants: ["a"], regressions: [],
+      generate: { maxSamples: 4, maxSteps: 4, traces: 2, outputDirectory: ".formal-traces/teleport" }, ...extra });
+    const teleportManifests = (models: Array<Record<string, unknown>>): Manifests => ({ execution: { settings: { backend: "rust", threads: 1, seed: "0xd1a1ca", verbosity: 1 }, models }, registry: { profiles: [{ id: "teleport", version: 1 }] } });
+    expect(() => differential.differentialPlan(teleportManifests([teleport()]), teleportManifests([teleport()]), "teleport")).toThrow(/teleport has no explicit-input replay descriptor/);
+    // The local-clock and effects profiles, whose drivers have their own runners, replay through their own descriptors beside the
+    // feature profiles; the effects descriptor brings its own parser for the record its drivers assert.
+    expect(Object.keys(differential.replayDescriptors)).toEqual(expect.arrayContaining(["layers", "policy", "local-clock", "effects"]));
+    expect(differential.differentialPlan(differential.readManifests(root), differential.readManifests(root), "effects"))
+      .toMatchObject({ action: "compare", descriptor: { explicitInputs: true, parseTrace: expect.any(Function), actions: { adapterReply: { choices: Array.from({ length: 16 }, (_, i) => i + 1) }, releaseRead: { choices: "index" }, tick: {} } } });
     expect(differential.differentialPlan(differential.readManifests(root), differential.readManifests(root), "local-clock"))
       .toMatchObject({ action: "compare", descriptor: { explicitInputs: true, actions: { call: { choices: [0, 1, 2, 3] } }, actionBindings: { call: "callCache" } } });
   });
@@ -217,7 +220,7 @@ describe("corpus differential comparison", () => {
   }, 30_000);
 
   it("selects the composed profiles by their kernel imports in either revision, following helper libraries, and lists every Quint source", () => {
-    expect(differential.composedProfiles(readExecution())).toEqual(["recovery", "policy", "shadow", "scope", "admission", "layers", "independent", "recovery-read", "local-failure", "runtime-boundaries", "shadow-layers", "local-clock", "source-budgets"]);
+    expect(differential.composedProfiles(readExecution())).toEqual(["effects", "recovery", "policy", "shadow", "scope", "admission", "layers", "independent", "recovery-read", "local-failure", "runtime-boundaries", "shadow-layers", "local-clock", "source-budgets"]);
     // A profile composed only at the reference (a rewrite off the library) is still selected.
     const referenceTree = mkdtempSync(join(tmpdir(), "differential-reference-"));
     const candidateTree = mkdtempSync(join(tmpdir(), "differential-candidate-"));

@@ -23,7 +23,7 @@ import { shadowWitnesses } from "./shadow.mjs";
 import { shadowDiagnosticsWitnesses } from "./shadow-diagnostics.mjs";
 import { shadowLayersWitnesses } from "./shadow-layers.mjs";
 import { sourceBudgetsWitnesses } from "./source-budgets.mjs";
-import { readTrace, traceStates, witnessStates } from "./trace.mjs";
+import { readTrace, witnessStates } from "./trace.mjs";
 
 // One language-neutral witness evaluator for every profile with a completion
 // gate. Any port runs it over the same sampled histories and exported
@@ -37,10 +37,12 @@ export const witnessProfiles = [...Object.keys(featureProfiles), "effects", "loc
 
 // The shared strict parser for a profile's histories. Effects and feature
 // histories keep their raw ITF states for the classifiers keyed on explicit
-// inputs and public observations; feature histories also carry their decoded
-// private predictions.
+// inputs and public observations, and carry their decoded private
+// predictions for the fidelity checks.
 function historyParser(profile) {
-  if (profile === "effects") return (raw, path) => ({ ...parseEffectsTrace(raw, path), states: traceStates(raw, path) });
+  // Effects histories carry their decoded private predictions beside the
+  // parsed steps for the classifier's fidelity check, as feature histories do.
+  if (profile === "effects") return (raw, path) => ({ ...parseEffectsTrace(raw, path), ...witnessStates(raw, path) });
   if (profile === "local-clock") return parseLocalClockTrace;
   const definition = featureProfiles[profile];
   if (definition === undefined) throw new Error(`Unknown witness profile ${profile}`);
