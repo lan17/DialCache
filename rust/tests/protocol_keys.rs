@@ -9,9 +9,26 @@ mod fixtures;
 #[path = "formal/key_vectors.rs"]
 mod key_vectors;
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 type Check = fn(&Value) -> Result<(), String>;
+
+#[test]
+fn key_assertions_distinguish_library_rejections_from_bad_fixtures() {
+    let valid_shape = json!({
+        "input":{"namespace":"bad{namespace", "keyType":"id", "id":"1", "useCase":"Example", "tracked":false, "args":[]},
+        "logicalKey":"expected", "valueKey":"expected", "watermarkKey":null,
+    });
+    let error = key_vectors::check_key_vector(&valid_shape).unwrap_err();
+    assert!(
+        error.starts_with("PROTOCOL_ASSERTION_FAILURE expected:"),
+        "{error}"
+    );
+    let mut malformed = valid_shape;
+    malformed["logicalKey"] = json!(5);
+    let error = key_vectors::check_key_vector(&malformed).unwrap_err();
+    assert!(!error.contains("PROTOCOL_ASSERTION_FAILURE"), "{error}");
+}
 
 const GROUPS: [(&str, Check); 4] = [
     ("keyVectors", key_vectors::check_key_vector),

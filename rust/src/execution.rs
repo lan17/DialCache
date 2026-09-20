@@ -294,9 +294,12 @@ pub(crate) fn layer_labels(labels: &OutcomeLabels, layer: Layer) -> Labels {
 }
 
 /// Invoke the source directly with panic isolation; errors keep their identity.
-async fn call_load(op: &ErasedOperation, scope: Scope) -> ValueResult {
-    let future = (op.load)(scope);
-    match AssertUnwindSafe(future).catch_unwind().await {
+pub(crate) async fn call_load(op: &ErasedOperation, scope: Scope) -> ValueResult {
+    // Constructing a callback's future can panic before its first poll.
+    match AssertUnwindSafe(async { (op.load)(scope).await })
+        .catch_unwind()
+        .await
+    {
         Ok(Ok(value)) => Ok(value),
         Ok(Err(error)) => Err(Error::Source(Arc::from(error))),
         Err(payload) => Err(Error::Panic(panic_message(payload))),
@@ -840,7 +843,7 @@ impl Execution {
         }
         let start = self.elapsed();
         let codec = self.op.codec.clone();
-        let decoded = match AssertUnwindSafe(codec.decode(expanded.payload))
+        let decoded = match AssertUnwindSafe(async { codec.decode(expanded.payload).await })
             .catch_unwind()
             .await
         {
@@ -885,7 +888,10 @@ impl Execution {
         }
         let start = self.elapsed();
         let codec = self.op.codec.clone();
-        let encoded = match AssertUnwindSafe(codec.encode(value)).catch_unwind().await {
+        let encoded = match AssertUnwindSafe(async { codec.encode(value).await })
+            .catch_unwind()
+            .await
+        {
             Ok(result) => result,
             Err(payload) => Err(Box::new(PanicError(panic_message(payload))) as BoxError),
         };

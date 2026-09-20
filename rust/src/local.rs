@@ -59,10 +59,11 @@ pub struct LruLocalStore {
 }
 
 impl LruLocalStore {
-    /// A store holding at most `capacity` entries. Capacity must be positive.
+    /// A store holding at most `capacity` entries. Capacity must be positive;
+    /// storage is allocated as entries arrive rather than for the full limit.
     pub fn new(capacity: NonZeroUsize) -> Self {
         LruLocalStore {
-            entries: lru::LruCache::new(capacity),
+            entries: lru::LruCache::sparse(capacity),
         }
     }
 

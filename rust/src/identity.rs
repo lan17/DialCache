@@ -249,68 +249,10 @@ pub fn cohort(logical_key: &str, discriminator: &str) -> f64 {
 /// round-trips, laid out as plain decimal for exponents in `(-7, 21]` and as
 /// `d.ddde±X` otherwise. Negative zero spells `0`.
 pub fn js_number_to_string(value: f64) -> String {
-    if value.is_nan() {
-        return "NaN".to_owned();
-    }
-    if value.is_infinite() {
-        return if value > 0.0 { "Infinity" } else { "-Infinity" }.to_owned();
-    }
-    if value == 0.0 {
-        return "0".to_owned();
-    }
-    let (digits, exponent) = shortest_digits(value.abs());
-    let k = digits.len() as i32;
-    let n = exponent + 1;
-    let mut out = String::new();
-    if value < 0.0 {
-        out.push('-');
-    }
-    if k <= n && n <= 21 {
-        out.push_str(&digits);
-        out.extend(std::iter::repeat_n('0', (n - k) as usize));
-    } else if 0 < n && n <= 21 {
-        let (whole, fraction) = digits.split_at(n as usize);
-        out.push_str(whole);
-        out.push('.');
-        out.push_str(fraction);
-    } else if -6 < n && n <= 0 {
-        out.push_str("0.");
-        out.extend(std::iter::repeat_n('0', (-n) as usize));
-        out.push_str(&digits);
-    } else {
-        let (first, rest) = digits.split_at(1);
-        out.push_str(first);
-        if !rest.is_empty() {
-            out.push('.');
-            out.push_str(rest);
-        }
-        let e = n - 1;
-        out.push('e');
-        out.push(if e < 0 { '-' } else { '+' });
-        let _ = write!(out, "{}", e.abs());
-    }
-    out
-}
-
-/// The shortest round-trip decimal digits of a positive finite number and
-/// the decimal exponent of its first digit: `value = 0.d1d2… × 10^(exponent+1)`.
-fn shortest_digits(value: f64) -> (String, i32) {
-    debug_assert!(value.is_finite() && value > 0.0);
-    // Rust's `LowerExp` without a precision prints the shortest representation
-    // that round-trips, as `d[.ddd]e[-]X`.
-    let scientific = format!("{value:e}");
-    let (mantissa, exponent) = scientific
-        .split_once('e')
-        .expect("LowerExp always includes an exponent");
-    let mut digits: String = mantissa.chars().filter(|c| *c != '.').collect();
-    let trimmed = digits.trim_end_matches('0').len().max(1);
-    digits.truncate(trimmed);
-    (
-        digits,
-        exponent
-            .parse()
-            .expect("LowerExp exponent is a decimal integer"),
-    )
+    // Rust's standard shortest formatter rounds some decimal ties away from
+    // zero; ECMAScript chooses the even significand. Those spellings are part
+    // of the shared key identity, so use the ECMAScript variant of Ryū.
+    ryu_js::Buffer::new().format(value).to_owned()
 }
 
 /// Compare two strings by UTF-16 code units, as JavaScript's `<` does.
@@ -348,6 +290,13 @@ mod tests {
             (0.5, "0.5"),
             (123.456, "123.456"),
             (1e20, "100000000000000000000"),
+            // Exact binary fractions whose shortest decimal candidates tie.
+            (f64::from_bits(0x430c6bf526340002), "1000000000000000.2"),
+            (f64::from_bits(0xc30c6bf526340002), "-1000000000000000.2"),
+            (f64::from_bits(0x430c6bf526340006), "1000000000000000.8"),
+            (f64::from_bits(0xc30c6bf526340006), "-1000000000000000.8"),
+            (f64::from_bits(0x42d6bcc41e900008), "100000000000000.12"),
+            (f64::from_bits(0x42d6bcc41e900018), "100000000000000.38"),
         ];
         for (value, expected) in cases {
             assert_eq!(

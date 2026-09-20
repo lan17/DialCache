@@ -13,8 +13,8 @@ use parking_lot::Mutex;
 use crate::deadline::{await_deadline, since};
 use crate::engine::Core;
 use crate::error::Error;
-use crate::execution::{Execution, RawRead};
-use crate::flight::{panic_message, start_pending, yield_deferred, Settled, ValueResult};
+use crate::execution::{call_load, Execution, RawRead};
+use crate::flight::{start_pending, yield_deferred, Settled, ValueResult};
 use crate::limits::DEFAULT_FALLBACK_TIMEOUT_MS;
 use crate::local::StoredValue;
 use crate::observe::{
@@ -371,15 +371,7 @@ impl Execution {
                 }
                 result
             }
-            None => {
-                let disabled = self.scope.disabled_view();
-                let future = (self.op.load)(disabled);
-                match AssertUnwindSafe(future).catch_unwind().await {
-                    Ok(Ok(value)) => Ok(value),
-                    Ok(Err(error)) => Err(Error::Source(Arc::from(error))),
-                    Err(payload) => Err(Error::Panic(panic_message(payload))),
-                }
-            }
+            None => call_load(&self.op, self.scope.disabled_view()).await,
         };
         let value = match value {
             Ok(value) => value,

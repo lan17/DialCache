@@ -93,6 +93,256 @@ fn without(base: &Value, field: &str) -> Value {
     Value::Object(changed)
 }
 
+#[test]
+fn publication_causality_distinguishes_overlapping_source_owners_and_deadlines() {
+    use formal::causal::{assert_publication_causality, CausalEvent::*};
+    let overlap = vec![
+        SourceStart {
+            id: 0,
+            owner: 10,
+            at_ms: 0,
+            budget_ms: Some(10),
+        },
+        SourceStart {
+            id: 1,
+            owner: 20,
+            at_ms: 10,
+            budget_ms: Some(10),
+        },
+        SourceSettlement {
+            id: 0,
+            at_ms: 15,
+            outcome: "resolve",
+        },
+        SourceSettlement {
+            id: 1,
+            at_ms: 16,
+            outcome: "resolve",
+        },
+    ];
+    for (source, owner, expected) in [
+        (0, 10, "late raw settlement"),
+        (1, 10, "different invocation"),
+    ] {
+        let mut history = overlap.clone();
+        history.push(WriteDispatch {
+            source: Some(source),
+            owner: Some(owner),
+            at_ms: 17,
+        });
+        let error = assert_publication_causality(&history).unwrap_err();
+        assert!(error.starts_with("CAUSAL_PROPERTY_FAILURE"), "{error}");
+        assert!(error.contains(expected), "{error}");
+    }
+    let mut accepted = overlap.clone();
+    accepted.push(WriteDispatch {
+        source: Some(1),
+        owner: Some(20),
+        at_ms: 30,
+    });
+    assert_publication_causality(&accepted)
+        .expect("publication can outlive an accepted source's deadline");
+    assert_publication_causality(&overlap[..2]).expect("pending prefixes are allowed");
+    assert_publication_causality(&[
+        SourceStart {
+            id: 0,
+            owner: 0,
+            at_ms: 0,
+            budget_ms: None,
+        },
+        SourceSettlement {
+            id: 0,
+            at_ms: 100_000,
+            outcome: "resolve",
+        },
+        WriteDispatch {
+            source: Some(0),
+            owner: Some(0),
+            at_ms: 100_000,
+        },
+    ])
+    .expect("unbounded sources stay unbounded");
+    for outcome in [None, Some("reject")] {
+        let mut history = vec![SourceStart {
+            id: 0,
+            owner: 0,
+            at_ms: 0,
+            budget_ms: Some(10),
+        }];
+        if let Some(outcome) = outcome {
+            history.push(SourceSettlement {
+                id: 0,
+                at_ms: 1,
+                outcome,
+            });
+        }
+        history.push(WriteDispatch {
+            source: Some(0),
+            owner: Some(0),
+            at_ms: 1,
+        });
+        assert!(assert_publication_causality(&history)
+            .unwrap_err()
+            .contains("exact source's successful settlement"));
+    }
+}
+
+#[test]
+fn malformed_monitor_inputs_never_become_mutation_evidence() {
+    use formal::causal::{assert_publication_causality, CausalEvent::*};
+    use formal::driver::{Driver, HistoryEvent};
+    for history in [
+        vec![SourceStart {
+            id: 0,
+            owner: 0,
+            at_ms: 0,
+            budget_ms: Some(0),
+        }],
+        vec![SourceSettlement {
+            id: 0,
+            at_ms: 0,
+            outcome: "resolve",
+        }],
+        vec![WriteDispatch {
+            source: None,
+            owner: None,
+            at_ms: 0,
+        }],
+        vec![SourceStart {
+            id: 0,
+            owner: 0,
+            at_ms: -1,
+            budget_ms: None,
+        }],
+        vec![
+            SourceStart {
+                id: 0,
+                owner: 0,
+                at_ms: 0,
+                budget_ms: None,
+            },
+            SourceSettlement {
+                id: 0,
+                at_ms: 1,
+                outcome: "unknown",
+            },
+        ],
+    ] {
+        let error = assert_publication_causality(&history).unwrap_err();
+        assert!(!error.contains("CAUSAL_PROPERTY_FAILURE"), "{error}");
+    }
+    let start = HistoryEvent {
+        event: "sourceStart",
+        id: 0,
+        at: 0,
+        outcome: "",
+        duration_ms: 0.0,
+        failed: false,
+    };
+    let settled = HistoryEvent {
+        event: "sourceSettlement",
+        at: 10,
+        outcome: "resolve",
+        ..start.clone()
+    };
+    let completed = HistoryEvent {
+        event: "fallbackCompletion",
+        at: 10,
+        duration_ms: 10.0,
+        ..start.clone()
+    };
+    for history in [
+        vec![completed.clone()],
+        vec![settled.clone()],
+        vec![
+            start.clone(),
+            HistoryEvent {
+                outcome: "unknown",
+                ..settled.clone()
+            },
+        ],
+    ] {
+        let error = Driver::assert_effects_events(&history).unwrap_err();
+        assert!(!error.contains("CAUSAL_PROPERTY_FAILURE"), "{error}");
+    }
+    let error = Driver::assert_effects_events(&[start, settled, completed]).unwrap_err();
+    assert!(
+        error.starts_with("CAUSAL_PROPERTY_FAILURE rule=C25 event="),
+        "{error}"
+    );
+}
+
+#[test]
+fn invocation_context_follows_spawn_and_defer_without_leaking_between_polls() {
+    use dialcache::{testing::TestExecutor, Runtime};
+    use formal::causal::{current_invocation, InvocationFuture, InvocationRuntime};
+    use formal::gate::Gate;
+    use parking_lot::Mutex;
+    use std::sync::Arc;
+    let mut exec = TestExecutor::new(0);
+    let runtime = Arc::new(InvocationRuntime(exec.runtime.clone()));
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let gate = Gate::<()>::new();
+    for owner in [10, 20] {
+        let runtime = runtime.clone();
+        let seen = seen.clone();
+        let gate = gate.clone();
+        exec.spawn(InvocationFuture::new(Some(owner), async move {
+            seen.lock().push(current_invocation());
+            let deferred_seen = seen.clone();
+            runtime.defer(Box::pin(async move {
+                deferred_seen.lock().push(current_invocation());
+            }));
+            runtime.spawn(Box::pin(async move {
+                gate.wait().await;
+                seen.lock().push(current_invocation());
+            }));
+        }));
+    }
+    exec.drain();
+    assert_eq!(current_invocation(), None);
+    gate.settle(());
+    exec.drain();
+    assert_eq!(current_invocation(), None);
+    let mut seen = seen.lock().clone();
+    seen.sort();
+    assert_eq!(
+        seen,
+        [Some(10), Some(10), Some(10), Some(20), Some(20), Some(20)]
+    );
+    let panicking = InvocationFuture::new(Some(30), async { panic!("controlled context unwind") });
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+        || futures::executor::block_on(panicking)
+    ))
+    .is_err());
+    assert_eq!(current_invocation(), None);
+}
+
+#[test]
+fn behavior_driver_attributes_detached_writes_to_their_actual_sources() {
+    use formal::causal::CausalEvent;
+    use formal::driver::Driver;
+    let mut driver = Driver::new(json!({"policy":{"ttlSec":{"remote":10},"coalesce":false}}));
+    for input in [
+        json!({"op":"begin", "key":"same"}),
+        json!({"op":"begin", "key":"same"}),
+        json!({"op":"resolve", "loader":1, "value":2}),
+        json!({"op":"resolve", "loader":0, "value":1}),
+    ] {
+        driver.apply(&input).unwrap();
+    }
+    let writes: Vec<_> = driver
+        .causal_history()
+        .into_iter()
+        .filter_map(|event| match event {
+            CausalEvent::WriteDispatch { source, owner, .. } => Some((source, owner)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(writes, [(Some(1), Some(1)), (Some(0), Some(0))]);
+    driver.close();
+}
+
 fn prepared_control() -> Prepared {
     Prepared {
         session: "1".to_string(),

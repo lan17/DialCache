@@ -12,6 +12,8 @@ use dialcache::protocol::{
 use dialcache::{Frame, Payload, ReadResult};
 use serde_json::{json, Value};
 
+use super::fixtures::assertion_mismatch;
+
 use super::fixtures::LONE_SURROGATE_MARKER;
 
 /// The fixture level every `codecBytes` entry was measured at.
@@ -90,15 +92,15 @@ pub fn check_frame_vector(vector: &Value) -> Result<(), String> {
         .as_u64()
         .ok_or("createdAtMs is not an unsigned integer")?;
     let payload = vector_payload(vector, true)?;
+    let expected = text_field(vector, "frameHex")?;
     let frame = encode_frame(&Frame {
         created_at_ms,
         payload,
     })
-    .map_err(|error| format!("encode failed: {error}"))?;
+    .map_err(|error| assertion_mismatch(expected, error))?;
     let actual = hex::encode(&frame);
-    let expected = text_field(vector, "frameHex")?;
     if actual != expected {
-        return Err(format!("frame: got {actual}, want {expected}"));
+        return Err(assertion_mismatch(expected, actual));
     }
     Ok(())
 }
@@ -126,9 +128,10 @@ fn check_decode_vector(vector: &Value, tracked: bool) -> Result<(), String> {
         Value::String(text) => Some(text.as_bytes().to_vec()),
         _ => return Err("watermarkUtf8 is neither null nor a string".to_string()),
     };
+    let expected = field(vector, "expected")?;
     let actual = match decode_frame(raw.as_deref(), tracked, watermark.as_deref()) {
         Err(ProtocolError::PayloadEncoding) => json!({ "kind": "payload_encoding_error" }),
-        Err(other) => return Err(format!("unexpected decode error {other}")),
+        Err(other) => return Err(assertion_mismatch(expected, other)),
         Ok(ReadResult::Miss {
             reason,
             observed_watermark_ms,
@@ -147,15 +150,14 @@ fn check_decode_vector(vector: &Value, tracked: bool) -> Result<(), String> {
             } else {
                 object["payloadType"] = json!("string");
                 let text = String::from_utf8(frame.payload.bytes)
-                    .map_err(|_| "text payload is not UTF-8")?;
+                    .map_err(|error| assertion_mismatch(expected, error))?;
                 object["payloadUtf8"] = json!(text);
             }
             object
         }
     };
-    let expected = field(vector, "expected")?;
     if &actual != expected {
-        return Err(format!("got {actual}\nwant {expected}"));
+        return Err(assertion_mismatch(expected, actual));
     }
     Ok(())
 }
@@ -163,19 +165,27 @@ fn check_decode_vector(vector: &Value, tracked: bool) -> Result<(), String> {
 /// `invalidTimestampVectors`: every input is outside the timestamp domain.
 pub fn check_invalid_timestamp_vector(vector: &Value) -> Result<(), String> {
     match validate_timestamp_ms(number_input(vector)?) {
-        Ok(accepted) => Err(format!("invalid timestamp accepted as {accepted}")),
+        Ok(accepted) => Err(assertion_mismatch("invalid timestamp rejected", accepted)),
         Err(_) => Ok(()),
     }
 }
 
 /// `durationVectors`: `expected` null rejects; otherwise the ceiled TTL.
 pub fn check_duration_vector(vector: &Value) -> Result<(), String> {
+    let expected = match field(vector, "expected")? {
+        Value::Null => None,
+        value => Some(
+            value
+                .as_u64()
+                .ok_or("expected is neither null nor an unsigned integer")?,
+        ),
+    };
     let result = ceil_supported_cache_ttl_ms(number_input(vector)?);
-    match (field(vector, "expected")?.as_u64(), result) {
+    match (expected, result) {
         (None, Err(_)) => Ok(()),
-        (None, Ok(accepted)) => Err(format!("invalid duration accepted as {accepted}")),
+        (None, Ok(accepted)) => Err(assertion_mismatch("invalid duration rejected", accepted)),
         (Some(expected), Ok(actual)) if actual == expected => Ok(()),
-        (Some(expected), other) => Err(format!("got {other:?} want {expected}")),
+        (Some(expected), other) => Err(assertion_mismatch(expected, other)),
     }
 }
 
@@ -185,7 +195,10 @@ pub fn check_envelope_vector(vector: &Value) -> Result<(), String> {
     let raw = Payload::binary(unhex(text_field(vector, "inputHex")?)?);
     let escaped = escape_raw_payload(raw.clone());
     if escaped.bytes != unhex(text_field(vector, "escapedHex")?)? {
-        return Err(format!("escape differs: {}", hex::encode(&escaped.bytes)));
+        return Err(assertion_mismatch(
+            text_field(vector, "escapedHex")?,
+            hex::encode(&escaped.bytes),
+        ));
     }
     let decoded = decompress_payload(raw.clone(), MAX_DECOMPRESSED_BYTES);
     let expected_outcome = text_field(vector, "outcome")?;
@@ -193,9 +206,9 @@ pub fn check_envelope_vector(vector: &Value) -> Result<(), String> {
         || !decoded.payload.binary
         || decoded.payload.bytes != unhex(text_field(vector, "decodedHex")?)?
     {
-        return Err(format!(
-            "decoded {decoded:?}, want {expected_outcome} {}",
-            text_field(vector, "decodedHex")?
+        return Err(assertion_mismatch(
+            (expected_outcome, text_field(vector, "decodedHex")?),
+            &decoded,
         ));
     }
     if decompress_payload(escaped, MAX_DECOMPRESSED_BYTES)
@@ -203,7 +216,7 @@ pub fn check_envelope_vector(vector: &Value) -> Result<(), String> {
         .bytes
         != raw.bytes
     {
-        return Err("escape roundtrip differs".to_string());
+        return Err(assertion_mismatch(&raw.bytes, "escape roundtrip differs"));
     }
     Ok(())
 }
@@ -233,14 +246,15 @@ pub fn check_compressed_decode_vector(vector: &Value) -> Result<(), String> {
             (false, Err(_)) => {}
         }
     }
-    let got = decompress_payload(Payload::binary(input), max_decompressed_bytes(vector)?);
     let want = vector_payload(vector, false)?;
+    let max = max_decompressed_bytes(vector)?;
     let outcome = vector
         .get("outcome")
         .and_then(Value::as_str)
         .unwrap_or("decompressed");
+    let got = decompress_payload(Payload::binary(input), max);
     if outcome_name(got.outcome) != outcome || got.payload != want {
-        return Err(format!("got {got:?} want {outcome} {want:?}"));
+        return Err(assertion_mismatch((outcome, want), got));
     }
     Ok(())
 }
@@ -271,6 +285,10 @@ pub fn check_compression_write_vector(vector: &Value) -> Result<(), String> {
         }
     }
 
+    let expected_outcome = match modeled {
+        Some(expected) => text_field(expected, "outcome")?,
+        None => text_field(vector, "outcome")?,
+    };
     let got = compress_payload(
         raw.clone(),
         &CompressionConfig {
@@ -279,21 +297,14 @@ pub fn check_compression_write_vector(vector: &Value) -> Result<(), String> {
         },
         max,
     )
-    .map_err(|error| format!("compress failed: {error}"))?;
-    let expected_outcome = match modeled {
-        Some(expected) => text_field(expected, "outcome")?,
-        None => text_field(vector, "outcome")?,
-    };
+    .map_err(|error| assertion_mismatch(expected_outcome, error))?;
     if got.outcome.as_str() != expected_outcome {
-        return Err(format!(
-            "got outcome {} want {expected_outcome} ({got:?})",
-            got.outcome
-        ));
+        return Err(assertion_mismatch(expected_outcome, &got));
     }
     if let Some(expected) = modeled {
         let stored = usize_field(expected, "storedBytes")?;
         if got.stored_bytes != stored {
-            return Err(format!("storedBytes {} want {stored}", got.stored_bytes));
+            return Err(assertion_mismatch(stored, got.stored_bytes));
         }
         if vector.get("originalBytes").is_none()
             || vector.get("rawStoredBytes").is_none()
@@ -307,10 +318,7 @@ pub fn check_compression_write_vector(vector: &Value) -> Result<(), String> {
     if let Some(original) = vector.get("originalBytes").filter(|value| !value.is_null()) {
         let original = original.as_u64().ok_or("originalBytes is not a number")? as usize;
         if got.original_bytes != original {
-            return Err(format!(
-                "originalBytes {} want {original}",
-                got.original_bytes
-            ));
+            return Err(assertion_mismatch(original, got.original_bytes));
         }
     }
     if let Some(raw_stored) = vector
@@ -321,31 +329,28 @@ pub fn check_compression_write_vector(vector: &Value) -> Result<(), String> {
             .as_u64()
             .ok_or("rawStoredBytes is not a number")? as usize;
         if escaped.len() != raw_stored {
-            return Err(format!(
-                "escaped length {} want rawStoredBytes {raw_stored}",
-                escaped.len()
-            ));
+            return Err(assertion_mismatch(raw_stored, escaped.len()));
         }
     }
     if let Some(escaped_hex) = vector.get("escapedHex").and_then(Value::as_str) {
         if escaped.bytes != unhex(escaped_hex)? {
-            return Err(format!(
-                "escaped bytes {} want {escaped_hex}",
-                hex::encode(&escaped.bytes)
-            ));
+            return Err(assertion_mismatch(escaped_hex, hex::encode(&escaped.bytes)));
         }
     }
 
     let decoded = decompress_payload(got.payload.clone(), MAX_DECOMPRESSED_BYTES);
     if decoded.payload != raw {
-        return Err(format!("compression changed value: {decoded:?}"));
+        return Err(assertion_mismatch(&raw, &decoded));
     }
     if got.outcome == CompressionOutcome::Compressed {
         if !got.payload.binary
             || got.stored_bytes >= escaped.len()
             || got.payload.len() != got.stored_bytes
         {
-            return Err(format!("compression grew or misreported: {got:?}"));
+            return Err(assertion_mismatch(
+                "binary payload shorter than escaped raw with accurate stored size",
+                &got,
+            ));
         }
         let mut marker = if raw.binary {
             MARKER_ZSTD_BINARY
@@ -361,13 +366,10 @@ pub fn check_compression_write_vector(vector: &Value) -> Result<(), String> {
             .map_err(|_| "modeled marker is not a byte".to_string())?;
         }
         if got.payload.bytes.first() != Some(&marker) {
-            return Err(format!(
-                "compressed payload marker {:?} want {marker}",
-                got.payload.bytes.first()
-            ));
+            return Err(assertion_mismatch(marker, got.payload.bytes.first()));
         }
     } else if got.payload != escaped {
-        return Err(format!("raw representation differs: {got:?}"));
+        return Err(assertion_mismatch(&escaped, &got));
     }
     Ok(())
 }

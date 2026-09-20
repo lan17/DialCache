@@ -24,6 +24,7 @@ parking_lot = "0.12"
 lru = "0.18"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
+ryu-js = "1"
 zstd = "0.14"
 zstd-safe = "7"
 thiserror = "2"

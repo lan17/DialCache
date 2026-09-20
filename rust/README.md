@@ -85,6 +85,11 @@ invalid leaves have the narrower consequences defined in Quint (an invalid TTL
 or ramp disables only that layer; an invalid flag or read deadline bypasses
 caching for the call).
 
+Convert a typed policy with `RuntimePolicy::from(policy)` or `policy.into()`.
+Omitted leaves remain absent, including `request_local` and `coalesce`, so a
+TTL-only overlay preserves the operation's flags. `Policy::to_json` uses the
+same sparse representation; library defaults are applied during resolution.
+
 Defaults are namespace `urn`, local capacity 10,000, 50 ms remote reads,
 60,000 ms source calls (`SourceBudget::Default`; `SourceBudget::Unbounded`
 disables the deadline), sharing enabled, and shadow capacity one. Policy omits
@@ -150,9 +155,12 @@ or distribution and a namespace.
 for `ConnectionManager`, `MultiplexedConnection` and cluster connections,
 routing tracked reads to slot primaries and sharing the invalidation script
 and frame codec with the other ports. The `redis_integration` test replays
-every invalidation vector against real Redis, Valkey and Cluster servers; its
-tests are `#[ignore]`d, and `make integration-rust` runs them where Docker is
-available.
+every invalidation vector against real Redis, Valkey and Cluster servers,
+and reads/writes shared entries with the production TypeScript adapter in both
+directions. Both ports construct keys independently, including numeric rounding
+boundaries; the payload tests cover JSON, binary escaping, compression and
+invalidation by either language. The tests are `#[ignore]`d, and
+`make integration-rust` runs them where Docker is available.
 
 ## Validation and reproducing a trace
 
@@ -203,10 +211,9 @@ every behavior-driver-backed smoke history.
   than a clock fault.
 - Prometheus collectors are shared by cloning the observer rather than by
   registering the same names twice.
-- The behavior driver ports the effects profile's publication monitor but
-  not the reference drivers' cross-profile publication-causality monitor,
-  because `Remote::write` carries no caller context to attribute a write to
-  an invocation.
+- The behavior driver checks source/write causality after every command.
+  Its test runtime carries driver-owned invocation identities across detached
+  tasks, independently attributing each write to its actual source callback.
 - The core replay, the exporters and the Redis adapter follow their Go
   counterparts; real-server integration is a separate lane, as in the other
   ports, and not part of the completion claim (see `formal/profiles.json`).

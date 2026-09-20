@@ -341,6 +341,12 @@ pub fn protocol_groups(selection: &str) -> BTreeMap<String, Vec<Value>> {
     groups
 }
 
+/// An executed protocol assertion, distinguished from malformed fixture input
+/// and environmental codec failures by the mutation measurement.
+pub fn assertion_mismatch(expected: impl std::fmt::Debug, actual: impl std::fmt::Debug) -> String {
+    format!("PROTOCOL_ASSERTION_FAILURE expected: {expected:?}\nactual: {actual:?}")
+}
+
 #[cfg(test)]
 mod tests {
     #[allow(unused_imports)]

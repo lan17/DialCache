@@ -142,11 +142,14 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       .rejects.toThrow(/files requiring formatting:\ngo\/cache.go/);
   });
 
-  it("orders generation and shared witness evaluation before both port replays without duplicate wire generation", () => {
+  it("orders generation and shared witness evaluation before every port replay without duplicate wire generation", () => {
     const plan = validationPlan("formal", { directory });
     const position = (script: string, argument: string) => plan.findIndex(step => step.args?.[0] === script && step.args.includes(argument));
     const tsPrepare = position("formal/conformance.mjs", "typescript");
     const goPrepare = position("formal/conformance.mjs", "go");
+    const rustPrepare = position("formal/conformance.mjs", "rust");
+    const goCompletion = position("formal/conformance.mjs", ".formal-traces/go-completion.json");
+    const rustCompletion = position("formal/conformance.mjs", ".formal-traces/rust-completion.json");
     const tsCompletion = position("formal/conformance.mjs", ".formal-traces/ts-completion.json");
     const witnesses = position("formal/witnesses.mjs", "evaluate");
     expect(position("formal/run-models.mjs", "check")).toBeLessThan(position("formal/run-models.mjs", "generate"));
@@ -154,6 +157,9 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(witnesses).toBeLessThan(tsPrepare);
     expect(tsPrepare).toBeLessThan(tsCompletion);
     expect(tsCompletion).toBeLessThan(goPrepare);
+    expect(goPrepare).toBeLessThan(goCompletion);
+    expect(goCompletion).toBeLessThan(rustPrepare);
+    expect(rustPrepare).toBeLessThan(rustCompletion);
     expect(plan.filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "generate")).toHaveLength(1);
     expect(plan.filter(step => step.args?.[0] === "formal/witnesses.mjs")).toHaveLength(1);
     expect(plan.some(step => step.args?.[0] === "formal/generate-artifacts.mjs")).toBe(false);
@@ -227,6 +233,29 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(ts.some(step => step.args?.[0] === "formal/witnesses.mjs" || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
   });
 
+  it("replays Rust from its crate with full corpus selectors and a dedicated report before the completion gate", () => {
+    const plan = validationPlan("formal-rust", { directory, environment });
+    expect(plan[0]!.remove).toEqual([".formal-traces/rust-completion.json"]);
+    expect(plan[1]!.args).toEqual(["formal/conformance.mjs", "prepare", "rust", ".formal-traces/rust-context.json"]);
+    const replay = plan.find(step => step.command === "cargo")!;
+    expect(replay).toMatchObject({ cwd: "rust", args: ["test", "--release", "--all-features", "--test", "conformance"] });
+    expect(replay.env).toEqual({
+      DIALCACHE_MBT_TRACE_DIR: join(directory, ".formal-traces/conformance"),
+      DIALCACHE_EFFECTS_TRACE_DIR: join(directory, ".formal-traces/effects"),
+      DIALCACHE_FEATURE_TRACE_DIR: join(directory, ".formal-traces/features"),
+      DIALCACHE_WITNESS_EVIDENCE_DIR: join(directory, ".formal-traces/go-parity-witnesses"),
+      DIALCACHE_RUST_REPORT: join(directory, ".formal-traces/rust-replay.jsonl"),
+    });
+    expect(plan.slice(plan.indexOf(replay) + 1).map(step => step.args)).toEqual([
+      ["formal/check-rust-replay.mjs"],
+      ["formal/conformance-adapters.mjs", "rust", ".formal-traces/rust-replay.jsonl", ".formal-traces/rust-context.json"],
+      ["formal/conformance.mjs", "check", ".formal-traces/rust-completion.json", ".formal-traces/rust-context.json"],
+    ]);
+    const smoke = validationPlan("smoke", { directory }).find(step => step.command === "cargo")!;
+    expect(smoke.args).toEqual(["test", "--all-features", "--test", "conformance"]);
+    expect(smoke.env).toBeUndefined();
+  });
+
   it("lets Go parity and every mutation measurement run off the generated corpus without completion checks", () => {
     const isCompletionCheck = (step: Step) => step.args?.[0] === "formal/conformance.mjs" && step.args[1] === "check";
     const go = validationPlan("formal-go", { directory });
@@ -289,14 +318,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     for (const target of ["mutations-ts", "mutations-go", "mutations-rust"]) expect(targetDescriptions[target]).toMatch(/MUTATION_ONLY=<id>,<id>/);
   });
 
-  it("merges each language's shards with a plain Node step that needs neither Quint nor Go", () => {
+  it("merges each language's shards with a plain Node step that needs no native toolchains or Quint", () => {
     expect(validationPlan("mutations-merge-ts", { directory })).toEqual([
       { label: "Merge TypeScript mutation shards", command: process.execPath, args: ["formal/merge-mutation-reports.mjs", "ts"] },
     ]);
     expect(validationPlan("mutations-merge-go", { directory }).map(step => step.args)).toEqual([["formal/merge-mutation-reports.mjs", "go"]]);
+    expect(validationPlan("mutations-merge-rust", { directory }).map(step => step.args)).toEqual([["formal/merge-mutation-reports.mjs", "rust"]]);
     fakeTool("quint", 'console.error("quint: not installed"); process.exit(1)');
     fakeTool("go", 'console.error("go: not installed"); process.exit(1)');
-    for (const target of ["mutations-merge-ts", "mutations-merge-go"]) {
+    fakeTool("cargo", 'console.error("cargo: not installed"); process.exit(1)');
+    for (const target of ["mutations-merge-ts", "mutations-merge-go", "mutations-merge-rust"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
       expect(targetDescriptions[target]).toMatch(/Merge .* mutation shards/);
     }
@@ -358,7 +389,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     for (const target of ["mutations-ts", "mutations-go"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/docker/);
     }
-    for (const target of ["mutations-merge-ts", "mutations-merge-go"]) {
+    for (const target of ["mutations-merge-ts", "mutations-merge-go", "mutations-merge-rust"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
     }
   });
@@ -477,6 +508,32 @@ describe("full formal workflow shape", () => {
     expect(gate.env).not.toHaveProperty("GO_MUTATIONS_RESULT");
     expect(gate.run).toMatch(/test "\$TYPESCRIPT_MUTATIONS_MERGE_RESULT" = success/);
     expect(gate.run).toMatch(/test "\$GO_MUTATIONS_MERGE_RESULT" = success/);
+  });
+
+  it("requires Rust replay and merged mutations and retains Rust completion in the summary", () => {
+    const parity = jobs["rust-parity"]!;
+    expect(parity.steps.find(step => step.uses === "./.github/actions/setup-validation")!.with).toEqual({ rust: "true" });
+    expect(parity.steps.map(step => step.run).filter(Boolean)).toEqual(["make formal-rust"]);
+    const mutations = jobs["rust-mutations"]!;
+    const shards = mutations.strategy!.matrix!.shard as number[];
+    expect(mutations.env).toEqual({ MUTATION_SHARD: "$" + "{{ matrix.shard }}/" + shards.length });
+    expect(mutations.steps.map(step => step.run).filter(Boolean)).toEqual(["make mutations-rust"]);
+    const merge = jobs["rust-mutations-merge"]!;
+    expect(needsOf(merge)).toEqual(["rust-mutations"]);
+    expect(merge.if).toBe("always() && needs.rust-mutations.result != 'skipped'");
+    expect(merge.steps.map(step => step.run).filter(Boolean)).toEqual(["make mutations-merge-rust"]);
+    const aggregate = jobs["formal-full"]!;
+    expect(needsOf(aggregate)).toEqual(expect.arrayContaining(["rust-parity", "rust-mutations-merge"]));
+    expect(needsOf(aggregate)).not.toContain("rust-mutations");
+    const gate = aggregate.steps.find(step => step.run?.includes("_RESULT"))!;
+    expect(gate.env).toMatchObject({ RUST_RESULT: "$" + "{{ needs.rust-parity.result }}",
+      RUST_MUTATIONS_MERGE_RESULT: "$" + "{{ needs.rust-mutations-merge.result }}" });
+    expect(gate.run).toMatch(/test "\$RUST_RESULT" = success/);
+    expect(gate.run).toMatch(/test "\$RUST_MUTATIONS_MERGE_RESULT" = success/);
+    const summary = aggregate.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!.with!;
+    expect(summary.path).toContain("formal-summary/rust/rust-completion.json");
+    expect(summary.path).toContain("formal-summary/rust/rust-context.json");
+    expect(summary.path).toContain("formal-summary/rust/rust-replay-summary.json");
   });
 
   it("requires the model check in the aggregate and retains its report in the long-lived summary", () => {

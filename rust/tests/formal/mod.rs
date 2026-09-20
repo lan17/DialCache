@@ -8,6 +8,7 @@
 //! per binary.
 #![allow(dead_code)]
 
+pub mod causal;
 pub mod core_driver;
 pub mod driver;
 pub mod gate;

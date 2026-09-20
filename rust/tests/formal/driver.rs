@@ -19,6 +19,10 @@ use futures::future::BoxFuture;
 use parking_lot::Mutex;
 use serde_json::{json, Map, Value};
 
+use super::causal::{
+    assert_publication_causality, current_invocation, property_failure, CausalEvent,
+    InvocationFuture, InvocationRuntime,
+};
 use super::gate::Gate;
 use super::json::json_equal;
 
@@ -126,6 +130,8 @@ pub struct Shared {
     reply: Option<Value>,
     effects: HashMap<String, HashMap<usize, Gate<Result<(), String>>>>,
     history: Vec<HistoryEvent>,
+    causal_history: Vec<CausalEvent>,
+    source_by_invocation: HashMap<usize, usize>,
     fallback_failed: bool,
     pub discard_writes: bool,
     pub discard_invalidations: bool,
@@ -318,6 +324,8 @@ impl Driver {
             reply: None,
             effects: HashMap::new(),
             history: Vec::new(),
+            causal_history: Vec::new(),
+            source_by_invocation: HashMap::new(),
             fallback_failed: false,
             discard_writes: false,
             discard_invalidations: false,
@@ -387,7 +395,7 @@ impl Driver {
             .unwrap_or(10_000);
         let mut builder = DialCache::builder()
             .clock_arc(self.clock.clone())
-            .runtime_arc(self.exec.runtime.clone())
+            .runtime(InvocationRuntime(self.exec.runtime.clone()))
             .disable_compression()
             .local_capacity(capacity)
             .shadow_max_in_flight(
@@ -513,6 +521,11 @@ impl Driver {
                     gate.settle(LoaderOutcome::Value(value));
                     "resolve"
                 };
+                s.causal_history.push(CausalEvent::SourceSettlement {
+                    id: index,
+                    at_ms: at,
+                    outcome,
+                });
                 s.history.push(HistoryEvent {
                     event: "sourceSettlement",
                     id: index,
@@ -675,7 +688,7 @@ impl Driver {
         // Drain ready work while unresolved external gates remain held: the
         // causally-ready-v1 settlement step.
         self.exec.drain();
-        Ok(())
+        self.assert_publication_causality()
     }
 
     fn begin(&mut self, input: &Value) -> Result<(), String> {
@@ -751,10 +764,14 @@ impl Driver {
         let source_cache = cache.clone();
         let source_shared = shared.clone();
         let source_clock = clock.clone();
+        // Filled from the actual scope when this driver-owned call starts.
+        let source_budget = Arc::new(Mutex::new(None));
+        let loader_budget = source_budget.clone();
         let load = move |scope: Scope| {
             let shared = source_shared.clone();
             let clock = source_clock.clone();
             let cache = source_cache.clone();
+            let source_budget = loader_budget.clone();
             async move {
                 let gate = {
                     let mut s = shared.lock();
@@ -764,6 +781,13 @@ impl Driver {
                     s.increment("loaders");
                     use dialcache::Clock;
                     let at = clock.elapsed_ms();
+                    s.source_by_invocation.insert(index, id);
+                    s.causal_history.push(CausalEvent::SourceStart {
+                        id,
+                        owner: index,
+                        at_ms: at,
+                        budget_ms: *source_budget.lock(),
+                    });
                     s.history.push(HistoryEvent {
                         event: "sourceStart",
                         id,
@@ -799,7 +823,17 @@ impl Driver {
             let cache = call_cache.clone();
             let operation = operation.clone();
             let load = load.clone();
-            async move {
+            let source_budget = source_budget.clone();
+            InvocationFuture::new(Some(index), async move {
+                *source_budget.lock() = if !cache.is_enabled(&scope) {
+                    None
+                } else {
+                    match operation.budget {
+                        SourceBudget::Default => Some(60_000),
+                        SourceBudget::Unbounded => None,
+                        SourceBudget::Millis(ms) => Some(ms),
+                    }
+                };
                 let result = cache.get_or_load(&scope, operation, load).await;
                 let mut s = shared.lock();
                 let record = match result {
@@ -809,7 +843,7 @@ impl Driver {
                 if let Some(Value::Array(calls)) = s.observed.get_mut("calls") {
                     calls[index] = record;
                 }
-            }
+            })
         };
         let disabled = input.get("disabled") == Some(&Value::Bool(true));
         let outside = input.get("outside") == Some(&Value::Bool(true));
@@ -951,17 +985,28 @@ impl Driver {
         }
     }
 
+    pub fn causal_history(&self) -> Vec<CausalEvent> {
+        self.shared.lock().causal_history.clone()
+    }
+
+    pub fn assert_publication_causality(&self) -> Result<(), String> {
+        assert_publication_causality(&self.causal_history())
+    }
+
     pub fn history(&self) -> Vec<HistoryEvent> {
         self.shared.lock().history.clone()
     }
 
     /// C23/C25/C26 monitor over the actual callback history (effects profile).
     pub fn assert_effects_history(&self) -> Result<(), String> {
+        Self::assert_effects_events(&self.history())
+    }
+
+    pub fn assert_effects_events(history: &[HistoryEvent]) -> Result<(), String> {
         struct Source {
             at: i64,
             settled: &'static str,
         }
-        let history = self.history();
         let mut sources: HashMap<usize, Source> = HashMap::new();
         let mut active: Option<usize> = None;
         let mut authorized = false;
@@ -1013,21 +1058,35 @@ impl Driver {
                     }
                     let elapsed = (e.at - source.at) as f64;
                     if (e.duration_ms - elapsed).abs() > 1e-7 {
-                        return Err(format!("C23: duration includes lookup or omits source time (event {index}, at {} elapsed {elapsed} duration {})", e.at, e.duration_ms));
+                        return Err(property_failure(
+                            "C23",
+                            "duration includes lookup or omits source time",
+                            json!({"event":e.event, "index":index, "atMs":e.at, "elapsedMs":elapsed, "durationMs":e.duration_ms}),
+                        ));
                     }
                     if !e.failed && (elapsed >= 10.0 || source.settled != "resolve") {
-                        return Err(format!("C25: success must be accepted before its source deadline (event {index}, elapsed {elapsed}, settlement {})", source.settled));
+                        return Err(property_failure(
+                            "C25",
+                            "success must be accepted before its source deadline",
+                            json!({"event":e.event, "index":index, "atMs":e.at, "elapsedMs":elapsed, "budgetMs":10, "settlement":source.settled, "failed":e.failed}),
+                        ));
                     }
                     if e.failed && elapsed < 10.0 && source.settled != "reject" {
-                        return Err(format!("C23: source lost its full source-relative budget (event {index}, elapsed {elapsed}, settlement {})", source.settled));
+                        return Err(property_failure(
+                            "C23",
+                            "source lost its full source-relative budget",
+                            json!({"event":e.event, "index":index, "atMs":e.at, "elapsedMs":elapsed, "budgetMs":10, "settlement":source.settled, "failed":e.failed}),
+                        ));
                     }
                     active = None;
                     authorized = !e.failed;
                 }
                 "writeDispatch" => {
                     if !authorized {
-                        return Err(format!(
-                            "C26: publication without accepted source success (event {index})"
+                        return Err(property_failure(
+                            "C26",
+                            "publication without accepted source success",
+                            json!({"event":e.event, "index":index, "atMs":e.at, "authorized":false}),
                         ));
                     }
                 }
@@ -1176,6 +1235,13 @@ impl Remote for DriverRemote {
                 let mut s = shared.lock();
                 let index = s.increment("writes");
                 let at = clock.elapsed_ms();
+                let owner = current_invocation();
+                let source = owner.and_then(|owner| s.source_by_invocation.get(&owner).copied());
+                s.causal_history.push(CausalEvent::WriteDispatch {
+                    source,
+                    owner,
+                    at_ms: at,
+                });
                 s.history.push(HistoryEvent {
                     event: "writeDispatch",
                     id: 0,

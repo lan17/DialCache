@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { causalPropertyAssertion } from './measure-go-semantics.mjs';
 import { fingerprintFiles, gateDetections, languages, partitionMutations, shardDirectory, shardFromArguments } from './mutation-reports.mjs';
 
 // The Rust counterpart of measure-go-semantics.mjs: apply each catalogued
@@ -53,7 +54,8 @@ export function evaluateCargoTestOutput(output, exitCode, expectedBinaries) {
 // The harness writes one JSON object per line: a start header, one case per
 // inventory id and a finish footer. A missing footer means the run crashed or
 // timed out and is not evidence either way.
-export function evaluateRustReport(text, exitCode) {
+export function evaluateRustReport(text, exitCode, stderr = '') {
+  if (/^conformance harness failed:|^coverage:/m.test(stderr)) throw new Error('Rust harness infrastructure or coverage failure');
   const records = text.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
   if (!records.length) throw new Error('empty Rust harness report');
   const [start] = records;
@@ -62,19 +64,34 @@ export function evaluateRustReport(text, exitCode) {
   if (finish.kind !== 'finish') throw new Error('Rust harness report has no finish record: the run crashed or timed out');
   const cases = records.slice(1, -1);
   const seen = new Set();
+  const assertionKinds = {}, assertionEvidence = {};
   for (const record of cases) {
     if (record.kind !== 'case' || typeof record.id !== 'string' || !['passed', 'failed'].includes(record.status)) throw new Error('malformed Rust harness case record');
     if (seen.has(record.id)) throw new Error(`duplicate case ${record.id}`);
     seen.add(record.id);
+    const category = record.id.split('/')[0];
+    if (!['sampled', 'regression', 'scenario', 'protocol', 'witness'].includes(category)) throw new Error(`unknown Rust case ${record.id}`);
+    if (record.status === 'failed') {
+      if (category === 'witness') throw new Error(`witness audit failure ${record.id}`);
+      const message = record.message;
+      if (typeof message !== 'string' || !message) throw new Error(`failure has no assertion evidence: ${record.id}`);
+      if (category === 'protocol') {
+        if (!/PROTOCOL_ASSERTION_FAILURE expected:[\s\S]*actual:/.test(message)) throw new Error(`protocol failure lacks assertion evidence: ${record.id}`);
+        assertionKinds[record.id] = 'protocol-assertion';
+      } else if (/expected:[\s\S]*actual:/.test(message)) assertionKinds[record.id] = 'observation-mismatch';
+      else if (causalPropertyAssertion(message)) assertionKinds[record.id] = 'causal-property';
+      else throw new Error(`replay failure lacks observation or validated causal property evidence: ${record.id}`);
+      assertionEvidence[record.id] = message;
+    }
   }
   if (!cases.length) throw new Error('Rust harness report has no cases');
   const failingTests = cases.filter(record => record.status === 'failed').map(record => record.id);
-  if (typeof finish.cases === 'number' && finish.cases !== cases.length) throw new Error('finish totals disagree with the case records');
-  if (typeof finish.failed === 'number' && finish.failed !== failingTests.length) throw new Error('finish totals disagree with the failed cases');
+  if (finish.cases !== cases.length) throw new Error('finish totals disagree with the case records');
+  if (finish.failed !== failingTests.length) throw new Error('finish totals disagree with the failed cases');
   if (finish.status !== (failingTests.length ? 'failed' : 'passed')) throw new Error('finish status disagrees with the case records');
   if (exitCode === 0 && failingTests.length) throw new Error('harness exited 0 with failed cases');
   if (exitCode !== 0 && !failingTests.length) throw new Error(`harness exited ${exitCode} without a failed case: coverage or infrastructure failure`);
-  return { state: failingTests.length ? 'detected' : 'survived', passed: cases.length - failingTests.length, failed: failingTests.length, failingTests,
+  return { state: failingTests.length ? 'detected' : 'survived', passed: cases.length - failingTests.length, failed: failingTests.length, failingTests, assertionKinds, assertionEvidence,
     executedTests: cases.map(record => record.id) };
 }
 
@@ -192,10 +209,10 @@ export function measureRustSemantics({ shard = { index: 1, count: 1 }, only } = 
         writeFileSync(resolve(output, `${label}-${cohort}.log`), result.stdout ?? '');
         writeFileSync(resolve(output, `${label}-${cohort}.stderr.log`), result.stderr ?? '');
         if (result.error || result.signal) throw new Error(`${label}/${cohort}: runner infrastructure failed: ${result.error ?? result.signal}`);
-        parsed = evaluateRustReport(existsSync(reportPath) ? readFileSync(reportPath, 'utf8') : '', result.status);
+        parsed = evaluateRustReport(existsSync(reportPath) ? readFileSync(reportPath, 'utf8') : '', result.status, result.stderr ?? '');
       }
       if (baseline && parsed.failed) throw new Error(`${cohort}: unmodified baseline must pass; see baseline log`);
-      if (!baseline && parsed.state === 'survived' && JSON.stringify([...parsed.executedTests].sort()) !== JSON.stringify([...report.baselines[cohort].executedTests].sort())) throw new Error(`${label}/${cohort}: incomplete surviving run`);
+      if (!baseline && JSON.stringify([...parsed.executedTests].sort()) !== JSON.stringify([...report.baselines[cohort].executedTests].sort())) throw new Error(`${label}/${cohort}: incomplete mutation run`);
       writeFileSync(resolve(output, `${label}-${cohort}.json`), JSON.stringify(parsed, null, 2) + '\n');
       return parsed;
     };

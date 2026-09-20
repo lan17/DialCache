@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use dialcache::identity::{cohort, cohort_hash, normalize_args, ArgValue, Identity};
 use serde_json::Value;
 
-use super::fixtures::LONE_SURROGATE_MARKER;
+use super::fixtures::{assertion_mismatch, LONE_SURROGATE_MARKER};
 
 fn identity_from(value: &Value) -> Result<Identity, String> {
     serde_json::from_value(value.clone())
@@ -46,26 +46,20 @@ fn expected_str(value: &Value, field: &str) -> Result<Option<String>, String> {
 /// `keyVectors`: `keys()` must succeed and equal `logicalKey`, `valueKey` and `watermarkKey`.
 pub fn check_key_vector(vector: &Value) -> Result<(), String> {
     let identity = identity_from(&vector["input"])?;
-    let keys = identity
-        .keys()
-        .map_err(|error| format!("keys rejected a valid identity: {error}"))?;
     let logical = expected_str(vector, "logicalKey")?.ok_or("logicalKey missing")?;
     let value = expected_str(vector, "valueKey")?.ok_or("valueKey missing")?;
     let watermark = expected_str(vector, "watermarkKey")?;
+    let keys = identity
+        .keys()
+        .map_err(|error| assertion_mismatch((&logical, &value, &watermark), error))?;
     if keys.logical != logical {
-        return Err(format!(
-            "logical key {:?} != expected {logical:?}",
-            keys.logical
-        ));
+        return Err(assertion_mismatch(logical, keys.logical));
     }
     if keys.value != value {
-        return Err(format!("value key {:?} != expected {value:?}", keys.value));
+        return Err(assertion_mismatch(value, keys.value));
     }
     if keys.watermark != watermark {
-        return Err(format!(
-            "watermark key {:?} != expected {watermark:?}",
-            keys.watermark
-        ));
+        return Err(assertion_mismatch(watermark, keys.watermark));
     }
     Ok(())
 }
@@ -138,12 +132,15 @@ pub fn check_invalid_key_vector(vector: &Value) -> Result<(), String> {
     let unrepresentable =
         components(&identity).any(|component| component.contains(LONE_SURROGATE_MARKER));
     if !unrepresentable && identity.keys().is_ok() {
-        return Err("invalid key accepted".to_owned());
+        return Err(assertion_mismatch("invalid key rejected", "accepted"));
     }
     if let Some(raw) = vector.get("inputUtf16") {
         if let Some(rebuilt) = identity_from_utf16(raw, identity.tracked)? {
             if rebuilt.keys().is_ok() {
-                return Err("invalid key rebuilt from UTF-16 units accepted".to_owned());
+                return Err(assertion_mismatch(
+                    "invalid UTF-16 key rejected",
+                    "accepted",
+                ));
             }
         }
     }
@@ -204,10 +201,9 @@ pub fn check_normalize_args_vector(vector: &Value) -> Result<(), String> {
     }
     let expected: Vec<(String, String)> = serde_json::from_value(vector["expected"].clone())
         .map_err(|error| format!("expected pairs do not parse: {error}"))?;
-    let actual =
-        normalize_args(record).map_err(|error| format!("normalize_args failed: {error}"))?;
+    let actual = normalize_args(record).map_err(|error| assertion_mismatch(&expected, error))?;
     if actual != expected {
-        return Err(format!("normalized {actual:?} != expected {expected:?}"));
+        return Err(assertion_mismatch(expected, actual));
     }
     Ok(())
 }
@@ -216,22 +212,27 @@ pub fn check_normalize_args_vector(vector: &Value) -> Result<(), String> {
 /// exactly, and the FNV-1a numerator must equal `hashNumerator` when present.
 pub fn check_ramp_vector(vector: &Value) -> Result<(), String> {
     let identity = identity_from(&vector["input"])?;
-    let keys = identity
-        .keys()
-        .map_err(|error| format!("keys rejected the ramp identity: {error}"))?;
     let layer = vector["layer"].as_str().ok_or("layer missing")?;
     let sample = vector["sample"].as_f64().ok_or("sample missing")?;
+    let numerator = vector
+        .get("hashNumerator")
+        .map(|value| {
+            value
+                .as_u64()
+                .ok_or("hashNumerator is not an unsigned integer")
+        })
+        .transpose()?;
+    let keys = identity
+        .keys()
+        .map_err(|error| assertion_mismatch("valid rollout identity", error))?;
     let actual = cohort(&keys.logical, layer);
     if actual != sample {
-        return Err(format!("cohort {actual:.17} != expected {sample:.17}"));
+        return Err(assertion_mismatch(sample, actual));
     }
-    if let Some(numerator) = vector.get("hashNumerator") {
-        let numerator = numerator
-            .as_u64()
-            .ok_or("hashNumerator is not an unsigned integer")?;
+    if let Some(numerator) = numerator {
         let hash = u64::from(cohort_hash(&keys.logical, layer));
         if hash != numerator {
-            return Err(format!("hash numerator {hash} != expected {numerator}"));
+            return Err(assertion_mismatch(numerator, hash));
         }
     }
     Ok(())

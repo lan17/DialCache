@@ -207,9 +207,9 @@ impl Policy {
 
     /// The JSON-shaped form of this policy, with omitted leaves absent.
     ///
-    /// `ttlSec` and `ramp` are always objects (possibly empty); `requestLocal`
-    /// (default false) and `coalesce` (default true) are always present;
-    /// the optional scalars and the `shadow` object appear only when set.
+    /// `ttlSec` and `ramp` are always objects (possibly empty). All other
+    /// leaves, including `requestLocal` and `coalesce`, appear only when set,
+    /// so converting this policy to a runtime overlay preserves inheritance.
     pub fn to_json(&self) -> Value {
         let mut ttl = Map::new();
         if let Some(seconds) = self.local_ttl_sec {
@@ -228,14 +228,12 @@ impl Policy {
         let mut object = Map::new();
         object.insert("ttlSec".to_string(), Value::Object(ttl));
         object.insert("ramp".to_string(), Value::Object(ramp));
-        object.insert(
-            "requestLocal".to_string(),
-            Value::Bool(self.request_local.unwrap_or(false)),
-        );
-        object.insert(
-            "coalesce".to_string(),
-            Value::Bool(self.coalesce.unwrap_or(true)),
-        );
+        if let Some(enabled) = self.request_local {
+            object.insert("requestLocal".to_string(), Value::Bool(enabled));
+        }
+        if let Some(enabled) = self.coalesce {
+            object.insert("coalesce".to_string(), Value::Bool(enabled));
+        }
         if let Some(seconds) = self.stale_on_error_max_age_sec {
             object.insert("staleOnErrorMaxAgeSec".to_string(), Value::from(seconds));
         }
@@ -445,6 +443,10 @@ pub fn resolve_policy(
         Value::Object(object) => object,
         _ => unreachable!("Policy::to_json always produces an object"),
     };
+    // Defaults belong to resolution, not the sparse policy representation.
+    // Present overlay values (including invalid nulls) still replace them.
+    merged.entry("requestLocal").or_insert(Value::Bool(false));
+    merged.entry("coalesce").or_insert(Value::Bool(true));
     if let Some(RuntimePolicy(overlay)) = overlay {
         if !overlay.is_null() {
             merge_overlay(&mut merged, overlay)?;
@@ -934,10 +936,10 @@ mod tests {
 
     #[test]
     fn to_json_matches_the_static_policy_map_shape() {
-        // Empty policy: layer maps present but empty, flags at their defaults, optionals absent.
+        // Empty policy: layer maps present but empty, all other leaves absent.
         assert_eq!(
             Policy::default().to_json(),
-            json!({"ttlSec": {}, "ramp": {}, "requestLocal": false, "coalesce": true})
+            json!({"ttlSec": {}, "ramp": {}})
         );
         // Only present leaves appear inside the layer maps; integral ramps spell without a fraction.
         assert_eq!(
@@ -945,11 +947,11 @@ mod tests {
                 .local_ttl_sec(7)
                 .remote_ramp(40.0)
                 .to_json(),
-            json!({"ttlSec": {"local": 7}, "ramp": {"remote": 40}, "requestLocal": false, "coalesce": true})
+            json!({"ttlSec": {"local": 7}, "ramp": {"remote": 40}})
         );
         assert_eq!(
             Policy::default().local_ramp(12.5).to_json(),
-            json!({"ttlSec": {}, "ramp": {"local": 12.5}, "requestLocal": false, "coalesce": true})
+            json!({"ttlSec": {}, "ramp": {"local": 12.5}})
         );
         // An explicit flag value is emitted even when it equals the default.
         assert_eq!(
@@ -962,7 +964,7 @@ mod tests {
         // A present but empty shadow policy is an empty object.
         assert_eq!(
             Policy::default().shadow(ShadowPolicy::default()).to_json(),
-            json!({"ttlSec": {}, "ramp": {}, "requestLocal": false, "coalesce": true, "shadow": {}})
+            json!({"ttlSec": {}, "ramp": {}, "shadow": {}})
         );
         assert_eq!(
             Policy::default()
@@ -972,7 +974,7 @@ mod tests {
                 })
                 .to_json(),
             json!({
-                "ttlSec": {}, "ramp": {}, "requestLocal": false, "coalesce": true,
+                "ttlSec": {}, "ramp": {},
                 "shadow": {"logMismatches": false},
             })
         );
@@ -983,7 +985,7 @@ mod tests {
                 .remote_read_timeout_ms(75)
                 .to_json(),
             json!({
-                "ttlSec": {}, "ramp": {}, "requestLocal": false, "coalesce": true,
+                "ttlSec": {}, "ramp": {},
                 "staleOnErrorMaxAgeSec": 0, "remoteReadTimeoutMs": 75,
             })
         );
@@ -992,7 +994,6 @@ mod tests {
             json!({
                 "ttlSec": {"local": 60, "remote": 60},
                 "ramp": {"local": 100, "remote": 100},
-                "requestLocal": false, "coalesce": true,
             })
         );
         assert_eq!(
@@ -1000,7 +1001,7 @@ mod tests {
             json!({
                 "ttlSec": {},
                 "ramp": {"local": 0, "remote": 0},
-                "requestLocal": false, "coalesce": true,
+                "requestLocal": false,
                 "staleOnErrorMaxAgeSec": 0,
                 "shadow": {"ramp": 0, "logMismatches": false},
             })
@@ -1443,6 +1444,50 @@ mod tests {
         assert!(r.local.enabled);
         assert_eq!(r.local.ttl_ms, 9_000);
         assert_eq!(r.remote.reason, Some(DisabledReason::PolicyDisabled));
+    }
+
+    #[test]
+    fn typed_runtime_overlays_preserve_omitted_flags() {
+        let base = Policy::default().request_local(true).coalesce(false);
+        for overlay in [Policy::default(), Policy::default().local_ttl_sec(9)] {
+            let r = resolve_policy(
+                &base,
+                Some(&RuntimePolicy::from(overlay)),
+                KEY,
+                PolicyDefaults::default(),
+            )
+            .unwrap();
+            assert!(r.request_local, "an omitted flag must inherit the baseline");
+            assert!(!r.coalesce, "an omitted flag must inherit the baseline");
+        }
+
+        let explicit = resolved(
+            &base,
+            Some(RuntimePolicy::from(Policy::default().request_local(false).coalesce(true)).0),
+        );
+        assert!(!explicit.request_local);
+        assert!(explicit.coalesce);
+
+        let disabled = resolved(&base, Some(RuntimePolicy::from(Policy::disabled()).0));
+        assert!(!disabled.request_local);
+        assert!(
+            !disabled.coalesce,
+            "the kill switch leaves coalescing unset"
+        );
+    }
+
+    #[test]
+    fn json_round_trip_preserves_omitted_and_explicit_flags() {
+        for request_local in [None, Some(false), Some(true)] {
+            for coalesce in [None, Some(false), Some(true)] {
+                let policy = Policy {
+                    request_local,
+                    coalesce,
+                    ..Policy::default()
+                };
+                assert_eq!(Policy::from_json(&policy.to_json()).unwrap(), policy);
+            }
+        }
     }
 
     #[test]

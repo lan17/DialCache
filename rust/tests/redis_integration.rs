@@ -3,7 +3,8 @@
 //! Valkey 8 standalone servers plus a single-node Redis 7 cluster, each
 //! exercised for complete-frame round trips, watermark fencing, the
 //! `EVALSHA` to `EVAL` recovery after `SCRIPT FLUSH`, and the full
-//! invalidation vector corpus (`formal/invalidation_vectors.rs`); and a
+//! invalidation vector corpus (`formal/invalidation_vectors.rs`), plus actual
+//! TypeScript/Rust key, payload and invalidation interoperability; and a
 //! replicated Redis 7 cluster that pins tracked reads to the slot primary.
 //!
 //! Every test here is `#[ignore]`d: `cargo test` reports it as ignored, and
@@ -33,6 +34,7 @@
 mod formal;
 #[path = "formal/invalidation_vectors.rs"]
 mod invalidation_vectors;
+mod redis_interop;
 
 use std::collections::HashMap;
 use std::net::TcpListener;
@@ -453,9 +455,10 @@ async fn round_trip<C: RedisConnection>(adapter: &RedisAdapter<C>, connection: &
     );
 }
 
-async fn exercise<C: RedisConnection>(connection: C, label: &str) {
+async fn exercise<C: RedisConnection>(connection: C, label: &str, endpoint: &str, cluster: bool) {
     let adapter = RedisAdapter::new(connection);
     round_trip(&adapter, adapter.connection(), label).await;
+    redis_interop::exercise(&adapter, endpoint, cluster, label).await;
     let vectors = invalidation_vectors::load_corpus(&repo_root(), sha256_hex);
     let prefix = format!("{{rust-invalidation-{label}}}:");
     match invalidation_vectors::replay_all(&adapter, adapter.connection(), &prefix, &vectors).await
@@ -473,8 +476,8 @@ async fn exercise<C: RedisConnection>(connection: C, label: &str) {
 fn run_standalone(test: &str, image: &str) {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     runtime.block_on(async {
-        let (_container, connection) = standalone(image).await;
-        exercise(connection, test).await;
+        let (container, connection) = standalone(image).await;
+        exercise(connection, test, &published_endpoint(&container), false).await;
     });
 }
 
@@ -501,8 +504,8 @@ fn valkey_8_standalone() {
 fn redis_7_single_node_cluster() {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     runtime.block_on(async {
-        let (_container, connection) = single_node_cluster("redis:7-alpine").await;
-        exercise(connection, "cluster").await;
+        let (container, connection) = single_node_cluster("redis:7-alpine").await;
+        exercise(connection, "cluster", &published_endpoint(&container), true).await;
     });
 }
 

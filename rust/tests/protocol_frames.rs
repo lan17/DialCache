@@ -8,9 +8,23 @@ mod fixtures;
 #[path = "formal/frame_vectors.rs"]
 mod frame_vectors;
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 type Check = fn(&Value) -> Result<(), String>;
+
+#[test]
+fn frame_assertions_distinguish_library_rejections_from_bad_fixtures() {
+    let valid_shape = json!({"createdAtMs":0, "payloadType":"string", "payloadUtf8":"value", "frameHex":"expected"});
+    let error = frame_vectors::check_frame_vector(&valid_shape).unwrap_err();
+    assert!(
+        error.starts_with("PROTOCOL_ASSERTION_FAILURE expected:"),
+        "{error}"
+    );
+    let mut malformed = valid_shape;
+    malformed["frameHex"] = json!(5);
+    let error = frame_vectors::check_frame_vector(&malformed).unwrap_err();
+    assert!(!error.contains("PROTOCOL_ASSERTION_FAILURE"), "{error}");
+}
 
 /// The eight groups this test owns, with their fixed-corpus sizes.
 const GROUPS: [(&str, usize, Check); 8] = [

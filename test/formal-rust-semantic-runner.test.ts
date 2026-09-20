@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const moduleUrl = new URL("../formal/measure-rust-semantics.mjs", import.meta.url).href;
-type Cohort = { state: string; passed: number; failed: number; failingTests: string[]; executedTests: string[] };
+type Cohort = { state: string; passed: number; failed: number; failingTests: string[]; executedTests: string[]; assertionKinds: Record<string, string>; assertionEvidence: Record<string, string> };
 const { evaluateCargoTestOutput, evaluateRustReport, infrastructureTestFile } = await import(moduleUrl) as {
   evaluateCargoTestOutput(output: string, exitCode: number, expectedBinaries?: number): Cohort;
-  evaluateRustReport(text: string, exitCode: number): Cohort;
+  evaluateRustReport(text: string, exitCode: number, stderr?: string): Cohort;
   infrastructureTestFile: RegExp;
 };
 
@@ -57,11 +57,11 @@ describe("Rust ordinary cohort evaluation", () => {
   });
 });
 
-function report(cases: [string, string][], finish = true, extra: Record<string, unknown> = {}): string {
+function report(cases: [string, string, string?][], finish = true, extra: Record<string, unknown> = {}): string {
   const failed = cases.filter(([, status]) => status === "failed").length;
   const lines = [
     JSON.stringify({ schemaVersion: 1, kind: "start", implementation: "rust", startedAt: 1 }),
-    ...cases.map(([id, status]) => JSON.stringify({ kind: "case", id, status, startedAt: 2, finishedAt: 3, ...(status === "failed" ? { message: "expected 1 got 2" } : {}) })),
+    ...cases.map(([id, status, message]) => JSON.stringify({ kind: "case", id, status, startedAt: 2, finishedAt: 3, ...(status === "failed" ? { message: message ?? "expected: 1\nactual: 2" } : {}) })),
   ];
   if (finish) lines.push(JSON.stringify({ kind: "finish", status: failed ? "failed" : "passed", finishedAt: 4, cases: cases.length, failed, ...extra }));
   return lines.join("\n") + "\n";
@@ -78,6 +78,41 @@ describe("Rust harness report evaluation", () => {
     expect(evaluateRustReport(text, 101)).toMatchObject({ state: "detected", passed: 1, failed: 1, failingTests: ["sampled/core/0"] });
     expect(() => evaluateRustReport(text, 0)).toThrow(/exited 0 with failed cases/);
     expect(() => evaluateRustReport(report([["sampled/core/0", "passed"]]), 101)).toThrow(/without a failed case/);
+  });
+
+  it("retains the validated assertion kind and evidence", () => {
+    const id = "sampled/effects/0";
+    const message = 'CAUSAL_PROPERTY_FAILURE rule=C26 event={"index":0,"atMs":0,"event":"writeDispatch","condition":"publication without accepted source success","authorized":false}';
+    expect(evaluateRustReport(report([[id, "failed", message]]), 101)).toMatchObject({
+      assertionKinds: { [id]: "causal-property" }, assertionEvidence: { [id]: message },
+    });
+    const vector = "protocol/frameVectors/example";
+    const mismatch = "PROTOCOL_ASSERTION_FAILURE expected: 1\nactual: 2";
+    expect(evaluateRustReport(report([[vector, "failed", mismatch]]), 101)).toMatchObject({
+      assertionKinds: { [vector]: "protocol-assertion" }, assertionEvidence: { [vector]: mismatch },
+    });
+  });
+
+  it.each([
+    "Malformed replay observation: behaviorObservation at observed.calls",
+    "malformed next replay command",
+    "no pending read 0",
+    "coordinator response is not UTF-8",
+    "effects contract event 0 fallbackCompletion: fallback completion has no source",
+    'CAUSAL_PROPERTY_FAILURE rule=C26 event={"index":0,"atMs":0,"event":"writeDispatch","condition":"publication without accepted source success","authorized":true}',
+  ])("rejects infrastructure or invalid property evidence: %s", message => {
+    expect(() => evaluateRustReport(report([["sampled/effects/0", "failed", message]]), 101)).toThrow(/lacks observation or validated causal property evidence/);
+  });
+
+  it("rejects global infrastructure failures even when an assertion also failed", () => {
+    const text = report([["sampled/effects/0", "failed"]]);
+    expect(() => evaluateRustReport(text, 101, "conformance harness failed: coordinator exited unexpectedly")).toThrow(/infrastructure or coverage/);
+    expect(() => evaluateRustReport(text, 101, "coverage: effects corpus omits action begin")).toThrow(/infrastructure or coverage/);
+  });
+
+  it("rejects failed witness audits and malformed protocol fixtures", () => {
+    expect(() => evaluateRustReport(report([["witness/effects", "failed", "expected: hash-a actual: hash-b"]]), 101)).toThrow(/witness audit failure/);
+    expect(() => evaluateRustReport(report([["protocol/frameVectors/example", "failed", "frameHex is neither null nor a string"]]), 101)).toThrow(/protocol failure lacks assertion evidence/);
   });
 
   it("rejects crashed, empty, duplicated or inconsistent reports instead of crediting them", () => {
