@@ -10,10 +10,10 @@ type History = { path: string; steps: Step[] };
 type Verdict = { path: string; agree: boolean; step?: number; action?: string; choice?: number; reason?: string; fields?: string[] };
 type Manifests = { execution: { settings: Record<string, unknown>; models: Array<Record<string, unknown>> }; registry: { profiles: Array<{ id: string; version?: number }> } };
 type Model = { path: string; generate: { outputDirectory: string; traces: number }; invariants: string[]; replayRegressions?: string[]; settings: { backend: string; seed: string };
-  behaviorVersion: number; schemaVersion: number | null };
+  behaviorVersion: number; maxBytesPerStateRatio: number | null; schemaVersion: number | null };
 type Plan = { action: "skip" | "compare"; reason?: string; reference?: Model; candidate: Model; descriptor: unknown };
 type Report = { profile: string; skipped?: string; forward: { disagreed: number }; reverse: { disagreed: number };
-  generation: { bytesPerStateRatio: number | null; maxBytesPerStateRatio: number; wallRatio: number | null } };
+  generation: { bytesPerStateRatio: number | null; maxBytesPerStateRatio: number; maxBytesPerStateRatioSource?: string; wallRatio: number | null } };
 const differential = await import(new URL("../formal/differential.mjs", import.meta.url).href) as {
   compareHistory(reference: History, replayed: History): { agree: boolean; step?: number; action?: string; choice?: number; reason?: string; fields?: string[] };
   chunked<T>(items: T[], size: number): T[][];
@@ -28,6 +28,7 @@ const differential = await import(new URL("../formal/differential.mjs", import.m
   composedProfiles(manifest: { models: Array<{ path: string; profile?: string }> }, options?: { cwd?: string }): string[];
   selectProfiles(prepared: { reference: { manifests: Manifests; tree: string }; candidate: { manifests: Manifests; tree: string } }): string[];
   closureSkip(reference: Model, candidate: Model, referenceSources: Record<string, string>, candidateSources: Record<string, string>): string | null;
+  bytesBound(model: Pick<Model, "maxBytesPerStateRatio">): { maxBytesPerStateRatio: number; source: string };
   verdict(report: Report): { failed: boolean; reasons: string[] };
   formatReport(report: Report): string;
   defaultChunk: number;
@@ -128,6 +129,9 @@ describe("corpus differential comparison", () => {
       .toMatchObject({ action: "skip", reason: "intended divergence: behaviorVersion 0 -> 1" });
     expect(differential.differentialPlan(manifests([layersModel()], 2), manifests([layersModel()], 3), "layers"))
       .toMatchObject({ action: "skip", reason: "intended divergence: observation schema version 2 -> 3" });
+    // A model's own bytes-per-state bound travels with the plan; without one the lane's default applies.
+    expect(differential.differentialPlan(manifests([layersModel()]), manifests([layersModel({ differential: { maxBytesPerStateRatio: 1.4 } })]), "layers"))
+      .toMatchObject({ action: "compare", reference: { maxBytesPerStateRatio: null }, candidate: { maxBytesPerStateRatio: 1.4 } });
     // A profile the candidate no longer generates is a visible removal, reported rather than compared; a profile neither revision generates is a misuse.
     expect(differential.differentialPlan(manifests([layersModel()]), manifests([]), "layers")).toMatchObject({ action: "skip", reason: /profile removed/ });
     expect(() => differential.differentialPlan(manifests([]), manifests([]), "layers")).toThrow(/No generation profile named layers in either revision/);
@@ -147,7 +151,16 @@ describe("corpus differential comparison", () => {
     expect(differential.verdict(report({ forward: { disagreed: 2 } }))).toMatchObject({ failed: true, reasons: ["2 forward disagreement(s)"] });
     expect(differential.verdict(report({ reverse: { disagreed: 1 } }))).toMatchObject({ failed: true, reasons: ["1 reverse disagreement(s)"] });
     expect(differential.maxBytesPerStateRatio).toBe(1.2);
-    expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.25 } }))).toMatchObject({ failed: true, reasons: [expect.stringMatching(/x1\.250, above the bound x1\.2/)] });
+    expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.25 } }))).toMatchObject({ failed: true, reasons: [expect.stringMatching(/x1\.250, above the bound x1\.20 \(default\)/)] });
+    // A model's declared bound replaces the default, and the report names where the bound came from.
+    expect(differential.bytesBound({ maxBytesPerStateRatio: null })).toEqual({ maxBytesPerStateRatio: 1.2, source: "default" });
+    expect(differential.bytesBound({ maxBytesPerStateRatio: 1.4 })).toEqual({ maxBytesPerStateRatio: 1.4, source: "model" });
+    const declared = { maxBytesPerStateRatio: 1.4, maxBytesPerStateRatioSource: "model" };
+    expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.3, ...declared } }))).toEqual({ failed: false, reasons: [] });
+    expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.45, ...declared } }))).toMatchObject({ failed: true, reasons: [expect.stringMatching(/x1\.450, above the bound x1\.40 \(model\)/)] });
+    const full = { profile: "layers", forward: { agreed: 2, sampled: 1, regressions: 1, disagreed: 0, disagreements: [] }, reverse: { agreed: 2, sampled: 1, regressions: 1, disagreed: 0, disagreements: [] },
+      replay: { chunk: 16, wallMs: 1000 }, generation: { referenceMs: 1000, candidateMs: 1000, wallRatio: 1, reference: { bytesPerState: 100 }, candidate: { bytesPerState: 130 }, bytesPerStateRatio: 1.3, ...declared } };
+    expect(differential.formatReport(full as unknown as Report)).toContain("(x1.300, bound x1.40 (model))");
     expect(differential.verdict(report({ generation: { wallRatio: 2 } }))).toEqual({ failed: false, reasons: [expect.stringMatching(/^advisory: generation wall time x2\.00/)] });
     expect(differential.verdict({ profile: "layers", skipped: "new profile" } as unknown as Report)).toEqual({ failed: false, reasons: ["skipped: new profile"] });
     expect(differential.formatReport({ profile: "layers", skipped: "intended divergence: behaviorVersion 0 -> 1" } as unknown as Report)).toBe("layers: not compared (intended divergence: behaviorVersion 0 -> 1).");

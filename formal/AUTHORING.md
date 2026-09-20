@@ -118,10 +118,14 @@ A rewrite lands only when `node formal/differential.mjs <profile>` replays the
 profile's whole reference corpus and exported regressions through the new text,
 and the new text's corpus through the old, with step-by-step agreement on every
 driver-asserted channel; an intended change of behavior is declared by bumping
-the model's `differential.behaviorVersion` in the manifest instead. Compare the
-same recorded inputs before attributing a change in observations to the
-rewrite. Reusing a random seed does not preserve an input history when a
-model's choice structure changes.
+the model's `differential.behaviorVersion` in the manifest instead. Trace bytes
+per state may grow at most 1.2 times over the reference; a composition that
+must carry more state declares its own bound as
+`differential.maxBytesPerStateRatio` beside `behaviorVersion`, with the reason
+recorded in the kernel README's record table. Compare the same recorded inputs
+before attributing a change in observations to the rewrite. Reusing a random
+seed does not preserve an input history when a model's choice structure
+changes.
 
 Connection models advance the imported profile and save its preceding context
 in the same `all` action. Views such as `acquired` and `observedSources` combine

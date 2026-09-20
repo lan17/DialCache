@@ -85,7 +85,15 @@ function generationModel(manifests, profileId) {
   const model = manifests.execution.models.find(candidate => candidate.profile === profileId);
   if (!model || !model.generate || typeof model.path !== 'string' || !Array.isArray(model.invariants)) return undefined;
   const entry = manifests.registry.profiles.find(candidate => candidate.id === profileId);
-  return { ...model, behaviorVersion: model.differential?.behaviorVersion ?? 0, schemaVersion: entry?.version ?? null, settings: manifests.execution.settings };
+  return { ...model, behaviorVersion: model.differential?.behaviorVersion ?? 0, maxBytesPerStateRatio: model.differential?.maxBytesPerStateRatio ?? null,
+    schemaVersion: entry?.version ?? null, settings: manifests.execution.settings };
+}
+// The bound on trace bytes per state a run applies: the model's own
+// declaration (differential.maxBytesPerStateRatio in formal/execution.json)
+// when it has one, else the lane's default.
+export function bytesBound(model) {
+  return model.maxBytesPerStateRatio === null || model.maxBytesPerStateRatio === undefined
+    ? { maxBytesPerStateRatio, source: 'default' } : { maxBytesPerStateRatio: model.maxBytesPerStateRatio, source: 'model' };
 }
 
 // What to do for one profile given both revisions' manifests. A profile the
@@ -388,6 +396,7 @@ export async function runDifferential(profileId, prepared, { chunk = defaultChun
     disagreed: verdicts.filter(verdict => !verdict.agree).length, disagreements: verdicts.filter(verdict => !verdict.agree).slice(0, 20).map(verdict => ({ direction: name, ...verdict })) });
   const referenceSize = bytesPerState(referenceCorpus.directory);
   const candidateSize = bytesPerState(candidateCorpus.directory);
+  const bound = bytesBound(candidateModel);
   return write({
     ...withSources,
     forward: direction('forward', forward, referenceHistories.length - referenceHistories.filter(history => history.path.startsWith('regression:')).length, referenceHistories.filter(history => history.path.startsWith('regression:')).length),
@@ -396,20 +405,21 @@ export async function runDifferential(profileId, prepared, { chunk = defaultChun
       wallRatio: referenceCorpus.generationMs ? candidateCorpus.generationMs / referenceCorpus.generationMs : null,
       reference: referenceSize, candidate: candidateSize,
       bytesPerStateRatio: referenceSize.bytesPerState ? candidateSize.bytesPerState / referenceSize.bytesPerState : null,
-      maxBytesPerStateRatio },
+      maxBytesPerStateRatio: bound.maxBytesPerStateRatio, maxBytesPerStateRatioSource: bound.source },
     replay: { chunk, wallMs: Math.round(replayMs) },
   });
 }
 
 // The run's verdict: any disagreement in either direction fails, as does trace
-// growth beyond the bound. Wall time is advisory: the two generations run
-// concurrently and hosted runners are noisy.
+// growth beyond the bound (the model's own or the default). Wall time is
+// advisory: the two generations run concurrently and hosted runners are noisy.
+const boundText = generation => `bound x${generation.maxBytesPerStateRatio.toFixed(2)} (${generation.maxBytesPerStateRatioSource ?? 'default'})`;
 export function verdict(report) {
   const reasons = [];
   if (report.skipped) return { failed: false, reasons: [`skipped: ${report.skipped}`] };
   for (const name of ['forward', 'reverse']) if (report[name].disagreed) reasons.push(`${report[name].disagreed} ${name} disagreement(s)`);
   const ratio = report.generation.bytesPerStateRatio;
-  if (ratio !== null && ratio > report.generation.maxBytesPerStateRatio) reasons.push(`bytes per state grew x${ratio.toFixed(3)}, above the bound x${report.generation.maxBytesPerStateRatio}`);
+  if (ratio !== null && ratio > report.generation.maxBytesPerStateRatio) reasons.push(`bytes per state grew x${ratio.toFixed(3)}, above the ${boundText(report.generation)}`);
   const advisory = report.generation.wallRatio !== null && report.generation.wallRatio > advisoryWallRatio
     ? [`advisory: generation wall time x${report.generation.wallRatio.toFixed(2)} exceeds x${advisoryWallRatio} (concurrent generations; not gated)`] : [];
   return { failed: reasons.length > 0, reasons: [...reasons, ...advisory] };
@@ -425,7 +435,7 @@ export function formatReport(report) {
       ` replay ${seconds(report.replay.wallMs)} at ${report.replay.chunk} per process.`,
     `generation wall ${seconds(report.generation.referenceMs)} -> ${seconds(report.generation.candidateMs)} (${ratio(report.generation.wallRatio, 2)}, advisory),` +
       ` bytes/state ${report.generation.reference.bytesPerState.toFixed(0)} -> ${report.generation.candidate.bytesPerState.toFixed(0)}` +
-      ` (${ratio(report.generation.bytesPerStateRatio, 3)}, bound x${report.generation.maxBytesPerStateRatio})`,
+      ` (${ratio(report.generation.bytesPerStateRatio, 3)}, ${boundText(report.generation)})`,
   ];
   for (const name of ['forward', 'reverse']) {
     for (const disagreement of report[name].disagreements) lines.push(`  ${name} ${disagreement.path}: ${disagreement.reason}`);
@@ -442,7 +452,8 @@ Generates <profile>'s corpus and exported regressions from the merge base with
 manifest entry and the lane's command; replays every reference history through
 the working tree's text and every working-tree history through the reference
 text; fails on any step whose driver-asserted observation differs, on an input
-either text refuses, or on trace bytes per state above x${maxBytesPerStateRatio}.
+either text refuses, or on trace bytes per state above x${maxBytesPerStateRatio} (or above
+the model's own differential.maxBytesPerStateRatio when it declares one).
 A profile whose differential.behaviorVersion or observation schema version
 differs between the revisions is reported as an intended divergence and not
 compared; a profile the reference does not generate is reported as new.

@@ -312,7 +312,9 @@ disagrees in the reverse direction. Replays run as batched `quint test`
 processes (16 histories each, the measured optimum) built from constrained
 action clones shared across the batch, the same schedules fixture recipes use.
 The run fails on any disagreement and when trace bytes per state grow beyond
-1.2 times the reference's; generation wall time is recorded and reported as
+1.2 times the reference's, or beyond the model's own
+`differential.maxBytesPerStateRatio` when it declares one (the reason belongs
+in the record table below); generation wall time is recorded and reported as
 advisory above 1.5, because the two generations run concurrently and hosted
 runners are noisy. What is compared is what the drivers assert (the
 observation and the profile's side channels); private state is protected by

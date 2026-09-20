@@ -670,11 +670,19 @@ export function validateExecution(manifest = readExecution(), {
     // A composed profile's declared behavior: bumping behaviorVersion says its
     // observable behavior changed on purpose, so the corpus differential
     // reports that profile instead of comparing it against the reference.
+    // maxBytesPerStateRatio is the profile's own bound on trace growth for the
+    // differential, in place of the lane's default: a composition that must
+    // carry more state per trace than its predecessor declares it, with the
+    // reason recorded in the kernel README's record table.
     if (model.differential !== undefined) {
-      if (!model.differential || typeof model.differential !== 'object' || Array.isArray(model.differential) || model.generate === undefined ||
-          Object.keys(model.differential).join() !== 'behaviorVersion') throw new Error(`${model.path}: unsupported differential settings`);
-      const { behaviorVersion } = model.differential;
-      if (!Number.isSafeInteger(behaviorVersion) || behaviorVersion < 1) throw new Error(`${model.path}: differential.behaviorVersion must be a positive integer`);
+      const settings = model.differential, known = ['behaviorVersion', 'maxBytesPerStateRatio'];
+      if (!settings || typeof settings !== 'object' || Array.isArray(settings) || model.generate === undefined ||
+          !Object.keys(settings).length || Object.keys(settings).some(key => !known.includes(key))) throw new Error(`${model.path}: unsupported differential settings`);
+      const { behaviorVersion, maxBytesPerStateRatio } = settings;
+      if (behaviorVersion !== undefined && (!Number.isSafeInteger(behaviorVersion) || behaviorVersion < 1)) throw new Error(`${model.path}: differential.behaviorVersion must be a positive integer`);
+      if (maxBytesPerStateRatio !== undefined && (typeof maxBytesPerStateRatio !== 'number' || !Number.isFinite(maxBytesPerStateRatio) || maxBytesPerStateRatio < 1)) {
+        throw new Error(`${model.path}: differential.maxBytesPerStateRatio must be a finite number of at least 1`);
+      }
     }
     if (model.profile !== undefined || model.generate !== undefined) {
       const profile = profiles.find(profile => profile.id === model.profile);

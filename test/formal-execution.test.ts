@@ -120,7 +120,7 @@ describe("formal execution schedule", () => {
       .toThrow(/formal\/kernel\/clock\.qnt: a stateful Quint source must be a scheduled model/);
   });
 
-  it("validates a composed profile's declared behavior version", () => {
+  it("validates a composed profile's declared behavior version and bytes-per-state bound", () => {
     const layers = () => { const m = manifest(); return { m, model: m.models.find(model => model.profile === "layers")! as typeof m.models[number] & { differential?: unknown } }; };
     const versioned = layers();
     versioned.model.differential = { behaviorVersion: 1 };
@@ -128,10 +128,22 @@ describe("formal execution schedule", () => {
     const zero = layers();
     zero.model.differential = { behaviorVersion: 0 };
     expect(() => validate(zero.m)).toThrow(/behaviorVersion must be a positive integer/);
-    for (const invalid of [{ preserve: true }, {}, null, { behaviorVersion: 1, maxBytesPerStateRatio: 1.3 }]) {
+    for (const invalid of [{ preserve: true }, {}, null, { behaviorVersion: 1, bytes: 1.3 }]) {
       const bad = layers();
       bad.model.differential = invalid;
       expect(() => validate(bad.m), JSON.stringify(invalid)).toThrow(/unsupported differential settings/);
+    }
+    // A model may declare its own bytes-per-state bound for the differential, alone or beside its behavior version.
+    const bounded = layers();
+    bounded.model.differential = { behaviorVersion: 1, maxBytesPerStateRatio: 1.3 };
+    expect(() => validate(bounded.m)).not.toThrow();
+    const boundOnly = layers();
+    boundOnly.model.differential = { maxBytesPerStateRatio: 1.4 };
+    expect(() => validate(boundOnly.m)).not.toThrow();
+    for (const invalid of [0.9, 0, -1, "1.4", Number.NaN, Number.POSITIVE_INFINITY, null]) {
+      const bad = layers();
+      bad.model.differential = { maxBytesPerStateRatio: invalid };
+      expect(() => validate(bad.m), String(invalid)).toThrow(/maxBytesPerStateRatio must be a finite number of at least 1/);
     }
     const unscheduled = manifest();
     (unscheduled.models.find(model => model.path === "formal/dialcache-core.qnt")! as typeof unscheduled.models[number] & { differential?: unknown }).differential = { behaviorVersion: 1 };
