@@ -43,7 +43,7 @@ const fixtureNames = [
   "profile-witness-choice", "profile-witness-projection", "profile-witness-guard", "profile-witness-deep", "profile-witness-domain",
   "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick", "composition-nondet-inline",
   "composition-action-argument", "composition-wiring-passes", "composition-lambda-argument", "composition-named-operator-argument",
-  "composition-lambda-through-helper",
+  "composition-lambda-through-helper", "library-alias", "composition-alias-typed-operator-position", "composition-aliased-transition",
 ];
 // Quint's effect checker rejects an operator constant that reads a variable
 // (QNT201), so this route can only be shown on the parsed IR; the lint must
@@ -205,6 +205,31 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
     expect(report.composition.violations).toEqual([
       { definition: "repeatWith", detail: "higher-order library::repeat instantiated in the value of s", chain: ["bumpWrapper", "repeatWith"] },
+    ]);
+  }, quintTimeout);
+
+  it("judges a kernel definition whose operator parameter is typed through an alias, or a chain of aliases, as higher-order", async () => {
+    const report = await lintModel(fixture("composition-alias-typed-operator-position"), { kernelModules: ["library_alias"] });
+    expect(report.composition.libraryTransitions).toEqual(["library_alias::bump", "library_alias::repeatChained", "library_alias::repeatVia"]);
+    // Quint records `each: Step[r]` as the alias name, not as an operator type;
+    // the typedef it resolves to is the operator type, so every instantiation
+    // is reported, the one passing the kernel's own step included.
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "higher-order library_alias::repeatVia instantiated in the value of s", chain: ["bumpWrapper"] },
+      { definition: "chainedWrapper", detail: "higher-order library_alias::repeatChained instantiated in the value of s", chain: ["chainedWrapper"] },
+      { definition: "kernelStepWrapper", detail: "higher-order library_alias::repeatVia instantiated in the value of s", chain: ["kernelStepWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("judges a kernel definition applied through a profile alias as the kernel's application", async () => {
+    const report = await lintModel(fixture("composition-aliased-transition"), { kernelModules: ["library"] });
+    // `bumpAlias` and `repeatAlias` resolve to the kernel definitions: both
+    // transitions are recorded under the kernel's names, so aliasing cannot
+    // empty the list the composed-violations gate keys on, and the
+    // higher-order fold is reported at the wrapper that applies it.
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "repeatWrapper", detail: "higher-order library::repeat instantiated in the value of s", chain: ["repeatWrapper"] },
     ]);
   }, quintTimeout);
 
