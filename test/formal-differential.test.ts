@@ -26,6 +26,7 @@ const differential = await import(new URL("../formal/differential.mjs", import.m
   readManifests(directory: string): Manifests;
   replayHistories(tree: string, model: Model, descriptor: unknown, histories: History[], options: { chunk: number; output: string; concurrency: number }): Promise<Verdict[]>;
   composedProfiles(manifest: { models: Array<{ path: string; profile?: string }> }, options?: { cwd?: string }): string[];
+  prepare(reference: string, options?: { cwd?: string; output?: string }): { reference: { revision: string; tree: string; manifests: Manifests }; candidate: { tree: string; manifests: Manifests } };
   selectProfiles(prepared: { reference: { manifests: Manifests; tree: string }; candidate: { manifests: Manifests; tree: string } }): string[];
   closureSkip(reference: Model, candidate: Model, referenceSources: Record<string, string>, candidateSources: Record<string, string>): string | null;
   bytesBound(model: Pick<Model, "maxBytesPerStateRatio">): { maxBytesPerStateRatio: number; source: string };
@@ -178,6 +179,17 @@ describe("corpus differential comparison", () => {
     expect(differential.closureSkip(model({ replayRegressions: ["aTest"] }), model({ replayRegressions: ["aTest", "bTest"] }), sources, { ...sources })).toBeNull();
     expect(differential.closureSkip(model(), model({ generate: { outputDirectory: "x", traces: 4 } }), sources, { ...sources })).toBeNull();
     expect(differential.closureSkip(model(), model({ settings: { backend: "rust", seed: "0x1" } }), sources, { ...sources })).toBeNull();
+  });
+
+  it("validates the working tree's manifest as written and derives the schedule of both revisions", () => {
+    const output = mkdtempSync(join(tmpdir(), "differential-prepare-"));
+    try {
+      const prepared = differential.prepare("HEAD", { output });
+      const exported = (manifests: Manifests) => manifests.execution.models.find(model => model.profile === "layers")?.replayRegressions as string[] | undefined;
+      expect(prepared.reference.revision).toMatch(/^[0-9a-f]{40}$/);
+      expect(exported(prepared.candidate.manifests)?.length).toBeGreaterThan(0);
+      expect(exported(prepared.reference.manifests)?.length).toBeGreaterThan(0);
+    } finally { rmSync(output, { recursive: true, force: true }); }
   });
 
   it("selects the composed profiles by their kernel imports in either revision, following helper libraries, and lists every Quint source", () => {
