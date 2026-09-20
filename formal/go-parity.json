@@ -11,7 +11,7 @@
     "semanticCasesSha256": "0c74ce51fc4c880aef0acaf2c03f23884ec123b8b4865fed236f630ed17e4c22",
     "executionSha256": "7a176d74eabffbcb0406ae82f09b67a33dee6592d2b51c9e6b03bd2e18cb5136",
     "sourceAuditSha256": "769ff8845e8df0aae1097a2d5c27a2322c6c2ec8d3233df1334c3a9742bf699b",
-    "quintCaseAuditSha256": "c3203c0014b509ce6dfb874fa3d4c630211d2b7d34a65d06d13c9cc2e4c553f9",
+    "quintCaseAuditSha256": "fe7755f3aee41cc616eba52dd423a893919b9c96172ad97a7993252c35da9bf0",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "28a9af577d3306f572de2b295eade2ff195ff910cb136e407207ab8cc3c0c539"
@@ -5756,7 +5756,7 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/kernel/remote-io.qnt:beginRead",
+        "formal/kernel/diagnostics.qnt:beginRead",
         "formal/kernel/recovery.qnt:retain",
         "formal/kernel/recovery.qnt:failure"
       ],

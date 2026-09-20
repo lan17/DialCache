@@ -4116,7 +4116,7 @@
     },
     {
       "case": "C42.allow-override",
-      "reference": "formal/kernel/remote-io.qnt:beginRead",
+      "reference": "formal/kernel/diagnostics.qnt:beginRead",
       "kind": "helper",
       "scope": "Operation classifier replaces inherited instance classifier; an explicit allow admits a valid retained candidate after source error."
     },

@@ -1,5 +1,5 @@
 // The budgeted held remote lifecycle with a read settled in the step that
-// admits the caller (remote_io::beginRead, deadlines::beginRead) and the
+// admits the caller (deadlines::beginRead) and the
 // diagnosed variants of that lifecycle (diagnostics): one key, one instance,
 // two persistent contexts, immediate replies, decodes and loaders held.
 // Pins the seams the recovery profile reaches only through its own fixtures

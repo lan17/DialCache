@@ -98,12 +98,9 @@ module diagnostics {
   // recorded (a late result that only drains records none); the recovery age
   // sampled when a recovery decode serves.
 
-  // A flight the step started is attributed to a layer: parallel to `sources`.
-  pure def attributed(after: DiagnosedHeld[r, q], layer: str): DiagnosedHeld[r, q] =
-    if (after.sourceLayers.length() < after.sources.length()) recordSourceLayer(after, layer) else after
   pure def beginRead(state: DiagnosedHeld[r, q], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int, classifier: int): DiagnosedHeld[r, q] = {
     val admitted = Deadlines::admit(state, layout, call)
-    if (not(Serving::participating(state, layout, call))) attributed(admitted, NO_LAYER)
+    if (not(Serving::participating(state, layout, call))) recordSourceLayer(admitted, NO_LAYER)
     else {
       val judged = Serving::judgeRelease(admitted, layout, state.o.policyCalls, resolved, ttls, false)
       val released = Deadlines::releaseJudged(admitted, layout, judged, state.o.policyCalls, ttls, budget)

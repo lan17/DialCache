@@ -181,6 +181,7 @@ describe("corpus differential comparison", () => {
     expect(differential.closureSkip(model(), model({ settings: { backend: "rust", seed: "0x1" } }), sources, { ...sources })).toBeNull();
   });
 
+  // A fixture-export test, not a unit test: prepare spawns about 65 git processes, and hosted runners are slower.
   it("validates the working tree's manifest as written and derives the schedule of both revisions", () => {
     const output = mkdtempSync(join(tmpdir(), "differential-prepare-"));
     try {
@@ -190,7 +191,7 @@ describe("corpus differential comparison", () => {
       expect(exported(prepared.candidate.manifests)?.length).toBeGreaterThan(0);
       expect(exported(prepared.reference.manifests)?.length).toBeGreaterThan(0);
     } finally { rmSync(output, { recursive: true, force: true }); }
-  });
+  }, 30_000);
 
   it("selects the composed profiles by their kernel imports in either revision, following helper libraries, and lists every Quint source", () => {
     expect(differential.composedProfiles(readExecution())).toEqual(["recovery", "policy", "scope", "layers", "independent", "recovery-read", "runtime-boundaries", "shadow-layers", "source-budgets"]);
