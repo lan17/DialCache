@@ -12,7 +12,10 @@ const inventory = JSON.parse(readFileSync(new URL("../formal/semantic-cases.json
 };
 const check = (value: unknown) => JSON.stringify(checkSemanticCoverage(value));
 
-describe("semantic coverage accounting", () => {
+// Every case re-checks the whole inventory against the Quint sources; the
+// hosted runner is about ten times slower than a laptop (5.2 s versus 0.5 s
+// for the definition-citation case), so the suite carries an explicit budget.
+describe("semantic coverage accounting", { timeout: 30_000 }, () => {
   it("rejects incompatible profile registries and schema drift", () => {
     const registry = JSON.parse(readFileSync(new URL("../formal/profiles.json", import.meta.url), "utf8"));
     expect(() => checkProfiles(registry)).not.toThrow();
