@@ -343,37 +343,6 @@
       "tracked": true,
       "watermark": true
     },
-    "recovery": {
-      "acceptedMaxAge": true,
-      "candidate": true,
-      "candidateCreated": true,
-      "classifier": true,
-      "created": true,
-      "deadline": true,
-      "expires": true,
-      "frame": true,
-      "loadFailed": true,
-      "maxAge": true,
-      "now": true,
-      "phase": true,
-      "readFailed": true,
-      "wall": true,
-      "watermark": true,
-      "o": {
-        "calls": true,
-        "reads": true,
-        "loads": true,
-        "loaders": true,
-        "classifications": true,
-        "dumps": true,
-        "writes": true,
-        "recovery": true,
-        "shadow": true
-      },
-      "d": {
-        "ages": true
-      }
-    },
     "shadow-16": {
       "abandoned": true,
       "c0": true,
@@ -401,57 +370,6 @@
       "d": {
         "ages": true
       }
-    },
-    "recovery-17": {
-      "acceptedMaxAge": true,
-      "activeLoader": true,
-      "attached": true,
-      "canRecover": true,
-      "canWrite": true,
-      "candidate": true,
-      "candidateCreated": true,
-      "classifier": true,
-      "closed": true,
-      "created": true,
-      "d": {
-        "ages": true,
-        "coalesced": true,
-        "fallbackErrors": true,
-        "warnings": true
-      },
-      "deadline": true,
-      "expires": true,
-      "frame": true,
-      "instanceClassifier": true,
-      "loadFailed": true,
-      "maxAge": true,
-      "memo": true,
-      "now": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "observedFence": true,
-      "phase": true,
-      "readFailed": true,
-      "request": true,
-      "sourceError": true,
-      "sources": true,
-      "wall": true,
-      "watermark": true
     },
     "shadow-18": {
       "abandoned": true,
@@ -1585,9 +1503,9 @@
             ["releaseLoad", -1]
           ],
           "startState": 0,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "fenced-read-does-not-retain",
@@ -1603,10 +1521,10 @@
             ["beginCall", 0],
             ["rejectLoader", 1]
           ],
-          "startState": 4,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "startState": 0,
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "future-read-preserves-source-error",
@@ -1621,10 +1539,10 @@
             ["beginCall", 7],
             ["advance", 4000]
           ],
-          "startState": 3,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "startState": 0,
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "classifier-error-keeps-error-without-decode",
@@ -1637,9 +1555,9 @@
             ["rejectLoader", 0]
           ],
           "startState": 0,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "maximum-age-read-preserves-source-error",
@@ -1670,10 +1588,10 @@
             ["joinCall", 0],
             ["rejectLoader", 3]
           ],
-          "startState": 18,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "startState": 0,
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "fenced-c1-supersedes-without-repair",
@@ -1732,9 +1650,9 @@
             ["releaseLoad", -1]
           ],
           "startState": 0,
-          "projection": "recovery-17",
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "last-recovery-age-serves",
@@ -1760,10 +1678,10 @@
             ["joinCall", 0],
             ["releaseLoad", -1]
           ],
-          "startState": 7,
-          "projection": "recovery-17",
+          "startState": 0,
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "exact-maximum-after-decode-rejects",
@@ -1787,9 +1705,9 @@
             ["releaseLoad", -1]
           ],
           "startState": 0,
-          "projection": "recovery-17",
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "failed-fresh-decode-is-not-recovery",
@@ -1820,10 +1738,10 @@
             ["joinCall", 0],
             ["rejectLoader", 2]
           ],
-          "startState": 13,
-          "projection": "recovery-17",
+          "startState": 0,
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "classifier-error-keeps-error-without-decode",
@@ -1836,9 +1754,9 @@
             ["rejectLoader", 0]
           ],
           "startState": 0,
-          "projection": "recovery-17",
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "same-c1-bytes-confirm-mismatch",

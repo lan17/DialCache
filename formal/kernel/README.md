@@ -200,7 +200,9 @@ remote lifecycle with immediate replies, its recovery snapshots and payload
 classes, the compression channel variants and the marker lifetime;
 `formal/dialcache-shadow-layers-conformance.qnt` the eighth, over the atomic
 layered release with held refills and stale-on-error on the atomic path, and
-the shadow job registry with its budgets). It keeps
+the shadow job registry with its budgets; `formal/dialcache-recovery-conformance.qnt`
+the ninth, over the budgeted held lifecycle with the read settled at admission
+and the diagnosed held variants). It keeps
 its constants, its flat `State`, `var s` and `var input`, its `nondet` input
 choices, its guards, its invariants and its regressions. Each wrapper action
 assigns `s'` to one library transition and `input'` to the driver record:
@@ -237,9 +239,10 @@ the classifiers alone, as the policy composition did (its `modelView` maps the
 shadow to the layered shape). The classifiers still reading private
 predictions, to migrate the same way (layers is already composed and still
 owes this):
-`effects.mjs`, `layers.mjs`, `recovery.mjs` (the scope and
-wall-rollback rules), `recovery-shadow.mjs`, `shadow.mjs`, and the scope and
-layers rules of `runtime.mjs`.
+`effects.mjs`, `layers.mjs`, `recovery-shadow.mjs` (the shadow profile's
+classifier), `shadow.mjs`, and the scope and layers rules of `runtime.mjs`;
+`recovery.mjs` shadows the recovery profile from its inputs and channels and
+binds the shadow to the composed layout in its fidelity check.
 
 The rules a profile may keep are wiring: record literals for the initial state,
 record updates with inputs (`{ policy: policy, ...s }`), and input decoding
@@ -422,6 +425,23 @@ entry points and added two regressions pinning `match` and `superseded`. The
 differential against 16bb2c6 agreed on 279 of 279 reference and 281 of 281
 candidate histories (23 and 25 regressions) at 3923 bytes per state both ways
 (x1.000); the seven other composed profiles were unchanged.
+
+Later rewrites are recorded as one row each, measured against the branch head
+that preceded them with the manifest seed, in one process for both generations
+(sampled histories and exported regressions agreeing step for step in both
+directions; bytes per state against the bound in force). recovery declares
+`differential.maxBytesPerStateRatio: 1.85`: the text it replaces was the
+thinnest profile in the repository (1544 bytes per state: the two channels and
+twenty-five scalars), and the composition pays the held shape's per-flight
+`LayeredSource`, the per-caller registries and the `io` channel (about 2015
+bytes of library records against 790 of retired scalars), so the floor of any
+composition over the landed held shape is about x1.7; in absolute terms 2769
+sits between recovery-read (2304) and independent (2845), and the corpus is
+about 85 MB.
+
+| Rewrite | Measured | Histories agreeing | Generation wall (advisory) | Bytes per state | Profile lines | Lint violations |
+| --- | --- | --- | --- | --- | --- | --- |
+| recovery | 2026-09-20 against 5b46ce9 (the read settled in its step, the held release split from its judgment, the diagnosed held lifecycle) | 512 of 512 and 30 of 30 | 11.6 s -> 21.0 s (x1.80) | 1544 -> 2769 (x1.793, bound x1.85, model) | 466 -> 443 | 80 -> 0 |
 
 The pilot that preceded the library (#171, #172) instantiated one kernel state
 machine per profile and measured its cost; its conclusions and measurements are

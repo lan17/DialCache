@@ -6,23 +6,23 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/first-stale-age-recovers-without-publication"
     },
-    "initialState": {"acceptedMaxAge":{"#bigint":"5000"},"activeLoader":{"#bigint":"0"},"attached":[false,false],"canRecover":false,"canWrite":false,"candidate":{"#bigint":"0"},"candidateCreated":{"#bigint":"0"},"classifier":{"#bigint":"0"},"closed":[false,false],"created":{"#bigint":"99000"},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}},"deadline":{"#bigint":"0"},"expires":{"#bigint":"70000"},"frame":{"#bigint":"1"},"instanceClassifier":{"#bigint":"1"},"loadFailed":false,"maxAge":{"#bigint":"5000"},"memo":[{"#bigint":"0"},{"#bigint":"0"}],"now":{"#bigint":"10000"},"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"observedFence":{"#bigint":"0"},"phase":{"#bigint":"0"},"readFailed":false,"request":false,"sourceError":{"#bigint":"3"},"sources":[],"wall":{"#bigint":"100000"},"watermark":{"#bigint":"0"}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
-      {"action":"beginCall","statePatch":{"attached":[false,true],"canRecover":true,"canWrite":true,"candidate":{"#bigint":"1"},"candidateCreated":{"#bigint":"99000"},"deadline":{"#bigint":"10010"},"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}},"phase":{"#bigint":"2"},"sources":[{"#bigint":"0"}]}},
-      {"action":"invalidate","statePatch":{"o":{"invalidations":{"#bigint":"1"},"maintenance":["ok"]},"watermark":{"#bigint":"100000"}}},
-      {"action":"invalidate","statePatch":{"o":{"invalidations":{"#bigint":"2"},"maintenance":["ok","ok"]}}},
-      {"action":"advance","statePatch":{"now":{"#bigint":"10001"},"wall":{"#bigint":"100001"}}},
-      {"action":"rejectTimeout","statePatch":{"d":{"fallbackErrors":["remote"]},"o":{"classifications":{"#bigint":"1"},"loads":{"#bigint":"1"}},"phase":{"#bigint":"3"},"sources":[{"#bigint":"2"}]}},
-      {"action":"seed","statePatch":{"created":{"#bigint":"99001"},"expires":{"#bigint":"70001"}}},
-      {"action":"joinCall","statePatch":{"d":{"coalesced":["process"]},"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"2"}}}},
-      {"action":"joinCall","statePatch":{"attached":[true,true],"d":{"coalesced":["process","process"]},"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"3"}}}},
-      {"action":"seed","statePatch":{"created":{"#bigint":"99002"}}},
-      {"action":"readFault","statePatch":{"readFailed":true}},
-      {"action":"readFault","statePatch":{"readFailed":false}},
-      {"action":"loadFault","statePatch":{}},
-      {"action":"policy","statePatch":{}},
-      {"action":"rollbackWall","statePatch":{"wall":{"#bigint":"99001"}}},
-      {"action":"releaseLoad","statePatch":{"d":{"ages":[{"#bigint":"1"}]},"o":{"calls":[{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"1"}],"recovery":["served"]},"phase":{"#bigint":"0"}}}
+      {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"4"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
+      {"action":"invalidate","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"invalidations":{"#bigint":"1"},"maintenance":["ok"]}}},
+      {"action":"invalidate","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"invalidations":{"#bigint":"2"},"maintenance":["ok","ok"]}}},
+      {"action":"advance","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
+      {"action":"rejectTimeout","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"classifications":{"#bigint":"1"},"loads":{"#bigint":"1"}},"d":{"fallbackErrors":["remote"]}}},
+      {"action":"seed","choice":{"tag":"Some","value":{"#bigint":"2"}},"statePatch":{}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"2"}},"d":{"coalesced":["process"]}}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"3"}},"d":{"coalesced":["process","process"]}}},
+      {"action":"seed","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
+      {"action":"readFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
+      {"action":"readFault","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{}},
+      {"action":"loadFault","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{}},
+      {"action":"policy","choice":{"tag":"Some","value":{"#bigint":"5000"}},"statePatch":{}},
+      {"action":"rollbackWall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{}},
+      {"action":"releaseLoad","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"1"}],"recovery":["served"]},"d":{"ages":[{"#bigint":"1"}]}}}
     ]
   },
   {
@@ -32,17 +32,24 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/last-recovery-age-serves"
     },
-    "initialState": {"acceptedMaxAge":{"#bigint":"5000"},"activeLoader":{"#bigint":"0"},"attached":[true,true],"canRecover":true,"canWrite":true,"candidate":{"#bigint":"1"},"candidateCreated":{"#bigint":"99000"},"classifier":{"#bigint":"2"},"closed":[false,false],"created":{"#bigint":"93001"},"d":{"ages":[],"coalesced":["request_local","process"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}},"deadline":{"#bigint":"10010"},"expires":{"#bigint":"70000"},"frame":{"#bigint":"1"},"instanceClassifier":{"#bigint":"2"},"loadFailed":false,"maxAge":{"#bigint":"5000"},"memo":[{"#bigint":"0"},{"#bigint":"0"}],"now":{"#bigint":"10000"},"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"3"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"observedFence":{"#bigint":"0"},"phase":{"#bigint":"0"},"readFailed":false,"request":true,"sourceError":{"#bigint":"3"},"sources":[{"#bigint":"2"}],"wall":{"#bigint":"98000"},"watermark":{"#bigint":"0"}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
-      {"action":"beginCall","statePatch":{"activeLoader":{"#bigint":"1"},"attached":[true,false],"candidateCreated":{"#bigint":"93001"},"classifier":{"#bigint":"0"},"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"}],"loaders":{"#bigint":"2"},"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"2"}},"phase":{"#bigint":"2"},"sources":[{"#bigint":"2"},{"#bigint":"0"}]}},
-      {"action":"rejectLoader","statePatch":{"d":{"fallbackErrors":["remote","remote"]},"o":{"classifications":{"#bigint":"2"},"loads":{"#bigint":"1"}},"phase":{"#bigint":"3"},"sources":[{"#bigint":"2"},{"#bigint":"2"}]}},
-      {"action":"loadFault","statePatch":{}},
-      {"action":"policy","statePatch":{}},
-      {"action":"joinCall","statePatch":{"d":{"coalesced":["request_local","process","request_local"]},"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"5"}}}},
-      {"action":"joinCall","statePatch":{"attached":[true,true],"d":{"coalesced":["request_local","process","request_local","process"]},"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"6"}}}},
-      {"action":"policy","statePatch":{"maxAge":{"#bigint":"2000"}}},
-      {"action":"joinCall","statePatch":{"d":{"coalesced":["request_local","process","request_local","process","request_local"]},"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"7"}}}},
-      {"action":"releaseLoad","statePatch":{"d":{"ages":[{"#bigint":"4999"}]},"memo":[{"#bigint":"1"},{"#bigint":"1"}],"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"1"}],"recovery":["served"]},"phase":{"#bigint":"0"}}}
+      {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"3"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"2"}},"d":{"coalesced":["request_local"]}}},
+      {"action":"rollbackWall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"3"}},"d":{"coalesced":["request_local","process"]}}},
+      {"action":"rollbackWall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{}},
+      {"action":"rejectLoader","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"}],"classifications":{"#bigint":"1"}},"d":{"fallbackErrors":["remote"]}}},
+      {"action":"seed","choice":{"tag":"Some","value":{"#bigint":"3"}},"statePatch":{}},
+      {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"}],"loaders":{"#bigint":"2"},"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"2"}}}},
+      {"action":"rejectLoader","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"classifications":{"#bigint":"2"},"loads":{"#bigint":"1"}},"d":{"fallbackErrors":["remote","remote"]}}},
+      {"action":"loadFault","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{}},
+      {"action":"policy","choice":{"tag":"Some","value":{"#bigint":"5000"}},"statePatch":{}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"5"}},"d":{"coalesced":["request_local","process","request_local"]}}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"6"}},"d":{"coalesced":["request_local","process","request_local","process"]}}},
+      {"action":"policy","choice":{"tag":"Some","value":{"#bigint":"2000"}},"statePatch":{}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"7"}},"d":{"coalesced":["request_local","process","request_local","process","request_local"]}}},
+      {"action":"releaseLoad","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"1"}],"recovery":["served"]},"d":{"ages":[{"#bigint":"4999"}]}}}
     ]
   },
   {
@@ -52,21 +59,21 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/exact-maximum-after-decode-rejects"
     },
-    "initialState": {"acceptedMaxAge":{"#bigint":"5000"},"activeLoader":{"#bigint":"0"},"attached":[false,false],"canRecover":false,"canWrite":false,"candidate":{"#bigint":"0"},"candidateCreated":{"#bigint":"0"},"classifier":{"#bigint":"0"},"closed":[false,false],"created":{"#bigint":"99000"},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}},"deadline":{"#bigint":"0"},"expires":{"#bigint":"70000"},"frame":{"#bigint":"1"},"instanceClassifier":{"#bigint":"3"},"loadFailed":false,"maxAge":{"#bigint":"5000"},"memo":[{"#bigint":"0"},{"#bigint":"0"}],"now":{"#bigint":"10000"},"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"observedFence":{"#bigint":"0"},"phase":{"#bigint":"0"},"readFailed":false,"request":false,"sourceError":{"#bigint":"3"},"sources":[],"wall":{"#bigint":"100000"},"watermark":{"#bigint":"0"}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
-      {"action":"beginCall","statePatch":{"attached":[true,false],"canRecover":true,"canWrite":true,"candidate":{"#bigint":"1"},"candidateCreated":{"#bigint":"99000"},"deadline":{"#bigint":"10010"},"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}},"phase":{"#bigint":"2"},"sources":[{"#bigint":"0"}]}},
-      {"action":"joinCall","statePatch":{"attached":[true,true],"d":{"coalesced":["process"]},"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"2"}}}},
-      {"action":"joinCall","statePatch":{"d":{"coalesced":["process","process"]},"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"3"}}}},
-      {"action":"joinCall","statePatch":{"d":{"coalesced":["process","process","process"]},"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"4"}}}},
-      {"action":"joinCall","statePatch":{"d":{"coalesced":["process","process","process","process"]},"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"5"}}}},
-      {"action":"invalidate","statePatch":{"o":{"invalidations":{"#bigint":"1"},"maintenance":["ok"]},"watermark":{"#bigint":"100000"}}},
-      {"action":"loadFault","statePatch":{"loadFailed":true}},
-      {"action":"seed","statePatch":{}},
-      {"action":"advance","statePatch":{"d":{"fallbackErrors":["remote"]},"now":{"#bigint":"14000"},"o":{"classifications":{"#bigint":"1"},"loads":{"#bigint":"1"}},"phase":{"#bigint":"3"},"sourceError":{"#bigint":"4"},"sources":[{"#bigint":"1"}],"wall":{"#bigint":"104000"}}},
-      {"action":"resolveLoader","statePatch":{"sources":[{"#bigint":"2"}]}},
-      {"action":"seed","statePatch":{"created":{"#bigint":"103001"},"expires":{"#bigint":"74000"}}},
-      {"action":"loadFault","statePatch":{"loadFailed":false}},
-      {"action":"releaseLoad","statePatch":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"}],"recovery":["miss"]},"phase":{"#bigint":"0"}}}
+      {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"2"}},"d":{"coalesced":["process"]}}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"3"}},"d":{"coalesced":["process","process"]}}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"4"}},"d":{"coalesced":["process","process","process"]}}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"5"}},"d":{"coalesced":["process","process","process","process"]}}},
+      {"action":"invalidate","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"invalidations":{"#bigint":"1"},"maintenance":["ok"]}}},
+      {"action":"loadFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
+      {"action":"seed","choice":{"tag":"Some","value":{"#bigint":"2"}},"statePatch":{}},
+      {"action":"advance","choice":{"tag":"Some","value":{"#bigint":"4000"}},"statePatch":{"o":{"classifications":{"#bigint":"1"},"loads":{"#bigint":"1"}},"d":{"fallbackErrors":["remote"]}}},
+      {"action":"resolveLoader","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{}},
+      {"action":"seed","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
+      {"action":"loadFault","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{}},
+      {"action":"releaseLoad","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"}],"recovery":["miss"]}}}
     ]
   },
   {
@@ -76,16 +83,29 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/failed-fresh-decode-is-not-recovery"
     },
-    "initialState": {"acceptedMaxAge":{"#bigint":"5000"},"activeLoader":{"#bigint":"1"},"attached":[true,true],"canRecover":false,"canWrite":true,"candidate":{"#bigint":"2"},"candidateCreated":{"#bigint":"100000"},"classifier":{"#bigint":"1"},"closed":[false,false],"created":{"#bigint":"100000"},"d":{"ages":[],"coalesced":["process","process","process"],"fallbackErrors":[],"warnings":{"#bigint":"0"}},"deadline":{"#bigint":"10010"},"expires":{"#bigint":"15000"},"frame":{"#bigint":"2"},"instanceClassifier":{"#bigint":"0"},"loadFailed":true,"maxAge":{"#bigint":"5000"},"memo":[{"#bigint":"0"},{"#bigint":"0"}],"now":{"#bigint":"10000"},"o":{"calls":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":[],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"2"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}},"observedFence":{"#bigint":"0"},"phase":{"#bigint":"0"},"readFailed":false,"request":false,"sourceError":{"#bigint":"3"},"sources":[{"#bigint":"2"},{"#bigint":"2"}],"wall":{"#bigint":"100000"},"watermark":{"#bigint":"0"}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
-      {"action":"beginCall","statePatch":{"attached":[false,true],"canRecover":true,"classifier":{"#bigint":"2"},"o":{"calls":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"}],"loads":{"#bigint":"2"},"policyCalls":{"#bigint":"6"},"reads":{"#bigint":"3"}},"phase":{"#bigint":"1"}}},
-      {"action":"policy","statePatch":{"maxAge":{"#bigint":"2000"}}},
-      {"action":"invalidate","statePatch":{"o":{"invalidations":{"#bigint":"1"},"maintenance":["ok"]},"watermark":{"#bigint":"100000"}}},
-      {"action":"advance","statePatch":{"now":{"#bigint":"14000"},"wall":{"#bigint":"104000"}}},
-      {"action":"releaseLoad","statePatch":{"activeLoader":{"#bigint":"2"},"canRecover":false,"deadline":{"#bigint":"14010"},"o":{"loaders":{"#bigint":"3"}},"phase":{"#bigint":"2"},"sources":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"}]}},
-      {"action":"rollbackWall","statePatch":{"wall":{"#bigint":"103000"}}},
-      {"action":"joinCall","statePatch":{"attached":[true,true],"d":{"coalesced":["process","process","process","process"]},"o":{"calls":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"7"}}}},
-      {"action":"rejectLoader","statePatch":{"d":{"fallbackErrors":["remote"]},"o":{"calls":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"}]},"phase":{"#bigint":"0"},"sources":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}]}}
+      {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"6"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
+      {"action":"policy","choice":{"tag":"Some","value":{"#bigint":"5000"}},"statePatch":{}},
+      {"action":"resolveLoader","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"2"}],"dumps":{"#bigint":"1"},"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
+      {"action":"loadFault","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{}},
+      {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"2"},{"#bigint":"0"}],"loads":{"#bigint":"1"},"policyCalls":{"#bigint":"2"},"reads":{"#bigint":"2"}}}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"2"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"3"}},"d":{"coalesced":["process"]}}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"2"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"4"}},"d":{"coalesced":["process","process"]}}},
+      {"action":"loadFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
+      {"action":"seed","choice":{"tag":"Some","value":{"#bigint":"5"}},"statePatch":{}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"2"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"5"}},"d":{"coalesced":["process","process","process"]}}},
+      {"action":"releaseLoad","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"loaders":{"#bigint":"2"}}}},
+      {"action":"seed","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{}},
+      {"action":"resolveLoader","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"dumps":{"#bigint":"2"},"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
+      {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"6"}},"statePatch":{"o":{"calls":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"}],"loads":{"#bigint":"2"},"policyCalls":{"#bigint":"6"},"reads":{"#bigint":"3"}}}},
+      {"action":"policy","choice":{"tag":"Some","value":{"#bigint":"2000"}},"statePatch":{}},
+      {"action":"invalidate","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"invalidations":{"#bigint":"1"},"maintenance":["ok"]}}},
+      {"action":"advance","choice":{"tag":"Some","value":{"#bigint":"4000"}},"statePatch":{}},
+      {"action":"releaseLoad","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"loaders":{"#bigint":"3"}}}},
+      {"action":"rollbackWall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{}},
+      {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"7"}},"d":{"coalesced":["process","process","process","process"]}}},
+      {"action":"rejectLoader","choice":{"tag":"Some","value":{"#bigint":"2"}},"statePatch":{"o":{"calls":[{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"}]},"d":{"fallbackErrors":["remote"]}}}
     ]
   },
   {
@@ -95,10 +115,10 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/classifier-error-keeps-error-without-decode"
     },
-    "initialState": {"acceptedMaxAge":{"#bigint":"5000"},"activeLoader":{"#bigint":"0"},"attached":[false,false],"canRecover":false,"canWrite":false,"candidate":{"#bigint":"0"},"candidateCreated":{"#bigint":"0"},"classifier":{"#bigint":"0"},"closed":[false,false],"created":{"#bigint":"99000"},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}},"deadline":{"#bigint":"0"},"expires":{"#bigint":"70000"},"frame":{"#bigint":"1"},"instanceClassifier":{"#bigint":"2"},"loadFailed":false,"maxAge":{"#bigint":"5000"},"memo":[{"#bigint":"0"},{"#bigint":"0"}],"now":{"#bigint":"10000"},"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"observedFence":{"#bigint":"0"},"phase":{"#bigint":"0"},"readFailed":false,"request":true,"sourceError":{"#bigint":"3"},"sources":[],"wall":{"#bigint":"100000"},"watermark":{"#bigint":"0"}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
-      {"action":"beginCall","statePatch":{"attached":[true,false],"canRecover":true,"canWrite":true,"candidate":{"#bigint":"1"},"candidateCreated":{"#bigint":"99000"},"classifier":{"#bigint":"2"},"deadline":{"#bigint":"10010"},"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}},"phase":{"#bigint":"2"},"sources":[{"#bigint":"0"}]}},
-      {"action":"rejectLoader","statePatch":{"d":{"fallbackErrors":["remote"]},"o":{"calls":[{"#bigint":"3"}],"classifications":{"#bigint":"1"}},"phase":{"#bigint":"0"},"sources":[{"#bigint":"2"}]}}
+      {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"3"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
+      {"action":"rejectLoader","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"3"}],"classifications":{"#bigint":"1"}},"d":{"fallbackErrors":["remote"]}}}
     ]
   },
   {

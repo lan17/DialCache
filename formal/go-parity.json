@@ -8,13 +8,13 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "4c5d8ff9ee9b139235b5cd5489b2ea5215d3b665832289932498531151e4bca1",
-    "executionSha256": "b00fdeae35fc59f6fa38a25a5990ebd32458be5cb3347a2933ec8aad316de3b6",
-    "sourceAuditSha256": "ea96291cc13158704fe559082df4dbdda579066b805a897e2602e9634f0e0641",
-    "quintCaseAuditSha256": "e48b11be0bdcfd9ac9b8a7c3c9717582312e1fa5c26599653e568f90766a2e6e",
+    "semanticCasesSha256": "0c74ce51fc4c880aef0acaf2c03f23884ec123b8b4865fed236f630ed17e4c22",
+    "executionSha256": "7a176d74eabffbcb0406ae82f09b67a33dee6592d2b51c9e6b03bd2e18cb5136",
+    "sourceAuditSha256": "769ff8845e8df0aae1097a2d5c27a2322c6c2ec8d3233df1334c3a9742bf699b",
+    "quintCaseAuditSha256": "c3203c0014b509ce6dfb874fa3d4c630211d2b7d34a65d06d13c9cc2e4c553f9",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
-    "profilesSha256": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d"
+    "profilesSha256": "28a9af577d3306f572de2b295eade2ff195ff910cb136e407207ab8cc3c0c539"
   },
   "inventory": {
     "behavioralCases": 240,
@@ -29,7 +29,7 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 33,
-    "scheduledInvariants": 224,
+    "scheduledInvariants": 229,
     "scheduledRegressions": 434,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
@@ -189,8 +189,7 @@
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
         "formal/replay/witnesses/recovery.mjs",
-        "formal/replay/witnesses/labels.mjs",
-        "formal/replay/witnesses/recovery-shadow.mjs"
+        "formal/replay/witnesses/labels.mjs"
       ]
     },
     {
@@ -4469,7 +4468,7 @@
       "group": "invalidation",
       "quintProperties": [
         "formal/dialcache-recovery-read-conformance.qnt:trackedWritesRespectPhysicalCap",
-        "formal/dialcache-recovery-connection.qnt:sourcesCarryCappedAdmittedRetention",
+        "formal/dialcache-recovery-read-connection.qnt:sourcesCarryCappedAdmittedRetention",
         "formal/dialcache-recovery-read-conformance.qnt:trackedPhysicalRetentionExpiresAtCapTest",
         "formal/dialcache-recovery-read-conformance.qnt:untrackedRetentionIsNotCappedTest"
       ],
@@ -4511,7 +4510,7 @@
       "kind": "portable-behavior",
       "group": "invalidation",
       "quintProperties": [
-        "formal/dialcache-recovery-connection.qnt:recoveryReturnMatchesAcquiredContract",
+        "formal/dialcache-recovery-read-connection.qnt:recoveryReturnMatchesAcquiredContract",
         "formal/dialcache-recovery-read-conformance.qnt:physicalCapDoesNotClampLogicalRecoveryTest"
       ],
       "requiredGenerated": [
@@ -5757,8 +5756,9 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-recovery-conformance.qnt:admitted",
-        "formal/dialcache-recovery-conformance.qnt:rejected"
+        "formal/kernel/remote-io.qnt:beginRead",
+        "formal/kernel/recovery.qnt:retain",
+        "formal/kernel/recovery.qnt:failure"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -5910,8 +5910,8 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-recovery-conformance.qnt:joined",
-        "formal/dialcache-recovery-conformance.qnt:rejected",
+        "formal/kernel/serving.qnt:decide",
+        "formal/kernel/recovery.qnt:failure",
         "formal/dialcache-recovery-conformance.qnt:releaseLoad"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -5933,10 +5933,10 @@
         "formal/dialcache-recovery-conformance.qnt:recoveredValueMemoizesOnlyInAttachedRequestTest",
         "formal/dialcache-recovery-conformance.qnt:closedRequestCannotReceiveLateRecoveryMemoTest",
         "formal/dialcache-stale-recovery.qnt:recoveredStaleHasNoSharedPublication",
-        "formal/dialcache-recovery-connection.qnt:recoveredResultsNeverPublishShared",
+        "formal/dialcache-recovery-read-connection.qnt:recoveredResultsNeverPublishShared",
         "formal/dialcache-recovery-read-conformance.qnt:compressedRecoveryMemoizesWithoutLocalPublicationTest",
         "formal/dialcache-recovery-read-conformance.qnt:closingAnotherScopeKeepsThisScopesMemoTest",
-        "formal/dialcache-legacy-recovery-connection.qnt:flightRecoveryMatchesContract",
+        "formal/dialcache-recovery-connection.qnt:recoveredFlightCompletesEveryOwner",
         "formal/dialcache-recovery-conformance.qnt:recoveredFlightMemoIsReusedByBothRequestsTest"
       ],
       "requiredGenerated": [
@@ -6037,8 +6037,8 @@
         "formal/dialcache-recovery-conformance.qnt:replacementDoesNotChangeRetainedRecoveryTest",
         "formal/dialcache-stale-recovery.qnt:retainedBytesSurviveRedisDeletionAndFenceTest",
         "formal/dialcache-recovery-read-conformance.qnt:retainedCompressedRecoverySurvivesInvalidationTest",
-        "formal/dialcache-recovery-connection.qnt:retainedSnapshotMatchesAcquisition",
-        "formal/dialcache-legacy-recovery-connection.qnt:flightKeepsAcquiredSnapshot"
+        "formal/dialcache-recovery-read-connection.qnt:retainedSnapshotMatchesAcquisition",
+        "formal/dialcache-recovery-connection.qnt:retainedSnapshotMatchesAcquisition"
       ],
       "requiredGenerated": [
         {
@@ -6173,7 +6173,7 @@
         "formal/dialcache-stale-recovery.qnt:servedStaleIsStrictlyWithinMaxAge",
         "formal/dialcache-stale-recovery.qnt:decodingAtMaxAgeRejectsTest",
         "formal/dialcache-recovery-conformance.qnt:maximumAgeAfterDecodePreservesSourceTest",
-        "formal/dialcache-recovery-conformance.qnt:recoveredValueWasWithinAcceptedAge",
+        "formal/dialcache-recovery-connection.qnt:recoveredValueWasWithinAcceptedAge",
         "formal/dialcache-rule-checks.qnt:recoveryBoundaryIsExclusive"
       ],
       "requiredGenerated": [
@@ -6248,7 +6248,7 @@
       "group": "recovery",
       "quintProperties": [
         "formal/dialcache-independent-conformance.qnt:recoveryPolicyIsCapturedPerCallerTest",
-        "formal/dialcache-recovery-connection.qnt:recoveryReturnMatchesAcquiredContract",
+        "formal/dialcache-recovery-read-connection.qnt:recoveryReturnMatchesAcquiredContract",
         "formal/dialcache-independent-connection.qnt:independentRecoveryMatchesContract",
         "formal/dialcache-independent-conformance.qnt:independentRecoveryAtCapturedAgeBoundaryTest"
       ],
@@ -6386,7 +6386,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-recovery-conformance.qnt:releaseLoad",
-        "formal/dialcache-recovery-conformance.qnt:rejected"
+        "formal/kernel/recovery.qnt:failure"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -7929,7 +7929,7 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-recovery-conformance.qnt:rejected"
+        "formal/kernel/recovery.qnt:failure"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -11478,7 +11478,7 @@
       "rule": "Retained compressed bytes follow the same recovery and no-shared-publication rules; decompression failure preserves the source error.",
       "kind": "portable-behavior",
       "quintProperties": [
-        "formal/dialcache-recovery-connection.qnt:recoveredResultsNeverPublishShared",
+        "formal/dialcache-recovery-read-connection.qnt:recoveredResultsNeverPublishShared",
         "formal/dialcache-recovery-read-conformance.qnt:compressedRecoveryMemoizesWithoutLocalPublicationTest",
         "formal/dialcache-recovery-read-conformance.qnt:corruptCompressedRecoveryKeepsOriginalSourceErrorTest",
         "formal/dialcache-recovery-read-conformance.qnt:untrackedCompressedRecoveryDoesNotWarmLocalTest",
@@ -11589,7 +11589,7 @@
       "rule": "Logical remote freshness is evaluated at read settlement, so age accumulated during the bounded read can make a frame stale.",
       "kind": "portable-behavior",
       "quintProperties": [
-        "formal/dialcache-recovery-connection.qnt:freshnessUsesReadSettlement",
+        "formal/dialcache-recovery-read-connection.qnt:freshnessUsesReadSettlement",
         "formal/dialcache-recovery-read-conformance.qnt:freshnessAfterHeldReadTest",
         "formal/dialcache-recovery-read-conformance.qnt:heldReadJustBeforeFreshnessBoundaryStillHitsTest"
       ],
@@ -18450,7 +18450,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "ea96291cc13158704fe559082df4dbdda579066b805a897e2602e9634f0e0641",
+    "sha256": "769ff8845e8df0aae1097a2d5c27a2322c6c2ec8d3233df1334c3a9742bf699b",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",

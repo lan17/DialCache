@@ -1,10 +1,12 @@
 import { explicitInput, integer } from "./trace.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
-// Classify schedules only after every driver has independently replayed its
-// public observations. Private Quint state identifies the external boundary;
-// each witness also requires its visible consequence, never merely an input.
-// The committed smoke traces omit private state and are not coverage evidence.
+// The shadow profile's witnesses, classified only after every driver has
+// independently replayed its public observations. Private Quint state
+// identifies the external boundary (the profile is not yet composed; see the
+// migration list in formal/kernel/README.md); each witness also requires its
+// visible consequence, never merely an input. The committed smoke traces omit
+// private state and are not coverage evidence.
 const number = (state, name) => integer(state[name], name);
 function settled(before, after, value) {
   return after.calls.some((result, index) => before.calls[index] === 0 && result === value);
@@ -12,103 +14,6 @@ function settled(before, after, value) {
 function unchangedWork(before, after) {
   return after.reads === before.reads && after.loads === before.loads
     && after.dumps === before.dumps && after.writes === before.writes;
-}
-
-function recoveryWitnesses(steps, recorder) {
-  const FRESH_DECODE = 1, SOURCE_RUNNING = 2, RECOVERY_DECODE = 3;
-  let acquired;
-  let acquisitionObservations;
-  let failedFreshDecode = false;
-  let decodeStartedAge;
-  for (let index = 1; index < steps.length; index++) {
-    recorder.step(index);
-    const before = steps[index - 1].s, after = steps[index].s;
-    const previous = before.o, actual = after.o, action = steps[index].input.name;
-    if (action === "beginCall" && actual.reads === previous.reads + 1) {
-      acquired = before;
-      acquisitionObservations = actual;
-      failedFreshDecode = false;
-      decodeStartedAge = undefined;
-    }
-    if (acquired === undefined || acquisitionObservations === undefined) continue;
-    const ageAtRead = number(acquired, "wall") - number(acquired, "created");
-    const ageNow = number(before, "wall") - number(before, "candidateCreated");
-    const phase = number(before, "phase");
-    if (number(after, "phase") === RECOVERY_DECODE && phase !== RECOVERY_DECODE) {
-      // advance() delivers the source deadline before completing its clock jump.
-      // Recovery decoding starts at that timer boundary, not at the final clock.
-      const untilDeadline = action === "advance"
-        ? number(before, "deadline") - number(before, "now") : 0;
-      decodeStartedAge = ageNow + untilDeadline;
-    }
-    const initialBytesPresent = number(acquired, "frame") > 0
-      && acquired.readFailed === false && number(acquired, "now") < number(acquired, "expires");
-    const initialBytesUnfenced = number(acquired, "created") > number(acquired, "watermark");
-    const appendedRecovery = actual.recovery.slice(previous.recovery.length);
-    const noSharedWrite = actual.dumps === acquisitionObservations.dumps
-      && actual.writes === acquisitionObservations.writes;
-    const noReread = actual.reads === acquisitionObservations.reads;
-    const returnsCandidate = settled(previous, actual, number(before, "candidate"));
-    const returnsSourceError = settled(previous, actual, 3);
-    const returnsDeadline = settled(previous, actual, 4);
-
-    if (action === "releaseLoad" && phase === FRESH_DECODE) {
-      failedFreshDecode = before.loadFailed === true;
-      if (!failedFreshDecode && returnsCandidate && actual.loaders === acquisitionObservations.loaders
-        && actual.recovery.length === previous.recovery.length && noSharedWrite) {
-        if (ageAtRead === 0) recorder.credit("fresh-zero-age-skips-source");
-        if (ageAtRead === 999) recorder.credit("last-fresh-age-skips-source");
-      }
-    }
-    if (action === "resolveLoader" && phase === SOURCE_RUNNING
-      && number(before, "candidate") > 0 && ageAtRead >= 1000
-      && settled(previous, actual, 2) && actual.loads === previous.loads
-      && actual.recovery.length === previous.recovery.length) {
-      recorder.credit("source-success-skips-stale-decode");
-    }
-    if (action === "rejectLoader" && phase === SOURCE_RUNNING && returnsSourceError
-      && actual.loads === previous.loads && noSharedWrite && noReread) {
-      if (number(before, "classifier") === 2 && actual.classifications === previous.classifications + 1
-        && number(before, "candidate") > 0 && ageNow >= 0 && ageNow < number(before, "acceptedMaxAge")) {
-        recorder.credit("classifier-error-keeps-error-without-decode");
-      }
-      if (failedFreshDecode && actual.classifications === previous.classifications
-        && appendedRecovery.length === 0) recorder.credit("failed-fresh-decode-is-not-recovery");
-      if (acquired.readFailed === true && actual.classifications === previous.classifications
-        && appendedRecovery.length === 0) recorder.credit("failed-initial-read-skips-recovery");
-    }
-    if (appendedRecovery.includes("miss") && phase === SOURCE_RUNNING
-      && (returnsSourceError || returnsDeadline) && actual.loads === previous.loads
-      && noReread && noSharedWrite) {
-      // Isolate the rejection rule: a fenced or physically missing value cannot
-      // establish that the age check itself prevented recovery, and vice versa.
-      if (initialBytesPresent && initialBytesUnfenced) {
-        if (ageAtRead === number(acquired, "maxAge")) recorder.credit("maximum-age-read-preserves-source-error");
-        if (ageAtRead < 0) recorder.credit("future-read-preserves-source-error");
-      }
-      if (initialBytesPresent && !initialBytesUnfenced
-        && ageAtRead >= 0 && ageAtRead < number(acquired, "maxAge")) {
-        recorder.credit("fenced-read-does-not-retain");
-      }
-      if (number(before, "candidate") > 0 && ageNow >= number(before, "acceptedMaxAge")) {
-        recorder.credit("maximum-age-before-decode-skips-load");
-      }
-    }
-    if (action === "releaseLoad" && phase === RECOVERY_DECODE && noSharedWrite && noReread) {
-      if (appendedRecovery.includes("served") && returnsCandidate) {
-        if (ageAtRead === 1000) recorder.credit("first-stale-age-recovers-without-publication");
-        if (ageNow === number(before, "acceptedMaxAge") - 1) recorder.credit("last-recovery-age-serves");
-        if (ageNow >= 0 && ageNow < 1000 && ageAtRead >= 1000) recorder.credit("rollback-below-fresh-age-still-recovers");
-        if (number(before, "frame") !== number(before, "candidate")) recorder.credit("replacement-cannot-change-recovered-value");
-        const ages = after.d.ages;
-        if (decodeStartedAge !== undefined && ageNow !== decodeStartedAge && ages.at(-1) === ageNow) {
-          recorder.credit("recovery-age-sampled-at-successful-decode");
-        }
-      }
-      if (appendedRecovery.includes("miss") && ageNow === number(before, "acceptedMaxAge")
-        && (returnsSourceError || returnsDeadline)) recorder.credit("exact-maximum-after-decode-rejects");
-    }
-  }
 }
 
 // Normalize the published text/binary fixture encodings to byte identities.
@@ -194,13 +99,11 @@ function shadowWitnesses(steps, recorder) {
 }
 
 export function recoveryShadowWitnesses(profile, histories, recorder = createWitnessRecorder()) {
-  if (profile !== "recovery" && profile !== "shadow") return recorder.labels();
+  if (profile !== "shadow") return recorder.labels();
   for (const { path, states, predictions } of histories) {
     recorder.enter(path);
     if (states[0]?.s?.phase === undefined) continue;
-    const steps = predictions.map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
-    if (profile === "recovery") recoveryWitnesses(steps, recorder);
-    else shadowWitnesses(steps, recorder);
+    shadowWitnesses(predictions.map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) })), recorder);
   }
   return recorder.labels();
 }

@@ -59,8 +59,18 @@
       "id": "recovery",
       "model": "formal/dialcache-recovery-conformance.qnt",
       "module": "dialcache_recovery_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 80
+      "libraryTransitions": [
+        "clock::shiftWall",
+        "diagnostics::advance",
+        "diagnostics::beginRead",
+        "diagnostics::settleLoad",
+        "diagnostics::settleLoader",
+        "remote_frames::seedAged",
+        "remote_io::latestLoad",
+        "serving::closeScope",
+        "serving::invalidate"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "policy",

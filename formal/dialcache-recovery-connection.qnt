@@ -1,137 +1,82 @@
 module dialcache_recovery_connection {
-  import dialcache_recovery_read_conformance as profile from "./dialcache-recovery-read-conformance"
+  import dialcache_recovery_conformance as profile from "./dialcache-recovery-conformance"
   import conformance_observations.* from "./conformance-observations"
-  import cache_contract.* from "./cache-contract"
   import encodings.* from "./kernel/encodings"
   import remote_io as RemoteIO from "./kernel/remote-io"
-  import remote_frames as Remote from "./kernel/remote-frames"
+  import recovery as Recovery from "./kernel/recovery"
   import payloads as Payloads from "./kernel/payloads"
   import clock as Clock from "./kernel/clock"
 
-  // Bounded correspondence for the real recovery-read profile, not a second
-  // replay machine. Its actions execute unchanged. This monitor acquires a
-  // reference snapshot from storage when the held read settles (the frame's
-  // payload code, raw and decoded, its stamp, the maximum admitted from the
-  // policy in force before the caller's admission, the wall clock of the
-  // settlement) and checks the library's held reads, retained snapshots,
-  // pending sources and returned observations against that acquired record,
-  // reading storage fields and library records only: whether the frame is
-  // present, retained and fence-cleared is restated here from the raw fields,
-  // never taken from the kernel judgment under test. Two payload tables are
-  // shared with the kernel, `Payloads::valueOf` (cache_contract's
-  // recoveryReturnAllowed compares decoded values) and the class test
-  // `Payloads::readFails`. The monitor assumes every seed is a value below
-  // 100, an unsupported-encoding code (which fails the read, so
-  // `freshnessUsesReadSettlement` expects no decode), or a compressed or
-  // corrupt class code plus a positive value, as the profile's seed table
-  // is: a fresh observable frame storing a bare compressed or corrupt code
-  // decodes to NO_VALUE and holds no decode where
-  // `freshnessUsesReadSettlement` expects one. One active call and the
-  // profile's finite domain bound this connection; no fairness claim.
-  var snapshot: RecoverySnapshot
-  // The raw code the read acquired, beside the decoded snapshot: a retained
-  // candidate must be that code, not another code with the same value.
-  var snapshotCode: int
-  var capturedMaximum: int
-  var before: {
-    payload: int, created: int, wall: int, calls: int, maximum: int, valid: bool,
-    reads: List[RemoteIO::HeldRead], loads: List[RemoteIO::HeldLoad], dumps: int, writes: int,
-    localValues: List[int], localExpires: List[int], lru: List[List[int]]
-  }
+  // Bounded correspondence for the composed recovery profile, not a second
+  // replay machine: its actions execute unchanged and this monitor keeps the
+  // profile's previous state to state one-step facts the profile's own
+  // invariants cannot (the profile carries no receipt of a served recovery and
+  // no record of who was pending). It reads storage fields, the drivers'
+  // channels and the library records; the age arithmetic is restated here,
+  // never taken from cache_rules. One flight at a time bounds it; no fairness claim.
+  var before: profile::State
 
-  action init = all {
-    profile::init,
-    snapshot' = captureRecovery(NO_OWNER, NO_VALUE, 0, 0, 0),
-    snapshotCode' = NO_VALUE,
-    capturedMaximum' = 0,
-    before' = { payload: NO_VALUE, created: 0, wall: 0, calls: 0, maximum: 0, valid: false,
-      reads: List(), loads: List(), dumps: 0, writes: 0, localValues: List(), localExpires: List(), lru: List() }
-  }
-  // Admission acquires the preceding policy reply's retention as the maximum,
-  // independently of the held read's record. A held read cannot acquire a
-  // later reply; one caller at a time, so one captured maximum suffices.
-  val admittedMaximum = if (profile::input.name == "beginCall") before.maximum else capturedMaximum
-  // The step that settled the held read, and the one that settled a recovery
-  // decode (a held decode released while a recovery decode was held).
-  val settlingRead = profile::input.name == "releaseRead"
-  val recoveryDecodeSettling = profile::input.name == "releaseLoad" and before.loads.select(load => load.recovery).length() > 0
-  // Capture immediately after the profile's read settles, from the storage
-  // fields the read observed (the state before the step), not from the
-  // library's snapshot: confusing those must be detectable. The payload is
-  // recorded decoded, as a recovery returns it, and raw, as a snapshot
-  // retains it.
-  val acquired = if (settlingRead)
-    captureRecovery(before.calls - 1, Payloads::valueOf(before.payload), before.created, admittedMaximum, before.wall)
-    else snapshot
-  val acquiredCode = if (settlingRead) before.payload else snapshotCode
+  action init = all { profile::init, before' = profile::initialState(0) }
+  action step = all { before' = profile::s, profile::step }
 
-  action step = all {
-    snapshot' = acquired,
-    snapshotCode' = acquiredCode,
-    capturedMaximum' = admittedMaximum,
-    before' = {
-      payload: profile::s.remoteValues.nth(0), created: profile::s.created.nth(0), wall: Clock::wallOf(profile::s),
-      calls: profile::s.o.calls.length(), maximum: profile::s.ttls.retentionMs,
-      // A frame a read can observe, from the raw fields: present, retained
-      // (the monotonic clock before its expiry, cache_rules.deadlinePendingAt
-      // restated), fence-cleared for a tracked reader (stamped strictly above
-      // its entity's watermark, cache_rules.fenceAllows restated) and not of
-      // a class that fails the read.
-      valid: profile::s.remoteValues.nth(0) > NO_VALUE and profile::s.now < profile::s.expires.nth(0) and
-        (not(profile::s.tracked) or profile::s.created.nth(0) > profile::s.watermark.nth(0)) and
-        not(Payloads::readFails(profile::s.remoteValues.nth(0))),
-      reads: profile::s.reads, loads: profile::s.loads, dumps: profile::s.o.dumps, writes: profile::s.o.writes,
-      localValues: profile::s.localValues, localExpires: profile::s.localExpires, lru: profile::s.lru
-    },
-    profile::step
-  }
+  // The step that settled a recovery decode, and whether it served.
+  val recoveryDecodeSettling = profile::input.name == "releaseLoad" and
+    before.loads.length() > 0 and RemoteIO::latestLoad(before).recovery
+  val served = profile::s.o.recovery.length() > before.o.recovery.length() and
+    profile::s.o.recovery.nth(profile::s.o.recovery.length() - 1) == "served"
+  val servedFlight = RemoteIO::latestLoad(before).flight
+  val servedSnapshot = Recovery::retainedFor(before, servedFlight)
+  // The step that dispatched a read, and the flight it registered (the newest source).
+  val readDispatched = profile::s.o.reads > before.o.reads
+  val newFlight = profile::s.sources.length() - 1
 
-  // Every held read carries the maximum its caller was admitted with.
-  val heldReadsCarryAdmittedMaximum =
-    profile::s.reads.indices().forall(i => profile::s.reads.nth(i).ttls.retentionMs == admittedMaximum)
-  // Every held read carries the admitted maximum; every retained snapshot
-  // carries that maximum and, when it retains a candidate, the very code and
-  // the stamp the caller's own read acquired.
-  val retainedSnapshotMatchesAcquisition =
-    heldReadsCarryAdmittedMaximum and
+  // C45: a recovered value was served at a wall clock at or after its stamp
+  // and strictly less than the maximum admitted for it, at the settlement's
+  // wall clock (clocks do not move in a release). The former profile
+  // invariant of the same name over receipts, restated one step.
+  val recoveredValueWasWithinAcceptedAge = not(recoveryDecodeSettling and served) or {
+    val wall = Clock::wallOf(before)
+    servedSnapshot.created <= wall and wall - servedSnapshot.created < servedSnapshot.maximum
+  }
+  // C24/C43: a served recovery completes every caller its flight owned that
+  // was pending with the value the candidate decodes to, and changes no
+  // other caller's outcome (the former legacy monitor's flightRecoveryMatchesContract).
+  val recoveredFlightCompletesEveryOwner = not(recoveryDecodeSettling and served) or
+    before.o.calls.indices().forall(c =>
+      if (before.owners.nth(c) == servedFlight and before.o.calls.nth(c) == CALL_PENDING)
+        profile::s.o.calls.nth(c) == Payloads::valueOf(servedSnapshot.candidate)
+      else profile::s.o.calls.nth(c) == before.o.calls.nth(c))
+  // C44: the snapshot a read retains is the frame the read acquired, under
+  // the maximum in force at admission: its candidate is that frame's code
+  // (or none), its stamp the frame's, its maximum the policy's retention
+  // (the former legacy monitor's flightKeepsAcquiredSnapshot).
+  val retainedSnapshotMatchesAcquisition = not(readDispatched) or
     profile::s.retained.indices().forall(i => {
-      val retained = profile::s.retained.nth(i)
-      retained.maximum == admittedMaximum and (retained.candidate == NO_VALUE or
-        (acquired.owner == profile::s.o.calls.length() - 1 and
-          retained.candidate == acquiredCode and retained.created == acquired.created))
+      val snapshot = profile::s.retained.nth(i)
+      snapshot.flight != newFlight or (snapshot.maximum == before.ttls.retentionMs and
+        snapshot.created == before.created.nth(profile::KEY) and
+        (snapshot.candidate == NO_VALUE or snapshot.candidate == before.remoteValues.nth(profile::KEY)))
     })
-  // A served recovery decode returns the acquired bytes to their caller within
-  // the acquired maximum at the wall clock of its release.
-  val recoveryReturnMatchesAcquiredContract = not(recoveryDecodeSettling) or
-    profile::s.o.recovery.nth(profile::s.o.recovery.length() - 1) != "served" or
-    recoveryReturnAllowed(snapshot, before.calls - 1, profile::s.o.calls.nth(before.calls - 1), before.wall)
-  // When a held read settles, a decode is held exactly when the frame is
-  // observable (present, retained, fence-cleared and readable, from the raw
-  // fields) and its age at the settlement wall clock lies in [0, the admitted
-  // freshness). Stated both ways, so a kernel that holds a decode of a frame
-  // the raw fields say is expired or fenced fails it too. The arithmetic is
-  // restated here rather than taken from cache_rules, so the clause is
-  // independent of the judgment under test.
-  val freshnessUsesReadSettlement = not(settlingRead) or
-    before.reads.length() == 0 or {
-      val age = before.wall - before.created
-      (profile::s.loads.length() > 0) == (before.valid and age >= 0 and age < before.reads.nth(0).ttls.freshMs)
-    }
-  // A recovery decode's settlement publishes nothing shared: no dump, no
-  // write and no local publication, the slot's value, expiry and recency
-  // unchanged, so a re-warm of the value the slot already holds is seen too
-  // (C43, C45).
+  // A recovered value publishes nothing shared: no dump and no write.
   val recoveredResultsNeverPublishShared = not(recoveryDecodeSettling) or
-    (profile::s.o.dumps == before.dumps and profile::s.o.writes == before.writes and
-      profile::s.localValues == before.localValues and profile::s.localExpires == before.localExpires and profile::s.lru == before.lru)
-  // Every pending source captured either no retention (its read has not
-  // settled, or it may not refill) or the admitted maximum, capped at the
-  // tracked cap for a tracked entity (C37): the write that follows carries
-  // exactly this retention.
-  val sourcesCarryCappedAdmittedRetention =
-    profile::s.sources.indices().forall(i => {
-      val source = profile::s.sources.nth(i)
-      source.result != CALL_PENDING or source.retentionMs == 0 or source.retentionMs ==
-        (if (profile::s.tracked and admittedMaximum > Remote::TRACKED_RETENTION_CAP_MS) Remote::TRACKED_RETENTION_CAP_MS else admittedMaximum)
-    })
+    (profile::s.o.dumps == before.o.dumps and profile::s.o.writes == before.o.writes)
+
+  // Follow-up recorded for this slice (PR 188): the candidate window pinned
+  // against the raw frame age at acquisition, independently of the recheck.
+  // At a step that dispatched a read, the new flight holds a snapshot unless
+  // the read failed or the frame was fresh; its candidate is the frame code
+  // exactly when the frame was visible (present, unexpired, above the
+  // watermark) at an age in [fresh, maximum), else none.
+  val retainedCandidateWindow = not(readDispatched) or {
+    val wall = Clock::wallOf(before)
+    val created = before.created.nth(profile::KEY)
+    val code = before.remoteValues.nth(profile::KEY)
+    val visible = code > NO_VALUE and before.now < before.expires.nth(profile::KEY) and created > before.watermark.nth(profile::ENTITY)
+    val age = wall - created
+    val isFresh = visible and created <= wall and age < before.ttls.freshMs
+    val window = visible and created <= wall and age >= before.ttls.freshMs and age < before.ttls.retentionMs
+    val snapshot = Recovery::retainedFor(profile::s, newFlight)
+    if (before.readFailed or isFresh) snapshot.flight == NO_OWNER
+    else snapshot.flight == newFlight and snapshot.candidate == (if (window) code else NO_VALUE)
+  }
 }

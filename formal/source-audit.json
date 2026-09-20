@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "176603cd56d4006b2b17b020999cf1c6c1f2ab07ea738d4b4bd854cf3db9d245",
+      "sha256": "8cc5b03db7cb3aa99080fc9eb91ae27efbdf048d9dab4161fc9d5550466f4f3d",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1381,7 +1381,7 @@
     },
     {
       "path": "formal/SPEC.md",
-      "sha256": "33d5c3074a9b6009e84fddac3ee4c3fb4b64e950b8fe33242a680b6cacefa922",
+      "sha256": "770074b5e2f32b8f4b1cc11647eefaaeb00e032c7505a23beeb1eb1dc6857a54",
       "entries": [
         {"line":1,"title":"DialCache behavioral specification"},
         {"line":15,"title":"Definition ownership and executable connections"},

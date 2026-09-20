@@ -337,10 +337,10 @@ describe("formal execution schedule", () => {
     const current = manifest();
     const withReproducer = current.challenges.filter(challenge => challenge.reproducer);
     expect(withReproducer.map(challenge => challenge.id)).toEqual([
-      "policy-inclusive-local-expiry", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "scope-nested-close-evicts-outer-memo", "admission-capacity-off-by-one", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry",
+      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "recovery-strands-followers", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "scope-nested-close-evicts-outer-memo", "admission-capacity-off-by-one", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry",
     ]);
     expect(withReproducer.map(challenge => challenge.reproducer!.kind)).toEqual([
-      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
+      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
     ]);
     // The shared-rule fault of a verification model is pinned by a profile's exported regression.
     expect(withReproducer.find(challenge => challenge.id === "stale-recovery-future-candidate")!.reproducer).toMatchObject({
@@ -439,7 +439,7 @@ describe("formal execution schedule", () => {
     expect(agreeing().nativeMutants).toMatchObject({ unobservable: 2 });
     expect(withNative(twins[0]!, unobservable("x"))).toThrow(/layers-late-memo-into-closed-scope: maps the fault of scope-late-source-repopulates-closed-memo differently/);
     const crossOnly = withNative("recovery-inclusive-maximum", mapped("M40", "Recovery reaches the shared rule."), m => {
-      m.challenges.find(challenge => challenge.id === "legacy-recovery-inclusive-maximum")!.nativeMutants = mapped("M40", "The legacy path reaches it too.");
+      m.challenges.find(challenge => challenge.id === "recovery-connection-inclusive-maximum")!.nativeMutants = mapped("M40", "The recovery monitor reaches it too.");
     });
     expect(crossOnly().nativeMutants).toMatchObject({ mapped: 2 });
     // The backlog is the exact set of challenges without an entry, and only the grandfathered ones may sit in it.
@@ -575,7 +575,7 @@ describe("formal execution schedule", () => {
     // A shared-library fault partitions every profile between the listed and the excluded.
     expect(() => validate(exported(r => { r.profiles = ["source-budgets", "effects"]; r.exclusions = { independent: "Its sources settle only through explicit deadlines." }; })))
       .toThrow(/a shared-library fault must list or exclude every profile; missing core/);
-    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects", "shadow-layers"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(liveReproducers());
+    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects", "shadow-layers", "recovery"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(liveReproducers());
     expect(() => validate(exported(r => { r.scope = "not model-only"; }))).toThrow(/scope belongs only to a model-run reproducer/);
     // Another profile model's exported run may be cited only for a fault in a shared library.
     const local = (edit: (reproducer: Reproducer) => void) => {

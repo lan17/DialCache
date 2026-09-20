@@ -67,7 +67,7 @@ export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder
     case "layers": layersWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
     case "admission": admissionWitnesses(corpus, recorder); break;
     case "independent": independentWitnesses(corpus, recorder); break;
-    case "recovery": recoveryWitnesses(corpus, recorder); recoveryShadowWitnesses(profile, corpus, recorder); break;
+    case "recovery": recoveryWitnesses(corpus, recorder); break;
     case "shadow":
       shadowWitnesses(corpus, recorder); recoveryShadowWitnesses(profile, corpus, recorder); shadowDiagnosticsWitnesses(corpus, recorder); break;
     case "recovery-read": actionLabels(corpus, recorder); recoveryReadWitnesses(corpus, recorder); recoveryAdmissionWitnesses(corpus, recorder); break;

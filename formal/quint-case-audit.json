@@ -1870,7 +1870,7 @@
     },
     {
       "case": "C22.freshness-after-read",
-      "reference": "formal/dialcache-recovery-connection.qnt:freshnessUsesReadSettlement",
+      "reference": "formal/dialcache-recovery-read-connection.qnt:freshnessUsesReadSettlement",
       "kind": "invariant",
       "scope": "Read acquisition samples the settlement wall clock; a frame initially fresh becomes stale during the held read and subsequently recovers after source rejection."
     },
@@ -1918,7 +1918,7 @@
     },
     {
       "case": "C37.logical-age-unclamped",
-      "reference": "formal/dialcache-recovery-connection.qnt:recoveryReturnMatchesAcquiredContract",
+      "reference": "formal/dialcache-recovery-read-connection.qnt:recoveryReturnMatchesAcquiredContract",
       "kind": "invariant",
       "scope": "An externally retained candidate older than the physical cap but younger than the captured logical maximum is served after source failure; no new write is credited."
     },
@@ -1942,7 +1942,7 @@
     },
     {
       "case": "C45.compressed-candidate",
-      "reference": "formal/dialcache-recovery-connection.qnt:recoveredResultsNeverPublishShared",
+      "reference": "formal/dialcache-recovery-read-connection.qnt:recoveredResultsNeverPublishShared",
       "kind": "invariant",
       "scope": "The modeled input domain includes valid/corrupt compressed bytes; retained recovery either serves the decoded value with request-only publication or preserves the indexed original source error. Compression algorithm correctness remains vector/native evidence."
     },
@@ -1972,7 +1972,7 @@
     },
     {
       "case": "C43.request-memo",
-      "reference": "formal/dialcache-recovery-connection.qnt:recoveredResultsNeverPublishShared",
+      "reference": "formal/dialcache-recovery-read-connection.qnt:recoveredResultsNeverPublishShared",
       "kind": "invariant",
       "scope": "A same-scope public probe reuses recovered value; another scope performs remote work, distinguishing request memo from local publication."
     },
@@ -2236,7 +2236,7 @@
     },
     {
       "case": "C37.physical-cap",
-      "reference": "formal/dialcache-recovery-connection.qnt:sourcesCarryCappedAdmittedRetention",
+      "reference": "formal/dialcache-recovery-read-connection.qnt:sourcesCarryCappedAdmittedRetention",
       "kind": "invariant",
       "scope": "Every pending source captured either no retention or the maximum admitted before its caller's admission, capped at 3600000ms for a tracked entity: the per-write pairing with the admitted maximum that the profile's write-TTL invariant cannot state once the authority caps it."
     },
@@ -3466,9 +3466,9 @@
     },
     {
       "case": "C45.maximum-age-exclusive",
-      "reference": "formal/dialcache-recovery-conformance.qnt:recoveredValueWasWithinAcceptedAge",
+      "reference": "formal/dialcache-recovery-connection.qnt:recoveredValueWasWithinAcceptedAge",
       "kind": "invariant",
-      "scope": "Independent recovery receipts check nonnegative returned age strictly below the captured maximum after recovery decode in the recovery profile."
+      "scope": "At the settlement that serves a recovered value, the recovery connection model checks the retained snapshot's stamp against the pre-step wall clock: nonnegative age, strictly below the captured maximum. One-step restatement of the former profile receipt."
     },
     {
       "case": "C09.fixed-local-ttl",
@@ -3520,21 +3520,21 @@
     },
     {
       "case": "C44.retained-invalidation",
-      "reference": "formal/dialcache-recovery-connection.qnt:retainedSnapshotMatchesAcquisition",
+      "reference": "formal/dialcache-recovery-read-connection.qnt:retainedSnapshotMatchesAcquisition",
       "kind": "invariant",
       "scope": "The recovery-read profile captures maximum age from pre-admission policy, then projects read settlement into a retained owner, modeled payload identity and timestamp. Accepted policy and later retained candidates must match those independent records. Raw/compressed encoding identity is abstracted."
     },
     {
       "case": "C45.captured-policy",
-      "reference": "formal/dialcache-recovery-connection.qnt:recoveryReturnMatchesAcquiredContract",
+      "reference": "formal/dialcache-recovery-read-connection.qnt:recoveryReturnMatchesAcquiredContract",
       "kind": "invariant",
       "scope": "A served recovery result after releaseLoad must match the acquired snapshot owner and modeled payload and satisfy its captured maximum at the pre-settlement wall clock. Single-active-call profile."
     },
     {
       "case": "C44.retained-invalidation",
-      "reference": "formal/dialcache-legacy-recovery-connection.qnt:flightKeepsAcquiredSnapshot",
+      "reference": "formal/dialcache-recovery-connection.qnt:retainedSnapshotMatchesAcquisition",
       "kind": "invariant",
-      "scope": "The recovery profile captures pre-read storage and policy into a flight snapshot; nonempty retained candidates preserve its payload, timestamp and maximum through later transitions."
+      "scope": "At a step that dispatches a read in the recovery profile, the new flight's retained snapshot carries the pre-step frame's stamp, its code or none, and the pre-step policy's retention as its maximum; later invalidation and replacement leave the snapshot alone."
     },
     {
       "case": "C36.independent-invalidation-snapshots",
@@ -3592,9 +3592,9 @@
     },
     {
       "case": "C43.request-memo",
-      "reference": "formal/dialcache-legacy-recovery-connection.qnt:flightRecoveryMatchesContract",
+      "reference": "formal/dialcache-recovery-connection.qnt:recoveredFlightCompletesEveryOwner",
       "kind": "invariant",
-      "scope": "After a served recovery decode, every previously pending caller in the acquired flight returns its captured modeled payload within the accepted age bound. This establishes shared caller results; request-memo publication remains covered by the case's other evidence."
+      "scope": "After a served recovery decode, every caller the flight owned that was pending receives the value its retained candidate decodes to and every other caller keeps its outcome. This establishes shared caller results; request-memo publication remains covered by the case's other evidence."
     },
     {
       "case": "C55.ignore-untracked-fence",
@@ -4116,25 +4116,31 @@
     },
     {
       "case": "C42.allow-override",
-      "reference": "formal/dialcache-recovery-conformance.qnt:admitted",
+      "reference": "formal/kernel/remote-io.qnt:beginRead",
       "kind": "helper",
       "scope": "Operation classifier replaces inherited instance classifier; an explicit allow admits a valid retained candidate after source error."
     },
     {
       "case": "C42.allow-override",
-      "reference": "formal/dialcache-recovery-conformance.qnt:rejected",
+      "reference": "formal/kernel/recovery.qnt:retain",
+      "kind": "helper",
+      "scope": "Operation classifier replaces inherited instance classifier; an explicit allow admits a valid retained candidate after source error."
+    },
+    {
+      "case": "C42.allow-override",
+      "reference": "formal/kernel/recovery.qnt:failure",
       "kind": "helper",
       "scope": "Operation classifier replaces inherited instance classifier; an explicit allow admits a valid retained candidate after source error."
     },
     {
       "case": "C43.coalesced-once",
-      "reference": "formal/dialcache-recovery-conformance.qnt:joined",
+      "reference": "formal/kernel/serving.qnt:decide",
       "kind": "helper",
       "scope": "Followers attach to the current execution; one source rejection classifies once and starts one candidate decode, whose result completes all pending callers."
     },
     {
       "case": "C43.coalesced-once",
-      "reference": "formal/dialcache-recovery-conformance.qnt:rejected",
+      "reference": "formal/kernel/recovery.qnt:failure",
       "kind": "helper",
       "scope": "Followers attach to the current execution; one source rejection classifies once and starts one candidate decode, whose result completes all pending callers."
     },
@@ -4170,7 +4176,7 @@
     },
     {
       "case": "C58.recovered-failure",
-      "reference": "formal/dialcache-recovery-conformance.qnt:rejected",
+      "reference": "formal/kernel/recovery.qnt:failure",
       "kind": "helper",
       "scope": "A source rejection records its fallback error before deciding whether stale recovery may succeed."
     },
@@ -4410,7 +4416,7 @@
     },
     {
       "case": "C45.failed-fresh-not-stale",
-      "reference": "formal/dialcache-recovery-conformance.qnt:rejected",
+      "reference": "formal/kernel/recovery.qnt:failure",
       "kind": "helper",
       "scope": "Failed fresh decode starts source with canRecover=false; later source error cannot decode that failed fresh snapshot again."
     },
