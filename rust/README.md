@@ -56,7 +56,8 @@ work that runs on behalf of no request.
 `UseCase<Args, T>` handle; `get_or_load` runs one inline `Operation<T>` without
 registration. Both snapshot the static policy and the source budget before any
 asynchronous work. Values come back as `Arc<T>`: shared by reference, treat
-them as immutable. Use case `watermark` is reserved. `coalescing_state`
+them as immutable. Both `UseCase<Args, T>` and `Operation<T>` can be cloned
+without requiring `T: Clone`. Use case `watermark` is reserved. `coalescing_state`
 reports actual process leaders, followers and the oldest leader age.
 
 Sources are `Fn(Scope, Args) -> Future<Output = Result<T, BoxError>>`. They may
@@ -67,13 +68,17 @@ failure. A source deadline returns `Error::FallbackTimeout` and does not cancel
 the source. Dropping the future returned by `get` never cancels the execution:
 sources, publications and other callers keep their contracts.
 
-`KeySpec::new` accepts strings, integers and floats, including shared references
-such as `&u64`. Its `IntoKeyId` conversion preserves string IDs and exact decimal
-integers; floats use JavaScript number spelling, including negative zero and
-exponents (`f32` is promoted to `f64`). For custom displayable IDs, pass
-`id.to_string()` or implement `IntoKeyId`. `normalize_args` applies the shared
-scalar spelling to secondary dimensions and orders names by UTF-16 code units
-so the same identity produces the same Redis key in every language.
+`KeySpec::new` and `DialCache::invalidate` accept strings, integers and floats,
+including shared references such as `&u64`. Their `IntoKeyId` conversion
+preserves string IDs and exact decimal integers; floats use JavaScript number
+spelling, including negative zero and exponents (`f32` is promoted to `f64`).
+For custom displayable IDs, pass
+`id.to_string()` or implement `IntoKeyId`. `KeySpec::arg` also accepts all
+primitive integer and float types, preserving exact integer text and promoting
+`f32` to `f64`, as well as borrowed inputs such as `&String` and `&u64`.
+`normalize_args` applies the shared scalar spelling to secondary dimensions and
+orders names by UTF-16 code units so the same identity produces the same Redis
+key in every language.
 Use the same namespace, key dimensions, codecs and policy across languages when
 sharing entries.
 

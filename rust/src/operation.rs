@@ -51,7 +51,6 @@ pub type Preview<T> = Arc<dyn Fn(&T) -> Option<String> + Send + Sync>;
 /// Registered use cases build this for every call; use it directly with
 /// [`DialCache::get_or_load`](crate::DialCache::get_or_load) when a stable use
 /// case is declared at the call site instead of being registered.
-#[derive(Clone)]
 pub struct Operation<T> {
     /// The logical identity; an empty namespace inherits the instance's.
     pub identity: Identity,
@@ -68,6 +67,20 @@ pub struct Operation<T> {
     pub should_recover: Option<RecoveryPredicate>,
     /// Renders bounded value previews for mismatch warnings; `None` logs none.
     pub preview: Option<Preview<T>>,
+}
+
+impl<T> Clone for Operation<T> {
+    fn clone(&self) -> Self {
+        Self {
+            identity: self.identity.clone(),
+            policy: self.policy.clone(),
+            budget: self.budget,
+            codec: self.codec.clone(),
+            comparator: self.comparator.clone(),
+            should_recover: self.should_recover.clone(),
+            preview: self.preview.clone(),
+        }
+    }
 }
 
 impl<T> std::fmt::Debug for Operation<T> {

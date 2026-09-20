@@ -7,7 +7,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use dialcache::testing::{TestExecutor, WALL_EPOCH_MS};
-use dialcache::{DialCache, IntoKeyId, KeySpec, Policy};
+use dialcache::{
+    BoxError, DialCache, IntoKeyId, InvalidateRequest, KeySpec, MissReason, Policy, ReadContext,
+    ReadRequest, ReadResult, Remote, WriteRequest,
+};
+use futures::future::BoxFuture;
+use parking_lot::Mutex;
 
 #[test]
 fn floating_ids_use_javascript_spelling_for_owned_and_borrowed_inputs() {
@@ -85,4 +90,98 @@ fn registered_float_ids_share_the_javascript_zero_identity() {
     });
     assert_eq!((*negative, *positive), (1, 1));
     assert_eq!(sources.load(Ordering::SeqCst), 1);
+}
+
+#[derive(Default)]
+struct RecordingRemote {
+    reads: Mutex<Vec<ReadRequest>>,
+    invalidations: Mutex<Vec<InvalidateRequest>>,
+}
+
+impl Remote for RecordingRemote {
+    fn read(
+        &self,
+        request: ReadRequest,
+        _: ReadContext,
+    ) -> BoxFuture<'_, Result<ReadResult, BoxError>> {
+        self.reads.lock().push(request);
+        Box::pin(async { Ok(ReadResult::miss(MissReason::ValueAbsent)) })
+    }
+
+    fn write(&self, _: WriteRequest) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn invalidate(&self, request: InvalidateRequest) -> BoxFuture<'_, Result<(), BoxError>> {
+        self.invalidations.lock().push(request);
+        Box::pin(async { Ok(()) })
+    }
+}
+
+fn assert_invalidation_matches_registered_id<T>(id: T, escaped_id: &str)
+where
+    T: IntoKeyId + Clone + Send + Sync + 'static,
+{
+    let mut executor = TestExecutor::new(WALL_EPOCH_MS);
+    let remote = Arc::new(RecordingRemote::default());
+    let cache = DialCache::builder()
+        .namespace("numeric")
+        .clock_arc(executor.clock.clone())
+        .runtime_arc(executor.runtime.clone())
+        .remote_arc(remote.clone())
+        .build()
+        .unwrap();
+    let lookup = cache
+        .use_case::<T, u64>("thing", "TrackedId")
+        .tracked(true)
+        .policy(Policy::default().remote_ttl_sec(60))
+        .key(|id: &T| KeySpec::new(id))
+        .source(|_, _| async { Ok(7) })
+        .register()
+        .unwrap();
+    executor.block_on(async move {
+        let request = cache.enable_guard();
+        assert_eq!(*lookup.get(request.scope(), id.clone()).await.unwrap(), 7);
+        cache.invalidate("thing", &id, 17).await.unwrap();
+        cache.invalidate("thing", id, 17).await.unwrap();
+    });
+
+    let expected = format!("{{numeric:thing:{escaped_id}}}#watermark");
+    let reads = remote.reads.lock();
+    assert_eq!(reads.len(), 1);
+    assert_eq!(reads[0].watermark_key.as_deref(), Some(expected.as_str()));
+    let invalidations = remote.invalidations.lock();
+    assert_eq!(invalidations.len(), 2);
+    for request in invalidations.iter() {
+        assert_eq!(request.watermark_key, expected);
+        assert_eq!(request.invalidated_at_ms, WALL_EPOCH_MS as u64);
+        assert_eq!(request.future_buffer_ms, 17);
+    }
+}
+
+#[test]
+fn numeric_invalidation_uses_the_registered_entity_watermark() {
+    for (id, escaped_id) in [
+        (-0.0, "0"),
+        (1e-7, "1e-7"),
+        (1e21, "1e%2B21"),
+        (f64::from_bits(0x430c6bf526340002), "1000000000000000.2"),
+        (f64::INFINITY, "Infinity"),
+        (f64::NAN, "NaN"),
+    ] {
+        assert_invalidation_matches_registered_id(id, escaped_id);
+    }
+    assert_invalidation_matches_registered_id(0.1_f32, "0.10000000149011612");
+    assert_invalidation_matches_registered_id(u64::MAX, "18446744073709551615");
+    assert_invalidation_matches_registered_id(
+        i128::MIN,
+        "-170141183460469231731687303715884105728",
+    );
+    assert_invalidation_matches_registered_id(u128::MAX, "340282366920938463463374607431768211455");
+}
+
+#[test]
+fn string_invalidation_preserves_explicit_entity_text() {
+    assert_invalidation_matches_registered_id("001e+21", "001e%2B21");
+    assert_invalidation_matches_registered_id(String::from("-0"), "-0");
 }

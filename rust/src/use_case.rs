@@ -88,7 +88,10 @@ impl KeySpec {
     }
 
     /// Add a secondary key dimension. Absent values are omitted; names are
-    /// sorted by UTF-16 code units when the key is built.
+    /// sorted by UTF-16 code units when the key is built. Primitive integers
+    /// preserve their exact decimal value; floats use JavaScript number
+    /// spelling, with `f32` promoted to `f64`. Shared references to supported
+    /// inputs are also accepted.
     pub fn arg(mut self, name: impl Into<String>, value: impl Into<ArgValue>) -> Self {
         self.args.push((name.into(), value.into()));
         self
@@ -124,33 +127,46 @@ impl From<String> for ArgValue {
     }
 }
 
+impl<T: Clone + Into<ArgValue>> From<&T> for ArgValue {
+    fn from(value: &T) -> Self {
+        value.clone().into()
+    }
+}
+
 impl From<bool> for ArgValue {
     fn from(value: bool) -> Self {
         ArgValue::Bool(value)
     }
 }
 
-impl From<i64> for ArgValue {
-    fn from(value: i64) -> Self {
-        ArgValue::Int(value)
-    }
+macro_rules! integer_arg_value {
+    ($($t:ty),*) => { $(impl From<$t> for ArgValue {
+        fn from(value: $t) -> Self { ArgValue::Int(i64::from(value)) }
+    })* };
 }
+integer_arg_value!(i8, i16, i32, i64, u8, u16, u32);
 
-impl From<i32> for ArgValue {
-    fn from(value: i32) -> Self {
-        ArgValue::Int(value as i64)
-    }
+macro_rules! wide_integer_arg_value {
+    ($($t:ty),*) => { $(impl From<$t> for ArgValue {
+        fn from(value: $t) -> Self {
+            match i64::try_from(value) {
+                Ok(value) => ArgValue::Int(value),
+                Err(_) => ArgValue::BigInt(value.to_string()),
+            }
+        }
+    })* };
 }
-
-impl From<u32> for ArgValue {
-    fn from(value: u32) -> Self {
-        ArgValue::Int(value as i64)
-    }
-}
+wide_integer_arg_value!(i128, isize, u64, u128, usize);
 
 impl From<f64> for ArgValue {
     fn from(value: f64) -> Self {
         ArgValue::Number(value)
+    }
+}
+
+impl From<f32> for ArgValue {
+    fn from(value: f32) -> Self {
+        ArgValue::Number(f64::from(value))
     }
 }
 

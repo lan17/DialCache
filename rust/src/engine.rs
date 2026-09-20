@@ -27,6 +27,7 @@ use crate::remote::{InvalidateRequest, Remote};
 use crate::runtime::Runtime;
 use crate::scope::{Owner, Scope};
 use crate::shadow::ShadowFlight;
+use crate::use_case::IntoKeyId;
 
 /// Resolves a sparse runtime policy overlay once per enabled call.
 pub type PolicyProvider = Arc<
@@ -582,13 +583,14 @@ impl DialCache {
     /// Advance the invalidation watermark of every tracked variant of one
     /// entity, in this instance's namespace. Call it after the source
     /// mutation commits. Requires a remote adapter; failures are returned.
+    /// IDs use the same [`IntoKeyId`] conversion as [`crate::KeySpec::new`].
     pub async fn invalidate(
         &self,
         key_type: &str,
-        id: &str,
+        id: impl IntoKeyId,
         future_buffer_ms: u64,
     ) -> Result<(), Error> {
-        let identity = Identity::new(key_type, id, WATERMARK_USE_CASE)
+        let identity = Identity::new(key_type, id.into_key_id(), WATERMARK_USE_CASE)
             .tracked(true)
             .namespace(self.core.namespace.to_string());
         self.invalidate_identity(identity, future_buffer_ms).await
