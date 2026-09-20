@@ -7,7 +7,9 @@ module deadlines {
   // whose held read settled or expired, belongs to a caller that was enabled
   // when admitted, whether or not its scope has closed since, and is always
   // bounded. A held remote read is bounded by the read budget in force when
-  // it was dispatched. A deadline is measured from its work's own start;
+  // it was dispatched; a read settled in its dispatching step registers no
+  // read deadline under an unbounded budget, and a finite budget is reached
+  // at once only when zero. A deadline is measured from its work's own start;
   // equality belongs to the timeout (`dueAt`).
   //
   // A pending deadline (`Due`) names its work (a remote read, a source loader
@@ -197,15 +199,25 @@ module deadlines {
   // source the release started without the remote layer (under the reply, or
   // the bypass reply of a scope closed since admission) is bounded by the
   // configured source budget, as every release-started source is.
-  pure def release(state: BudgetedHeld[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls, budget: int): BudgetedHeld[r] = {
-    val released = RemoteIO::release(state, layout, policyCall, resolved, ttls, budget)
+  pure def releaseJudged(state: BudgetedHeld[r], layout: Serving::Layout, judged: Serving::LayeredRelease, policyCall: int, ttls: Ttls, budget: int): BudgetedHeld[r] = {
+    val released = RemoteIO::releaseJudged(state, layout, judged, policyCall, ttls, budget)
     stampLoader(state, if (released.o.reads > state.o.reads) due(released, READ, state.o.reads, budget) else released, state.sourceBudget)
   }
+  pure def release(state: BudgetedHeld[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls, budget: int): BudgetedHeld[r] =
+    releaseJudged(state, layout, Serving::judgeRelease(state, layout, policyCall, resolved, ttls, false), policyCall, ttls, budget)
   // An immediate policy reply: admission and the held release in one step.
   pure def begin(state: BudgetedHeld[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int): BudgetedHeld[r] = {
     val admitted = admit(state, layout, call)
     if (Serving::participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls, budget) else admitted
   }
+  // A read settled in the step that dispatched it: its deadline, if the
+  // budget registered one, is forgotten by the settlement (an unbounded
+  // budget registers none and is the truthful one for a read that never
+  // waits), and the loader the settlement starts is bounded from now.
+  pure def settleDispatched(before: BudgetedHeld[r], after: BudgetedHeld[r], layout: Serving::Layout, classifier: int): BudgetedHeld[r] =
+    if (after.o.reads > before.o.reads) settleRead(after, layout, before.o.reads, after.readFailed, classifier) else after
+  pure def beginRead(state: BudgetedHeld[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int, classifier: int): BudgetedHeld[r] =
+    settleDispatched(state, begin(state, layout, call, resolved, ttls, budget), layout, classifier)
   // A read whose deadline is delivered: the loader its expiry starts is bounded from now.
   pure def expireRead(state: BudgetedHeld[r], layout: Serving::Layout, read: int): BudgetedHeld[r] =
     stampLoader(state, RemoteIO::expireRead(state, layout, read), state.sourceBudget)

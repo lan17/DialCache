@@ -63,7 +63,7 @@ module remote_frames {
   // A write (a seed or a refill) is stamped with the wall clock and retained for its TTL.
   pure def seedFrame(state: Frames[r], key: int, value: int, retentionMs: int): Frames[r] =
     storeFrame(state, key, value, Clock::wallOf(state), retentionMs)
-  // A seed the drivers stamp at a non-negative age: the wall clock minus that age.
+  // A seed the drivers stamp at an age, negative for a stamp in the future: the wall clock minus that age.
   pure def seedAged(state: Frames[r], key: int, value: int, ageMs: int, retentionMs: int): Frames[r] =
     storeFrame(state, key, value, Clock::wallOf(state) - ageMs, retentionMs)
   pure def raiseWatermark(state: Frames[r], entity: int): Frames[r] = {

@@ -33,14 +33,19 @@ module remote_io {
   // pending-only records: a settled one leaves nothing behind. A read whose
   // deadline was delivered owns nothing (`flight` NO_OWNER) and stays until
   // its late reply drains. The adapter's read fault is per release
-  // (`failed`), so `readFailed` stays false in a held profile; a visible
+  // (`failed`): a held read takes its fault as an argument when it settles,
+  // and a read settled in the step that dispatched it (`settleDispatched`)
+  // takes the shape's `readFailed` switch, as the atomic path does; a visible
   // frame whose payload fails the read (`payloads::readFails`) fails it the
   // same way, judged once in `remote_frames::observe`. A held decode holds
   // the frame's payload code and decodes it when it settles
   // (`payloads::valueOf`), as does a recovery decode its snapshot's candidate.
   //
   // `begin` is admission and the held release in one step for a profile
-  // whose replies are immediate, like `serving::begin`; `latestRead`,
+  // whose replies are immediate, like `serving::begin`; `beginRead` is
+  // `begin` with the read it dispatched settled in the same step, observing
+  // the frames as they are at admission, for a profile whose drivers hold
+  // decodes and loaders but not reads; `latestRead`,
   // `latestLoad` and `latestOrdinal` name the most recently held read and
   // decode and the newest loader ordinal, for profiles whose drivers name
   // the latest effect rather than an index (a wrapper guards on the list
@@ -126,13 +131,16 @@ module remote_io {
       ...registered
     }
   }
-  // The release judged with the remote layer unobserved: a traversal that
-  // reaches the remote layer dispatches the read; one that starts a source
-  // without it (a reply without the remote layer, or the bypass reply of a
-  // scope closed since admission) starts the source at once, under the next
-  // ordinal; one that serves or joins is the layered release.
-  pure def release(state: Held[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls, budget: int): Held[r] = {
-    val judged = Serving::judgeRelease(state, layout, policyCall, resolved, ttls, false)
+  // The release applied from a judgment already made on this state
+  // (`Serving::judgeRelease` with the remote layer unobserved): a traversal
+  // that reaches the remote layer dispatches the read; one that starts a
+  // source without it (a reply without the remote layer, or the bypass reply
+  // of a scope closed since admission) starts the source at once, under the
+  // next ordinal; one that serves or joins is the layered release. A variant
+  // that records beside the held release (`diagnostics`) judges once through
+  // `Serving::judgeRelease` and applies this; `release` is its composition
+  // with the judgment.
+  pure def releaseJudged(state: Held[r], layout: Serving::Layout, judged: Serving::LayeredRelease, policyCall: int, ttls: Ttls, budget: int): Held[r] = {
     val applied = Serving::applyRelease(state, layout, judged, policyCall, ttls)
     match judged.decision.outcome {
       | Starts => if (judged.effective.layers.remote) dispatchRead(applied, layout, judged, ttls, budget)
@@ -145,11 +153,24 @@ module remote_io {
       | ServesRemote(_) => applied
     }
   }
+  pure def release(state: Held[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls, budget: int): Held[r] =
+    releaseJudged(state, layout, Serving::judgeRelease(state, layout, policyCall, resolved, ttls, false), policyCall, ttls, budget)
   // An immediate policy reply: admission and the held release in one step.
   pure def begin(state: Held[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int): Held[r] = {
     val admitted = admit(state, layout, call)
     if (Serving::participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls, budget) else admitted
   }
+  // A read the drivers do not hold settles in the step that dispatched it,
+  // observing the frames as they are at admission: `settleDispatched` settles
+  // the read a step dispatched, if any (the drivers' index it took is the
+  // count before the step; the adapter's fault is the shape's switch, per
+  // release as on the atomic path), stated once for the budgeted and the
+  // diagnosed variants; `beginRead` is `begin` with it, for a profile whose
+  // drivers hold decodes and loaders but not reads.
+  pure def settleDispatched(before: Held[r], after: Held[r], layout: Serving::Layout, classifier: int): Held[r] =
+    if (after.o.reads > before.o.reads) settleRead(after, layout, before.o.reads, after.readFailed, classifier) else after
+  pure def beginRead(state: Held[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int, classifier: int): Held[r] =
+    settleDispatched(state, begin(state, layout, call, resolved, ttls, budget), layout, classifier)
 
   // -- Loaders and decodes ---------------------------------------------------------
 
