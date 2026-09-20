@@ -22,7 +22,9 @@ module remote_writes {
   // names the fault per effect as effects' `failDump` and `failWrite` do): a
   // failed dump dispatches no write and a failed write stores nothing, and
   // the flight completes either way, as `serving::publish` has it on the
-  // atomic path.
+  // atomic path. `HeldWriting` and `settleLoader` are the same held refill
+  // over the held read path (`deadlines::BudgetedHeld`), for a profile whose
+  // drivers hold reads and loaders as well as dumps and writes.
   //
   // Stale-on-error on the atomic path (C40 to C46, as `recovery` states them
   // and `remote_io` composes them on the held path): a flight that read the
@@ -44,14 +46,20 @@ module remote_writes {
   import recovery as Recovery from "./recovery"
   import payloads as Payloads from "./payloads"
   import clock as Clock from "./clock"
+  import deadlines as Deadlines from "./deadlines"
 
   // A held dump: the drivers' effect ordinal, the flight it serializes for and
   // the write authority it was held with, the retention its write is
   // dispatched with and the fence the write must clear (a caller's refill
   // carries its source's, a job's fill the one its own C0 read observed,
   // `shadow`). A held write keeps the retention and adds the stamp captured
-  // when its dump was released.
-  type HeldDump = { dump: int, source: int, retentionMs: int, fence: int }
+  // when its dump was released. `sampled` is the wall clock the
+  // pre-serialization fence check sampled (`src/internal/redis-cache.ts`
+  // `putWithLayer`, `sampleWriteTimestamp` before `dump`), the receipt the
+  // first fence check leaves: a held dump's fence was cleared by that instant,
+  // whatever the wall clock does before the dump is released and the second
+  // check runs (C34).
+  type HeldDump = { dump: int, source: int, retentionMs: int, fence: int, sampled: int }
   type HeldWrite = { write: int, source: int, retentionMs: int, stamp: int }
   type Writing[r] = Serving::Served[{ dumps: List[HeldDump], writes: List[HeldWrite], retained: List[Recovery::Snapshot] | r }]
 
@@ -117,7 +125,7 @@ module remote_writes {
   // A refill starts with its serialization: the dump is counted and held with
   // the retention the source captured; the flight stays pending.
   pure def holdDump(state: Writing[r], source: int, retentionMs: int, fence: int): Writing[r] = {
-    dumps: state.dumps.append({ dump: state.o.dumps, source: source, retentionMs: retentionMs, fence: fence }),
+    dumps: state.dumps.append({ dump: state.o.dumps, source: source, retentionMs: retentionMs, fence: fence, sampled: Clock::wallOf(state) }),
     o: { dumps: state.o.dumps + 1, ...state.o },
     ...state
   }
@@ -160,6 +168,28 @@ module remote_writes {
     if (dispatched.o.writes > state.o.writes) dispatched
     else complete(Serving::warm(dispatched, layout, state.sources.nth(held.source), state.sources.nth(held.source).result, state.sources.nth(held.source).localMs), layout, held.source, state.sources.nth(held.source).result)
   }
+  // -- The held refill over the held read path -----------------------------------------
+
+  // The budgeted held lifecycle (`deadlines::BudgetedHeld`) whose refills the
+  // drivers also hold: a loader settled by the drivers' ordinal whose accepted
+  // result refills (`serving::refills`, the first fence check) records its
+  // outcome, drops its snapshot and holds its dump, the flight staying pending
+  // until its write is released (`releaseDump`, `releaseWrite`, as on the
+  // atomic path); every other arrival is the budgeted held settlement
+  // (`deadlines::settleLoader`: a late result is a deadline error, a drained
+  // one settles nothing, an error is classified, an accepted result that does
+  // not refill publishes and completes at once). For a profile whose drivers
+  // hold reads, decodes, loaders, dumps and writes alike (effects).
+  type HeldWriting[r] = Deadlines::BudgetedHeld[{ dumps: List[HeldDump], writes: List[HeldWrite] | r }]
+  pure def settleLoader(state: HeldWriting[r], layout: Serving::Layout, ordinal: int, value: int, timeout: bool): HeldWriting[r] = {
+    val flight = state.loaders.nth(ordinal)
+    val source = state.sources.nth(flight)
+    val outcome = Deadlines::arrival(state, ordinal, source.result, value)
+    if (accepted(outcome) and Serving::refills(state, source, outcome))
+      holdDump(Recovery::drop(Flights::recordResult(Deadlines::retire(state, ordinal), flight, outcome), flight), flight, source.retentionMs, source.fence)
+    else Deadlines::settleLoader(state, layout, ordinal, value, timeout)
+  }
+
   // The write released: the frame stored with the value the source recorded,
   // the captured stamp and the dump's retention.
   pure def store(state: Writing[r], write: int): Writing[r] = {

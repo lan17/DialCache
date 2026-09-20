@@ -60,6 +60,7 @@ module deadlines {
   import layer_policy.* from "./layer-policy"
   import serving as Serving from "./serving"
   import remote_io as RemoteIO from "./remote-io"
+  import remote_frames as Remote from "./remote-frames"
   import clock as Clock from "./clock"
 
   pure val UNBOUNDED = -1
@@ -224,9 +225,16 @@ module deadlines {
   // A read whose deadline passed undelivered (a bare clock move) is expired
   // before its reply is judged, so the reply drains; a delivered one owns
   // nothing already.
+  pure def expiredIfReached(state: BudgetedHeld[r], layout: Serving::Layout, read: int): BudgetedHeld[r] =
+    if (reached(state, READ, read)) expireRead(forget(state, READ, read), layout, read) else forget(state, READ, read)
   pure def settleRead(state: BudgetedHeld[r], layout: Serving::Layout, read: int, failed: bool, classifier: int): BudgetedHeld[r] = {
-    val current = if (reached(state, READ, read)) expireRead(forget(state, READ, read), layout, read) else forget(state, READ, read)
+    val current = expiredIfReached(state, layout, read)
     stampLoader(current, RemoteIO::settleRead(current, layout, read, failed, classifier), state.sourceBudget)
+  }
+  // The same settlement applied from a judgment already made (`remote_io::settleObserved`).
+  pure def settleObserved(state: BudgetedHeld[r], layout: Serving::Layout, read: int, judged: Remote::Observed, fence: int, classifier: int): BudgetedHeld[r] = {
+    val current = expiredIfReached(state, layout, read)
+    stampLoader(current, RemoteIO::settleObserved(current, layout, read, judged, fence, classifier), state.sourceBudget)
   }
   // A failed fresh decode's restart is a loader start like any other.
   pure def settleLoad(state: BudgetedHeld[r], layout: Serving::Layout, load: int, failed: bool): BudgetedHeld[r] =

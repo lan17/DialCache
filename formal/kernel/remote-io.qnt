@@ -47,7 +47,10 @@ module remote_io {
   // `latestLoad` and `latestOrdinal` name the most recently held read and
   // decode and the newest loader ordinal, for profiles whose drivers name
   // the latest effect rather than an index (a wrapper guards on the list
-  // being non-empty, as it does on `holdsRead`).
+  // being non-empty, as it does on `holdsRead`). `settleObserved` is the
+  // read settlement applied from a judgment already made, the seam a variant
+  // that substitutes what a read observed composes; `settleRead` judges the
+  // frames and applies it.
   //
   // The io channel (BEHAVIOR.md, `readIO`) is a mandatory field written by
   // the transitions that have each fact in hand: `budgets` one row per
@@ -168,15 +171,20 @@ module remote_io {
 
   // A loader starts for a flight with the authority its read fixed: counted
   // against the profile and mapped from the drivers' next ordinal.
-  pure def startLoader(state: Held[r], layout: Serving::Layout, flight: int, ttls: Ttls, readOk: bool, visible: bool): Held[r] = {
+  // `startLoaderFenced` takes the fence the refill carries as an argument (a
+  // queued adapter reply supplies its own, effects); `startLoader` reads it
+  // from the frames the read observed (`Remote::fenceFor`).
+  pure def startLoaderFenced(state: Held[r], layout: Serving::Layout, flight: int, ttls: Ttls, readOk: bool, fence: int): Held[r] = {
     val source = state.sources.nth(flight)
-    val payload = Serving::authority(state, source, ttls, true, readOk, Remote::fenceFor(state, source.key, layout.operationsPerEntity, visible))
+    val payload = Serving::authority(state, source, ttls, true, readOk, fence)
     {
       sources: state.sources.replaceAt(flight, Serving::sourceOf(payload, source.result, source.shared)),
       loaders: state.loaders.append(flight),
       ...Serving::started(state, layout, true)
     }
   }
+  pure def startLoader(state: Held[r], layout: Serving::Layout, flight: int, ttls: Ttls, readOk: bool, visible: bool): Held[r] =
+    startLoaderFenced(state, layout, flight, ttls, readOk, Remote::fenceFor(state, state.sources.nth(flight).key, layout.operationsPerEntity, visible))
   pure def holdLoad(state: Held[r], flight: int, ttls: Ttls, value: int, recovery: bool): Held[r] = {
     loads: state.loads.append({ load: state.o.loads, flight: flight, ttls: ttls, value: value, recovery: recovery }),
     o: { loads: state.o.loads + 1, ...state.o },
@@ -191,18 +199,31 @@ module remote_io {
   // failed read), a completed read first retaining the flight's snapshot
   // under the classifier in force. A read expired by its deadline drains
   // without effect.
-  pure def settleRead(state: Held[r], layout: Serving::Layout, read: int, failed: bool, classifier: int): Held[r] = {
+  //
+  // The settlement is applied from a judgment already made (`settleObserved`:
+  // what the read observed and the fence a refill it starts carries), so a
+  // variant that substitutes the observation (the reply an adapter queued,
+  // which the effects drivers hold) applies the same settlement; `settleRead`
+  // is its composition with the judgment of the frames (`Remote::observe`,
+  // `Remote::fenceFor`). A read that owns nothing is judged as unobserved.
+  pure def settleObserved(state: Held[r], layout: Serving::Layout, read: int, judged: Remote::Observed, fence: int, classifier: int): Held[r] = {
     val held = heldRead(state, read)
     val settled = { reads: state.reads.select(other => other.read != read), ...state }
     if (not(owning(held))) settled
+    else if (judged.value > NO_VALUE) holdLoad(settled, held.flight, held.ttls, judged.payload, false)
+    else {
+      val key = state.sources.nth(held.flight).key
+      val retained = if (judged.failed) settled else Recovery::retain(settled, held.flight, key, judged.visible, held.ttls, classifier)
+      startLoaderFenced(retained, layout, held.flight, held.ttls, not(judged.failed), fence)
+    }
+  }
+  pure def settleRead(state: Held[r], layout: Serving::Layout, read: int, failed: bool, classifier: int): Held[r] = {
+    val held = heldRead(state, read)
+    if (not(owning(held))) settleObserved(state, layout, read, Remote::UNOBSERVED, NO_FENCE, classifier)
     else {
       val key = state.sources.nth(held.flight).key
       val judged = Remote::observe(state, key, layout.operationsPerEntity, held.ttls.freshMs, failed)
-      if (judged.value > NO_VALUE) holdLoad(settled, held.flight, held.ttls, judged.payload, false)
-      else {
-        val retained = if (judged.failed) settled else Recovery::retain(settled, held.flight, key, judged.visible, held.ttls, classifier)
-        startLoader(retained, layout, held.flight, held.ttls, not(judged.failed), judged.visible)
-      }
+      settleObserved(state, layout, read, judged, Remote::fenceFor(state, key, layout.operationsPerEntity, judged.visible), classifier)
     }
   }
   // A read whose deadline is delivered: recorded as aborted, disowned (its

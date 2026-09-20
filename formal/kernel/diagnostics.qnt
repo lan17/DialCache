@@ -103,7 +103,8 @@ module diagnostics {
 
   // -- Diagnosed variants of the budgeted held lifecycle -------------------------
   // For a profile whose drivers compare the channel over the held remote path
-  // with immediate replies and reads settled at admission (recovery): the
+  // with immediate replies, its reads settled at admission (recovery,
+  // `beginRead`) or held (effects, `begin`): the
   // singleflight a caller coalesced into, judged once beside the release
   // (`Serving::judgeRelease` applied through `Deadlines::releaseJudged`); the
   // layer a flight is attributed to when it starts (the remote layer for a
@@ -137,14 +138,16 @@ module diagnostics {
       | ServesRemote(_) => released
     }
   }
-  pure def beginRead(state: DiagnosedHeld[r, q], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int, classifier: int): DiagnosedHeld[r, q] = {
+  // Admission and the held release in one step, labelled from the release
+  // judged once: for a profile whose drivers hold the read (`begin`), or
+  // settle it in the same step (`beginRead`, `Deadlines::settleDispatched`).
+  pure def begin(state: DiagnosedHeld[r, q], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int): DiagnosedHeld[r, q] = {
     val admitted = admit(state, layout, call)
     if (not(Serving::participating(state, layout, call))) admitted
-    else {
-      val judged = Serving::judgeRelease(admitted, layout, state.o.policyCalls, resolved, ttls, false)
-      Deadlines::settleDispatched(admitted, releaseJudged(admitted, layout, judged, state.o.policyCalls, ttls, budget), layout, classifier)
-    }
+    else releaseJudged(admitted, layout, Serving::judgeRelease(admitted, layout, state.o.policyCalls, resolved, ttls, false), state.o.policyCalls, ttls, budget)
   }
+  pure def beginRead(state: DiagnosedHeld[r, q], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int, classifier: int): DiagnosedHeld[r, q] =
+    Deadlines::settleDispatched(state, begin(state, layout, call, resolved, ttls, budget), layout, classifier)
   // A flight whose failure the step recorded (its source's outcome moved from
   // pending to an error) is attributed to its layer; a result that drains
   // after its deadline completed the flight records nothing.
