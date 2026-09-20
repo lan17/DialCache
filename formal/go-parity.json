@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "0fd8b07110e8ea3ce615f50ec0a4770582c789763a1505e7f7531c6d59ad4a60",
-    "executionSha256": "6352bfe8c74ba17e7b4547190f836508282bd0b94bdf73bfad998bedafc276be",
+    "semanticCasesSha256": "0f91f4871e783c5b83d7068f9bdfcfb7855a385aab583fcf888f65a2445cc711",
+    "executionSha256": "6f9fd40d4498c208ecfcb24d4e106ef0fe5d4bc0c1d6518219f7d3899d1509df",
     "sourceAuditSha256": "4d39d512662347140aabd1d83f7fe3d090ddf84d956c6541e08578d9f74ed755",
-    "quintCaseAuditSha256": "12373810a6e9db75651d3fb1558e406da8098f3f4acf307c62a13c20a8dbae3a",
+    "quintCaseAuditSha256": "083b377311272ea6a7ec3793252a234bdcdab63cfbf1417c250735243bae406d",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d"
@@ -30,11 +30,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 221,
-    "scheduledRegressions": 429,
+    "scheduledRegressions": 430,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 265
+    "exportedRegressionHistories": 266
   },
   "profiles": [
     {
@@ -396,7 +396,8 @@
         "closingAnotherScopeKeepsThisScopesMemoTest",
         "localEntryExpiresAtItsInsertionTtlTest",
         "expiredMarkerIsGoneTest",
-        "unsafeTimestampAtTheWatermarkStillRefillsTest"
+        "unsafeTimestampAtTheWatermarkStillRefillsTest",
+        "encodingFailedReadLeavesNoCandidateTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -11531,7 +11532,8 @@
       "kind": "portable-behavior",
       "quintProperties": [
         "formal/dialcache-recovery-read-conformance.qnt:trackedEncodingFailureSuppressesRefillTest",
-        "formal/dialcache-recovery-read-conformance.qnt:untrackedEncodingFailureStillPublishesLocalTest"
+        "formal/dialcache-recovery-read-conformance.qnt:untrackedEncodingFailureStillPublishesLocalTest",
+        "formal/dialcache-recovery-read-conformance.qnt:encodingFailedReadLeavesNoCandidateTest"
       ],
       "requiredGenerated": [
         {
@@ -11558,7 +11560,8 @@
       "gaps": [],
       "quintReplays": [
         "recovery-read/trackedEncodingFailureSuppressesRefillTest",
-        "recovery-read/untrackedEncodingFailureStillPublishesLocalTest"
+        "recovery-read/untrackedEncodingFailureStillPublishesLocalTest",
+        "recovery-read/encodingFailedReadLeavesNoCandidateTest"
       ],
       "generatedVectors": []
     },

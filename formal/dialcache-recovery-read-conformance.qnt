@@ -343,6 +343,14 @@ module dialcache_recovery_read_conformance {
     .then(beginIn(0)).then(releaseRead).then(resolveLoader).then(beginIn(1))
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.reads == 1
       and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
+  // A read failed by the frame's encoding retains no snapshot, so the loader
+  // failure that follows is unclassified: the caller completes with the
+  // loader's own error, no recovery label is reported, nothing is decoded or
+  // written.
+  run encodingFailedReadLeavesNoCandidateTest = initialized(TRACKED_MODE).then(seedWith(10))
+    .then(beginIn(0)).then(releaseRead).then(rejectLoader)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.io.sourceErrors == List(1) and s.o.classifications == 0
+      and s.o.recovery == List() and s.o.loads == 0 and s.o.writes == 0)
   run trackedPhysicalRetentionExpiresAtCapTest = initialized(TRACKED_MODE).then(policyWith(2))
     .then(beginIn(2)).then(releaseRead).then(resolveLoader)
     .expect(s.o.writeTtls == List(3600000))

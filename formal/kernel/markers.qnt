@@ -6,11 +6,11 @@ module markers {
   // and a desired lifetime: a floor of twice the tracked retention cap, or
   // the span from the invalidation's wall clock to the watermark plus the cap
   // and a minute's margin, whichever is longer, so the watermark outlives
-  // every frame it may fence (`src/internal/redis-scripts.ts:6,16,58-75`:
-  // `MIN_WATERMARK_TTL_MS = 2 * MAX_TRACKED_REDIS_VALUE_TTL_MS`,
-  // `WATERMARK_TTL_MARGIN_MS = 60000`, keep the larger existing PTTL;
-  // `go/redis_adapter.go:195-199`). Once the key lapses a read sees no
-  // watermark.
+  // every frame it may fence (`src/internal/redis-scripts.ts`
+  // `INVALIDATE_CACHE_SCRIPT`: `MIN_WATERMARK_TTL_MS = 2 *
+  // MAX_TRACKED_REDIS_VALUE_TTL_MS`, `WATERMARK_TTL_MARGIN_MS = 60000`, keep
+  // the larger existing PTTL; `go/redis_adapter.go` `InvalidationScript`).
+  // Once the key lapses a read sees no watermark.
   //
   // Marker expiry is a time transition that zeroes the watermark (`expire`,
   // applied by `advance`), not a judgment threaded through the fence: the
@@ -51,12 +51,11 @@ module markers {
     val covering = cutoff - wall + Remote::TRACKED_RETENTION_CAP_MS + MARKER_MARGIN_MS
     if (covering > MARKER_FLOOR_MS) covering else MARKER_FLOOR_MS
   }
-  // A marker no longer in force fences nothing: its entity's watermark is zero.
-  pure def expire(state: Marked[r]): Marked[r] = {
-    watermark: state.watermark.indices().fold(state.watermark, (out, entity) =>
-      if (inForce(state, entity)) out else out.replaceAt(entity, 0)),
-    ...state
-  }
+  // A marker no longer in force fences nothing: its entity's watermark
+  // returns to the zero baseline (`Remote::clearWatermark`).
+  pure def expire(state: Marked[r]): Marked[r] =
+    state.watermark.indices().fold(state, (out, entity) =>
+      if (inForce(state, entity)) out else Remote::clearWatermark(out, entity))
   pure def advance(state: Marked[r], ms: int): Marked[r] = expire(Clock::advance(state, ms))
   // The invalidation outcome (`serving::invalidate`) and, when it took
   // effect, the entity's marker kept for the larger of its remaining lifetime

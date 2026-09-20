@@ -169,8 +169,8 @@ export function classifyRuns(declarations) {
 // must still pass and the second must fail: the failure then belongs to the
 // declared expectation, not to a step the fault disables or a later check.
 const opens = ['{', '(', '['], shuts = ['}', ')', ']'];
-export function reproducerCheckpoint(source, run, failure) {
-  const declaration = scanDeclarationBodies(source).get(run);
+export function reproducerCheckpoint(source, run, failure, declarations = scanDeclarationBodies(source)) {
+  const declaration = declarations.get(run);
   if (declaration?.kind !== 'run') throw new Error(`${run} is not a run declaration`);
   const { body, spans } = declaration;
   const wanted = tokenize(typeof failure === 'string' ? failure : '').tokens;
@@ -226,7 +226,7 @@ export const contractIds = text => [...text.matchAll(/^\| ([CWEB]\d{2}) \|/gm)].
 // because no other profile executes that text.
 const reproducerKinds = ['exported-regression', 'model-run'];
 const reproducerFields = ['kind', 'run', 'model', 'failure', 'family', 'profiles', 'exclusions', 'scope'];
-function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, readSource }) {
+function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, source, scanned }) {
   const { id, reproducer } = challenge;
   if (!reproducer || typeof reproducer !== 'object' || Array.isArray(reproducer)) throw new Error(`${id}: invalid reproducer`);
   const unknown = Object.keys(reproducer).filter(key => !reproducerFields.includes(key));
@@ -240,7 +240,7 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
   }
   if (typeof run !== 'string' || !cited.regressions.includes(run)) throw new Error(`${id}: reproducer run is not a scheduled regression of ${cited.path}: ${run}`);
   if (!nonEmptyText(failure)) throw new Error(`${id}: reproducer failure must state the expect condition the fault breaks`);
-  try { reproducerCheckpoint(readSource(cited.path), run, failure); }
+  try { reproducerCheckpoint(source(cited.path), run, failure, scanned(cited.path)); }
   catch (error) { throw new Error(`${id}: ${error.message}`); }
   if (!isSlug(family)) throw new Error(`${id}: reproducer family must be a fault family slug`);
   const own = model.profile ?? model.path;
@@ -501,7 +501,7 @@ export const grandfatheredReproducerBacklog = Object.freeze([
 // Every scheduled model carries at least one challenge or an explicit waiver.
 // Every challenge carries a reproducer or is listed in the reported backlog,
 // and maps to native mutants in both ports or is listed in that backlog.
-function validateChallenges(manifest, { readSource, contracts, sources, profileIds, publicOnly, catalog,
+function validateChallenges(manifest, { source, scanned, contracts, sources, profileIds, publicOnly, catalog,
   grandfathered = grandfatheredReproducerBacklog, grandfatheredNative = grandfatheredNativeMutantBacklog }) {
   const { challenges, reproducerBacklog, nativeMutantBacklog } = manifest;
   if (!Array.isArray(challenges) || !challenges.length) throw new Error('Model property challenge catalog is missing');
@@ -525,7 +525,7 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
     if (!model) throw new Error(`${challenge.id}: challenged model is not scheduled: ${challenge.model}`);
     if (!model.invariants.includes(challenge.invariant)) throw new Error(`${challenge.id}: ${challenge.invariant} is not a scheduled invariant of ${challenge.model}`);
     if (challenge.before === challenge.after) throw new Error(`${challenge.id}: mutation must change the source`);
-    if (readSource(challenge.source).split(challenge.before).length !== 2) throw new Error(`${challenge.id}: mutation anchor must match exactly once in ${challenge.source}`);
+    if (source(challenge.source).split(challenge.before).length !== 2) throw new Error(`${challenge.id}: mutation anchor must match exactly once in ${challenge.source}`);
     const fault = JSON.stringify([challenge.source, challenge.before, challenge.after]);
     if (faults.has(fault) && !nonEmptyText(challenge.measures)) {
       throw new Error(`${challenge.id}: repeats the fault of ${faults.get(fault).id} without a measures note`);
@@ -535,7 +535,7 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
     }
     challengedModels.add(challenge.model);
     if (challenge.reproducer !== undefined) {
-      validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, readSource });
+      validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, source, scanned });
       reproducers++;
     }
     if (challenge.nativeMutants !== undefined) {
@@ -576,6 +576,7 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
 
 export function validateExecution(manifest = readExecution(), {
   readSource = read,
+  scanSource = scanDeclarationBodies,
   grandfathered = grandfatheredReproducerBacklog,
   grandfatheredNative = grandfatheredNativeMutantBacklog,
   catalog = readMutantCatalog(),
@@ -604,12 +605,20 @@ export function validateExecution(manifest = readExecution(), {
   if (manifest.models.some(model => typeof model.path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(model.path)) ||
       manifest.libraries.some(path => typeof path !== 'string' || !isQuintSourcePath(path)) ||
       new Set(paths).size !== paths.length || !sameMembers(paths, files)) throw new Error('Model/library file inventory changed; review the execution schedule');
+  // One pass reads and scans each source once: the model and library loops,
+  // the challenge anchors and every reproducer checkpoint share these memos,
+  // so a pass costs one scan per file rather than one per citation. They live
+  // in the pass, not the module, because callers hand in temporary sources; a
+  // caller validating many times may pass a `scanSource` memoized by text.
+  const texts = new Map(), scans = new Map();
+  const source = path => { if (!texts.has(path)) texts.set(path, readSource(path)); return texts.get(path); };
+  const scanned = path => { if (!scans.has(path)) scans.set(path, scanSource(source(path))); return scans.get(path); };
   const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map();
   let invariants = 0, regressions = 0, generatedTraces = 0;
   let exportedRegressionTraces = 0, generatedVectors = 0, vectorModels = 0;
   const vectorPaths = new Set();
   for (const model of manifest.models) {
-    const bodies = scanDeclarationBodies(readSource(model.path));
+    const bodies = scanned(model.path);
     const declarations = new Map([...bodies].map(([name, { kind }]) => [name, kind]));
     if (declarations.get('init') !== 'action' || declarations.get('step') !== 'action') throw new Error(`${model.path}: scheduled model needs init and step actions`);
     names(model.invariants, `${model.path} invariants`);
@@ -691,8 +700,7 @@ export function validateExecution(manifest = readExecution(), {
     }
   }
   for (const path of manifest.libraries) {
-    const declarations = scanDeclarations(readSource(path));
-    if ([...declarations.values()].some(kind => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful model cannot be classified as a pure helper library`);
+    if ([...scanned(path).values()].some(({ kind }) => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful model cannot be classified as a pure helper library`);
   }
   // A kernel module exists to be composed: one no scheduled model reaches is
   // never typechecked or executed by any lane, so it may not stay listed.
@@ -700,7 +708,7 @@ export function validateExecution(manifest = readExecution(), {
   const orphans = manifest.libraries.filter(path => isKernelSource(path) && !reached.has(path));
   if (orphans.length) throw new Error(`Kernel modules no scheduled model imports: ${orphans.join(', ')}; compose them or delete them`);
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
-  const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, grandfathered, grandfatheredNative });
+  const challenges = validateChallenges(manifest, { source, scanned, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, grandfathered, grandfatheredNative });
   return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
 }
 

@@ -1887,6 +1887,12 @@
       "scope": "Unsupported encoding is classified after presence/fence checks and denies remote refill; source success remains visible, and untracked local publication remains eligible."
     },
     {
+      "case": "C28.encoding-error-suppresses-refill",
+      "reference": "formal/dialcache-recovery-read-conformance.qnt:encodingFailedReadLeavesNoCandidateTest",
+      "kind": "regression",
+      "scope": "An encoding-failed read retains no recovery snapshot: the source failure that follows is unclassified, completes the caller with the source's own error, reports no recovery label and refills nothing."
+    },
+    {
       "case": "C37.physical-cap",
       "reference": "formal/dialcache-recovery-read-conformance.qnt:trackedWritesRespectPhysicalCap",
       "kind": "invariant",

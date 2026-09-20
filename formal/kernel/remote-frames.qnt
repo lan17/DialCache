@@ -44,9 +44,10 @@ module remote_frames {
 
   // A tracked write's retention is clamped to one hour so the entity's
   // watermark, kept for twice that, outlives every frame it may fence
-  // (`src/internal/duration.ts:5`, `src/internal/redis-cache.ts:305-307`,
-  // `go/engine.go:495-497` `tracked_ttl_clamped`, `go/protocol.go:20`); an
-  // untracked write is retained for its full TTL.
+  // (`src/internal/duration.ts` `MAX_TRACKED_REDIS_VALUE_TTL_MS`,
+  // `src/internal/redis-cache.ts` `putWithLayer`, `go/engine.go` `putRemote`
+  // with its `tracked_ttl_clamped` event, `go/protocol.go`
+  // `MaxTrackedValueTTLMS`); an untracked write is retained for its full TTL.
   pure val TRACKED_RETENTION_CAP_MS = 3600000
   pure def physicalRetention(state: Frames[r], retentionMs: int): int =
     if (state.tracked and retentionMs > TRACKED_RETENTION_CAP_MS) TRACKED_RETENTION_CAP_MS else retentionMs
@@ -70,6 +71,11 @@ module remote_frames {
     val wall = Clock::wallOf(state)
     { watermark: state.watermark.replaceAt(entity, if (wall > current) wall else current), ...state }
   }
+  // The zero baseline of an entity's watermark, the one a profile's init
+  // starts from and the one NO_FENCE and an unfenced `writeAllowed` refer to:
+  // where a marker's expiry (`markers::expire`) returns the entity.
+  pure def clearWatermark(state: Frames[r], entity: int): Frames[r] =
+    { watermark: state.watermark.replaceAt(entity, 0), ...state }
   pure def retained(state: Frames[r], key: int): bool = deadlinePendingAt(state.now, state.expires.nth(key))
   pure def fresh(state: Frames[r], key: int, freshMs: int): bool =
     freshAgeAllowed(state.created.nth(key), Clock::wallOf(state), freshMs)

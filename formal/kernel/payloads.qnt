@@ -10,13 +10,21 @@ module payloads {
   // class. COMPRESSED + v is a compressed frame whose bytes decode to v
   // (`src/internal/compression.ts` outcome "decompressed"); CORRUPT + v a
   // frame whose compressed bytes fail to decode (outcome "fallback_raw"; v is
-  // the value the bytes would have carried, consulted only after
-  // `decodeFails` was judged); UNSUPPORTED_ENCODING a frame whose header
-  // names an encoding the adapter does not know, which throws once the frame
-  // is present and fence-cleared (`src/internal/redis-payload.ts:44-52`), so
-  // the read fails. The class rules do not depend on the value: a profile
-  // spells a seed as the sum (`Payloads::COMPRESSED + VALUE_ONE`), arithmetic
-  // over constants, which the composition lint accepts.
+  // the value the bytes would have carried); UNSUPPORTED_ENCODING a frame
+  // whose header names an encoding the adapter does not know, which throws
+  // once the frame is present and fence-cleared
+  // (`src/internal/redis-payload.ts` `decodeRedisPayload`), so the read
+  // fails. A compressed or corrupt code must carry a positive value to reach
+  // a decode step or to be a recovery candidate: `remote_frames::observe` and
+  // `recovery::retain` consult the value before any decode as that
+  // positivity test (`valueOf(code) > NO_VALUE`), so a bare COMPRESSED or
+  // CORRUPT (value 0) is routed as a visible frame the traversal declined, a
+  // miss holding no decode, reporting no compression outcome and no recovery
+  // label (pinned by the payload-classes fixture,
+  // `bareCorruptCodeIsADeclinedFrameTest`). UNSUPPORTED_ENCODING is spelled
+  // bare because it names no value. The class rules read the class alone; a
+  // profile spells a seed as the sum (`Payloads::COMPRESSED + VALUE_ONE`),
+  // arithmetic over constants, which the composition lint accepts.
   //
   // The judgments are consulted once, in `remote_frames::observe`, for the
   // atomic release and the held read settlement alike, at the held decode
@@ -37,7 +45,6 @@ module payloads {
   // composed over the atomic path must not seed decode-fault payloads
   // (pinned by the payload-classes fixture,
   // `atomicReleaseOfAFreshCorruptFrameServesWithoutADecodeStepTest`).
-  import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
 
   // The classes, as hundreds: a payload in the band is a class plus a value

@@ -31,12 +31,13 @@ type PortSection = { edits?: unknown[]; requiredDetections: string[] };
 type MutantEntry = { id: string; case: string; description?: string; rationale?: string; typescript: PortSection; go: PortSection };
 type Catalog = { mutations: Map<string, MutantEntry>; caseContracts: Map<string, string[]> };
 type Summary = { [key: string]: unknown; nativeMutants: { mapped: number; unobservable: number; modelOnly: number; backlog: number }; unmappedMutants: number };
-type Options = { readSource?(path: string): string; grandfathered?: readonly string[]; grandfatheredNative?: readonly string[]; catalog?: Catalog; files?: string[] };
+type Declarations = Map<string, { kind: string; body: string[]; spans: Array<[number, number]> }>;
+type Options = { readSource?(path: string): string; scanSource?(source: string): Declarations; grandfathered?: readonly string[]; grandfatheredNative?: readonly string[]; catalog?: Catalog; files?: string[] };
 const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution, readMutantCatalog, checkMutantAnchors, mutantsForPort, challengesByMutant, nativeMutantKinds, grandfatheredReproducerBacklog, grandfatheredNativeMutantBacklog, quintSources } = await import(moduleUrl) as {
   root: string;
   quintSources(directory?: string): string[];
   scanDeclarations(source: string): Map<string, string>;
-  scanDeclarationBodies(source: string): Map<string, { kind: string; body: string[]; spans: Array<[number, number]> }>;
+  scanDeclarationBodies(source: string): Declarations;
   classifyRuns(declarations: Map<string, { kind: string; body: string[] }>): { publicOnly: string[]; patching: string[] };
   reproducerCheckpoint(source: string, run: string, failure: unknown): { before: string; through: string };
   validateExecution(value: unknown, options?: Options): Summary;
@@ -56,12 +57,20 @@ const { bindGeneratedTrace } = await import(new URL("../formal/run-models.mjs", 
 };
 // Exercise pure metadata checks directly: large catalogs must not depend on
 // synchronous stdin pipes. The CLI dry-run check below still tests the launcher.
-const validate = (value: unknown, options?: Options) => validateExecution(value, options);
+// The many validations of one manifest share one scan per distinct source
+// text; keyed by the text, so a temporary source is always scanned afresh.
+const scans = new Map<string, Declarations>();
+const scanSource = (source: string): Declarations => {
+  let declarations = scans.get(source);
+  if (declarations === undefined) { declarations = scanDeclarationBodies(source); scans.set(source, declarations); }
+  return declarations;
+};
+const validate = (value: unknown, options?: Options) => validateExecution(value, { scanSource, ...options });
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 32, libraries: 26, profiles: 15, invariants: 221, regressions: 429,
-      generatedTraces: 5280, exportedRegressionTraces: 265, vectorModels: 4, generatedVectors: 1631,
+    expect(validate(manifest())).toEqual({ models: 32, libraries: 26, profiles: 15, invariants: 221, regressions: 430,
+      generatedTraces: 5280, exportedRegressionTraces: 266, vectorModels: 4, generatedVectors: 1631,
       challenges: 73, distinctFaults: 67, challengedModels: 32, waivedModels: 0, reproducers: 20, reproducerBacklog: 53,
       nativeMutants: { mapped: 63, unobservable: 2, modelOnly: 6, backlog: 2 }, unmappedMutants: 7 });
   });
@@ -307,6 +316,7 @@ describe("formal execution schedule", () => {
     expect(() => validate(missing)).toThrow(/reproducer backlog is missing/);
   });
 
+  // Explicit budget: the hosted runner is about six times slower under coverage than a local run.
   it("maps every challenge to a native mutant in the catalog or an enumerated explanation, and freezes the backlog", () => {
     // A small catalog fixture: M01 and M11 require generated detection in both
     // ports, M40 sits on a C40 case and M20 requires generated detection only in
@@ -400,7 +410,7 @@ describe("formal execution schedule", () => {
     const fixture = explained();
     expect(challengesByMutant({ ...fixture, challenges: [{ ...fixture.challenges[0]!, nativeMutants: mapped("M11") }, { ...fixture.challenges[1]!, nativeMutants: mapped("M11") }, { ...fixture.challenges[2]!, nativeMutants: mapped("M01") }, fixture.challenges[3]!] }))
       .toEqual(new Map([["M11", [fixture.challenges[0]!.id, fixture.challenges[1]!.id]], ["M01", [fixture.challenges[2]!.id]]]));
-  });
+  }, 60_000);
 
   it("maps every live challenge outside the frozen native-mutant backlog, and cites only catalog mutants", () => {
     const live = manifest();
@@ -472,6 +482,7 @@ describe("formal execution schedule", () => {
     expect(() => validate(manifest(), { catalog: readMutantCatalog(read(catalogText([entry("M01", { rationale: " " })]))) })).toThrow(/Mutant catalog: M01 has no rationale/);
   });
 
+  // Explicit budget: the hosted runner is about six times slower under coverage than a local run.
   it("validates reproducer kinds, cited models, declared checkpoints, profile partitions and model-only scope", () => {
     const exported = (edit: (reproducer: Reproducer) => void) => {
       const edited = manifest();
@@ -550,7 +561,7 @@ describe("formal execution schedule", () => {
     core.reproducer = { kind: "exported-regression", run: "localReadFailureContinuesToRemoteTest", family: "unhealthy-read-served", profiles: ["formal/dialcache-core.qnt"], exclusions: {},
       failure: "s.origin == RemoteValue and s.localReads == 1 and s.remoteReads == 1 and s.sourceCalls == 0 and s.localWrites == 0" };
     expect(() => validate(verification)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-core\.qnt/);
-  });
+  }, 60_000);
 
   it("keeps vector artifacts separate from profile histories and validates their provenance boundary", () => {
     for (const changed of [

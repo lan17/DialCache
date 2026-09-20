@@ -20,8 +20,12 @@ module dialcache_recovery_connection {
   // never taken from the kernel judgment under test. Two payload tables are
   // shared with the kernel, `Payloads::valueOf` (cache_contract's
   // recoveryReturnAllowed compares decoded values) and the class test
-  // `Payloads::readFails`. One active call and the profile's finite domain
-  // bound this connection; no fairness claim.
+  // `Payloads::readFails`. The monitor assumes every seed is a value below
+  // 100 or a class code plus a positive value, as the profile's seed table
+  // is: a fresh observable frame storing a bare class code decodes to
+  // NO_VALUE and holds no decode where `freshnessUsesReadSettlement` expects
+  // one. One active call and the profile's finite domain bound this
+  // connection; no fairness claim.
   var snapshot: RecoverySnapshot
   // The raw code the read acquired, beside the decoded snapshot: a retained
   // candidate must be that code, not another code with the same value.
@@ -99,14 +103,17 @@ module dialcache_recovery_connection {
   val recoveryReturnMatchesAcquiredContract = not(recoveryDecodeSettling) or
     profile::s.o.recovery.nth(profile::s.o.recovery.length() - 1) != "served" or
     recoveryReturnAllowed(snapshot, before.calls - 1, profile::s.o.calls.nth(before.calls - 1), before.wall)
-  // When a held read settles on a frame it can observe, a decode is held
-  // exactly when the frame's age at the settlement wall clock lies in [0, the
-  // admitted freshness). The arithmetic is restated here rather than taken
-  // from cache_rules, so the clause is independent of the judgment under test.
+  // When a held read settles, a decode is held exactly when the frame is
+  // observable (present, retained, fence-cleared and readable, from the raw
+  // fields) and its age at the settlement wall clock lies in [0, the admitted
+  // freshness). Stated both ways, so a kernel that holds a decode of a frame
+  // the raw fields say is expired or fenced fails it too. The arithmetic is
+  // restated here rather than taken from cache_rules, so the clause is
+  // independent of the judgment under test.
   val freshnessUsesReadSettlement = not(settlingRead) or
-    before.reads.length() == 0 or not(before.valid) or {
+    before.reads.length() == 0 or {
       val age = before.wall - before.created
-      (profile::s.loads.length() > 0) == (age >= 0 and age < before.reads.nth(0).ttls.freshMs)
+      (profile::s.loads.length() > 0) == (before.valid and age >= 0 and age < before.reads.nth(0).ttls.freshMs)
     }
   // A recovery decode's settlement publishes nothing shared: no dump, no
   // write and no local publication, the slot's value, expiry and recency

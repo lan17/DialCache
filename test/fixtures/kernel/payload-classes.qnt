@@ -7,11 +7,14 @@
 // alone and restarts the loader unfenced; a corrupt recovery candidate keeps
 // the loader's error with the deserialization label; a code of a class the
 // module names no rule for is readable but decodes to nothing, so a stale
-// frame storing it is no recovery candidate and the flight misses; an
+// frame storing it is no recovery candidate and the flight misses; a bare
+// class code (Payloads::CORRUPT, value 0) decodes to nothing and is routed
+// as a declined visible frame, the constraint the payloads header states; an
 // unsupported encoding fails the held read like an adapter fault (no
 // snapshot, no refill, no fence, while an untracked loader still warms
-// local), but a fenced or expired one is never seen and misses like an
-// absent frame; the atomic read of an unsupported encoding denies the refill
+// local), so the loader failure that follows is unclassified and reports no
+// recovery label, but a fenced or expired one is never seen and misses like
+// an absent frame; the atomic read of an unsupported encoding denies the refill
 // (`readOk`) and the atomic release serves a compressed frame's decoded
 // value; and the documented
 // limit that the atomic release, having no decode step, serves the value a
@@ -202,6 +205,21 @@ module payload_classes {
     .then(settle(0, SOURCE_ERROR))
     .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 0 and s.o.classifications == 1 and s.o.recovery == List("miss")
       and s.io.sourceErrors == List(1) and s.retained == List() and s.o.writes == 0)
+  // A bare class code carries no value: a fresh frame spelled Payloads::CORRUPT
+  // (value 0) decodes to NO_VALUE, so `observe` routes it as a visible frame
+  // the traversal declined, not as a decode that fails: no decode is held, no
+  // compression outcome is reported, the snapshot's candidate is NO_VALUE and
+  // the loader starts with refill allowed and no fence; its value refills. The
+  // constraint the payloads header states: a compressed or corrupt code
+  // reaches a decode step only with a positive value.
+  run bareCorruptCodeIsADeclinedFrameTest = init
+    .expect(Payloads::valueOf(Payloads::CORRUPT) == NO_VALUE and Payloads::decodeFails(Payloads::CORRUPT))
+    .then(seed(Payloads::CORRUPT, 0)).then(begin(0, ALONE)).then(readReported(0))
+    .expect(s.o.loads == 0 and s.o.loaders == 1 and s.compression == List() and Recovery::retainedFor(s, 0).candidate == NO_VALUE
+      and s.sources.nth(0).retentionMs == TTLS.retentionMs and s.sources.nth(0).fence == NO_FENCE)
+    .then(settle(0, VALUE_TWO))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.writes == 1 and s.remoteValues == List(VALUE_TWO) and s.o.recovery == List()
+      and s.o.classifications == 0 and s.compression == List())
   // A visible frame whose encoding the adapter does not know fails the read
   // like an adapter fault: nothing is held, no snapshot is retained, and the
   // loader starts with refill denied and no fence, where a miss under the
@@ -221,6 +239,14 @@ module payload_classes {
       and s.retained == List())
     .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.writes == 0 and s.localValues == List(VALUE_TWO) and s.localExpires == List(LOCAL_TTLS.localMs))
+  // The failed read retains no snapshot, so the loader failure that follows
+  // is unclassified: the caller completes with the loader's own error, no
+  // recovery label is reported, no decode is held and nothing is written.
+  run encodingFailedReadLeavesNoCandidateForTheLoadersFailureTest = init.then(seed(Payloads::UNSUPPORTED_ENCODING, 0)).then(begin(0, ALONE)).then(read(0))
+    .expect(s.o.loaders == 1 and s.o.loads == 0 and s.retained == List() and s.sources.nth(0).retentionMs == 0)
+    .then(settle(0, SOURCE_ERROR))
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.io.sourceErrors == List(1) and s.o.classifications == 0 and s.o.recovery == List()
+      and s.o.loads == 0 and s.o.writes == 0 and s.retained == List() and s.remoteValues == List(Payloads::UNSUPPORTED_ENCODING))
   // The class is judged only on a frame the adapter returns: a fenced
   // unsupported frame, and an expired one, are ordinary misses, whose reads
   // complete, retain an empty snapshot and refill under the watermark's fence.

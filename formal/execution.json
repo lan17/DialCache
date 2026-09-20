@@ -862,7 +862,8 @@
         "closingAnotherScopeKeepsThisScopesMemoTest",
         "localEntryExpiresAtItsInsertionTtlTest",
         "expiredMarkerIsGoneTest",
-        "unsafeTimestampAtTheWatermarkStillRefillsTest"
+        "unsafeTimestampAtTheWatermarkStillRefillsTest",
+        "encodingFailedReadLeavesNoCandidateTest"
       ],
       "replayRegressions": [
         "freshnessAfterHeldReadTest",
@@ -896,7 +897,8 @@
         "closingAnotherScopeKeepsThisScopesMemoTest",
         "localEntryExpiresAtItsInsertionTtlTest",
         "expiredMarkerIsGoneTest",
-        "unsafeTimestampAtTheWatermarkStillRefillsTest"
+        "unsafeTimestampAtTheWatermarkStillRefillsTest",
+        "encodingFailedReadLeavesNoCandidateTest"
       ],
       "generate": {
         "maxSamples": 1024,

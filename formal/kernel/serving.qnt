@@ -499,13 +499,16 @@ module serving {
 
   // Maintenance: invalidating an entity raises its watermark. The outcome is
   // one rule of the write-fault switch, as the drivers classify it
-  // (`test/formal/behavior-driver.ts:373-381`, `go/behavior_driver_test.go:832-841`):
-  // without remote storage the request reports the missing layer and changes
-  // nothing, the adapter is never called (`src/dialcache.ts:573-577`,
-  // `go/cache.go:190-192`); under a write fault the invalidation is counted
-  // and reports the mutation error, and the watermark does not move, as the
-  // adapter counts it before its write fails (`test/formal/behavior-driver.ts:209-213`,
-  // `go/behavior_driver_test.go:1107-1111`); otherwise it is counted, reports
+  // (the `invalidate` command of `test/formal/behavior-driver.ts` `apply` and
+  // of `go/behavior_driver_test.go` `behaviorDriver.apply`): without remote
+  // storage the request reports the missing layer and changes nothing, the
+  // adapter is never called (`src/dialcache.ts` `invalidateRemote`,
+  // `go/cache.go` `Invalidate` returning `ErrNoRemote`); under a write fault
+  // the invalidation is counted and reports the mutation error, and the
+  // watermark does not move, as the adapter counts it before its write fails
+  // (the driver adapter's `invalidate` override in
+  // `test/formal/behavior-driver.ts`, `go/behavior_driver_test.go`
+  // `behaviorRemote.Invalidate`); otherwise it is counted, reports
   // ok and raises the watermark. `maintains` is whether an invalidation takes
   // effect: the judgment the effective arm branches on, and the one a marker
   // lifetime (a profile that composes one stamps its marker only then) reads
