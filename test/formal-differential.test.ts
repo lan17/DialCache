@@ -174,6 +174,8 @@ describe("corpus differential comparison", () => {
     expect(differential.closureSkip(model(), model(), sources, { ...sources })).toBe("identical import closure and generation settings");
     expect(differential.closureSkip(model(), model(), sources, { ...sources, "formal/kernel/serving.qnt": "cc" })).toBeNull();
     expect(differential.closureSkip(model(), model({ invariants: ["a", "b"] }), sources, { ...sources })).toBeNull();
+    expect(differential.closureSkip(model({ replayRegressions: ["bTest", "aTest"] }), model({ replayRegressions: ["aTest", "bTest"] }), sources, { ...sources })).toBe("identical import closure and generation settings");
+    expect(differential.closureSkip(model({ replayRegressions: ["aTest"] }), model({ replayRegressions: ["aTest", "bTest"] }), sources, { ...sources })).toBeNull();
     expect(differential.closureSkip(model(), model({ generate: { outputDirectory: "x", traces: 4 } }), sources, { ...sources })).toBeNull();
     expect(differential.closureSkip(model(), model({ settings: { backend: "rust", seed: "0x1" } }), sources, { ...sources })).toBeNull();
   });

@@ -350,7 +350,8 @@ export function selectProfiles(prepared) {
 // A generation whose inputs are byte-identical in both revisions is the same
 // deterministic computation under the pinned Quint and seed: nothing to compare.
 export function closureSkip(referenceModel, candidateModel, referenceSources, candidateSources) {
-  const generationInputs = model => ({ settings: model.settings, generate: model.generate, invariants: model.invariants, replayRegressions: model.replayRegressions ?? [] });
+  // The exported list is compared as a set: a reference revision may record it in hand order while the candidate derives declaration order.
+  const generationInputs = model => ({ settings: model.settings, generate: model.generate, invariants: model.invariants, replayRegressions: [...(model.replayRegressions ?? [])].sort() });
   return isDeepStrictEqual(referenceSources, candidateSources) && isDeepStrictEqual(generationInputs(referenceModel), generationInputs(candidateModel))
     ? 'identical import closure and generation settings' : null;
 }
