@@ -35,7 +35,7 @@ module shadow {
   // else a confirmation read (counted, under the adapter's read fault: a
   // failed one ends `confirmation_error`) of the frame as it is now says
   // whether the C0 bytes are still current (`mismatch`) or were replaced
-  // meanwhile (`superseded`). A served
+  // meanwhile (`superseded`, `confirmation`, the one verdict for both paths). A served
   // job always has a C0, so it never fills (C54). Every job has the budget
   // its admission resolved, kept by `deadlines` (kind `JOB`): at expiry the job
   // is timed out and says so once; a dark job still waiting for its source
@@ -46,6 +46,36 @@ module shadow {
   // after it still stores (C53). No later label follows a timeout. A fill
   // whose dump or write fails (the `failed` argument of the two releases,
   // as `remote_writes` takes it) ends `fill_error`, nothing written.
+  //
+  // The shadow policy of a call is the cohort selection its reply resolved
+  // (per call, C18: `shadow.ramp` is key configuration the policy reply
+  // overlays) and the instance's limits (`Limits`: the per-instance capacity,
+  // `shadowMaxInFlight`, and the job budget, the instance's fallback timeout;
+  // the drivers set both at construction). Two shapes compose the one
+  // registry. The atomic shape (`Shadowed`, over `remote_writes::Writing`)
+  // judges the hit and the policy in the same step, at release: `admitJobs`
+  // reads the whole `Shadowing`. The held shape (`HeldShadowed`, over
+  // `remote_io::Held`) dispatches the caller's read before the frame is
+  // judged, so the selection is captured for the flight when the read is
+  // dispatched (`selected`, a pending-only list of flights, the kernel's
+  // consulted-record idiom as `recovery`'s snapshot) and consulted when the
+  // hit is judged: at the decode's settlement for a frame held for decoding,
+  // where a served hit admits the job under the instance's limits read then
+  // (`settleLoad`), or at the read's settlement otherwise, where no hit can
+  // follow and nothing is admitted (`settleRead`). The job's decode and its
+  // confirmation read are held over the job's own source as `remote_io`
+  // holds a caller's, in the same lists under the drivers' effect indices
+  // (a held effect over a source with a job decoding or confirming belongs
+  // to that job; a caller's flight never has one then): the source settled
+  // holds the decode (`settleLoader`), the decode settled says `match` or
+  // holds the confirmation read (`deserialization_error` when the decode
+  // fails, the drivers' fault or a payload whose bytes fail to decode), the
+  // read settled says the verdict. A timed-out job ends silently at
+  // whichever of the three steps finds it so, keeping its slot until then
+  // (C54: a served job's capacity is owned through its pending source, decode
+  // and confirmation). The held lifecycle states served jobs: a dark job's
+  // held fill (its dumps and writes over `remote_writes`) is not stated here,
+  // since no scheduled profile holds one.
   //
   // Cohort selection is the drivers' ramp decoded by the profile through
   // `cohort_boundaries` (strict against the key's numerator); the module reads
@@ -60,6 +90,7 @@ module shadow {
   import serving as Serving from "./serving"
   import remote_frames as Remote from "./remote-frames"
   import remote_writes as Writes from "./remote-writes"
+  import remote_io as RemoteIO from "./remote-io"
   import deadlines as Deadlines from "./deadlines"
   import payloads as Payloads from "./payloads"
 
@@ -67,10 +98,15 @@ module shadow {
   pure val SERIALIZING = 1
   pure val WRITING = 2
   pure val FINISHED = 3
+  // The held phases: the job's decode held, its confirmation read held.
+  pure val DECODING = 4
+  pure val CONFIRMING = 5
 
+  // The instance's shadow limits: the per-instance capacity and the job budget.
+  type Limits = { capacity: int, budgetMs: int }
   // The shadow policy in force for a call: whether the key's cohort is
-  // selected, the per-instance capacity and the job budget.
-  type Shadowing = { selected: bool, capacity: int, budgetMs: int }
+  // selected, with the instance's limits.
+  type Shadowing = { selected: bool, limits: Limits }
   // A job: the source whose result it compares or fills with (the caller's
   // own source for a dark job, a detached one for a served job), whether it is
   // dark, the payload its C0 found fresh (NO_VALUE when none), the fill
@@ -79,43 +115,57 @@ module shadow {
   // served job never fills and takes none), its phase and whether its budget
   // expired.
   type Job = { source: int, dark: bool, cached: int, retentionMs: int, fence: int, phase: int, timedOut: bool }
+  // The registry beside the clock and its pending budgets, over the sources
+  // the jobs run for: what both shapes compose.
+  type Jobs[r] = Deadlines::Scheduled[{ o: Observation, jobs: List[Job], sources: List[Serving::LayeredSource] | r }]
   type Shadowed[r] = Writes::Writing[{ jobs: List[Job], deadlines: List[Deadlines::Due] | r }]
+  type HeldShadowed[r] = RemoteIO::Held[{ jobs: List[Job], deadlines: List[Deadlines::Due], selected: List[int] | r }]
 
-  pure def sourceOf(state: Shadowed[r], job: Job): Serving::LayeredSource = state.sources.nth(job.source)
+  pure def sourceOf(state: Jobs[r], job: Job): Serving::LayeredSource = state.sources.nth(job.source)
   pure def live(job: Job): bool = job.phase != FINISHED
-  pure def liveJobs(state: Shadowed[r]): Set[int] = state.jobs.indices().filter(i => live(state.jobs.nth(i)))
+  pure def liveJobs(state: Jobs[r]): Set[int] = state.jobs.indices().filter(i => live(state.jobs.nth(i)))
   // A live job already runs for the identity, or the instance's registry is full.
-  pure def duplicate(state: Shadowed[r], instance: int, key: int): bool =
+  pure def duplicate(state: Jobs[r], instance: int, key: int): bool =
     liveJobs(state).exists(i => sourceOf(state, state.jobs.nth(i)).instance == instance and sourceOf(state, state.jobs.nth(i)).key == key)
-  pure def full(state: Shadowed[r], instance: int, capacity: int): bool =
+  pure def full(state: Jobs[r], instance: int, capacity: int): bool =
     liveJobs(state).filter(i => sourceOf(state, state.jobs.nth(i)).instance == instance).size() >= capacity
+  pure def busy(state: Jobs[r], instance: int, key: int, capacity: int): bool =
+    duplicate(state, instance, key) or full(state, instance, capacity)
   // The jobs over a source in a phase (at most one: a source has one job).
-  pure def jobsOf(state: Shadowed[r], source: int, phase: int): Set[int] =
+  pure def jobsOf(state: Jobs[r], source: int, phase: int): Set[int] =
     state.jobs.indices().filter(i => state.jobs.nth(i).source == source and state.jobs.nth(i).phase == phase)
 
   // -- Admission -----------------------------------------------------------------------
 
-  pure def dropped(state: Shadowed[r]): Shadowed[r] =
+  pure def dropped(state: Jobs[r]): Jobs[r] =
     { o: { shadow: state.o.shadow.append("dropped"), ...state.o }, ...state }
   // A job registered over a source, waiting for it, its budget due from now.
-  pure def admit(state: Shadowed[r], source: int, dark: bool, cached: int, retentionMs: int, fence: int, budgetMs: int): Shadowed[r] =
+  pure def admit(state: Jobs[r], source: int, dark: bool, cached: int, retentionMs: int, fence: int, budgetMs: int): Jobs[r] =
     Deadlines::due({
       jobs: state.jobs.append({ source: source, dark: dark, cached: cached, retentionMs: retentionMs, fence: fence, phase: WAITING_SOURCE, timedOut: false }),
       ...state
     }, Deadlines::JOB, state.jobs.length(), budgetMs)
+  // A served hit's job, judged once for both shapes: nothing unless the
+  // reply selected the cohort; `dropped` for a live job of the same identity
+  // or a full instance (C47); else a served job over a detached source with
+  // the payload the hit served as its C0, capturing the retention the reply
+  // resolved to and no fence.
+  pure def admitServed(state: Serving::Served[{ jobs: List[Job], deadlines: List[Deadlines::Due] | r }], layout: Serving::Layout,
+      who: { instance: int, key: int | q }, cached: int, ttls: Ttls, selected: bool, limits: Limits): Serving::Served[{ jobs: List[Job], deadlines: List[Deadlines::Due] | r }] =
+    if (not(selected)) state
+    else if (busy(state, who.instance, who.key, limits.capacity)) dropped(state)
+    else admit(Serving::startDetachedSource(state, layout, who), state.sources.length(), false, cached,
+      Serving::authority(state, who, ttls, true, true, NO_FENCE).retentionMs, NO_FENCE, limits.budgetMs)
   // Admission beside the release judged once, on the released state.
   pure def admitJobs(state: Shadowed[r], layout: Serving::Layout, judged: Serving::LayeredRelease, ttls: Ttls, shadowing: Shadowing): Shadowed[r] = {
     val call = judged.call
-    val busy = duplicate(state, call.instance, call.key) or full(state, call.instance, shadowing.capacity)
     if (not(shadowing.selected)) state
     else match judged.decision.outcome {
-      | ServesRemote(_) => if (busy) dropped(state)
-        else admit(Serving::startDetachedSource(state, layout, call), state.sources.length(), false, judged.remote.payload,
-          Serving::authority(state, call, ttls, true, true, NO_FENCE).retentionMs, NO_FENCE, shadowing.budgetMs)
+      | ServesRemote(_) => admitServed(state, layout, call, judged.remote.payload, ttls, shadowing.selected, shadowing.limits)
       // A bypass reply (the caller's scope closed before its release) admits
       // nothing: that caller bypasses every layer (C01), shadow work included.
       | Starts => if (not(judged.open) or judged.effective.layers.remote) state
-        else if (busy) dropped(state)
+        else if (busy(state, call.instance, call.key, shadowing.limits.capacity)) dropped(state)
         else {
           // The dark C0 read: the frame as the reply's freshness judges it now,
           // under the adapter's read fault; the job reads the remote layer on
@@ -126,7 +176,7 @@ module shadow {
           val c0 = Remote::observe(state, call.key, layout.operationsPerEntity, ttls.freshMs, state.readFailed)
           val fill = Serving::authority(state, call, ttls, true, not(c0.failed), Remote::fenceFor(state, call.key, layout.operationsPerEntity, c0.visible))
           val admitted = admit({ o: { reads: state.o.reads + 1, ...state.o }, ...state }, state.sources.length() - 1, true,
-            if (c0.value > NO_VALUE) c0.payload else NO_VALUE, fill.retentionMs, fill.fence, shadowing.budgetMs)
+            if (c0.value > NO_VALUE) c0.payload else NO_VALUE, fill.retentionMs, fill.fence, shadowing.limits.budgetMs)
           if (c0.failed) finishJob(admitted, state.jobs.length(), "redis_error") else admitted
         }
       | _ => state
@@ -146,7 +196,7 @@ module shadow {
 
   // A job ends with its outcome, its deadline forgotten; a timed-out job said
   // so already and adds nothing.
-  pure def finishJob(state: Shadowed[r], index: int, outcome: str): Shadowed[r] = {
+  pure def finishJob(state: Jobs[r], index: int, outcome: str): Jobs[r] = {
     val job = state.jobs.nth(index)
     Deadlines::forget({
       jobs: state.jobs.replaceAt(index, { phase: FINISHED, ...job }),
@@ -154,8 +204,12 @@ module shadow {
       ...state
     }, Deadlines::JOB, index)
   }
-  pure def inPhase(state: Shadowed[r], index: int, phase: int): Shadowed[r] =
+  pure def inPhase(state: Jobs[r], index: int, phase: int): Jobs[r] =
     { jobs: state.jobs.replaceAt(index, { phase: phase, ...state.jobs.nth(index) }), ...state }
+  // The confirmation read's verdict on a C0 the source disagreed with: the
+  // read failed, the C0 bytes are still current, or they were replaced.
+  pure def confirmation(confirmed: Remote::Observed, cached: int): str =
+    if (confirmed.failed) "confirmation_error" else if (confirmed.payload == cached) "mismatch" else "superseded"
   // The job's source has settled. A fill is fenced before it serializes, as
   // the implementations check the fence before encoding: a fence the wall
   // does not clear ends the job with no dump counted. The confirmation read is
@@ -174,8 +228,7 @@ module shadow {
       if (Payloads::valueOf(job.cached) == source.result) finishJob(decoded, index, "match")
       else {
         val confirmed = Remote::observe(decoded, source.key, layout.operationsPerEntity, 0, state.readFailed)
-        finishJob({ o: { reads: decoded.o.reads + 1, ...decoded.o }, ...decoded }, index,
-          if (confirmed.failed) "confirmation_error" else if (confirmed.payload == job.cached) "mismatch" else "superseded")
+        finishJob({ o: { reads: decoded.o.reads + 1, ...decoded.o }, ...decoded }, index, confirmation(confirmed, job.cached))
       }
     }
   }
@@ -216,7 +269,7 @@ module shadow {
   // -- Budgets ------------------------------------------------------------------------------
 
   // A job's budget delivered.
-  pure def expireJob(state: Shadowed[r], due: Deadlines::Due): Shadowed[r] = {
+  pure def expireJob(state: Jobs[r], due: Deadlines::Due): Jobs[r] = {
     val job = state.jobs.nth(due.index)
     {
       jobs: state.jobs.replaceAt(due.index, {
@@ -229,5 +282,82 @@ module shadow {
     }
   }
   // Time passes, delivering each job budget at its instant.
-  pure def advance(state: Shadowed[r], ms: int): Shadowed[r] = Deadlines::deliver(state, ms, expireJob)
+  pure def advance(state: Jobs[r], ms: int): Jobs[r] = Deadlines::deliver(state, ms, expireJob)
+
+  // -- The held lifecycle of served jobs -------------------------------------------------
+
+  // The selection captured for the flight whose read the step dispatched.
+  pure def capture(before: HeldShadowed[r], after: HeldShadowed[r], selected: bool): HeldShadowed[r] =
+    if (selected and after.o.reads > before.o.reads) { selected: after.selected.append(after.sources.length() - 1), ...after } else after
+  pure def isSelected(state: HeldShadowed[r], flight: int): bool = state.selected.select(other => other == flight).length() > 0
+  // The selection consulted: the hit judged, the record is forgotten.
+  pure def forgetSelection(state: HeldShadowed[r], flight: int): HeldShadowed[r] =
+    { selected: state.selected.select(other => other != flight), ...state }
+  // An immediate policy reply: admission and the held release in one step
+  // (`remote_io::begin`), the selection captured when a read is dispatched.
+  pure def beginHeld(state: HeldShadowed[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int, selected: bool): HeldShadowed[r] =
+    capture(state, RemoteIO::begin(state, layout, call, resolved, ttls, budget), selected)
+  // A held policy reply released: the held release (`remote_io::release`),
+  // the selection captured the same way.
+  pure def releaseHeld(state: HeldShadowed[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls, budget: int, selected: bool): HeldShadowed[r] =
+    capture(state, RemoteIO::release(state, layout, policyCall, resolved, ttls, budget), selected)
+
+  // A held read settles: a job's confirmation read says its verdict; a
+  // caller's read settles as `remote_io` has it, and one that holds no decode
+  // (a miss, a failed read, a read whose deadline was delivered) can serve no
+  // hit, so its flight's selection is forgotten.
+  pure def settleRead(state: HeldShadowed[r], layout: Serving::Layout, read: int, failed: bool, classifier: int): HeldShadowed[r] = {
+    val held = RemoteIO::heldRead(state, read)
+    val confirming = jobsOf(state, held.flight, CONFIRMING)
+    if (confirming.size() > 0) confirming.fold(state, (out, index) => {
+      val confirmed = Remote::observe(out, sourceOf(out, out.jobs.nth(index)).key, layout.operationsPerEntity, 0, failed)
+      finishJob({ reads: out.reads.select(other => other.read != read), ...out }, index, confirmation(confirmed, out.jobs.nth(index).cached))
+    })
+    else {
+      val settled = RemoteIO::settleRead(state, layout, read, failed, classifier)
+      if (settled.o.loads > state.o.loads) settled else forgetSelection(settled, held.flight)
+    }
+  }
+  // A held decode settles: a job's decode ends `deserialization_error` when it
+  // fails (the drivers' fault or a payload whose bytes fail to decode), says
+  // `match` when the C0 decodes to the source's value, else holds the
+  // confirmation read (counted, budgeted on the io channel like every held
+  // read) and waits; a timed-out job ends silently. A caller's decode settles
+  // as `remote_io` has it; the selection captured for its flight is
+  // consulted and forgotten: a fresh frame decoded completes the flight with
+  // a served hit, which admits the job under the instance's limits
+  // (`admitServed`, its detached source mapped to the drivers' next loader
+  // ordinal, `remote_io::mapLoader`); a failed decode restarts the loader and
+  // a recovery decode recovers, neither a served hit.
+  pure def settleLoad(state: HeldShadowed[r], layout: Serving::Layout, load: int, failed: bool, budget: int, limits: Limits): HeldShadowed[r] = {
+    val held = RemoteIO::heldLoad(state, load)
+    val decoding = jobsOf(state, held.flight, DECODING)
+    if (decoding.size() > 0) decoding.fold({ loads: state.loads.select(other => other.load != load), ...state }, (out, index) => {
+      val job = out.jobs.nth(index)
+      if (job.timedOut) finishJob(out, index, "timeout")
+      else if (failed or Payloads::decodeFails(job.cached)) finishJob(out, index, "deserialization_error")
+      else if (Payloads::valueOf(job.cached) == sourceOf(out, job).result) finishJob(out, index, "match")
+      else inPhase(RemoteIO::holdRead(out, job.source, NO_TTLS, budget), index, CONFIRMING)
+    })
+    else {
+      val settled = forgetSelection(RemoteIO::settleLoad(state, layout, load, failed), held.flight)
+      val served = not(held.recovery) and not(failed) and not(Payloads::decodeFails(held.value))
+      if (not(served)) settled
+      else RemoteIO::mapLoader(settled, admitServed(settled, layout, state.sources.nth(held.flight), held.value, held.ttls, isSelected(state, held.flight), limits))
+    }
+  }
+  // A loader settles by the drivers' ordinal (`remote_io::settleLoader`),
+  // then the job waiting on its source: a timed-out job ends silently, a
+  // failed source ends it `source_error`, else the job's decode of its C0 is
+  // held (counted) over the job's source.
+  pure def settleLoader(state: HeldShadowed[r], layout: Serving::Layout, ordinal: int, value: int, timeout: bool): HeldShadowed[r] = {
+    val flight = state.loaders.nth(ordinal)
+    val settled = RemoteIO::settleLoader(state, layout, ordinal, value, timeout)
+    jobsOf(settled, flight, WAITING_SOURCE).fold(settled, (out, index) => {
+      val job = out.jobs.nth(index)
+      if (job.timedOut) finishJob(out, index, "timeout")
+      else if (not(accepted(sourceOf(out, job).result))) finishJob(out, index, "source_error")
+      else inPhase(RemoteIO::holdLoad(out, job.source, NO_TTLS, job.cached, false), index, DECODING)
+    })
+  }
 }
