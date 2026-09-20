@@ -1,8 +1,11 @@
 {
   "schemaVersion": 1,
   "quintVersion": "0.32.0",
+  "settings": {
+    "backend": "rust",
+    "seed": "0xd1a1ca"
+  },
   "inputs": {
-    "formal/cache-contract.qnt": "a6cba8e60f15d8b14dd5ec22b5c8173c0f6927f5f0c6f621bb48f0ea697a451b",
     "formal/cache-rules.qnt": "c439080cebd85942a9b7516076d295f18a53bf06be0e66287a35e37ded72ef17",
     "formal/cohort-boundaries.qnt": "700f0b9ee734f2511b3c7f10138b9636cef93bc1045b653479a05be1766e3407",
     "formal/compact-json.mjs": "fe180d42ea438f915a011accf79728701fd51222877d39adbda8ea3ebf3f4bfb",
@@ -22,10 +25,8 @@
     "formal/dialcache-shadow-conformance.qnt": "d0d95566594189a89401fe498f7b341c2864c3d62ea240e09aa427a7d8340425",
     "formal/dialcache-shadow-layers-conformance.qnt": "dec6d347cc1530900e6cbe6e8f916290d7747fe2ed6a0ff6314128fbe75b3741",
     "formal/dialcache-source-budgets-conformance.qnt": "9444541c7f5817b3a98342126a927102e56209cfb2b41671aa80195860fd6e53",
-    "formal/execution.json": "118fdee73334c43df9173c76ccb9905e712d73efa4ec3dc726ba7a94b39698f8",
-    "formal/execution.mjs": "7b1b50244552eace7da1c3ee3df7c6642fe544b6d200023382a79eccc174ec4a",
     "formal/fixture-recipes.json": "b570c5b47e1a55528e933c655a412393d0fee4af0ce88e9555dca70b2cb80748",
-    "formal/generated-fixtures.mjs": "ae9627239d1a8409f315ad1c0d2b6cc3ef96f321cee1998f59afd03a7bafb0fb",
+    "formal/generated-fixtures.mjs": "388a96bd424aae686601519dfe93afa1e5ce0ca7b143bd2ea3e0ebc1069b11e8",
     "formal/kernel/calls.qnt": "856c2d7249ea053aaf3a18bb5d235350b5d35e1100f4b4421efa20aceba9767f",
     "formal/kernel/clock.qnt": "e46ce9026e6e5ab1b358b0287e8ba5b5904a064e78355c0abbd1554562bb47a4",
     "formal/kernel/compression.qnt": "d31ae67c1f33c3f32d9fb5db65a9db48c65ea9119184ec88fe8a35680506158b",
@@ -48,9 +49,7 @@
     "formal/kernel/request-memo.qnt": "e7897bfe9949a4d31b8138b35c32a7df0939e81e1f9c13739340a794a3d5073f",
     "formal/kernel/runtime-policy.qnt": "41ebb180f8b8b561d0db43b237abbee04e69613521436f6c624241cfece536ae",
     "formal/kernel/serving.qnt": "abf6ca782cecacff17e1ba9a07ec51b8b9cc551bd9469801514db9dc9e1af2d1",
-    "formal/kernel/shadow.qnt": "00b8e713faedcae0a21f53159332cf15136e36ac2ef6774f5bb1edfeabf65929",
-    "formal/profiles.json": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d",
-    "formal/wire-text.qnt": "c78f8c674f4e1470b0d2b605b209d82e3aab0e35fb4e0efae813247bf093eb27"
+    "formal/kernel/shadow.qnt": "00b8e713faedcae0a21f53159332cf15136e36ac2ef6774f5bb1edfeabf65929"
   },
   "artifacts": {
     "formal/conformance-smoke.itf.json": "be38ab847b7a5d4c15914bd6bd2fd2fd72cb2fc9af7edb15ba209c53f2ccfa37",

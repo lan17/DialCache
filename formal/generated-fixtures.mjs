@@ -5,7 +5,7 @@ import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { encodeJson } from './compact-json.mjs';
-import { copySources, readExecution, root, validateExecution } from './execution.mjs';
+import { copySources, importClosure, readExecution, root, validateExecution } from './execution.mjs';
 import { resolveConcurrency, runPool, spawnBuffered } from './quint-pool.mjs';
 
 const recipePath = 'formal/fixture-recipes.json';
@@ -231,14 +231,21 @@ async function exportModel(model, requests, directory, settings) {
   }
 }
 
+// What the fixture bytes depend on: the recipes, this generator with its
+// encoder, and every Quint source a recipe model reaches through its imports.
+// The Quint settings the export runs with are recorded beside them. The
+// manifest, the profile registry and libraries no recipe model imports are
+// not inputs: editing them cannot change a fixture, so they do not invalidate one.
 function inputs(book) {
-  const execution = readExecution();
-  return Object.fromEntries([...new Set([recipePath, generator, encoder, 'formal/execution.mjs', 'formal/execution.json', 'formal/profiles.json',
-    ...execution.libraries, ...book.artifacts.flatMap(a => a.recipes.map(r => r.model ?? a.model))])].sort().map(path => [path, hash(read(path))]));
+  const models = new Set(book.artifacts.flatMap(a => a.recipes.map(r => r.model ?? a.model)));
+  return Object.fromEntries([...new Set([recipePath, generator, encoder, ...[...models].flatMap(model => importClosure(model))])].sort()
+    .map(path => [path, hash(read(path))]));
 }
-export function verifyFixtures(book = validateRecipes(json(recipePath))) {
+const exportSettings = execution => ({ backend: execution.settings.backend, seed: execution.settings.seed });
+export function verifyFixtures(book = validateRecipes(json(recipePath)), execution = readExecution()) {
   const lock = json(lockPath);
-  if (lock.schemaVersion !== 1 || lock.quintVersion !== '0.32.0' || !isDeepStrictEqual(lock.inputs, inputs(book))) fail('Generated fixture inputs changed; regenerate and review');
+  if (lock.schemaVersion !== 1 || lock.quintVersion !== '0.32.0' || !isDeepStrictEqual(lock.settings, exportSettings(execution)) ||
+      !isDeepStrictEqual(lock.inputs, inputs(book))) fail('Generated fixture inputs changed; regenerate and review');
   const expected = Object.fromEntries(book.artifacts.map(a => [a.path, hash(read(a.path))]));
   if (!isDeepStrictEqual(lock.artifacts, expected)) fail('Generated fixture content changed; regenerate and review');
   return { artifacts: book.artifacts.length, histories: book.artifacts.reduce((n, a) => n + a.recipes.length, 0) };
@@ -246,7 +253,7 @@ export function verifyFixtures(book = validateRecipes(json(recipePath))) {
 export async function generateFixtures(mode, { concurrency = resolveConcurrency() } = {}) {
   const execution = readExecution(); validateExecution(execution);
   const book = validateRecipes(json(recipePath), execution);
-  if (mode === '--verify') return verifyFixtures(book);
+  if (mode === '--verify') return verifyFixtures(book, execution);
   if (!['--check', '--write'].includes(mode)) fail('Use --write, --check or --verify');
   const version = spawnSync('quint', ['--version'], { encoding: 'utf8' });
   if (version.status !== 0 || version.stdout.trim() !== '0.32.0') fail('Fixture export requires Quint 0.32.0');
@@ -282,13 +289,14 @@ export async function generateFixtures(mode, { concurrency = resolveConcurrency(
       ? Object.fromEntries(artifact.recipes.map((r, i) => [r.id, entries[i]])) : entries;
     outputs.set(artifact.path, encode(output));
   }
-  const lock = { schemaVersion: 1, quintVersion: '0.32.0', inputs: inputs(book), artifacts: Object.fromEntries([...outputs].map(([path, text]) => [path, hash(text)])) };
+  const lock = { schemaVersion: 1, quintVersion: '0.32.0', settings: exportSettings(execution), inputs: inputs(book),
+    artifacts: Object.fromEntries([...outputs].map(([path, text]) => [path, hash(text)])) };
   outputs.set(lockPath, encode(lock));
   for (const [path, output] of outputs) {
     if (mode === '--write') writeFileSync(resolve(root, path), output);
     else if (read(path) !== output) fail(`${path}: fresh Quint output differs; run --write and review`);
   }
-  return verifyFixtures(book);
+  return verifyFixtures(book, execution);
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv.length !== 3) fail('Usage: node formal/generated-fixtures.mjs --write|--check|--verify');

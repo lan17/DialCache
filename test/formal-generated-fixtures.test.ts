@@ -5,7 +5,7 @@ const { validateRecipes, verifyFixtures, project, stateDelta, constrainAction } 
   new URL("../formal/generated-fixtures.mjs", import.meta.url).href,
 ) as {
   validateRecipes(book: unknown): unknown;
-  verifyFixtures(): { artifacts: number; histories: number };
+  verifyFixtures(book?: unknown, execution?: unknown): { artifacts: number; histories: number };
   project(value: unknown, mask: unknown): unknown;
   stateDelta(before: unknown, after: unknown): unknown;
   constrainAction(source: string, declaration: unknown, sourceMap: unknown, choice: number): string;
@@ -13,12 +13,30 @@ const { validateRecipes, verifyFixtures, project, stateDelta, constrainAction } 
 const { encodeJson } = await import(new URL("../formal/compact-json.mjs", import.meta.url).href) as {
   encodeJson(value: unknown, record?: (path: Array<string | number>, node: unknown) => boolean): string;
 };
-type Book = { artifacts: Array<{ path: string; format: string; recipes: unknown[] }> };
+const { importClosure, readExecution } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
+  importClosure(path: string): string[];
+  readExecution(): { settings: { backend: string; seed: string } };
+};
+type Book = { artifacts: Array<{ path: string; format: string; model?: string; recipes: Array<{ model?: string }> }> };
+type Lock = { settings: { backend: string; seed: string }; inputs: Record<string, string>; artifacts: Record<string, string> };
 const book = () => JSON.parse(readFileSync("formal/fixture-recipes.json", "utf8"));
+const lock = (): Lock => JSON.parse(readFileSync("formal/generated-fixtures.lock.json", "utf8")) as Lock;
 
 describe("reproducible Quint fixtures", () => {
   it("binds every committed fixture to its recipes, models and exporter without requiring Quint", () => {
     expect(verifyFixtures()).toEqual({ artifacts: 31, histories: 157 });
+  });
+  it("pins only what the generated fixtures read: recipes, generator, encoder, the recipe models' import closures and the export settings", () => {
+    const recipes = book() as Book;
+    const models = [...new Set(recipes.artifacts.flatMap(artifact => artifact.recipes.map(recipe => recipe.model ?? artifact.model!)))];
+    const expected = [...new Set(["formal/fixture-recipes.json", "formal/generated-fixtures.mjs", "formal/compact-json.mjs", ...models.flatMap(model => importClosure(model))])].sort();
+    expect(Object.keys(lock().inputs)).toEqual(expected);
+    for (const path of ["formal/execution.json", "formal/profiles.json", "formal/execution.mjs"]) expect(lock().inputs, path).not.toHaveProperty(path);
+    const { settings } = readExecution();
+    expect(lock().settings).toEqual({ backend: settings.backend, seed: settings.seed });
+    // A seed or backend change would change every exported history: the lock must notice without a Quint run.
+    expect(() => verifyFixtures(undefined, { settings: { ...settings, seed: "0x1" } })).toThrow(/inputs changed/);
+    expect(() => verifyFixtures(undefined, { settings: { ...settings, backend: "typescript" } })).toThrow(/inputs changed/);
   });
   it("writes the envelope indented and every record on one line, and matches JSON.stringify without records", () => {
     const value = { a: 1, b: [1, { c: [] }, {}], d: { e: "x", f: null }, g: [] };
