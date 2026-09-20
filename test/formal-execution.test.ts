@@ -233,13 +233,11 @@ describe("formal execution schedule", () => {
       const runs = classifyRuns(scanDeclarationBodies(readFileSync(root + model.path, "utf8")));
       expect(model.replayRegressions, model.path).toEqual(runs.publicOnly);
     }
-    // Every profile exports at least one history, and the classifier separates: effects and shadow keep
+    // Every profile exports at least one history, and the classifier separates: effects keeps its
     // state-patching fixtures out of replay.
     for (const model of current.models.filter(model => model.profile)) expect(model.replayRegressions!.length, model.path).toBeGreaterThan(0);
-    for (const profile of ["effects", "shadow"]) {
-      const model = current.models.find(model => model.profile === profile)!;
-      expect(model.regressions.length, profile).toBeGreaterThan(model.replayRegressions!.length);
-    }
+    const effectsModel = current.models.find(model => model.profile === "effects")!;
+    expect(effectsModel.regressions.length).toBeGreaterThan(effectsModel.replayRegressions!.length);
   });
 
   it("exports every public-only run and no state-patching run, by construction of the schedule", () => {
@@ -250,9 +248,6 @@ describe("formal execution schedule", () => {
       expect(runs.publicOnly.filter(name => !model.replayRegressions!.includes(name)), model.path).toEqual([]);
       expect(model.replayRegressions!.every(name => model.regressions.includes(name)), model.path).toBe(true);
     }
-    // The shadow profile keeps its state-patching fixtures as model-only regressions.
-    const shadow = current.models.find(model => model.profile === "shadow")!;
-    expect(shadow.regressions.length).toBeGreaterThan(shadow.replayRegressions!.length);
     // A reproducer may cite a state-patching run only as a model-run, never as an exported regression.
     const patching = manifest();
     const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
@@ -337,10 +332,10 @@ describe("formal execution schedule", () => {
     const current = manifest();
     const withReproducer = current.challenges.filter(challenge => challenge.reproducer);
     expect(withReproducer.map(challenge => challenge.id)).toEqual([
-      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "recovery-strands-followers", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "scope-nested-close-evicts-outer-memo", "admission-duplicate-key-admitted", "admission-capacity-off-by-one", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "local-failure-write-fault-publishes", "local-failure-source-error-published", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "local-clock-hit-renews-insertion", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry",
+      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "recovery-strands-followers", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "shadow-fenced-fill-writes", "shadow-fill-before-source", "scope-nested-close-evicts-outer-memo", "admission-duplicate-key-admitted", "admission-capacity-off-by-one", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "local-failure-write-fault-publishes", "local-failure-source-error-published", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "local-clock-hit-renews-insertion", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry",
     ]);
     expect(withReproducer.map(challenge => challenge.reproducer!.kind)).toEqual([
-      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
+      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
     ]);
     // The shared-rule fault of a verification model is pinned by a profile's exported regression.
     expect(withReproducer.find(challenge => challenge.id === "stale-recovery-future-candidate")!.reproducer).toMatchObject({
@@ -575,16 +570,12 @@ describe("formal execution schedule", () => {
     // A shared-library fault partitions every profile between the listed and the excluded.
     expect(() => validate(exported(r => { r.profiles = ["source-budgets", "effects"]; r.exclusions = { independent: "Its sources settle only through explicit deadlines." }; })))
       .toThrow(/a shared-library fault must list or exclude every profile; missing core/);
-    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects", "shadow-layers", "recovery", "admission"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(liveReproducers());
+    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects", "shadow-layers", "recovery", "admission", "shadow"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(liveReproducers());
     expect(() => validate(exported(r => { r.scope = "not model-only"; }))).toThrow(/scope belongs only to a model-run reproducer/);
-    // Another profile model's exported run may be cited only for a fault in a shared library.
-    const local = (edit: (reproducer: Reproducer) => void) => {
-      const edited = manifest();
-      edit(edited.challenges.find(challenge => challenge.id === "shadow-inclusive-c0-freshness")!.reproducer!);
-      return edited;
-    };
+    // Another profile model's exported run may be cited only for a fault in a shared library: a fault in a
+    // model's own file may not name one, whatever its reproducer kind.
     const budgetsRun = { model: "formal/dialcache-source-budgets-conformance.qnt", run: "defaultSourceBudgetExpiresAtSixtySecondsTest", failure: "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2" };
-    expect(() => validate(local(r => { Object.assign(r, budgetsRun); })))
+    expect(() => validate(modelRun(r => { Object.assign(r, budgetsRun); })))
       .toThrow(/reproducer model must name another profile model and is allowed only for an exported-regression of a shared-library fault: formal\/dialcache-source-budgets-conformance\.qnt/);
     expect(() => validate(shared(r => { r.model = "formal/dialcache-stale-recovery.qnt"; }))).toThrow(/reproducer model must name another profile model/);
     expect(() => validate(shared(r => { r.model = "formal/dialcache-core.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/dialcache-core\.qnt/);

@@ -34,9 +34,15 @@ module diagnostics {
   pure val NO_LAYER = ""
 
   // The channel is row-polymorphic: a profile whose drivers compare more
-  // fields (shadow's configErrors and futureOffsets) carries them beside
-  // these four, which scope's descriptor parses exactly.
+  // fields carries them beside these four, which scope's descriptor parses
+  // exactly; the shadow drivers compare two more (`ShadowChannel`): the
+  // configuration errors a malformed shadow policy reports and the offsets
+  // of frames a shadow read found stamped after the wall clock, on the
+  // `remote_shadow` layer (C57).
   type Channel[q] = { warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str] | q }
+  type FutureOffset = { layer: str, offsetMs: int }
+  pure val REMOTE_SHADOW_LAYER = "remote_shadow"
+  type ShadowChannel[q] = Channel[{ configErrors: int, futureOffsets: List[FutureOffset] | q }]
   // Per source, parallel to the source records: the layer it is attributed to.
   type Diagnosed[r, q] = { d: Channel[q], sourceLayers: List[str] | r }
   type DiagnosedRequest[r, q] = Serving::RequestServed[Diagnosed[r, q]]
@@ -49,9 +55,19 @@ module diagnostics {
     { sourceLayers: state.sourceLayers.append(layer), ...state }
   pure def recordFallbackError(state: Diagnosed[r, q], layer: str): Diagnosed[r, q] =
     if (layer == NO_LAYER) state else { d: { fallbackErrors: state.d.fallbackErrors.append(layer), ...state.d }, ...state }
-  // The age of a recovered value, sampled at its served recovery decode (C57).
+  // The age of a recovered value, sampled at its served recovery decode, or
+  // of a shadow job's C0 frame at its verdict (C57).
   pure def recordAge(state: Diagnosed[r, q], age: int): Diagnosed[r, q] =
     { d: { ages: state.d.ages.append(age), ...state.d }, ...state }
+  // A confirmed shadow mismatch logged under the job's captured policy (C60).
+  pure def recordWarning(state: { d: Channel[q] | r }): { d: Channel[q] | r } =
+    { d: { warnings: state.d.warnings + 1, ...state.d }, ...state }
+  // A shadow policy that failed to resolve, reported once per call.
+  pure def recordConfigError(state: { d: ShadowChannel[q] | r }): { d: ShadowChannel[q] | r } =
+    { d: { configErrors: state.d.configErrors + 1, ...state.d }, ...state }
+  // A frame a shadow read found stamped after the wall clock: the layer that observed it and the offset.
+  pure def recordFutureOffset(state: { d: ShadowChannel[q] | r }, layer: str, offsetMs: int): { d: ShadowChannel[q] | r } =
+    { d: { futureOffsets: state.d.futureOffsets.append({ layer: layer, offsetMs: offsetMs }), ...state.d }, ...state }
   // The layer a source started at release is attributed to: none once the
   // scope closed, the request memo when the call memoizes, else the shared
   // layers' fallback.
@@ -98,22 +114,35 @@ module diagnostics {
   // recorded (a late result that only drains records none); the recovery age
   // sampled when a recovery decode serves.
 
-  pure def beginRead(state: DiagnosedHeld[r, q], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int, classifier: int): DiagnosedHeld[r, q] = {
+  // Admission: a caller that does not participate starts a bypass source
+  // attributed to no layer.
+  pure def admit(state: DiagnosedHeld[r, q], layout: Serving::Layout, call: Call): DiagnosedHeld[r, q] = {
     val admitted = Deadlines::admit(state, layout, call)
-    if (not(Serving::participating(state, layout, call))) recordSourceLayer(admitted, NO_LAYER)
+    if (Serving::participating(state, layout, call)) admitted else recordSourceLayer(admitted, NO_LAYER)
+  }
+  // The held release applied from a judgment already made
+  // (`Serving::judgeRelease` with the remote layer unobserved, through
+  // `Deadlines::releaseJudged`), labelled from that judgment; a variant that
+  // admits work beside the held release (`shadow::beginHeld`) judges once
+  // and applies this.
+  pure def releaseJudged(state: DiagnosedHeld[r, q], layout: Serving::Layout, judged: Serving::LayeredRelease, policyCall: int, ttls: Ttls, budget: int): DiagnosedHeld[r, q] = {
+    val released = Deadlines::releaseJudged(state, layout, judged, policyCall, ttls, budget)
+    match judged.decision.outcome {
+      | JoinsRequest(_) => recordCoalesced(released, REQUEST_LOCAL_LAYER)
+      | JoinsProcess(_) => recordCoalesced(released, PROCESS_SCOPE)
+      | Starts => recordSourceLayer(released,
+        if (judged.effective.layers.remote) REMOTE_LAYER else sourceLayer(judged.open, judged.decision.slot))
+      | ServesMemo(_) => released
+      | ServesLocal(_) => released
+      | ServesRemote(_) => released
+    }
+  }
+  pure def beginRead(state: DiagnosedHeld[r, q], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int, classifier: int): DiagnosedHeld[r, q] = {
+    val admitted = admit(state, layout, call)
+    if (not(Serving::participating(state, layout, call))) admitted
     else {
       val judged = Serving::judgeRelease(admitted, layout, state.o.policyCalls, resolved, ttls, false)
-      val released = Deadlines::releaseJudged(admitted, layout, judged, state.o.policyCalls, ttls, budget)
-      val labeled = match judged.decision.outcome {
-        | JoinsRequest(_) => recordCoalesced(released, REQUEST_LOCAL_LAYER)
-        | JoinsProcess(_) => recordCoalesced(released, PROCESS_SCOPE)
-        | Starts => recordSourceLayer(released,
-          if (judged.effective.layers.remote) REMOTE_LAYER else sourceLayer(judged.open, judged.decision.slot))
-        | ServesMemo(_) => released
-        | ServesLocal(_) => released
-        | ServesRemote(_) => released
-      }
-      Deadlines::settleDispatched(admitted, labeled, layout, classifier)
+      Deadlines::settleDispatched(admitted, releaseJudged(admitted, layout, judged, state.o.policyCalls, ttls, budget), layout, classifier)
     }
   }
   // A flight whose failure the step recorded (its source's outcome moved from

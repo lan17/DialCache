@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseTrace, profiles as featureProfiles } from "../formal/replay/features.mjs";
 import { recoveryWitnesses } from "../formal/replay/witnesses/recovery.mjs";
-import { recoveryShadowWitnesses } from "../formal/replay/witnesses/recovery-shadow.mjs";
 import { runtimeWitnesses } from "../formal/replay/witnesses/runtime.mjs";
+import { shadowWitnesses } from "../formal/replay/witnesses/shadow.mjs";
 import { witnessStates } from "../formal/replay/witnesses/trace.mjs";
 
 type RecordValue = Record<string, unknown>;
@@ -20,7 +20,7 @@ type Recipe = { id: string; actions: Array<[string, number]> };
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/formal-witness-boundaries.json", import.meta.url), "utf8")) as Fixture[];
 const recipes = JSON.parse(readFileSync(new URL("../formal/fixture-recipes.json", import.meta.url), "utf8")) as { artifacts: Array<{ path: string; recipes: Recipe[] }> };
 
-// The fixture file contains excerpts selected from real Quint histories. Store
+// The fixture file contains histories selected from real Quint runs. Store
 // only changed fields to keep the examples readable without duplicating state.
 function merge(before: RecordValue, patch: RecordValue): RecordValue {
   const result = structuredClone(before);
@@ -36,12 +36,12 @@ function merge(before: RecordValue, patch: RecordValue): RecordValue {
 }
 function integer(value: number): RecordValue { return { "#bigint": String(value) }; }
 // Steps declare the explicit input record that every shared classifier keys
-// on; a recorded choice is the simulator's Some/None pick. A shadow excerpt
-// starts mid-history under a placeholder input; a recovery history starts at
-// its init, whose fixture choice is the recipe's first external action.
+// on; a recorded choice is the simulator's Some/None pick. A layers excerpt
+// starts mid-history under a placeholder input; a recovery or shadow history
+// starts at its init, whose fixture choice is the recipe's first external action.
 const explicitInput = (name: string, choice?: Choice) => ({ name, choice: choice === undefined || choice.tag === "None" ? integer(-1) : choice.value });
 function initialInput(fixture: Fixture): { name: string; choice: unknown } {
-  if (fixture.profile !== "recovery") return explicitInput("excerpt");
+  if (fixture.profile === "layers") return explicitInput("excerpt");
   const reference = fixture.provenance.recipe.replace(/^formal\/fixture-recipes\.json#/, "");
   const separator = reference.lastIndexOf("/");
   const recipe = recipes.artifacts.find(artifact => artifact.path === reference.slice(0, separator))?.recipes.find(item => item.id === reference.slice(separator + 1));
@@ -55,13 +55,13 @@ function statesFor(fixture: Fixture): State[] {
   }
   return states;
 }
-// A recovery history is parsed exactly as the corpus is (the drivers' explicit
-// inputs and public channels); the shadow-profile excerpts keep their private state.
+// A recovery or shadow history is parsed exactly as the corpus is (the
+// drivers' explicit inputs and public channels); the layers excerpts keep their private state.
 function collect(fixture: Fixture, states: State[]): Set<string> {
   const raw = { states }, path = "trace.itf.json";
-  if (fixture.profile === "recovery") return recoveryWitnesses([{ ...parseTrace(raw, path, featureProfiles.recovery!), ...witnessStates(raw, path) }]);
-  const histories = [{ path, ...witnessStates(raw, path) }];
-  return fixture.profile === "layers" ? runtimeWitnesses(fixture.profile, histories) : recoveryShadowWitnesses(fixture.profile, histories);
+  if (fixture.profile === "layers") return runtimeWitnesses(fixture.profile, [{ path, ...witnessStates(raw, path) }]);
+  const history = { ...parseTrace(raw, path, featureProfiles[fixture.profile as keyof typeof featureProfiles]!), ...witnessStates(raw, path) };
+  return fixture.profile === "recovery" ? recoveryWitnesses([history]) : shadowWitnesses([history]);
 }
 function fixtureFor(witness: string): Fixture {
   const fixture = fixtures.find(item => item.witness === witness);
@@ -75,6 +75,15 @@ function fixtureFor(witness: string): Fixture {
 function insertBefore(states: State[], index: number, name: string, choice: number): State[] {
   const inserted = { input: { name, choice: integer(choice) }, s: structuredClone(states[index - 1]!.s) };
   return [...states.slice(0, index), inserted, ...states.slice(index)];
+}
+// The recorded verdict of a history's final step replaced by another: the
+// public outcome a changed input would have produced.
+function withFinalVerdict(states: State[], verdict: string): State[] {
+  const edited = structuredClone(states);
+  const observations = edited.at(-1)!.s.o as RecordValue;
+  const shadow = observations.shadow as string[];
+  observations.shadow = [...shadow.slice(0, -1), verdict];
+  return edited;
 }
 
 describe("Quint recovery and shadow witness consequences", () => {
@@ -96,26 +105,41 @@ describe("Quint recovery and shadow witness consequences", () => {
       // final public result/effect transition from the real trace.
       final.o = structuredClone(states.at(-2)!.s.o);
     }
+    if (fixture.profile === "shadow") {
+      // The shadow classifier predicts each step's public effects from the
+      // inputs: an observation the inputs do not produce is refused outright,
+      // and one they do produce without the consequence earns nothing.
+      let credited: boolean;
+      try { credited = collect(fixture, states).has(fixture.witness); }
+      catch (error) { expect((error as Error).message).toMatch(/shadow predicts/); return; }
+      expect(credited).toBe(false);
+      return;
+    }
     expect(collect(fixture, states).has(fixture.witness)).toBe(false);
   });
 
   it("confirms equal bytes across text/binary encodings but excludes different JSON bytes", () => {
+    // The job's C0 is the binary spelling of the Unicode text (seed 8). A frame
+    // reseeded before the confirmation read with the text spelling (seed 7)
+    // carries the same bytes and confirms the mismatch; the padded spelling of
+    // `1` (seed 5) is other bytes, and the recorded mismatch becomes the
+    // supersession that input produces.
     const fixture = fixtureFor("same-c1-bytes-confirm-mismatch");
-    const states = statesFor(fixture), before = states.at(-2)!.s;
-    before.c0 = integer(1); // text '1'
-    before.frame = integer(3); // binary '1'
-    expect(collect(fixture, states).has(fixture.witness)).toBe(true);
-    before.frame = integer(5); // binary ' 1 ', same decoded value, different bytes
-    expect(collect(fixture, states).has(fixture.witness)).toBe(false);
+    const states = statesFor(fixture), confirmation = states.length - 1;
+    expect(collect(fixture, insertBefore(states, confirmation, "seed", 7)).has(fixture.witness)).toBe(true);
+    expect(collect(fixture, withFinalVerdict(insertBefore(states, confirmation, "seed", 5), "superseded")).has(fixture.witness)).toBe(false);
   });
 
   it("requires different bytes for a replacement witness even when a verdict says superseded", () => {
+    // The job's C0 is text `2` (seed 2). A frame reseeded before the
+    // confirmation read with the padded spelling of `1` (seed 5) is other
+    // bytes and supersedes; the binary spelling of `2` (seed 4) carries the C0
+    // bytes, so the recorded supersession becomes the mismatch that input
+    // produces and no replacement is credited.
     const fixture = fixtureFor("different-c1-bytes-supersede");
-    const states = statesFor(fixture), before = states.at(-2)!.s;
-    before.c0 = integer(1); before.frame = integer(5);
-    expect(collect(fixture, states).has(fixture.witness)).toBe(true);
-    before.frame = integer(3);
-    expect(collect(fixture, states).has(fixture.witness)).toBe(false);
+    const states = statesFor(fixture), confirmation = states.length - 1;
+    expect(collect(fixture, insertBefore(states, confirmation, "seed", 5)).has(fixture.witness)).toBe(true);
+    expect(collect(fixture, withFinalVerdict(insertBefore(states, confirmation, "seed", 4), "mismatch")).has(fixture.witness)).toBe(false);
   });
 
   it("does not claim capacity retention from late-effect suppression alone", () => {

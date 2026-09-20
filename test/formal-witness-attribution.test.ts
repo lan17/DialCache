@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseTrace, profiles as featureProfiles } from "../formal/replay/features.mjs";
 import { recoveryWitnesses } from "../formal/replay/witnesses/recovery.mjs";
-import { recoveryShadowWitnesses } from "../formal/replay/witnesses/recovery-shadow.mjs";
+import { shadowWitnesses } from "../formal/replay/witnesses/shadow.mjs";
 import { witnessStates } from "../formal/replay/witnesses/trace.mjs";
 
 type RecordValue = Record<string, unknown>;
@@ -21,9 +21,10 @@ const recipes = JSON.parse(readFileSync(new URL("../formal/fixture-recipes.json"
 
 // Real Quint histories preserve their final public outcome. The negative
 // controls add another sufficient cause, or remove the distinguishing input,
-// so reaching that outcome alone must no longer earn the witness. A recovery
-// history is a full public history from its init and its controls are input
-// edits; the shadow excerpt keeps its private state and edits it directly.
+// so reaching that outcome alone must no longer earn the witness. Every
+// history is a full public history from its init and every control is an
+// input edit: the classifiers read the recorded inputs and the public
+// channels only.
 function merge(before: RecordValue, patch: RecordValue): RecordValue {
   const result = structuredClone(before);
   for (const [key, value] of Object.entries(patch)) {
@@ -43,8 +44,8 @@ function fixtureFor(witness: string): Fixture {
 }
 const integer = (value: number): RecordValue => ({ "#bigint": String(value) });
 const explicitInput = (name: string, choice?: Choice) => ({ name, choice: choice === undefined || choice.tag === "None" ? integer(-1) : choice.value });
+// A history starts at its init, whose fixture choice is the recipe's first external action.
 function initialInput(fixture: Fixture): { name: string; choice: unknown } {
-  if (fixture.profile !== "recovery") return explicitInput("excerpt");
   const reference = fixture.provenance.recipe.replace(/^formal\/fixture-recipes\.json#/, "");
   const separator = reference.lastIndexOf("/");
   const recipe = recipes.artifacts.find(artifact => artifact.path === reference.slice(0, separator))?.recipes.find(item => item.id === reference.slice(separator + 1));
@@ -58,10 +59,12 @@ function statesFor(fixture: Fixture): State[] {
   }
   return states;
 }
+// Every history is parsed exactly as the corpus is: the drivers' explicit
+// inputs and the public channels of its profile.
 function witnessed(fixture: Fixture, states: State[]): boolean {
   const raw = { states }, path = "trace.itf.json";
-  if (fixture.profile === "recovery") return recoveryWitnesses([{ ...parseTrace(raw, path, featureProfiles.recovery!), ...witnessStates(raw, path) }]).has(fixture.witness);
-  return recoveryShadowWitnesses(fixture.profile, [{ path, ...witnessStates(raw, path) }]).has(fixture.witness);
+  const history = { ...parseTrace(raw, path, featureProfiles[fixture.profile as keyof typeof featureProfiles]!), ...witnessStates(raw, path) };
+  return (fixture.profile === "recovery" ? recoveryWitnesses([history]) : shadowWitnesses([history])).has(fixture.witness);
 }
 // An environment command inserted before a step carries the same public
 // channels (it observes nothing); removing a step drops its input with them.
@@ -125,12 +128,15 @@ describe("Quint witnesses distinguish the rule responsible for an outcome", () =
   });
 
   it("requires equal C1 bytes to isolate a watermark supersession", () => {
+    // The job's C0 is the binary spelling of `1` (seed 3). A frame reseeded
+    // and fenced again before the confirmation read is superseded either way;
+    // the witness credits the fence only when the frame still carries the C0
+    // bytes: the text spelling of `1` (seed 1) does, the padded spelling
+    // (seed 5) is a replacement that already supersedes.
     const fixture = fixtureFor("fenced-c1-supersedes-without-repair"), states = statesFor(fixture);
-    const confirmation = states.at(-2)!.s;
-    confirmation.c0 = 1; // text '1'
-    confirmation.frame = 3; // binary '1': identical payload bytes
-    expect(witnessed(fixture, states)).toBe(true);
-    confirmation.frame = 5; // binary ' 1': a replacement already supersedes C0
-    expect(witnessed(fixture, states)).toBe(false);
+    const confirmation = states.length - 1;
+    const refenced = (seed: number) => insertBefore(insertBefore(states, confirmation, "invalidate", 0), confirmation, "seed", seed);
+    expect(witnessed(fixture, refenced(1))).toBe(true);
+    expect(witnessed(fixture, refenced(5))).toBe(false);
   });
 });

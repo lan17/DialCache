@@ -486,8 +486,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'runtime-policy-physical-ttl-ignores-recovery',
   'stale-recovery-inclusive-served-maximum',
   'stale-recovery-candidate-stamped-at-read',
-  'shadow-validation-fenced-fill-writes',
-  'shadow-validation-fill-before-source',
   'redis-protocol-inclusive-fence',
   'redis-protocol-untracked-fence',
   'frame-vectors-inclusive-fence',

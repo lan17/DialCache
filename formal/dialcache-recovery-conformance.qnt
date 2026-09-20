@@ -237,7 +237,7 @@ module dialcache_recovery_conformance {
   }
   action invalidate = all {
     input' = { name: "invalidate", choice: -1 },
-    s' = Serving::invalidate(s, ENTITY)
+    s' = Serving::invalidate(s, ENTITY, 0)
   }
   action rollbackWall = all {
     input' = { name: "rollbackWall", choice: -1 },

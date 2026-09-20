@@ -60,8 +60,8 @@ module markers {
   // The invalidation outcome (`serving::invalidate`) and, when it took
   // effect, the entity's marker kept for the larger of its remaining lifetime
   // and the lifetime the raised watermark asks for.
-  pure def invalidate(state: Maintained[r], entity: int): Maintained[r] = {
-    val invalidated = Serving::invalidate(state, entity)
+  pure def invalidate(state: Maintained[r], entity: int, bufferMs: int): Maintained[r] = {
+    val invalidated = Serving::invalidate(state, entity, bufferMs)
     if (Serving::maintains(state)) {
       val current = state.markerExpires.nth(entity)
       val asked = state.now + lifetime(invalidated.watermark.nth(entity), Clock::wallOf(state))

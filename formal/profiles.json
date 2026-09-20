@@ -105,9 +105,9 @@
         "formal/replay/witnesses/evidence.mjs",
         "formal/replay/witnesses/shadow.mjs",
         "formal/replay/witnesses/labels.mjs",
-        "formal/replay/witnesses/recovery-shadow.mjs",
         "formal/replay/witnesses/shadow-diagnostics.mjs",
-        "formal/replay/witnesses/public-prefix.mjs"
+        "formal/replay/witnesses/public-prefix.mjs",
+        "formal/replay/witnesses/fidelity.mjs"
       ]
     },
     {
@@ -378,8 +378,6 @@
     "formal/replay/witnesses/recovery-admission.mjs",
     "formal/replay/witnesses/recovery-read.d.mts",
     "formal/replay/witnesses/recovery-read.mjs",
-    "formal/replay/witnesses/recovery-shadow.d.mts",
-    "formal/replay/witnesses/recovery-shadow.mjs",
     "formal/replay/witnesses/recovery.d.mts",
     "formal/replay/witnesses/recovery.mjs",
     "formal/replay/witnesses/runtime-boundaries.d.mts",

@@ -140,7 +140,7 @@ module held_remote {
   // A clock move without timer delivery (effects' jumpClock).
   action jump(ms: int): bool = all { s' = Clock::advance(s, ms), input' = { name: "jumpClock", choice: ms } }
   action seed(value: int, age: int): bool = all { s' = Remote::seedAged(s, 0, value, age, 60000), input' = { name: "seed", choice: value } }
-  action invalidate = all { s' = Serving::invalidate(s, 0), input' = { name: "invalidate", choice: -1 } }
+  action invalidate = all { s' = Serving::invalidate(s, 0, 0), input' = { name: "invalidate", choice: -1 } }
 
   // The read is counted at dispatch with its budget and registers its flight
   // without a loader; the frame is judged at settlement, so a fresh seed

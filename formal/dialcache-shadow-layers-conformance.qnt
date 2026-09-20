@@ -140,7 +140,7 @@ module dialcache_shadow_layers_conformance {
     not(ordinaryStaleCandidate(choice % KEYS)),
     input' = { name: "beginCall", choice: choice },
     s' = Shadow::begin(s, LAYOUT, call(choice), s.resolved, s.ttls, Recovery::ALLOW,
-      { selected: s.shadow, limits: { capacity: JOB_CAPACITY, budgetMs: JOB_BUDGET_MS } })
+      { hook: true, selected: s.shadow, capacity: JOB_CAPACITY, budgetMs: JOB_BUDGET_MS, logging: false })
   }
   action beginCall = {
     nondet choice = 0.to(14).oneOf()
@@ -228,13 +228,14 @@ module dialcache_shadow_layers_conformance {
     releaseDump, releaseWrite, advance, policy, seed }
 
   // Invariants over the library records ---------------------------------------
-  // A job's identity is its source's (instance, key).
+  // A job's identity is its source's (instance, key); the registry is
+  // pending-only, so every record is a live job.
   def jobInstance(i: int): int = s.sources.nth(s.jobs.nth(i).source).instance
   def jobKey(i: int): int = s.sources.nth(s.jobs.nth(i).source).key
   def owned(source: int): bool = Flights::ownedBy(s, source).size() > 0
   val boundedSharedJobRegistry = 0.to(INSTANCES - 1).forall(inst =>
-    Shadow::liveJobs(s).filter(i => jobInstance(i) == inst).size() <= JOB_CAPACITY)
-  val oneJobPerInstanceKey = Shadow::liveJobs(s).forall(a => Shadow::liveJobs(s).forall(b =>
+    s.jobs.indices().filter(i => jobInstance(i) == inst).size() <= JOB_CAPACITY)
+  val oneJobPerInstanceKey = s.jobs.indices().forall(a => s.jobs.indices().forall(b =>
     a == b or jobInstance(a) != jobInstance(b) or jobKey(a) != jobKey(b)))
   // Every source is a drivers' loader; a source is probed as participating
   // exactly when a caller owns it (a served job's detached source is not).
@@ -255,11 +256,13 @@ module dialcache_shadow_layers_conformance {
     s.o.classifications == ordinaryFailures
       and s.o.recovery == 0.to(ordinaryFailures - 1).fold(List(), (out, _) => out.append("miss"))
   }
-  // A job's held fill carries the retention the job captured at admission.
+  // A job's held fill carries the retention the reply it was admitted under
+  // resolved to, capped for this tracked fixture (C18).
+  def captured(source: int): int = Remote::physicalRetention(s, Shadow::jobOf(s, source).ttls.retentionMs)
   val fillKeepsCapturedRetention = s.dumps.indices().forall(i =>
-      Shadow::jobsOf(s, s.dumps.nth(i).source, Shadow::SERIALIZING).forall(j => s.dumps.nth(i).retentionMs == s.jobs.nth(j).retentionMs))
+      not(Shadow::holdsJob(s, s.dumps.nth(i).source)) or s.dumps.nth(i).retentionMs == captured(s.dumps.nth(i).source))
     and s.writes.indices().forall(i =>
-      Shadow::jobsOf(s, s.writes.nth(i).source, Shadow::WRITING).forall(j => s.writes.nth(i).retentionMs == s.jobs.nth(j).retentionMs))
+      not(Shadow::holdsJob(s, s.writes.nth(i).source)) or s.writes.nth(i).retentionMs == captured(s.writes.nth(i).source))
   // A served job carries the hit it was admitted with and never fills.
   val servedJobsNeverWrite = s.jobs.indices().forall(i => s.jobs.nth(i).dark
     or (s.jobs.nth(i).cached > NO_VALUE and s.jobs.nth(i).phase != Shadow::SERIALIZING and s.jobs.nth(i).phase != Shadow::WRITING))
@@ -271,13 +274,13 @@ module dialcache_shadow_layers_conformance {
   // A source no caller owns carries no publication authority.
   val detachedSourcesCarryNoAuthority = s.sources.indices().forall(i => owned(i)
     or (s.sources.nth(i).localMs == 0 and s.sources.nth(i).retentionMs == 0 and s.sources.nth(i).fence == NO_FENCE))
-  // Every pending deadline is a live job's whose budget has not expired, and
-  // every such job has exactly one.
+  // Every pending deadline is a registered job's whose budget has not
+  // expired, and every such job has exactly one.
   val jobBudgetsBelongToLiveJobs = s.deadlines.indices().forall(i => {
     val due = s.deadlines.nth(i)
-    due.kind == Deadlines::JOB and Shadow::live(s.jobs.nth(due.index)) and not(s.jobs.nth(due.index).timedOut)
-  }) and s.jobs.indices().forall(i => not(Shadow::live(s.jobs.nth(i)) and not(s.jobs.nth(i).timedOut))
-    or Deadlines::deadlinesOf(s, Deadlines::JOB, i).length() == 1)
+    due.kind == Deadlines::JOB and Shadow::holdsJob(s, due.index) and not(Shadow::jobOf(s, due.index).timedOut)
+  }) and s.jobs.indices().forall(i => s.jobs.nth(i).timedOut
+    or Deadlines::deadlinesOf(s, Deadlines::JOB, s.jobs.nth(i).source).length() == 1)
   // Every held dump or write serializes an accepted result.
   val heldWorkHasAcceptedResults = s.dumps.indices().forall(i => accepted(s.sources.nth(s.dumps.nth(i).source).result))
     and s.writes.indices().forall(i => accepted(s.sources.nth(s.writes.nth(i).source).result))

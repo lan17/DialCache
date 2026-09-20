@@ -97,8 +97,24 @@
       "id": "shadow",
       "model": "formal/dialcache-shadow-conformance.qnt",
       "module": "dialcache_shadow_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 96
+      "libraryTransitions": [
+        "clock::shiftWall",
+        "remote_frames::seedFrame",
+        "remote_io::latestOrdinal",
+        "remote_writes::latestDump",
+        "remote_writes::latestWrite",
+        "serving::invalidate",
+        "shadow::advanceHeld",
+        "shadow::beginDark",
+        "shadow::latestLoad",
+        "shadow::latestRead",
+        "shadow::releaseDump",
+        "shadow::releaseLoad",
+        "shadow::releaseRead",
+        "shadow::releaseWrite",
+        "shadow::settleHeld"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "admission",

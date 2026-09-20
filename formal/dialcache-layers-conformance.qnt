@@ -196,7 +196,7 @@ module dialcache_layers_conformance {
     seedRemote(choice / SOURCE_VALUE_COUNT, choice % SOURCE_VALUE_COUNT + VALUE_ONE)
   }
   action invalidateEntity(entity: int): bool = all {
-    s' = Serving::invalidate(s, entity),
+    s' = Serving::invalidate(s, entity, 0),
     input' = { name: "invalidate", choice: entity }
   }
   action invalidate = {

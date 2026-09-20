@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "ef2ff34535f49e405a92957922bc6caeac64d7c01a6aff97eaa6d61613790b91",
+      "sha256": "63f0c6f1ea3aef71e85eb25acdb4ef6103d6dbaacad4e06f96471d8ee9705235",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1347,14 +1347,14 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "505af30e6c64ca796c5f0f0ec8db101c7a79b32a51edac3f1dcda42fc84e1b32",
+      "sha256": "e30f20a0a03f01a08f869d58158a59b43c130d7980ed828992fa555b58d478a2",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
         {"line":26,"title":"How the specification connects to code"},
         {"line":46,"title":"Models and composition profiles"},
-        {"line":97,"title":"Generating and replaying behavior"},
-        {"line":184,"title":"Evidence and scope"}
+        {"line":96,"title":"Generating and replaying behavior"},
+        {"line":183,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",

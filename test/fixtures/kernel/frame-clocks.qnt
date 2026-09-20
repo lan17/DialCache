@@ -82,7 +82,7 @@ module frame_clocks {
     input' = { name: "shiftWall", choice: ms }
   }
   action invalidate = all {
-    s' = Serving::invalidate(s, 0),
+    s' = Serving::invalidate(s, 0, 0),
     input' = { name: "invalidate", choice: 0 }
   }
 

@@ -55,16 +55,31 @@ module payloads {
   pure val COMPRESSED = 100
   pure val CORRUPT = 200
   pure val UNSUPPORTED_ENCODING = 300
+  // Spellings of a value that decode like a plain one but carry other bytes
+  // (the shadow drivers' payloads, C51): a text padded with whitespace
+  // (`" 1"`, the drivers' seed 6) and a JSON string decoding to a value no
+  // source returns (`"café"`, seed 7; the profile spells its decoded value).
+  pure val PADDED = 400
+  pure val UNICODE = 500
+  // The form line: a payload at or above it is the binary spelling of the
+  // text payload below it, the same bytes (`bytesOf`), so the confirmation
+  // read compares bytes across the two forms and every class judgment reads
+  // the bytes. A profile spells `Payloads::BINARY + Payloads::PADDED + VALUE_ONE`.
+  pure val BINARY = 1000
 
+  // The bytes a payload carries: the form stripped.
+  pure def bytesOf(payload: int): int = payload % BINARY
   // The class of a payload: 0 below the band, its hundred in it.
-  pure def classOf(payload: int): int = payload / 100
+  pure def classOf(payload: int): int = bytesOf(payload) / 100
   // The value a payload decodes to: itself below the band, the value its
-  // code carries for the compressed and corrupt classes, none for
-  // UNSUPPORTED_ENCODING or for a class this module names no rule for.
-  pure def valueOf(payload: int): int =
-    if (payload < COMPRESSED) payload
-    else if (classOf(payload) == classOf(COMPRESSED) or classOf(payload) == classOf(CORRUPT)) payload % 100
+  // code carries for the compressed, corrupt, padded and unicode classes,
+  // none for UNSUPPORTED_ENCODING or for a class this module names no rule for.
+  pure def valueOf(payload: int): int = {
+    val bytes = bytesOf(payload)
+    if (bytes < COMPRESSED) bytes
+    else if (Set(classOf(COMPRESSED), classOf(CORRUPT), classOf(PADDED), classOf(UNICODE)).contains(classOf(bytes))) bytes % 100
     else NO_VALUE
+  }
   // The adapter throws on the frame: the read fails once the frame is visible.
   pure def readFails(payload: int): bool = classOf(payload) == classOf(UNSUPPORTED_ENCODING)
   // The bytes fail to decode: a fresh decode restarts the loader, a recovery
