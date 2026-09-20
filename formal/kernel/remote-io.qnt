@@ -136,7 +136,7 @@ module remote_io {
     val applied = Serving::applyRelease(state, layout, judged, policyCall, ttls)
     match judged.decision.outcome {
       | Starts => if (judged.effective.layers.remote) dispatchRead(applied, layout, judged, ttls, budget)
-        else mapLoader(applied, Serving::startSource(applied, layout, judged.caller, judged.call, judged.decision.slot, judged.open, judged.effective, ttls, judged.readOk, false))
+        else mapLoader(applied, Serving::startSource(applied, layout, judged.caller, judged.call, judged.decision.slot, judged.open, judged.effective, ttls, judged.remote))
       | JoinsRequest(_) => applied
       | JoinsProcess(_) => applied
       | ServesMemo(_) => applied
@@ -172,16 +172,6 @@ module remote_io {
 
   // -- Read settlement -----------------------------------------------------------------
 
-  // A read that owns its traversal, judged once with the state current at
-  // settlement (`remote_frames::observe`): its flight's key, whether the read
-  // failed (the drivers' fault or a payload that fails the read), whether the
-  // adapter found a frame, its payload code and the value a fresh one serves.
-  type ReadSettlement = { key: int, visible: bool, failed: bool, payload: int, value: int }
-  pure def judgeRead(state: Held[r], layout: Serving::Layout, held: HeldRead, failed: bool): ReadSettlement = {
-    val key = state.sources.nth(held.flight).key
-    val observed = Remote::observe(state, key, layout.operationsPerEntity, held.ttls.freshMs, failed)
-    { key: key, visible: observed.visible, failed: observed.failed, payload: observed.payload, value: observed.value }
-  }
   // A settled read that still owns its traversal: a frame the read judged
   // fresh is held for decoding with its payload code; anything else starts
   // the flight's loader with the authority fixed here (refill denied after a
@@ -193,10 +183,11 @@ module remote_io {
     val settled = { reads: state.reads.select(other => other.read != read), ...state }
     if (not(owning(held))) settled
     else {
-      val judged = judgeRead(state, layout, held, failed)
+      val key = state.sources.nth(held.flight).key
+      val judged = Remote::observe(state, key, layout.operationsPerEntity, held.ttls.freshMs, failed)
       if (judged.value > NO_VALUE) holdLoad(settled, held.flight, held.ttls, judged.payload, false)
       else {
-        val retained = if (judged.failed) settled else Recovery::retain(settled, held.flight, judged.key, judged.visible, held.ttls, classifier)
+        val retained = if (judged.failed) settled else Recovery::retain(settled, held.flight, key, judged.visible, held.ttls, classifier)
         startLoader(retained, layout, held.flight, held.ttls, not(judged.failed), judged.visible)
       }
     }

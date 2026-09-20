@@ -2199,6 +2199,24 @@
       "scope": "An unsafe stamp above a watermark raised at the same instant is visible and never fresh: the read holds no decode and its miss refills unfenced with the policy retention."
     },
     {
+      "case": "C33.reject-version-before-decode",
+      "reference": "formal/dialcache-recovery-read-conformance.qnt:unsupportedVersionUnderRaisedWatermarkIsAFencedMissTest",
+      "kind": "regression",
+      "scope": "An unsupported-version frame under a watermark raised at the same instant is read as a miss that carries the fence: no decode is held and the refill stamped at that instant is fenced out, so nothing is dumped or written."
+    },
+    {
+      "case": "C37.physical-cap",
+      "reference": "formal/dialcache-recovery-connection.qnt:sourcesCarryCappedAdmittedRetention",
+      "kind": "invariant",
+      "scope": "Every pending source captured either no retention or the maximum admitted before its caller's admission, capped at 3600000ms for a tracked entity: the per-write pairing with the admitted maximum that the profile's write-TTL invariant cannot state once the authority caps it."
+    },
+    {
+      "case": "C38.value-work-does-not-extend-marker",
+      "reference": "formal/dialcache-recovery-read-conformance.qnt:expiredMarkersFenceNothing",
+      "kind": "invariant",
+      "scope": "A marker no longer in force fences nothing: its entity's watermark is at the zero baseline once the marker's lifetime lapsed, so only an invalidation, never ordinary work or a lapsed marker, keeps a watermark in force."
+    },
+    {
       "case": "C42.allow-override",
       "reference": "formal/dialcache-recovery-conformance.qnt:operationAllowReplacesInstanceDenialTest",
       "kind": "regression",

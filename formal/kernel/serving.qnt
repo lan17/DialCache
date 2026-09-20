@@ -199,8 +199,8 @@ module serving {
   // whose read failed, or whose reply carries no retention, captures no
   // retention, never refills and takes no fence. `read` is whether the flight
   // read the remote layer, `readOk` whether that read completed (the
-  // judgment's, `LayeredRelease.readOk` or `remote_frames::Observed.failed`
-  // negated), `fence` the fence the read observed. The retention captured is
+  // judgment's observation, `remote_frames::Observed.failed` negated),
+  // `fence` the fence the read observed. The retention captured is
   // the one the refill is written with: a tracked flight's is capped
   // (`Remote::physicalRetention`); the logical maximum a recovery snapshot
   // carries is the reply's, untouched.
@@ -220,16 +220,16 @@ module serving {
     localMs: payload.localMs, fence: payload.fence, retentionMs: payload.retentionMs
   }
   // A miss starts a layered source with the layers the call resolved to and
-  // the authority its atomic read fixed (`readOk`: whether that read
-  // completed, the judgment's; `visible`: whether the read found a frame the
-  // traversal declined). A source started without the remote layer passes
-  // `readOk` false: no read was made, and the authority refills only for a
-  // flight that read the remote layer.
-  pure def startSource(state: Served[r], layout: Layout, caller: int, call: Call, slot: int, participating: bool, resolved: Resolution, ttls: Ttls, readOk: bool, visible: bool): Served[r] = {
+  // the authority its read fixed from the judgment's observation (`remote`:
+  // whether the read completed, `failed` negated, and whether it found a
+  // frame the traversal declined, `visible`). A source started without the
+  // remote layer passes `Remote::UNOBSERVED`: no read was made, and the
+  // authority refills only for a flight that read the remote layer.
+  pure def startSource(state: Served[r], layout: Layout, caller: int, call: Call, slot: int, participating: bool, resolved: Resolution, ttls: Ttls, remote: Remote::Observed): Served[r] = {
     val layers = resolved.layers
     Flights::registerSource(started(state, layout, participating),
-      sourceOf(authority(state, call, effectiveTtls(resolved, ttls), layers.remote, readOk,
-        Remote::fenceFor(state, call.key, layout.operationsPerEntity, visible)), CALL_PENDING, resolved.coalesce and sharedLayers(layers)),
+      sourceOf(authority(state, call, effectiveTtls(resolved, ttls), layers.remote, not(remote.failed),
+        Remote::fenceFor(state, call.key, layout.operationsPerEntity, remote.visible)), CALL_PENDING, resolved.coalesce and sharedLayers(layers)),
       caller, slot, resolved.coalesce, identity(layout, call))
   }
   pure def startLocalSource(state: LocalServed[r], layout: Layout, caller: int, call: Call, slot: int, participating: bool, resolved: Resolution, ttls: Ttls): LocalServed[r] =
@@ -258,7 +258,7 @@ module serving {
     val open = participating(state, layout, call)
     val caller = state.o.calls.length()
     if (open) Gate::hold(entered(state, open), state.o.policyCalls, caller, call)
-    else startSource(entered(state, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS, false, false)
+    else startSource(entered(state, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS, Remote::UNOBSERVED)
   }
   pure def admitLocal(state: LocalServed[r], layout: Layout, call: Call): LocalServed[r] = {
     val open = participating(state, layout, call)
@@ -288,11 +288,12 @@ module serving {
   // a remote hit warms local storage for the reply's local TTL.
   //
   // The release is judged once (`judgeRelease`): the held caller and its
-  // call, whether its scope is still open, the resolution in effect, the value
-  // the remote layer offered, whether it offered a visible frame at all,
-  // whether the read completed (`readOk`: false for a failed read, for a
-  // visible frame whose payload fails the read, and for a read not made) and
-  // the decision. The remote observation is a parameter: an atomic release
+  // call, whether its scope is still open, the resolution in effect, what the
+  // remote read observed (`remote_frames::Observed`: the value the remote
+  // layer offered, whether it offered a visible frame at all, and whether the
+  // read failed: an adapter fault, a visible frame whose payload fails the
+  // read, or a read not made) and the decision. The remote observation is a
+  // parameter: an atomic release
   // observes the frame (`layeredRelease`, the judgment `release` applies and
   // a variant composed around it, `receipts`, judges on the same state); a
   // held release (`remote_io`) judges the same traversal with the remote layer
@@ -300,7 +301,7 @@ module serving {
   // layer on and the read is dispatched instead. It is judged on the state
   // before Gate::release, which edits only the held list, a field no layer
   // read or decision consults.
-  type LayeredRelease = { caller: int, call: Call, open: bool, effective: Resolution, remoteValue: int, visible: bool, readOk: bool, decision: Decision }
+  type LayeredRelease = { caller: int, call: Call, open: bool, effective: Resolution, remote: Remote::Observed, decision: Decision }
   pure def judgeRelease(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls, observed: bool): LayeredRelease = {
     val held = Gate::entry(state, policyCall)
     val call = held.call
@@ -317,9 +318,7 @@ module serving {
       call: call,
       open: open,
       effective: effective,
-      remoteValue: remote.value,
-      visible: remote.visible,
-      readOk: not(remote.failed),
+      remote: remote,
       decision: decide(state, layout, call, effective, localValue, remote.value)
     }
   }
@@ -356,13 +355,13 @@ module serving {
     val observed = if (judged.effective.layers.remote and reachesRemote(judged.decision.outcome)) {
       o: {
         reads: applied.o.reads + 1,
-        loads: applied.o.loads + (if (judged.remoteValue > NO_VALUE) 1 else 0),
+        loads: applied.o.loads + (if (judged.remote.value > NO_VALUE) 1 else 0),
         ...applied.o
       },
       ...applied
     } else applied
     match judged.decision.outcome {
-      | Starts => startSource(observed, layout, judged.caller, judged.call, judged.decision.slot, judged.open, judged.effective, ttls, judged.readOk, judged.visible)
+      | Starts => startSource(observed, layout, judged.caller, judged.call, judged.decision.slot, judged.open, judged.effective, ttls, judged.remote)
       | JoinsRequest(_) => observed
       | JoinsProcess(_) => observed
       | ServesMemo(_) => observed
@@ -508,14 +507,15 @@ module serving {
   // adapter counts it before its write fails (`test/formal/behavior-driver.ts:209-213`,
   // `go/behavior_driver_test.go:1107-1111`); otherwise it is counted, reports
   // ok and raises the watermark. `maintains` is whether an invalidation takes
-  // effect, the one judgment a marker lifetime (a profile that composes one
-  // stamps its marker only then) reads beside this outcome.
+  // effect: the judgment the effective arm branches on, and the one a marker
+  // lifetime (a profile that composes one stamps its marker only then) reads
+  // beside this outcome.
   pure def maintains(state: Served[r]): bool = state.remoteAvailable and not(state.writeFailed)
   pure def invalidate(state: Served[r], entity: int): Served[r] =
     if (not(state.remoteAvailable)) {
       o: { maintenance: state.o.maintenance.append("missing_remote"), ...state.o },
       ...state
-    } else if (state.writeFailed) {
+    } else if (not(maintains(state))) {
       o: {
         invalidations: state.o.invalidations + 1,
         maintenance: state.o.maintenance.append("mutation_error"),

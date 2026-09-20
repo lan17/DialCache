@@ -5,14 +5,15 @@
 // paths: a compressed fresh frame decodes to its value at the held decode and
 // warms local with it; a corrupt fresh frame fails its decode by its code
 // alone and restarts the loader unfenced; a corrupt recovery candidate keeps
-// the loader's error with the deserialization label; a code that names no
-// class is readable but decodes to nothing, so a stale frame storing it is no
-// recovery candidate and the flight misses; an unsupported encoding
-// fails the held read like an adapter fault (no snapshot, no refill, no
-// fence, while an untracked loader still warms local), but a fenced or
-// expired one is never seen and misses like an absent frame; the atomic read
-// of an unsupported encoding denies the refill (`readOk`) and the atomic
-// release serves a compressed frame's decoded value; and the documented
+// the loader's error with the deserialization label; a code of a class the
+// module names no rule for is readable but decodes to nothing, so a stale
+// frame storing it is no recovery candidate and the flight misses; an
+// unsupported encoding fails the held read like an adapter fault (no
+// snapshot, no refill, no fence, while an untracked loader still warms
+// local), but a fenced or expired one is never seen and misses like an
+// absent frame; the atomic read of an unsupported encoding denies the refill
+// (`readOk`) and the atomic release serves a compressed frame's decoded
+// value; and the documented
 // limit that the atomic release, having no decode step, serves the value a
 // fresh corrupt frame would have carried. The cap: a tracked refill is
 // written with the capped retention while the recovery snapshot keeps the
@@ -49,6 +50,12 @@ module payload_classes {
   pure val LONG_RETENTION_MS = 7200000
   pure val LONG_TTLS: Ttls = { localMs: 0, freshMs: 1000, retentionMs: LONG_RETENTION_MS }
   pure val READ_BUDGET = 5
+  // The band's codes for the fixture's bytes: a compressed and a corrupt frame
+  // carrying VALUE_ONE, and a code of a class the module names no rule for
+  // (the hundred above UNSUPPORTED_ENCODING).
+  pure val COMPRESSED_ONE = Payloads::COMPRESSED + VALUE_ONE
+  pure val CORRUPT_ONE = Payloads::CORRUPT + VALUE_ONE
+  pure val UNNAMED_CLASS = Payloads::UNSUPPORTED_ENCODING + 100
   pure val WALL_SKEW_MS = 100000
   pure val KEY = 0
   pure def call(context: int): Call = { instance: 0, key: KEY, context: context, enabled: true, keyFailed: false }
@@ -150,11 +157,11 @@ module payload_classes {
   // A compressed fresh frame is held for decoding with its code; the decode
   // completes the caller with the value the bytes decode to and warms local
   // storage with that value, not the code.
-  run compressedFreshFrameDecodesToItsValueTest = localInit.then(seed(Payloads::COMPRESSED_ONE, 0)).then(beginWith(0, WITH_LOCAL, LOCAL_TTLS))
+  run compressedFreshFrameDecodesToItsValueTest = localInit.then(seed(COMPRESSED_ONE, 0)).then(beginWith(0, WITH_LOCAL, LOCAL_TTLS))
     .expect(s.o.reads == 1 and s.o.loads == 0 and RemoteIO::latestRead(s).read == 0 and RemoteIO::latestRead(s).flight == 0
       and RemoteIO::latestOrdinal(s) == NO_OWNER)
     .then(read(0))
-    .expect(s.o.loads == 1 and s.o.loaders == 0 and RemoteIO::latestLoad(s).value == Payloads::COMPRESSED_ONE
+    .expect(s.o.loads == 1 and s.o.loaders == 0 and RemoteIO::latestLoad(s).value == COMPRESSED_ONE
       and not(RemoteIO::latestLoad(s).recovery) and s.localValues == List(NO_VALUE))
     .then(load(0))
     .expect(s.o.calls == List(VALUE_ONE) and s.localValues == List(VALUE_ONE) and s.localExpires == List(LOCAL_TTLS.localMs)
@@ -163,8 +170,8 @@ module payload_classes {
   // its code alone (the drivers release it without a fault) and restarts the
   // flight's loader with refill allowed, unfenced under a watermark raised
   // since the read, and without a snapshot; the loader's value refills.
-  run corruptFreshFrameFailsItsDecodeAndRestartsUnfencedTest = init.then(seed(Payloads::CORRUPT_COMPRESSED, 0)).then(begin(0, ALONE)).then(read(0))
-    .expect(s.o.loads == 1 and s.o.loaders == 0 and RemoteIO::latestLoad(s).value == Payloads::CORRUPT_COMPRESSED and not(RemoteIO::latestLoad(s).recovery))
+  run corruptFreshFrameFailsItsDecodeAndRestartsUnfencedTest = init.then(seed(CORRUPT_ONE, 0)).then(begin(0, ALONE)).then(read(0))
+    .expect(s.o.loads == 1 and s.o.loaders == 0 and RemoteIO::latestLoad(s).value == CORRUPT_ONE and not(RemoteIO::latestLoad(s).recovery))
     .then(invalidate).then(load(0))
     .expect(s.o.loaders == 1 and s.loaders == List(0) and RemoteIO::latestOrdinal(s) == 0 and s.watermark == List(WALL_SKEW_MS) and s.retained == List()
       and s.sources.nth(0).retentionMs == TTLS.retentionMs and s.sources.nth(0).fence == NO_FENCE and s.o.calls == List(CALL_PENDING))
@@ -174,22 +181,22 @@ module payload_classes {
   // A stale corrupt frame is the recovery candidate; the recovery decode
   // fails by its code and the flight completes with the loader's own error
   // and identity under the deserialization label.
-  run corruptRecoveryCandidateKeepsTheLoadersErrorTest = init.then(seed(Payloads::CORRUPT_COMPRESSED, 1000)).then(begin(0, ALONE)).then(read(0))
-    .expect(s.o.loaders == 1 and s.o.loads == 0 and Recovery::retainedFor(s, 0).candidate == Payloads::CORRUPT_COMPRESSED
+  run corruptRecoveryCandidateKeepsTheLoadersErrorTest = init.then(seed(CORRUPT_ONE, 1000)).then(begin(0, ALONE)).then(read(0))
+    .expect(s.o.loaders == 1 and s.o.loads == 0 and Recovery::retainedFor(s, 0).candidate == CORRUPT_ONE
       and s.sources.nth(0).retentionMs == TTLS.retentionMs and s.sources.nth(0).fence == NO_FENCE)
     .then(settle(0, SOURCE_ERROR))
     .expect(s.o.calls == List(CALL_PENDING) and s.o.loads == 1 and s.o.classifications == 1 and RemoteIO::latestLoad(s).recovery)
     .then(load(0))
     .expect(s.o.calls == List(SOURCE_ERROR) and s.o.recovery == List("deserialization_error") and s.io.sourceErrors == List(1)
       and s.retained == List() and s.o.writes == 0)
-  // A code in the band that names no class (the band's boundary, ENVELOPED)
-  // is readable and fails no decode, but decodes to nothing: a stale frame
+  // A code of a class the module names no rule for (UNNAMED_CLASS) is
+  // readable and fails no decode, but decodes to nothing: a stale frame
   // storing it is no recovery candidate, so the loader's failure is classified
   // and reports a miss with the loader's own error and identity, holding no
   // recovery decode; no caller completes with the NO_VALUE it decodes to.
   run codeWithoutADecodedValueIsNoRecoveryCandidateTest = init
-    .expect(Payloads::valueOf(Payloads::ENVELOPED) == NO_VALUE and not(Payloads::readFails(Payloads::ENVELOPED)) and not(Payloads::decodeFails(Payloads::ENVELOPED)))
-    .then(seed(Payloads::ENVELOPED, 1000)).then(begin(0, ALONE)).then(read(0))
+    .expect(Payloads::valueOf(UNNAMED_CLASS) == NO_VALUE and not(Payloads::readFails(UNNAMED_CLASS)) and not(Payloads::decodeFails(UNNAMED_CLASS)))
+    .then(seed(UNNAMED_CLASS, 1000)).then(begin(0, ALONE)).then(read(0))
     .expect(s.o.loaders == 1 and s.o.loads == 0 and Recovery::retainedFor(s, 0).flight == 0 and Recovery::retainedFor(s, 0).candidate == NO_VALUE
       and s.sources.nth(0).retentionMs == TTLS.retentionMs and s.sources.nth(0).fence == NO_FENCE)
     .then(settle(0, SOURCE_ERROR))
@@ -246,13 +253,13 @@ module payload_classes {
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.writes == 1 and s.o.writeTtls == List(TTLS.retentionMs) and s.remoteValues == List(VALUE_TWO))
   // The atomic release serves a fresh compressed frame's decoded value, its
   // decode counted.
-  run atomicReleaseServesACompressedFramesDecodedValueTest = init.then(seed(Payloads::COMPRESSED_ONE, 0)).then(atomicBegin)
-    .expect(s.o.calls == List(VALUE_ONE) and s.o.reads == 1 and s.o.loads == 1 and s.o.loaders == 0 and s.remoteValues == List(Payloads::COMPRESSED_ONE))
+  run atomicReleaseServesACompressedFramesDecodedValueTest = init.then(seed(COMPRESSED_ONE, 0)).then(atomicBegin)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.reads == 1 and s.o.loads == 1 and s.o.loaders == 0 and s.remoteValues == List(COMPRESSED_ONE))
   // The documented limit (payloads.qnt): the atomic release has no decode
   // step, so a fresh corrupt frame serves the value its bytes would have
   // carried; a profile composed over the atomic path must not seed
   // decode-fault payloads.
-  run atomicReleaseOfAFreshCorruptFrameServesWithoutADecodeStepTest = init.then(seed(Payloads::CORRUPT_COMPRESSED, 0)).then(atomicBegin)
+  run atomicReleaseOfAFreshCorruptFrameServesWithoutADecodeStepTest = init.then(seed(CORRUPT_ONE, 0)).then(atomicBegin)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.reads == 1 and s.o.loads == 1 and s.o.loaders == 0)
 
   // -- The tracked retention cap -----------------------------------------------------
@@ -286,15 +293,30 @@ module payload_classes {
   // -- The judgments themselves --------------------------------------------------------
 
   // The compression outcome a decode reports, the value each class decodes
-  // to, and which classes fail the read or the decode.
+  // to, and which classes fail the read or the decode; the class is the
+  // code's hundred, the value its remainder.
   run decodeOutcomeAndValueOfTest = init
-    .expect(Payloads::decodeOutcome(Payloads::COMPRESSED_ONE) == List("decompressed") and Payloads::decodeOutcome(Payloads::CORRUPT_COMPRESSED) == List("fallback_raw")
+    .expect(Payloads::decodeOutcome(COMPRESSED_ONE) == List("decompressed") and Payloads::decodeOutcome(CORRUPT_ONE) == List("fallback_raw")
       and Payloads::decodeOutcome(VALUE_ABSENT) == List() and Payloads::decodeOutcome(Payloads::UNSUPPORTED_ENCODING) == List()
       and Payloads::valueOf(VALUE_ABSENT) == VALUE_ABSENT and Payloads::valueOf(NO_VALUE) == NO_VALUE
-      and Payloads::valueOf(Payloads::COMPRESSED_ONE) == VALUE_ONE and Payloads::valueOf(Payloads::CORRUPT_COMPRESSED) == VALUE_ONE
+      and Payloads::valueOf(COMPRESSED_ONE) == VALUE_ONE and Payloads::valueOf(CORRUPT_ONE) == VALUE_ONE
       and Payloads::valueOf(Payloads::UNSUPPORTED_ENCODING) == NO_VALUE
-      and Payloads::readFails(Payloads::UNSUPPORTED_ENCODING) and not(Payloads::readFails(Payloads::CORRUPT_COMPRESSED))
-      and Payloads::decodeFails(Payloads::CORRUPT_COMPRESSED) and not(Payloads::decodeFails(Payloads::COMPRESSED_ONE)))
+      and Payloads::readFails(Payloads::UNSUPPORTED_ENCODING) and not(Payloads::readFails(CORRUPT_ONE))
+      and Payloads::decodeFails(CORRUPT_ONE) and not(Payloads::decodeFails(COMPRESSED_ONE))
+      and Payloads::classOf(VALUE_ONE) == 0 and Payloads::classOf(COMPRESSED_ONE) == 1 and Payloads::classOf(CORRUPT_ONE) == 2
+      and Payloads::classOf(Payloads::UNSUPPORTED_ENCODING) == 3 and Payloads::valueOf(Payloads::COMPRESSED) == NO_VALUE)
+  // The class rules do not depend on the value: a compressed frame carrying
+  // VALUE_TWO is judged like one carrying VALUE_ONE, and its held decode
+  // completes the caller with VALUE_TWO and warms local with it.
+  run compressedFrameCarryingAnotherValueDecodesToItTest = init
+    .expect(Payloads::valueOf(Payloads::COMPRESSED + VALUE_TWO) == VALUE_TWO and Payloads::valueOf(Payloads::CORRUPT + VALUE_TWO) == VALUE_TWO
+      and Payloads::decodeOutcome(Payloads::COMPRESSED + VALUE_TWO) == List("decompressed") and Payloads::decodeOutcome(Payloads::CORRUPT + VALUE_TWO) == List("fallback_raw")
+      and not(Payloads::decodeFails(Payloads::COMPRESSED + VALUE_TWO)) and Payloads::decodeFails(Payloads::CORRUPT + VALUE_TWO)
+      and not(Payloads::readFails(Payloads::COMPRESSED + VALUE_TWO)) and not(Payloads::readFails(Payloads::CORRUPT + VALUE_TWO)))
+    .then(localInit).then(seed(Payloads::COMPRESSED + VALUE_TWO, 0)).then(beginWith(0, WITH_LOCAL, LOCAL_TTLS)).then(read(0))
+    .expect(s.o.loads == 1 and RemoteIO::latestLoad(s).value == Payloads::COMPRESSED + VALUE_TWO)
+    .then(load(0))
+    .expect(s.o.calls == List(VALUE_TWO) and s.localValues == List(VALUE_TWO) and s.o.writes == 0 and s.o.loaders == 0)
 
   // -- The compression channel -----------------------------------------------------
 
@@ -302,8 +324,8 @@ module payload_classes {
   // as the decode is held, once; the decode's settlement adds nothing, an
   // uncompressed fresh frame's decode reports nothing, and a read that holds
   // no decode (a stale frame's miss) reports nothing.
-  run freshCompressedReadReportsDecompressedTest = init.then(seed(Payloads::COMPRESSED_ONE, 0)).then(begin(0, ALONE)).then(readReported(0))
-    .expect(s.o.loads == 1 and s.compression == List("decompressed") and RemoteIO::latestLoad(s).value == Payloads::COMPRESSED_ONE)
+  run freshCompressedReadReportsDecompressedTest = init.then(seed(COMPRESSED_ONE, 0)).then(begin(0, ALONE)).then(readReported(0))
+    .expect(s.o.loads == 1 and s.compression == List("decompressed") and RemoteIO::latestLoad(s).value == COMPRESSED_ONE)
     .then(load(0))
     .expect(s.o.calls == List(VALUE_ONE) and s.compression == List("decompressed"))
     .then(seed(VALUE_TWO, 0)).then(begin(1, ALONE)).then(readReported(1))
@@ -320,11 +342,11 @@ module payload_classes {
     .expect(s.o.loads == 1 and RemoteIO::latestLoad(s).recovery and s.compression == List())
     .then(load(0))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.recovery == List("served") and s.compression == List())
-    .then(seed(Payloads::CORRUPT_COMPRESSED, 1000)).then(begin(1, ALONE)).then(readReported(1))
-    .expect(s.o.loads == 1 and s.compression == List() and Recovery::retainedFor(s, 1).candidate == Payloads::CORRUPT_COMPRESSED)
+    .then(seed(CORRUPT_ONE, 1000)).then(begin(1, ALONE)).then(readReported(1))
+    .expect(s.o.loads == 1 and s.compression == List() and Recovery::retainedFor(s, 1).candidate == CORRUPT_ONE)
     .then(settleReported(1, SOURCE_ERROR))
     .expect(s.o.loads == 2 and s.compression == List("fallback_raw") and RemoteIO::latestLoad(s).recovery
-      and RemoteIO::latestLoad(s).value == Payloads::CORRUPT_COMPRESSED)
+      and RemoteIO::latestLoad(s).value == CORRUPT_ONE)
     .then(load(1))
     .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR) and s.o.recovery == List("served", "deserialization_error")
       and s.compression == List("fallback_raw") and s.io.sourceErrors == List(0, 2))

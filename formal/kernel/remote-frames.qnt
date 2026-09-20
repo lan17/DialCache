@@ -85,6 +85,8 @@ module remote_frames {
   // payload code, and the value the traversal serves, what the code decodes
   // to when the frame is also fresh for the reply's freshness.
   type Observed = { visible: bool, failed: bool, payload: int, value: int }
+  // What a read not made observes: nothing.
+  pure val UNOBSERVED: Observed = { visible: false, failed: true, payload: NO_VALUE, value: NO_VALUE }
   pure def observe(state: Frames[r], key: int, operationsPerEntity: int, freshMs: int, failed: bool): Observed = {
     val present = not(failed) and visible(state, key, operationsPerEntity)
     val code = if (present) state.remoteValues.nth(key) else NO_VALUE

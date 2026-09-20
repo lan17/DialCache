@@ -1,18 +1,22 @@
 module payloads {
   // Payload validity classes: what a remote frame's stored code says about
-  // the bytes the adapter returned. A frame stores a payload code; the codes
-  // below ENVELOPED are the drivers' shared value codes (1..9,
+  // the bytes the adapter returned. A frame stores a payload code. The codes
+  // below COMPRESSED are the drivers' shared value codes (1..9,
   // `conformance_observations`) and any code a profile adds below 100
   // (runtime-boundaries' VALUE_UNDEFINED_STRING = 11), each of which decodes
-  // to itself. The enveloped band starts at 100 so no future profile value
-  // collides with a class: COMPRESSED_ONE is a compressed frame whose bytes
-  // decode to VALUE_ONE (`src/internal/compression.ts` outcome
-  // "decompressed"), CORRUPT_COMPRESSED a frame whose compressed bytes fail
-  // to decode (outcome "fallback_raw"; the value the bytes would have carried
-  // is VALUE_ONE, consulted only after `decodeFails` was judged),
-  // UNSUPPORTED_ENCODING a frame whose header names an encoding the adapter
-  // does not know, which throws once the frame is present and fence-cleared
-  // (`src/internal/redis-payload.ts:44-52`), so the read fails.
+  // to itself. The enveloped band starts at 100 and keeps class and value
+  // apart: a code in the band is a class hundred plus the value the bytes
+  // carry, so values stay below 100 and no profile value collides with a
+  // class. COMPRESSED + v is a compressed frame whose bytes decode to v
+  // (`src/internal/compression.ts` outcome "decompressed"); CORRUPT + v a
+  // frame whose compressed bytes fail to decode (outcome "fallback_raw"; v is
+  // the value the bytes would have carried, consulted only after
+  // `decodeFails` was judged); UNSUPPORTED_ENCODING a frame whose header
+  // names an encoding the adapter does not know, which throws once the frame
+  // is present and fence-cleared (`src/internal/redis-payload.ts:44-52`), so
+  // the read fails. The class rules do not depend on the value: a profile
+  // spells a seed as the sum (`Payloads::COMPRESSED + VALUE_ONE`), arithmetic
+  // over constants, which the composition lint accepts.
   //
   // The judgments are consulted once, in `remote_frames::observe`, for the
   // atomic release and the held read settlement alike, at the held decode
@@ -24,39 +28,42 @@ module payloads {
   // value, never the code: the fresh sites (`serving::decide`,
   // `remote_io::settleRead`) serve a positive `valueOf` only and
   // `recovery::retain` admits a candidate only when its code decodes to a
-  // value, so a code whose `valueOf` is NO_VALUE (UNSUPPORTED_ENCODING, or a
-  // code in the band that names no class, ENVELOPED itself among them) never
+  // value, so a class with no decoded value (UNSUPPORTED_ENCODING, or a class
+  // this module names no rule for) yields NO_VALUE from `valueOf` and never
   // completes a caller with CALL_PENDING, the integer NO_VALUE shares.
   // Documented limit: the atomic release
-  // (`serving::release`) has no decode step, so it serves
-  // `valueOf(CORRUPT_COMPRESSED)`, VALUE_ONE, for a fresh code-102 frame; a
-  // profile composed over the atomic path must not seed decode-fault
-  // payloads (pinned by the payload-classes fixture,
+  // (`serving::release`) has no decode step, so it serves `valueOf` of a
+  // fresh corrupt frame, the value its bytes would have carried; a profile
+  // composed over the atomic path must not seed decode-fault payloads
+  // (pinned by the payload-classes fixture,
   // `atomicReleaseOfAFreshCorruptFrameServesWithoutADecodeStepTest`).
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
 
-  pure val ENVELOPED = 100
-  pure val COMPRESSED_ONE = 101
-  pure val CORRUPT_COMPRESSED = 102
-  pure val UNSUPPORTED_ENCODING = 103
+  // The classes, as hundreds: a payload in the band is a class plus a value
+  // below 100.
+  pure val COMPRESSED = 100
+  pure val CORRUPT = 200
+  pure val UNSUPPORTED_ENCODING = 300
 
-  // The value a payload decodes to: itself below the band, VALUE_ONE for the
-  // two compressed classes, none for UNSUPPORTED_ENCODING or for a code in the
-  // band that names no class.
+  // The class of a payload: 0 below the band, its hundred in it.
+  pure def classOf(payload: int): int = payload / 100
+  // The value a payload decodes to: itself below the band, the value its
+  // code carries for the compressed and corrupt classes, none for
+  // UNSUPPORTED_ENCODING or for a class this module names no rule for.
   pure def valueOf(payload: int): int =
-    if (payload < ENVELOPED) payload
-    else if (payload == COMPRESSED_ONE or payload == CORRUPT_COMPRESSED) VALUE_ONE
+    if (payload < COMPRESSED) payload
+    else if (classOf(payload) == classOf(COMPRESSED) or classOf(payload) == classOf(CORRUPT)) payload % 100
     else NO_VALUE
   // The adapter throws on the frame: the read fails once the frame is visible.
-  pure def readFails(payload: int): bool = payload == UNSUPPORTED_ENCODING
+  pure def readFails(payload: int): bool = classOf(payload) == classOf(UNSUPPORTED_ENCODING)
   // The bytes fail to decode: a fresh decode restarts the loader, a recovery
   // decode keeps the loader's error.
-  pure def decodeFails(payload: int): bool = payload == CORRUPT_COMPRESSED
+  pure def decodeFails(payload: int): bool = classOf(payload) == classOf(CORRUPT)
   // The compression outcome a decode of the payload reports, none for an
   // uncompressed one.
   pure def decodeOutcome(payload: int): List[str] =
-    if (payload == COMPRESSED_ONE) List("decompressed")
-    else if (payload == CORRUPT_COMPRESSED) List("fallback_raw")
+    if (classOf(payload) == classOf(COMPRESSED)) List("decompressed")
+    else if (classOf(payload) == classOf(CORRUPT)) List("fallback_raw")
     else List()
 }

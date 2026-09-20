@@ -103,8 +103,8 @@ module dialcache_recovery_read_conformance {
     List(0, 999, 1000, 4999, 5000, 3600001, 7200000, 0, 1000, 1000, 0, 0, 4999, 0, 0, 1000, 0, 0, 1000).nth(code)
   pure def seedPayload(code: int): int =
     if (code == 7) VALUE_TWO
-    else if (code == 8 or code == 12 or code == 13) Payloads::COMPRESSED_ONE
-    else if (code == 9 or code == 14) Payloads::CORRUPT_COMPRESSED
+    else if (code == 8 or code == 12 or code == 13) Payloads::COMPRESSED + VALUE_ONE
+    else if (code == 9 or code == 14) Payloads::CORRUPT + VALUE_ONE
     else if (code == 10) Payloads::UNSUPPORTED_ENCODING
     else if (code == 17) NO_VALUE
     else if (code == 18) VALUE_ABSENT
@@ -476,6 +476,14 @@ module dialcache_recovery_read_conformance {
     .then(resolveLoader).then(beginIn(1)).then(releaseRead).then(releaseLoad)
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.reads == 2
       and s.o.loaders == 1 and s.o.loads == 1 and s.o.dumps == 1 and s.o.writes == 1)
+  // The version miss carries the fence a miss observes: under a watermark
+  // raised at the same instant, the refill stamped then does not clear it,
+  // so nothing is dumped or written.
+  run unsupportedVersionUnderRaisedWatermarkIsAFencedMissTest = initialized(TRACKED_MODE).then(invalidate).then(seedWith(17))
+    .then(beginIn(0)).then(releaseRead).expect(s.o.loads == 0 and s.o.loaders == 1)
+    .then(resolveLoader)
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.dumps == 0 and s.o.writes == 0 and s.o.writeTtls == List()
+      and s.o.reads == 1 and s.localValues == List(NO_VALUE))
 
   run maximumAgeBeforeDecodeKeepsOriginalErrorTest = initialized(TRACKED_MODE).then(seedWith(12))
     .then(beginIn(0)).then(releaseRead).then(advanceBy(1)).then(rejectLoader)

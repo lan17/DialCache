@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "35458b517653319d2b918fe514cb80dc0e486e6ed80d899e4d602e55f24ed291",
-    "executionSha256": "a7de5913d6872a96bd15f55dfd38ee5fc7a51badb82fec1d16aab389cf0f37b3",
+    "semanticCasesSha256": "0fd8b07110e8ea3ce615f50ec0a4770582c789763a1505e7f7531c6d59ad4a60",
+    "executionSha256": "6352bfe8c74ba17e7b4547190f836508282bd0b94bdf73bfad998bedafc276be",
     "sourceAuditSha256": "4d39d512662347140aabd1d83f7fe3d090ddf84d956c6541e08578d9f74ed755",
-    "quintCaseAuditSha256": "1653c8f0d8781b8041d3365071e9e4951f37251d34b1fa4ea0ebd8e020f1e302",
+    "quintCaseAuditSha256": "12373810a6e9db75651d3fb1558e406da8098f3f4acf307c62a13c20a8dbae3a",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d"
@@ -30,11 +30,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 221,
-    "scheduledRegressions": 428,
+    "scheduledRegressions": 429,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 264
+    "exportedRegressionHistories": 265
   },
   "profiles": [
     {
@@ -387,6 +387,7 @@
         "retainedSnapshotSurvivesPhysicalExpiryTest",
         "unsafeTimestampSkipsSerializerAndAllowsRefillTest",
         "unsupportedVersionSkipsSerializerAndAllowsRefillTest",
+        "unsupportedVersionUnderRaisedWatermarkIsAFencedMissTest",
         "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
         "laterInvalidationDoesNotRewriteObservedMissFenceTest",
         "recoveredAbsenceSkipsSelectedShadowTest",
@@ -4461,6 +4462,7 @@
       "group": "invalidation",
       "quintProperties": [
         "formal/dialcache-recovery-read-conformance.qnt:trackedWritesRespectPhysicalCap",
+        "formal/dialcache-recovery-connection.qnt:sourcesCarryCappedAdmittedRetention",
         "formal/dialcache-recovery-read-conformance.qnt:trackedPhysicalRetentionExpiresAtCapTest",
         "formal/dialcache-recovery-read-conformance.qnt:untrackedRetentionIsNotCappedTest"
       ],
@@ -9784,7 +9786,8 @@
       "kind": "portable-behavior",
       "quintProperties": [
         "formal/dialcache-redis-protocol.qnt:unsupportedFramePrecedesEncodingError",
-        "formal/dialcache-recovery-read-conformance.qnt:unsupportedVersionSkipsSerializerAndAllowsRefillTest"
+        "formal/dialcache-recovery-read-conformance.qnt:unsupportedVersionSkipsSerializerAndAllowsRefillTest",
+        "formal/dialcache-recovery-read-conformance.qnt:unsupportedVersionUnderRaisedWatermarkIsAFencedMissTest"
       ],
       "requiredGenerated": [
         {
@@ -9804,7 +9807,8 @@
       "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
-        "recovery-read/unsupportedVersionSkipsSerializerAndAllowsRefillTest"
+        "recovery-read/unsupportedVersionSkipsSerializerAndAllowsRefillTest",
+        "recovery-read/unsupportedVersionUnderRaisedWatermarkIsAFencedMissTest"
       ],
       "generatedVectors": []
     },
@@ -12229,7 +12233,8 @@
         "formal/dialcache-tracked-invalidation.qnt:readsAndValueWritesDoNotMoveWatermarkTest",
         "formal/dialcache-recovery-read-conformance.qnt:ordinaryValueWorkDoesNotCreateMarkerTest",
         "formal/dialcache-recovery-read-conformance.qnt:ordinaryValueWorkDoesNotExtendMarkerTest",
-        "formal/dialcache-recovery-read-conformance.qnt:expiredMarkerIsGoneTest"
+        "formal/dialcache-recovery-read-conformance.qnt:expiredMarkerIsGoneTest",
+        "formal/dialcache-recovery-read-conformance.qnt:expiredMarkersFenceNothing"
       ],
       "requiredGenerated": [
         {
