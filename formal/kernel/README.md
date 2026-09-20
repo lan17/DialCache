@@ -155,12 +155,10 @@ wrong. The held remote lifecycle uses the last two: `deadlines` wraps
 `remote_io` alone, and a profile without stale-on-error passes
 `Recovery::NONE`. Where two variants of one rule differ only in the expiry
 they run, the rule is one higher-order fold (`deadlines::deliver`) whose
-operator is passed only inside the kernel; the lint reports an argument in a
-parameter position a kernel definition declares with an operator type (inline
-or through a type alias, resolved to its typedef) unless the argument names a
-kernel definition, following `def x = <name>` aliases and let-bound names on
-both sides of the call (an aliased callee is judged as the kernel definition it
-resolves to), so the fold cannot become a hook for rule logic in a profile.
+operator is passed only inside the kernel; the lint reports any reference from
+a profile's assigned value to a kernel definition that takes an operator,
+whatever the profile passes, so the fold cannot become a hook for rule logic in
+a profile.
 
 The wall clock is the monotonic clock plus a skew (`Clock::wallOf`): a profile
 without wall-clock divergence holds `skew` at 0, one with rollbacks shifts it
@@ -283,24 +281,15 @@ operator whose operand carries cache state, and any non-library definition
 applied to cache state, following profile helpers with the taint of their
 arguments. Library modules are those declared under `formal/kernel`
 (`cache_rules` is the judgment layer they consume, not one a profile assigns
-through); a chosen `nondet` input and lambda parameters carry no state; an
-argument in a parameter position a kernel definition declares with an operator
-type (kernel definitions declare their parameter types; a type spelled through
-an alias such as `type Step[r] = (Counter[r], int) => Counter[r]` is resolved
-to its typedef, through a chain of aliases if there is one, and an alias the
-parse does not resolve is an error rather than a value position;
-`deadlines::deliver`'s `expire` is the one such position today) is reported at
-the call unless it names a kernel definition, following `def x = <name>`
-aliases and let-bound names, so a lambda literal, a profile definition, an
-alias of one and a helper's forwarded operator parameter are all reported (the
-library's folds take their operator only from kernel modules, so an operator
-written in a profile is rule logic the walk cannot follow); the callee is
-followed the same way, so a kernel definition applied through a profile alias
-(`pure def repeatAlias = L::repeat`) is judged as the kernel's application and
-recorded as its transition; a profile helper that forwards a kernel definition
-into an operator position is reported all the same, because inside the helper
-the argument is a lambda parameter, not a kernel name (a conservative reading
-that errs toward a false positive); a record literal
+through); a chosen `nondet` input and lambda parameters carry no state; a
+kernel definition that takes an operator (a parameter declared with an
+operator type; kernel definitions declare their parameter types, and one
+without a declared type is an error rather than a definition taken for
+first-order; `deadlines::deliver` is the one such definition today) may not be
+instantiated by a profile at all: a reference to it from an assigned value, as
+the callee or by name, is reported whatever the argument is, because the
+library's folds take their operator only from kernel modules and an operator
+written in a profile is rule logic the walk cannot follow; a record literal
 may set a field over a library result (that is wiring the reviewer sees, not a
 rule). `formal/profile-lint-baseline.json` records each
 profile's library transitions and violation count; a composed profile reports

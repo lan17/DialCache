@@ -1,7 +1,6 @@
-// A composed profile that forwards a lambda to a kernel definition through a
-// helper of its own: at the kernel call the argument is a parameter name, not
-// a lambda. The parameter was bound to an operator, so the call is reported in
-// the helper with the chain from the wrapper.
+// A composed profile that instantiates a kernel fold inside a helper of its
+// own, forwarding the wrapper's lambda as a parameter. The higher-order call
+// is the helper's, so it is reported there with the chain from the wrapper.
 module composition_lambda_through_helper {
   import library as L from "./library"
 

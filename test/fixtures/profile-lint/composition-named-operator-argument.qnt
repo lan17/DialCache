@@ -1,8 +1,8 @@
-// A composed profile that hands a kernel definition an operator written in
-// the profile by name rather than as a lambda literal. The library's fold
-// would run the profile's step over cache state where the lint cannot follow
-// it, so the named operator is reported at the call like a lambda is,
-// whatever its body does.
+// A composed profile that instantiates a kernel fold with an operator written
+// in the profile and passed by name rather than as a lambda literal. The
+// library's fold would run the profile's step over cache state where the lint
+// cannot follow it, so the call is reported like one with a lambda is,
+// whatever the operator's body does.
 module composition_named_operator_argument {
   import library as L from "./library"
 

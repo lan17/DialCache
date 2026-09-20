@@ -1,7 +1,7 @@
-// A composed profile that hands a kernel definition an operator written in
-// the profile. The library's fold would run the profile's step where the lint
-// cannot follow it, so the lambda argument is reported at the call, whatever
-// its body does.
+// A composed profile that instantiates a kernel fold with an operator written
+// in the profile. The library's fold would run the profile's step where the
+// lint cannot follow it, so the call to the higher-order definition is
+// reported, whatever the lambda's body does.
 module composition_lambda_argument {
   import library as L from "./library"
 
