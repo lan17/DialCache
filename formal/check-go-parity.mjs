@@ -18,8 +18,8 @@ function sourcePaths(directory = 'src') {
       entry.name.endsWith('.ts') ? [`${directory}/${entry.name}`] : []).sort();
 }
 
-// The declaration list is navigation, not an assertion inventory. Enumerate the
-// stated scope so removing a ledger row cannot silently drop an API member.
+// The declarations a production source file states: navigation for a reader
+// of the mapping, counted in the ledger's inventory and never stored in it.
 export function sourceDeclarationSnapshot(path) {
   const ast = ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true);
   const declarations = [];
@@ -45,14 +45,23 @@ function goSymbols(path) {
   return new Set([...read(path).matchAll(/^(?:func\s+(?:\([^\n]*?\)\s+)?|(?:type|const|var)\s+)([A-Za-z_]\w*)/gm)].map(match => match[1]));
 }
 
-/** Read-only accounting/freshness guard. Passing is not a parity or coverage proof. */
-export function checkGoParity(ledger = json('formal/go-parity.json')) {
-  const semantic = json('formal/semantic-cases.json');
-  const applicability = json('formal/quint-case-audit.json');
-  const execution = scheduleExecution(json('formal/execution.json'));
-  const profileManifest = json('formal/profiles.json');
-  const witnessCatalog = json('formal/coverage-witnesses.json');
-  const audit = json('formal/source-audit.json');
+// Read-only accounting/freshness guard. Passing is not a parity or coverage proof.
+//
+// The ledger stores what a reviewer writes: per case its group, gaps and
+// evidence paths; per production source its hash, Go bindings and mapping
+// rationale; per reviewed test or documentation file its Go applicability;
+// the native adaptations and the boundary treatments. Everything the other
+// ledgers and the sources already state (a case's rule, contracts, cited
+// checks, witnesses, replays and vectors; a source file's declarations; a
+// reviewed file's hash, entries and contracts; the profile schedule) is read
+// from them here and checked against execution.json and the repository, not
+// stored as a copy. `inputs` lets a test substitute one of those ledgers.
+export function checkGoParity(ledger = json('formal/go-parity.json'), inputs = {}) {
+  const semantic = inputs.semantic ?? json('formal/semantic-cases.json');
+  const execution = scheduleExecution(inputs.execution ?? json('formal/execution.json'));
+  const profileManifest = inputs.profileManifest ?? json('formal/profiles.json');
+  const witnessCatalog = inputs.witnessCatalog ?? json('formal/coverage-witnesses.json');
+  const audit = inputs.audit ?? json('formal/source-audit.json');
   const failures = [];
   const check = (condition, message) => { if (!condition) failures.push(message); };
   const pathExists = (path, context) => {
@@ -64,29 +73,27 @@ export function checkGoParity(ledger = json('formal/go-parity.json')) {
     check(typeof path === 'string' && path.startsWith('go/') && path.endsWith('.go'), `${context}: expected a production/test Go source path, got ${path}`);
     return pathExists(path, context);
   };
-  check(ledger.schemaVersion === 1, 'Unsupported Go parity ledger version');
+  check(ledger.schemaVersion === 2, 'Unsupported Go parity ledger version');
   for (const [field, path] of Object.entries({ semanticCasesSha256: 'formal/semantic-cases.json', executionSha256: 'formal/execution.json', sourceAuditSha256: 'formal/source-audit.json', quintCaseAuditSha256: 'formal/quint-case-audit.json', featureCoverageSha256: 'formal/feature-coverage.json', coverageWitnessesSha256: 'formal/coverage-witnesses.json', profilesSha256: 'formal/profiles.json' })) {
     check(ledger.inputs?.[field] === digest(path), `${path}: ledger input hash is stale; review and refresh its snapshot`);
   }
   check(equal(ledger.cases?.map(row => row.id), semantic.cases.map(row => row.id)), 'Semantic case inventory/order differs from the reviewed ledger');
+
+  // The profile schedule: execution.json and profiles.json must name the same
+  // profiles over the same models, and every smoke fixture must exist.
   const models = new Map(execution.models.filter(model => model.profile).map(model => [model.profile, model]));
   const scheduledChecks = new Set(execution.models.flatMap(model =>
     [...model.invariants, ...model.regressions].map(name => `${model.path}:${name}`)));
   const scheduledReplays = new Set(execution.models.filter(model => model.profile).flatMap(model =>
     (model.replayRegressions ?? []).map(name => `${model.profile}/${name}`)));
-  check(equal(sorted(ledger.profiles.map(row => row.id)), sorted(models.keys())), 'Generated profile inventory differs from execution.json');
-  check(equal(sorted(ledger.profiles.map(row => row.id)), sorted(profileManifest.profiles.map(row => row.id))), 'Profile inventory differs from profiles.json');
-  for (const profile of ledger.profiles) {
-    const model = models.get(profile.id);
+  check(equal(sorted(models.keys()), sorted(profileManifest.profiles.map(row => row.id))), 'Profile inventory differs between execution.json and profiles.json');
+  for (const declared of profileManifest.profiles) {
+    const model = models.get(declared.id);
     if (!model) continue;
-    check(profile.model === model.path && profile.plannedTraces === model.generate.traces, `${profile.id}: model or planned trace count is stale`);
-    const declared = profileManifest.profiles.find(row => row.id === profile.id);
-    check(declared && profile.version === declared.version && profile.model === declared.model && profile.smoke === declared.smoke, `${profile.id}: profile version/model/smoke differs from profiles.json`);
-    check(profile.status === 'executable-profile-schedule', `${profile.id}: current profile inventory must not claim a completed replay`);
-    check(equal(sorted(profile.scheduledRegressions), sorted(model.replayRegressions ?? [])), `${profile.id}: scheduled regression histories are stale`);
-    check(equal(profile.witnessSources, declared?.witnessSources ?? []), `${profile.id}: witness source inventory is stale`);
-    pathExists(profile.smoke, profile.id);
+    check(declared.model === model.path, `${declared.id}: profiles.json model differs from execution.json`);
+    pathExists(declared.smoke, declared.id);
   }
+
   const behavior = semantic.cases.filter(row => row.vectors.length === 0);
   const wire = semantic.cases.filter(row => row.vectors.length > 0);
   check(ledger.inventory.behavioralCases === behavior.length && ledger.inventory.wireCases === wire.length, 'Semantic case counts are stale');
@@ -118,31 +125,31 @@ export function checkGoParity(ledger = json('formal/go-parity.json')) {
   }
   check(ledger.inventory.quintGeneratedProtocolVectors === exportedModels.filter(model => model.vectorExport.kind === 'protocol').reduce((count,model) => count+model.vectorExport.cases,0) &&
     ledger.inventory.quintGeneratedInvalidationVectors === exportedModels.filter(model => model.vectorExport.kind === 'invalidation').reduce((count,model) => count+model.vectorExport.cases,0), 'Quint generated vector counts are stale');
+
+  // Each case row carries the reviewer's group, gaps and evidence paths; its
+  // executable evidence is the semantic case's, checked against the schedule.
   for (const row of ledger.cases) {
     const source = semantic.cases.find(item => item.id === row.id);
     if (!source) continue;
     check(row.kind === (source.vectors.length > 0 ? 'wire-protocol' : 'portable-behavior'), `${row.id}: case classification is stale`);
-    check(equal(row.contracts, source.contracts) && row.rule === source.rule, `${row.id}: contract or rule snapshot is stale`);
-    check(equal(row.quintProperties, source.models) && equal(row.fixedRegressions, source.scenarios) && equal(row.vectorEvidence, source.vectors), `${row.id}: executable evidence references are stale`);
-    check(equal(row.quintReplays, source.quintReplays ?? []) && equal(row.generatedVectors, source.generatedVectors ?? []), `${row.id}: model-driven replay/vector references are stale`);
-    check(row.scopeAudit === 'formal/quint-case-audit.json' && equal(row.quintDefinitions, applicability.definitions.filter(item => item.case === row.id).map(item => item.reference)), `${row.id}: scoped Quint definitions are stale`);
-    check(equal(row.requiredGenerated.map(({ profile, witness }) => ({ profile, witness })), source.generated), `${row.id}: required witness snapshot is stale`);
-    for (const required of row.requiredGenerated) check(required.model === models.get(required.profile)?.path, `${row.id}: required witness model is stale`);
-    for (const reference of row.quintProperties ?? []) {
+    check(typeof row.group === 'string' && row.group.length > 0, `${row.id}: case group missing`);
+    check(Array.isArray(row.gaps), `${row.id}: case gaps must be listed`);
+    const evidence = row.evidence;
+    check(typeof evidence?.typescript === 'string' && typeof evidence?.go === 'string' && typeof evidence?.scope === 'string' && evidence.scope.length > 40 && Array.isArray(evidence.nativeGo), `${row.id}: evidence paths or scope missing`);
+    for (const reference of evidence?.nativeGo ?? []) goFile(String(reference).split(':')[0], row.id);
+    for (const required of source.generated) check(models.has(required.profile), `${row.id}: required witness profile is not scheduled: ${required.profile}`);
+    for (const reference of source.models) {
       check(scheduledChecks.has(reference), `${row.id}: Quint check is not independently scheduled: ${reference}`);
       const match = /^(formal\/[^:]+\.qnt):([A-Za-z_]\w*)$/.exec(reference);
       check(Boolean(match), `${row.id}: malformed Quint obligation reference ${reference}`);
       if (match && pathExists(match[1], row.id)) check(new RegExp(`\\b(?:val|def|action|run)\\s+${match[2]}\\b`).test(read(match[1])), `${row.id}: missing named Quint obligation ${reference}`);
     }
-    for (const reference of row.quintReplays ?? []) check(scheduledReplays.has(reference), `${row.id}: Quint replay is not scheduled: ${reference}`);
-    for (const reference of row.generatedVectors ?? []) {
+    for (const reference of source.quintReplays ?? []) check(scheduledReplays.has(reference), `${row.id}: Quint replay is not scheduled: ${reference}`);
+    for (const reference of source.generatedVectors ?? []) {
       const artifact = vectorArtifacts.get(reference.artifact);
       const vectors = artifact?.[reference.group ?? 'vectors'];
       check(Array.isArray(vectors) && (reference.name === '*' ? vectors.length > 0 : vectors.some(vector => vector.name === reference.name)), `${row.id}: missing generated vector reference`);
     }
-    const expectedStatus = source.generated.length ? 'executable-generated' : source.quintReplays?.length ? 'executable-quint-regression'
-      : source.generatedVectors?.length ? 'executable-quint-vector' : source.scenarios.length ? 'executable-fixed' : 'scoped-model-only';
-    check(row.status === expectedStatus, `${row.id}: case status must describe its current executable evidence`);
   }
 
   const scope = ledger.sourceDeclarationScope;
@@ -155,16 +162,14 @@ export function checkGoParity(ledger = json('formal/go-parity.json')) {
     check(adaptation.references?.length > 0, `${adaptation.id}: native binding references missing`);
     for (const path of adaptation.references ?? []) pathExists(path, adaptation.id);
   }
+  // Each production source keeps its hash and reviewed Go bindings; its
+  // declarations are scanned from src/ and only counted.
   check(equal(ledger.sourceInventory.map(row => row.path), sourcePaths()), 'Production TypeScript source file inventory changed');
   let declarations = 0;
   for (const source of ledger.sourceInventory) {
-    declarations += source.declarations.length;
     if (!pathExists(source.path, 'Source inventory')) continue;
     check(source.sha256 === digest(source.path), `${source.path}: source hash changed; mapping review is stale`);
-    check(equal(source.declarations.map(({ name, kind, line }) => ({ name, kind, line })), sourceDeclarationSnapshot(source.path)), `${source.path}: declaration inventory/navigation changed`);
-    for (const declaration of source.declarations) {
-      check(declaration.status === 'inherits-source-file-mapping', `${source.path}:${declaration.line}: declaration must inherit a reviewed file mapping`);
-    }
+    declarations += sourceDeclarationSnapshot(source.path).length;
     const review = source.mappingReview;
     check(review?.status === 'reviewed-mapping-not-execution', `${source.path}: source mapping review missing`);
     check(typeof review?.rationale === 'string' && review.rationale.length > 80, `${source.path}: precise mapping rationale missing`);
@@ -180,16 +185,16 @@ export function checkGoParity(ledger = json('formal/go-parity.json')) {
     for (const id of review?.nativeAdaptations ?? []) check(adaptations.has(id), `${source.path}: unknown native adaptation ${id}`);
   }
   check(ledger.inventory.sourceFiles === ledger.sourceInventory.length && ledger.inventory.sourceDeclarations === declarations, 'Source inventory counts are stale');
+  // Each test or documentation file the source audit reviews has a Go
+  // applicability row; the file's hash, entries and contracts are the audit's.
   const reviewed = ledger.reviewedTestAndDocumentationAudit;
-  check(reviewed?.path === 'formal/source-audit.json' && reviewed.sha256 === digest('formal/source-audit.json'), 'Test/documentation applicability audit hash is stale');
+  check(reviewed?.path === 'formal/source-audit.json', 'Test/documentation applicability audit must review formal/source-audit.json');
   check(reviewed?.status === 'reviewed-applicability-not-execution', 'Test/documentation review must distinguish applicability from execution');
-  check(reviewed.sourceFiles === audit.sources.length && equal(reviewed.sources?.map(source => source.path), audit.sources.map(source => source.path)), 'Test/documentation applicability inventory changed');
-  for (const source of reviewed.sources ?? []) {
+  check(equal(reviewed?.sources?.map(source => source.path), audit.sources.map(source => source.path)), 'Test/documentation applicability inventory changed');
+  for (const source of reviewed?.sources ?? []) {
     const original = audit.sources.find(item => item.path === source.path);
     if (!original) continue;
-    check(source.sha256 === original.sha256 && source.entries === original.entries.length, `${source.path}: applicability snapshot changed`);
-    if (pathExists(source.path, 'Test/documentation audit')) check(source.sha256 === digest(source.path), `${source.path}: reviewed test/documentation contents changed`);
-    check(equal(source.contracts, sorted(new Set(original.entries.flatMap(entry => entry.contracts)))), `${source.path}: applicability contract inventory changed`);
+    if (pathExists(source.path, 'Test/documentation audit')) check(original.sha256 === digest(source.path), `${source.path}: reviewed test/documentation contents changed`);
     check(typeof source.rationale === 'string' && source.rationale.length > 60, `${source.path}: Go applicability rationale missing`);
     check(source.goFiles?.length > 0, `${source.path}: Go applicability references missing`);
     for (const path of source.goFiles ?? []) goFile(path, source.path);
@@ -198,7 +203,7 @@ export function checkGoParity(ledger = json('formal/go-parity.json')) {
   // File relocation must include optional boundary evidence owned by exporters.
   for (const boundary of ledger.boundaries) for (const reference of boundary.nativeTests ?? []) goFile(reference.split(':')[0], boundary.id);
   if (failures.length) throw new Error(failures.join('\n'));
-  return { kind: 'accounting-and-freshness', sourceFiles: ledger.sourceInventory.length, declarations, reviewedTestsAndDocs: reviewed.sourceFiles, semanticCases: ledger.cases.length, profiles: ledger.profiles.length, vectorModels: exportedModels.length, status: ledger.status, meaning: 'Fresh reviewed mappings and inventory snapshots; execution evidence remains separately assessed.' };
+  return { kind: 'accounting-and-freshness', sourceFiles: ledger.sourceInventory.length, declarations, reviewedTestsAndDocs: audit.sources.length, semanticCases: ledger.cases.length, profiles: models.size, vectorModels: exportedModels.length, status: ledger.status, meaning: 'Fresh reviewed mappings and inventory snapshots; execution evidence remains separately assessed.' };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) console.log(checkGoParity());

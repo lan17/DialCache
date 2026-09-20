@@ -1273,13 +1273,13 @@
     },
     {
       "path": "formal/GO-PARITY.md",
-      "sha256": "6710539770731259b721165c1fddf9974626d12274e6ebabe5c026d2898de648",
+      "sha256": "0c492fc2316f8152e6f809520b1de92320dad08e8d57ead91da8efadc52ec32f",
       "entries": [
         {"line":1,"title":"Go parity acceptance"},
         {"line":52,"title":"Required evidence"},
         {"line":110,"title":"Reading and updating the ledger"},
-        {"line":154,"title":"Native clock precision"},
-        {"line":187,"title":"Current configuration and observability bindings"}
+        {"line":161,"title":"Native clock precision"},
+        {"line":194,"title":"Current configuration and observability bindings"}
       ],
       "review": {
         "kind": "tooling-guide",
