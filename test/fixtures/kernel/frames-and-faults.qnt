@@ -15,6 +15,7 @@ module frames_and_faults {
   import serving as Serving from "../../../formal/kernel/serving"
   import remote_frames as Remote from "../../../formal/kernel/remote-frames"
   import clock as Clock from "../../../formal/kernel/clock"
+  import flights as Flights from "../../../formal/kernel/flights"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
   pure val INITIAL_TIME_MS = 10000
@@ -70,6 +71,11 @@ module frames_and_faults {
   action settle(index: int, value: int): bool = all {
     s' = Serving::settle(s, LAYOUT, index, value),
     input' = { name: "resolveLoader", choice: index }
+  }
+  // A source no caller owns, started beside the traversal.
+  action startDetached(key: int): bool = all {
+    s' = Serving::startDetachedSource(s, LAYOUT, call(key)),
+    input' = { name: "detached", choice: key }
   }
   action seed(key: int, value: int, retentionMs: int): bool = all {
     s' = Remote::seedFrame(s, key, value, retentionMs),
@@ -268,4 +274,12 @@ module frames_and_faults {
     .then(begin(KEY, LOCAL_AND_REMOTE, TTLS))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.reads == 2 and s.o.loads == 2 and s.o.loaders == 0
       and s.localExpires == List(INITIAL_TIME_MS + SHORT_LOCAL_MS + LOCAL_MS, 0))
+  // A detached source counts against the profile, owns nobody and carries no
+  // authority: its settlement completes no caller, warms nothing, refills nothing.
+  run detachedSourceOwnsNobodyTest = trackedInit.then(startDetached(KEY))
+    .expect(s.o.loaders == 1 and s.o.calls == List() and Flights::ownedBy(s, 0) == Set()
+      and s.sources.nth(0).localMs == 0 and s.sources.nth(0).retentionMs == 0 and s.sources.nth(0).fence == NO_FENCE)
+    .then(settle(0, VALUE_ONE))
+    .expect(s.o.calls == List() and s.o.dumps == 0 and s.o.writes == 0 and s.sources.nth(0).result == VALUE_ONE
+      and s.localValues == List(NO_VALUE, NO_VALUE) and s.remoteValues == List(NO_VALUE, NO_VALUE))
 }

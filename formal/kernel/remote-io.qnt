@@ -228,10 +228,9 @@ module remote_io {
     val snapshot = Recovery::retainedFor(recorded, flight)
     if (snapshot.flight == NO_OWNER) complete(recorded, layout, flight, error)
     else {
-      val classified = Recovery::classified(recorded, snapshot)
-      val recovers = Recovery::mayRecover(snapshot, timeout or error == DEADLINE_ERROR)
-      if (recovers and Recovery::validCandidate(classified, snapshot)) holdLoad(classified, flight, NO_TTLS, snapshot.candidate, true)
-      else complete(if (recovers) Recovery::recordOutcome(classified, "miss") else classified, layout, flight, error)
+      val judged = Recovery::failure(recorded, snapshot, error, timeout)
+      if (judged.serves) holdLoad(judged.state, flight, NO_TTLS, snapshot.candidate, true)
+      else complete(Recovery::missed(judged), layout, flight, error)
     }
   }
   // The drivers settle a loader by its ordinal: an accepted value publishes

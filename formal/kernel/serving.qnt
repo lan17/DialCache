@@ -232,6 +232,14 @@ module serving {
         Remote::fenceFor(state, call.key, layout.operationsPerEntity, remote.visible)), CALL_PENDING, resolved.coalesce and sharedLayers(layers)),
       caller, slot, resolved.coalesce, identity(layout, call))
   }
+  // A source no caller owns, started for diagnostic work beside the
+  // traversal: it counts against the profile, is probed as not participating
+  // (it started under no caller's scope), carries no publication authority
+  // (no local TTL, no retention, no fence) and, owned by nobody, completes no
+  // caller when it settles.
+  pure def startDetachedSource(state: Served[r], layout: Layout, who: { instance: int, key: int | q }): Served[r] =
+    Flights::registerDetached(started(state, layout, false),
+      sourceOf({ instance: who.instance, key: who.key, localMs: 0, fence: NO_FENCE, retentionMs: 0 }, CALL_PENDING, false))
   pure def startLocalSource(state: LocalServed[r], layout: Layout, caller: int, call: Call, slot: int, participating: bool, resolved: Resolution, ttls: Ttls): LocalServed[r] =
     Flights::registerSource(started(state, layout, participating),
       { instance: call.instance, key: call.key, localMs: if (resolved.layers.local) ttls.localMs else 0, result: CALL_PENDING, shared: resolved.coalesce and sharedLayers(resolved.layers) },
@@ -349,8 +357,13 @@ module serving {
   // The atomic release: the read is counted when the traversal reaches the
   // remote layer, its decode when the frame served, and a miss starts the
   // source with the authority the read fixed.
-  pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): Served[r] = {
-    val judged = layeredRelease(state, layout, policyCall, resolved, ttls)
+  //
+  // `releaseJudged` applies a judgment already made on this state, so a
+  // variant that records beside the release judges once through
+  // `layeredRelease` and applies the same judgment (`receipts` judges its
+  // record on the pre-release state the same way); `release` is its
+  // composition with the atomic judgment.
+  pure def releaseJudged(state: Served[r], layout: Layout, judged: LayeredRelease, policyCall: int, ttls: Ttls): Served[r] = {
     val applied = applyRelease(state, layout, judged, policyCall, ttls)
     val observed = if (judged.effective.layers.remote and reachesRemote(judged.decision.outcome)) {
       o: {
@@ -369,6 +382,8 @@ module serving {
       | ServesRemote(_) => observed
     }
   }
+  pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): Served[r] =
+    releaseJudged(state, layout, layeredRelease(state, layout, policyCall, resolved, ttls), policyCall, ttls)
   pure def releaseLocal(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LocalServed[r] = {
     val held = Gate::entry(state, policyCall)
     val caller = held.caller

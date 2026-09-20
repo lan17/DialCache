@@ -41,14 +41,16 @@ module deadlines {
   //
   // A profile whose drivers bound sources composes the budgeted variants of
   // the local lifecycle; one whose drivers hold and bound remote reads and
-  // loaders composes the held variants. A profile whose callers run no
-  // source deadline (shadow-layers' callers) holds `sourceBudget` at
-  // UNBOUNDED, so the sources its releases start register none. The fold's
-  // expiry is passed only by the two instantiations here; a profile never
-  // passes an operator to the library (the composition lint reports an
-  // argument in a parameter position a kernel definition declares with an
-  // operator type, `expire` here, unless it names a kernel definition,
-  // following aliases and let-bound names).
+  // loaders composes the held variants. A module that bounds work of its own
+  // kind composes `Scheduled` alone, the clock and the pending deadlines
+  // (kind 2 is reserved for a job registry): its profile's callers run no
+  // source deadline, so that shape has no `sourceBudget` and no source
+  // registers one. The fold's expiry is passed only from inside the kernel,
+  // by the two instantiations here and by such a module's own expiry; a
+  // profile never passes an operator to the library (the composition lint
+  // reports an argument in a parameter position a kernel definition declares
+  // with an operator type, `expire` here, unless it names a kernel
+  // definition, following aliases and let-bound names).
   import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
@@ -64,10 +66,14 @@ module deadlines {
   pure val SOURCE = 1
 
   type Due = { kind: int, index: int, at: int }
-  // The configured source budget, the pending deadlines and, per loader
+  // The pending deadlines beside the clock: what registration, forgetting and
+  // instant-ordered delivery read. A module that bounds work of its own kind
+  // composes this shape alone.
+  type Scheduled[r] = { now: int, deadlines: List[Due] | r }
+  // The budgeted shape adds the configured source budget and, per loader
   // ordinal, whether its external work has been delivered (a loader its
   // deadline completed still has work to drain).
-  type Budgeted[r] = { now: int, sourceBudget: int, deadlines: List[Due], drained: List[bool] | r }
+  type Budgeted[r] = Scheduled[{ sourceBudget: int, drained: List[bool] | r }]
   // The budgeted local lifecycle: the local projection of the traversal with
   // the deadlines beside its source list, and per source the history its
   // properties read: when it started, its budget and when it settled (-1
@@ -84,19 +90,19 @@ module deadlines {
   pure def admissionBudget(state: Budgeted[r], call: Call): int = if (call.keyFailed) state.sourceBudget else UNBOUNDED
   // Work that just started registers its deadline; unbounded work none
   // (a finite zero is due at once).
-  pure def due(state: Budgeted[r], kind: int, index: int, budget: int): Budgeted[r] =
+  pure def due(state: Scheduled[r], kind: int, index: int, budget: int): Scheduled[r] =
     if (budget < 0) state else { deadlines: state.deadlines.append({ kind: kind, index: index, at: state.now + budget }), ...state }
-  pure def deadlinesOf(state: Budgeted[r], kind: int, index: int): List[Due] =
+  pure def deadlinesOf(state: Scheduled[r], kind: int, index: int): List[Due] =
     state.deadlines.select(d => d.kind == kind and d.index == index)
-  pure def bounded(state: Budgeted[r], kind: int, index: int): bool = deadlinesOf(state, kind, index).length() > 0
-  pure def deadlineOf(state: Budgeted[r], kind: int, index: int): int =
+  pure def bounded(state: Scheduled[r], kind: int, index: int): bool = deadlinesOf(state, kind, index).length() > 0
+  pure def deadlineOf(state: Scheduled[r], kind: int, index: int): int =
     if (bounded(state, kind, index)) deadlinesOf(state, kind, index).nth(0).at else UNBOUNDED
   // A deadline is reached at an instant at or after it: equality belongs to the timeout.
   pure def dueAt(now: int, d: Due): bool = not(deadlinePendingAt(now, d.at))
   // Due and not yet delivered.
-  pure def reached(state: Budgeted[r], kind: int, index: int): bool =
+  pure def reached(state: Scheduled[r], kind: int, index: int): bool =
     deadlinesOf(state, kind, index).select(d => dueAt(state.now, d)).length() > 0
-  pure def forget(state: Budgeted[r], kind: int, index: int): Budgeted[r] =
+  pure def forget(state: Scheduled[r], kind: int, index: int): Scheduled[r] =
     { deadlines: state.deadlines.select(d => not(d.kind == kind and d.index == index)), ...state }
   pure def pending(state: Budgeted[r], ordinal: int): bool = not(state.drained.nth(ordinal))
   pure def drain(state: Budgeted[r], ordinal: int): Budgeted[r] = { drained: state.drained.replaceAt(ordinal, true), ...state }
@@ -114,7 +120,7 @@ module deadlines {
 
   // The earliest instant after now, at or before the target, at which a
   // pending deadline is due; the target when none is.
-  pure def earliestDue(state: Budgeted[r], target: int): int =
+  pure def earliestDue(state: Scheduled[r], target: int): int =
     state.deadlines.foldl(target, (best, d) => if (d.at > state.now and d.at < best) d.at else best)
   // Time passes to the target, delivering each due instant in turn with the
   // variant's expiry: a round moves both clocks to the earliest due instant
@@ -123,7 +129,7 @@ module deadlines {
   // deadline until the target is reached, and a delivery registers at most
   // one deadline (a read expiry starts a bounded loader), so the rounds are
   // bounded by twice the pending deadlines plus the final move.
-  pure def deliver(state: Budgeted[r], ms: int, expire: (Budgeted[r], Due) => Budgeted[r]): Budgeted[r] = {
+  pure def deliver(state: Scheduled[r], ms: int, expire: (Scheduled[r], Due) => Scheduled[r]): Scheduled[r] = {
     val target = state.now + ms
     1.to(2 * state.deadlines.length() + 1).fold(state, (current, _) => {
       val moved = Clock::advance(current, earliestDue(current, target) - current.now)

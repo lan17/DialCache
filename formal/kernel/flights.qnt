@@ -60,6 +60,11 @@ module flights {
       ...state
     }, if (coalesce) slot else NO_OWNER, index)
   }
+  // A source no caller owns, a diagnostic source: it joins the sources under
+  // the next index and is registered nowhere, so `ownedBy` is empty for it
+  // and its settlement completes no caller.
+  pure def registerDetached(state: Registry[r, p], source: Source[p]): Registry[r, p] =
+    { sources: state.sources.append(source), ...state }
   // A closed scope forgets its request flights along with its memo row.
   pure def forgetScope(state: Registry[r, p], context: int, keysPerScope: int): Registry[r, p] = {
     requestFlights: state.requestFlights.indices().fold(state.requestFlights, (out, slot) =>

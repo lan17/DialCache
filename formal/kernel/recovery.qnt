@@ -4,12 +4,12 @@ module recovery {
   // the flight's loader failure, and the recheck of the snapshot's age when
   // the recovery decode settles. This module holds codes, one pending-only
   // record and judgments; `remote_io` consults them at read settlement
-  // (`retain`), at loader failure (`classified`, `mayRecover`,
-  // `validCandidate`) and at recovery-decode settlement (`recovered`), and
-  // drops the snapshot when the flight completes. No profile composes a
-  // recovery transition: a held profile passes the classifier in force to
-  // `remote_io::settleRead` (`NONE` where stale-on-error is not configured,
-  // so no snapshot is ever created and every judgment reads NO_SNAPSHOT).
+  // (`retain`), at loader failure (`failure`, `missed`) and at recovery-decode
+  // settlement (`recovered`), and drops the snapshot when the flight
+  // completes. No profile composes a recovery transition: a held profile
+  // passes the classifier in force to `remote_io::settleRead` (`NONE` where
+  // stale-on-error is not configured, so no snapshot is ever created and
+  // every judgment reads NO_SNAPSHOT).
   //
   // The rules: a candidate is the frame the read found visible whose payload
   // code decodes to a value (`payloads::valueOf`; a code whose bytes fail to
@@ -26,8 +26,9 @@ module recovery {
   // classified once (the classifications count instruments every classifier
   // but the built-in timeout-only default); recovery is allowed by ALLOW, or
   // by TIMEOUT_ONLY for a timeout (a delivered or late deadline, or a
-  // propagated timeout the profile names; `remote_io::failed` decides which
-  // errors are timeouts); DENY never recovers, and a profile decodes a
+  // propagated timeout the profile names; `failure` decides which errors are
+  // timeouts, judged once for whichever path consults it, `remote_io::failed`
+  // today); DENY never recovers, and a profile decodes a
   // classifier that throws to DENY, as the implementations do. A recovery
   // decode is held while the candidate's age still allows it
   // (`cache_rules.recoveryAgeAllowed`, no fresh lower bound: a wall rollback
@@ -96,6 +97,21 @@ module recovery {
     { o: { classifications: state.o.classifications + (if (classifies(snapshot)) 1 else 0), ...state.o }, ...state }
   pure def recordOutcome(state: Recovering[r], label: str): Recovering[r] =
     { o: { recovery: state.o.recovery.append(label), ...state.o }, ...state }
+  // A loader failure judged once for whichever path consults it: the
+  // classification counted; whether recovery is allowed (the classifier, and
+  // whether the failure is a timeout: a deadline error, or a propagated
+  // timeout the profile names); whether the candidate then serves (recovery
+  // allowed and its age still admitted). What follows is the path's: a held
+  // recovery decode (`remote_io::failed`).
+  type Failure[r] = { state: Recovering[r], recovers: bool, serves: bool }
+  pure def failure(state: Recovering[r], snapshot: Snapshot, error: int, timeout: bool): Failure[r] = {
+    val counted = classified(state, snapshot)
+    val recovers = mayRecover(snapshot, timeout or error == DEADLINE_ERROR)
+    { state: counted, recovers: recovers, serves: recovers and validCandidate(counted, snapshot) }
+  }
+  // A failure that does not serve: a miss reported when recovery was allowed.
+  pure def missed(judged: Failure[r]): Recovering[r] =
+    if (judged.recovers) recordOutcome(judged.state, "miss") else judged.state
   // What a recovery decode settles to: the label and whether the candidate serves.
   type Recovered = { label: str, served: bool }
   pure def recovered(state: Recovering[r], snapshot: Snapshot, failed: bool): Recovered = {
