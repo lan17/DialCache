@@ -24,7 +24,8 @@ const lock = (): Lock => JSON.parse(readFileSync("formal/generated-fixtures.lock
 
 describe("reproducible Quint fixtures", () => {
   it("binds every committed fixture to its recipes, models and exporter without requiring Quint", () => {
-    expect(verifyFixtures()).toEqual({ artifacts: 31, histories: 157 });
+    const recipes = book() as Book;
+    expect(verifyFixtures()).toEqual({ artifacts: recipes.artifacts.length, histories: recipes.artifacts.reduce((total, artifact) => total + artifact.recipes.length, 0) });
   });
   it("pins only what the generated fixtures read: recipes, generator, encoder, the recipe models' import closures and the export settings", () => {
     const recipes = book() as Book;

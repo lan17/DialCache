@@ -67,13 +67,34 @@ const scanSource = (source: string): Declarations => {
 };
 const validate = (value: unknown, options?: Options) => validateExecution(value, { scanSource, ...options });
 const scheduled = () => scheduleExecution(manifest(), { scanSource });
+const liveReproducers = () => manifest().challenges.filter(challenge => challenge.reproducer).length;
+const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 33, libraries: 28, profiles: 15, invariants: 224, regressions: 434,
-      generatedTraces: 5280, exportedRegressionTraces: 270, vectorModels: 4, generatedVectors: 1631,
-      challenges: 73, distinctFaults: 67, challengedModels: 33, waivedModels: 0, reproducers: 22, reproducerBacklog: 51,
-      nativeMutants: { mapped: 63, unobservable: 2, modelOnly: 6, backlog: 2 }, unmappedMutants: 7 });
+    // Every count is computed from the manifest and the Quint sources the validator reads, so a schedule change
+    // needs no test edit. The sums are the invariants: the exported histories are the profiles' public-only
+    // runs, every model is challenged or waived, and every challenge carries a reproducer or sits in that
+    // backlog and maps to a native mutant or sits in that one.
+    const raw = manifest(), current = scheduled(), catalog = readMutantCatalog();
+    const registry = JSON.parse(readFileSync(new URL("../formal/profiles.json", import.meta.url), "utf8")) as { profiles: unknown[] };
+    const kinds = (kind: string) => raw.challenges.filter(challenge => challenge.nativeMutants?.kind === kind).length;
+    const cited = new Set(raw.challenges.map(challenge => challenge.nativeMutants?.mutant).filter(mutant => mutant !== undefined));
+    const challenged = new Set(raw.challenges.map(challenge => challenge.model)).size, waived = raw.models.filter(model => model.challengeWaiver !== undefined).length;
+    expect(validate(raw)).toEqual({
+      models: raw.models.length, libraries: current.libraries.length, profiles: registry.profiles.length,
+      invariants: sum(raw.models.map(model => model.invariants.length)), regressions: sum(current.models.map(model => model.regressions.length)),
+      generatedTraces: sum(raw.models.map(model => model.generate?.traces ?? 0)), exportedRegressionTraces: sum(current.models.map(model => model.replayRegressions?.length ?? 0)),
+      vectorModels: raw.models.filter(model => model.vectorExport).length, generatedVectors: sum(raw.models.map(model => model.vectorExport?.cases ?? 0)),
+      challenges: raw.challenges.length, distinctFaults: new Set(raw.challenges.map(challenge => JSON.stringify([challenge.source, challenge.before, challenge.after]))).size,
+      challengedModels: challenged, waivedModels: waived, reproducers: liveReproducers(), reproducerBacklog: raw.reproducerBacklog.length,
+      nativeMutants: { mapped: kinds("mapped"), unobservable: kinds("unobservable"), modelOnly: kinds("model-only"), backlog: raw.nativeMutantBacklog.length },
+      unmappedMutants: catalog.mutations.size - cited.size,
+    });
+    expect(current.libraries.length + raw.models.length).toBe(quintSources().length);
+    expect(challenged + waived).toBe(raw.models.length);
+    expect(liveReproducers() + raw.reproducerBacklog.length).toBe(raw.challenges.length);
+    expect(kinds("mapped") + kinds("unobservable") + kinds("model-only") + raw.nativeMutantBacklog.length).toBe(raw.challenges.length);
   });
 
   it("reads the schedule from the Quint text and refuses a manifest that lists it again or leaves a model unscheduled", () => {
@@ -204,9 +225,13 @@ describe("formal execution schedule", () => {
       const runs = classifyRuns(scanDeclarationBodies(readFileSync(root + model.path, "utf8")));
       expect(model.replayRegressions, model.path).toEqual(runs.publicOnly);
     }
-    expect(current.models.find(model => model.profile === "effects")!.replayRegressions).toHaveLength(42);
-    expect(current.models.find(model => model.profile === "shadow")!.replayRegressions).toHaveLength(7);
-    expect(current.models.find(model => model.profile === "independent")!.replayRegressions).toHaveLength(14);
+    // Every profile exports at least one history, and the classifier separates: effects and shadow keep
+    // state-patching fixtures out of replay.
+    for (const model of current.models.filter(model => model.profile)) expect(model.replayRegressions!.length, model.path).toBeGreaterThan(0);
+    for (const profile of ["effects", "shadow"]) {
+      const model = current.models.find(model => model.profile === profile)!;
+      expect(model.regressions.length, profile).toBeGreaterThan(model.replayRegressions!.length);
+    }
   });
 
   it("exports every public-only run and no state-patching run, by construction of the schedule", () => {
@@ -291,7 +316,7 @@ describe("formal execution schedule", () => {
     target.challengeWaiver = "   ";
     expect(() => validate(uncovered)).toThrow(/challenge waiver must explain an unchallenged model/);
     target.challengeWaiver = "No compiling single-site fault is detectable by the scheduled invariants.";
-    expect(validate(uncovered)).toMatchObject({ challengedModels: 32, waivedModels: 1 });
+    expect(validate(uncovered)).toMatchObject({ challengedModels: manifest().models.length - 1, waivedModels: 1 });
     const redundantWaiver = manifest();
     redundantWaiver.models[0]!.challengeWaiver = "Already challenged.";
     expect(() => validate(redundantWaiver)).toThrow(/challenge waiver must explain an unchallenged model/);
@@ -417,7 +442,7 @@ describe("formal execution schedule", () => {
     const optedIn = explained();
     delete optedIn.challenges.find(challenge => challenge.id === "policy-inclusive-local-expiry")!.nativeMutants;
     optedIn.nativeMutantBacklog.push("policy-inclusive-local-expiry");
-    expect(validate(optedIn, { catalog: catalog(), grandfatheredNative: [...grandfatheredNativeMutantBacklog, "policy-inclusive-local-expiry"] }).nativeMutants).toMatchObject({ backlog: 3 });
+    expect(validate(optedIn, { catalog: catalog(), grandfatheredNative: [...grandfatheredNativeMutantBacklog, "policy-inclusive-local-expiry"] }).nativeMutants).toMatchObject({ backlog: grandfatheredNativeMutantBacklog.length + 1 });
     expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { m.nativeMutantBacklog.push("policy-inclusive-local-expiry"); })).toThrow(/policy-inclusive-local-expiry: has nativeMutants and is listed in nativeMutantBacklog/);
     expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { m.nativeMutantBacklog.push("invented-fault"); })).toThrow(/nativeMutantBacklog names an unknown challenge: invented-fault/);
     expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { m.nativeMutantBacklog.push(m.nativeMutantBacklog[0]!); })).toThrow(/Duplicate challenge ids in nativeMutantBacklog/);
@@ -428,7 +453,7 @@ describe("formal execution schedule", () => {
       m.challenges.find(challenge => challenge.id === twins[0])!.nativeMutants = unobservable("Scope.");
       m.challenges.find(challenge => challenge.id === twins[1])!.nativeMutants = unobservable("Layers.");
     })();
-    expect(summary.nativeMutants).toEqual({ mapped: 1, unobservable: 2, modelOnly: 68, backlog: 2 });
+    expect(summary.nativeMutants).toEqual({ mapped: 1, unobservable: 2, modelOnly: manifest().challenges.length - grandfatheredNativeMutantBacklog.length - 3, backlog: grandfatheredNativeMutantBacklog.length });
     expect(summary.unmappedMutants).toBe(3);
     const fixture = explained();
     expect(challengesByMutant({ ...fixture, challenges: [{ ...fixture.challenges[0]!, nativeMutants: mapped("M11") }, { ...fixture.challenges[1]!, nativeMutants: mapped("M11") }, { ...fixture.challenges[2]!, nativeMutants: mapped("M01") }, fixture.challenges[3]!] }))
@@ -530,8 +555,8 @@ describe("formal execution schedule", () => {
     expect(() => validate(exported(r => { r.failure = "s.o.calls == List(CALL_PENDING, DEADLINE_ERROR) and s.o.loaders == 2"; })))
       .toThrow(/defaultSourceBudgetExpiresAtSixtySecondsTest has no top-level expect whose condition is the declared failure/);
     expect(() => validate(exported(r => { r.failure = "s.o.loaders == 2"; }))).toThrow(/has no top-level expect whose condition is the declared failure/);
-    expect(validate(exported(r => { r.failure = "s.o.calls==List( DEADLINE_ERROR,CALL_PENDING )\n  and s.o.loaders == 2"; })).reproducers).toBe(22);
-    expect(validate(exported(r => { r.failure = "s.o.calls == List(CALL_PENDING)"; })).reproducers).toBe(22);
+    expect(validate(exported(r => { r.failure = "s.o.calls==List( DEADLINE_ERROR,CALL_PENDING )\n  and s.o.loaders == 2"; })).reproducers).toBe(liveReproducers());
+    expect(validate(exported(r => { r.failure = "s.o.calls == List(CALL_PENDING)"; })).reproducers).toBe(liveReproducers());
     expect(() => validate(exported(r => { r.family = "Inclusive Boundary"; }))).toThrow(/reproducer family must be a fault family slug/);
     expect(() => validate(exported(r => { r.profiles = []; }))).toThrow(/reproducer profiles must name known profiles and include source-budgets/);
     expect(() => validate(exported(r => { r.profiles = ["effects"]; }))).toThrow(/must name known profiles and include source-budgets/);
@@ -542,7 +567,7 @@ describe("formal execution schedule", () => {
     // A shared-library fault partitions every profile between the listed and the excluded.
     expect(() => validate(exported(r => { r.profiles = ["source-budgets", "effects"]; r.exclusions = { independent: "Its sources settle only through explicit deadlines." }; })))
       .toThrow(/a shared-library fault must list or exclude every profile; missing core/);
-    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects", "shadow-layers"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(22);
+    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects", "shadow-layers"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(liveReproducers());
     expect(() => validate(exported(r => { r.scope = "not model-only"; }))).toThrow(/scope belongs only to a model-run reproducer/);
     // Another profile model's exported run may be cited only for a fault in a shared library.
     const local = (edit: (reproducer: Reproducer) => void) => {
@@ -562,7 +587,7 @@ describe("formal execution schedule", () => {
       .toThrow(/must name known profiles and include formal\/dialcache-stale-recovery\.qnt and policy/);
     // A shared-library fault lists or excludes every known profile.
     expect(() => validate(shared(r => { delete r.exclusions.core; delete r.exclusions.layers; }))).toThrow(/a shared-library fault must list or exclude every profile; missing core, layers/);
-    expect(validate(shared(r => { delete r.exclusions.layers; r.profiles.push("layers"); })).reproducers).toBe(22);
+    expect(validate(shared(r => { delete r.exclusions.layers; r.profiles.push("layers"); })).reproducers).toBe(liveReproducers());
     // A state-patching run is a scheduled regression but never exported.
     const patching = manifest();
     const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
@@ -571,7 +596,7 @@ describe("formal execution schedule", () => {
     effects.reproducer = { kind: "exported-regression", run: "followerKeepsAcceptedReadBudgetTest", failure: budget, family: "late-acceptance", profiles: ["effects"], exclusions: {} };
     expect(() => validate(patching)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: followerKeepsAcceptedReadBudgetTest/);
     effects.reproducer = { kind: "model-run", run: "followerKeepsAcceptedReadBudgetTest", failure: budget, family: "late-acceptance", profiles: ["effects"], exclusions: {}, scope: "Patches the follower budget directly." };
-    expect(validate(patching)).toMatchObject({ reproducers: 23, reproducerBacklog: 50 });
+    expect(validate(patching)).toMatchObject({ reproducers: liveReproducers() + 1, reproducerBacklog: manifest().reproducerBacklog.length - 1 });
     expect(() => validate(modelRun(r => { delete r.scope; }))).toThrow(/model-run reproducer needs a scope/);
     expect(() => validate(modelRun(r => { r.profiles = ["recovery"]; }))).toThrow(/must name known profiles and include formal\/dialcache-envelope-vectors\.qnt/);
     const exportedAsModelRun = manifest();

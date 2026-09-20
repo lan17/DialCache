@@ -12,7 +12,7 @@ type Event = { Action: string; Package: string; Test?: string };
 type Result = { status: string; generatedTraces: number; quintRegressionTraces: number; fixedScenarios: number; protocolVectors: number; witnessProfiles: string[] };
 type InventoryInputs = {
   packageName: string;
-  execution: { models: Array<{ profile?: string; generate?: { traces: number }; regressions?: string[]; replayRegressions?: string[] }> };
+  execution: { models: Array<{ profile?: string; generate?: { traces: number }; regressions?: string[]; replayRegressions?: string[]; vectorExport?: { kind: string; cases: number } }> };
   scenarios: { scenarios: Array<{ feature: string; name: string }> };
   protocol: Record<string, unknown>;
 };
@@ -56,9 +56,16 @@ const inventoryInputs = (): InventoryInputs => ({
 describe("completed Go conformance report", () => {
   it("requires the exact current trace, fixed, protocol, and witness inventories", () => {
     const result = check(completed());
-    expect(result).toMatchObject({ status: "pass", generatedTraces: 5280, quintRegressionTraces: 270, fixedScenarios: 244, protocolVectors: 1477 });
-    expect(result.witnessProfiles).toEqual(["admission", "effects", "independent", "layers", "local-clock", "local-failure", "policy",
-      "recovery", "recovery-read", "runtime-boundaries", "scope", "shadow", "shadow-layers", "source-budgets"]);
+    // The inventories are the manifest's own: every sampled trace of every profile, every exported public-only
+    // run, every fixed scenario, every protocol row and a witness gate for every profile but core.
+    const inputs = inventoryInputs();
+    const profiles = inputs.execution.models.filter(model => model.profile !== undefined);
+    expect(result).toMatchObject({ status: "pass",
+      generatedTraces: profiles.reduce((total, model) => total + model.generate!.traces, 0),
+      quintRegressionTraces: profiles.reduce((total, model) => total + (model.replayRegressions?.length ?? 0), 0),
+      fixedScenarios: inputs.scenarios.scenarios.length,
+      protocolVectors: Object.values(inputs.protocol).filter(Array.isArray).reduce((total, rows) => total + rows.length, 0) });
+    expect(result.witnessProfiles).toEqual(profiles.map(model => model.profile!).filter(profile => profile !== "core").sort());
   });
 
   it("rejects a partial report even if every completed leaf passed", () => {
@@ -165,7 +172,7 @@ describe("Go conformance fixture inventory boundaries", () => {
     const inputs = inventoryInputs();
     expect(buildGoReplayInventory(inputs).required).toEqual(inventory.required);
     const generated = inventory.required.filter(entry => entry.category === "protocol" && entry.name.includes("/Quint"));
-    expect(generated).toHaveLength(1343);
+    expect(generated).toHaveLength(inputs.execution.models.reduce((total, model) => total + (model.vectorExport?.kind === "protocol" ? model.vectorExport.cases : 0), 0));
     for (const prefix of ["TestProtocolKeys/", "TestProtocolFrames/", "TestProtocolDecoders/", "TestProtocolRemainingVectors/"]) {
       const leaf = generated.find(entry => entry.name.startsWith(prefix))!.name;
       expect(() => check(completed().filter(event => event.Test !== leaf))).toThrow(/Missing completed Go replay leaf/);

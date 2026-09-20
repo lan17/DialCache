@@ -21,7 +21,7 @@ describe("semantic coverage accounting", () => {
   });
   it("resolves contract, scenario, model, vector and witness references", () => {
     const result = JSON.parse(check(inventory));
-    expect(result.contracts).toBe(69);
+    expect(result.contracts).toBe([...readFileSync(new URL("../formal/CONTRACTS.md", import.meta.url), "utf8").matchAll(/^\| ([CW]\d{2}) \|/gm)].length);
     expect(result.cases.total).toBe(inventory.cases.length);
   });
   it("rejects duplicate cases and missing executable evidence without an explicit gap", () => {

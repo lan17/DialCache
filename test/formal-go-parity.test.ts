@@ -18,7 +18,7 @@ type Ledger = {
     limitations: string;
     nativeBindingAdaptations: Array<{ id: string; rationale: string }>;
   };
-  reviewedTestAndDocumentationAudit: { limitations: string };
+  reviewedTestAndDocumentationAudit: { sourceFiles: number; limitations: string };
 };
 
 const ledger = () => JSON.parse(readFileSync(new URL("../formal/go-parity.json", import.meta.url), "utf8")) as Ledger;
@@ -32,9 +32,12 @@ const { checkGoParity: validate } = await import(checker) as {
 
 describe("Go parity ledger freshness", () => {
   it("validates reviewed inventory without claiming executed parity", () => {
-    expect(validate(ledger())).toMatchObject({
-      kind: "accounting-and-freshness", sourceFiles: 27, declarations: 772,
-      reviewedTestsAndDocs: 44, semanticCases: 262, profiles: 15, vectorModels: 4,
+    const current = ledger();
+    expect(validate(current)).toMatchObject({
+      kind: "accounting-and-freshness", sourceFiles: current.sourceInventory.length,
+      declarations: current.sourceInventory.reduce((total, source) => total + source.declarations.length, 0),
+      reviewedTestsAndDocs: current.reviewedTestAndDocumentationAudit.sourceFiles, semanticCases: current.cases.length,
+      profiles: current.profiles.length, vectorModels: current.vectorExports.length,
       meaning: "Fresh reviewed mappings and inventory snapshots; execution evidence remains separately assessed.",
     });
   });

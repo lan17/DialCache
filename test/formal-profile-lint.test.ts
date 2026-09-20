@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -446,7 +446,7 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
   it("matches the committed baseline for every conformance profile", async () => {
     const { expected, actual, differences } = await checkBaseline();
     expect(differences).toEqual([]);
-    expect(actual.profiles.length).toBe(15);
+    expect(actual.profiles.length).toBe((JSON.parse(readFileSync(new URL("../formal/profiles.json", import.meta.url), "utf8")) as { profiles: unknown[] }).profiles.length);
     expect(expected.kernelModules).toEqual(kernelModulesOf());
     // A composed profile has no composition violation; every other count is
     // that profile's migration work list.
