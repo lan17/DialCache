@@ -1,5 +1,13 @@
 module dialcache_local_failure_conformance {
   import conformance_observations.* from "./conformance-observations"
+  import encodings.* from "./kernel/encodings"
+  import calls.* from "./kernel/calls"
+  import layer_policy.* from "./kernel/layer-policy"
+  import serving as Serving from "./kernel/serving"
+  import local_faults as Faults from "./kernel/local-faults"
+  import remote_frames as Remote from "./kernel/remote-frames"
+  import flights as Flights from "./kernel/flights"
+  import policy_gate as Gate from "./kernel/policy-gate"
 
   // C27: local plumbing can fail without changing an accepted caller result.
   // Two persistent requests and a transient request distinguish memo ownership
@@ -8,128 +16,166 @@ module dialcache_local_failure_conformance {
   // Native bindings inject failure at local storage/its integer-clock boundary.
   // A read fault is exercised on a present entry; a write fault is armed while
   // source work is pending. Successful operations use the real native storage.
+  // Every rule is a kernel transition (formal/kernel): the layered traversal
+  // with the local fault switch read at admission and settlement
+  // (`local_faults`). This module owns the bounded state, the scope and policy
+  // decoding, the input choices and the guards.
 
-  type Receipt = {
-    readFailed: bool, writeFailed: bool, before: int, after: int,
-    returned: int, call: int
+  pure val ROOT_REQUEST = 0
+  pure val SECOND_REQUEST = 1
+  pure val TRANSIENT_REQUEST = 2
+  pure val MAX_CALLS = 10
+  pure val SERVING_TTL_MS = 60000
+  // One key on one instance, two persistent request scopes and a transient
+  // one, one operation per entity; the fixture installs a policy provider.
+  pure val LAYOUT: Serving::Layout = {
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true
   }
+  pure val TTLS: Ttls = { localMs: SERVING_TTL_MS, freshMs: SERVING_TTL_MS, retentionMs: SERVING_TTL_MS }
+
   type State = {
-    o: Observation, memo: List[int], localValue: int, remoteValue: int,
-    remoteEnabled: bool, failed: bool, pending: bool, scope: int,
-    localMiss: bool, readFailed: bool, acceptedRemote: bool,
-    localBefore: int, receipts: List[Receipt]
+    o: Observation,
+    now: int,
+    skew: int,
+    remoteAvailable: bool,
+    tracked: bool,
+    capacity: int,
+    readFailed: bool,
+    dumpFailed: bool,
+    writeFailed: bool,
+    localFailed: bool,
+    policy: int,
+    closed: List[bool],
+    memo: List[int],
+    requestFlights: List[int],
+    processFlights: List[int],
+    localValues: List[int],
+    localExpires: List[int],
+    lru: List[List[int]],
+    remoteValues: List[int],
+    created: List[int],
+    expires: List[int],
+    watermark: List[int],
+    sources: List[Serving::LayeredSource],
+    owners: List[int],
+    memoSlots: List[int],
+    held: List[Gate::Held]
   }
   var s: State
   var input: { name: str, choice: int }
 
+  // Input decoding: every call is enabled on the one key; the two persistent
+  // scopes memoize, the transient one does not. The remote ramp reply is the
+  // drivers' layer policy code: all layers, or every layer but the remote one.
+  pure def call(scope: int): Call = { instance: 0, key: 0, context: scope, enabled: true, keyFailed: false }
+  pure def policyOf(selected: int): int = if (selected == 1) ALL_LAYERS else NO_REMOTE_LAYER
+
   action init = all {
     input' = { name: "init", choice: -1 },
     s' = {
-      o: empty, memo: List(0, 0), localValue: 0, remoteValue: 0,
-      remoteEnabled: true, failed: false, pending: false, scope: 2,
-      localMiss: false, readFailed: false, acceptedRemote: false,
-      localBefore: 0, receipts: List()
+      o: empty,
+      now: 0,
+      skew: 0,
+      remoteAvailable: true,
+      tracked: false,
+      capacity: 1,
+      readFailed: false,
+      dumpFailed: false,
+      writeFailed: false,
+      localFailed: false,
+      policy: ALL_LAYERS,
+      closed: List(false, false),
+      memo: List(NO_VALUE, NO_VALUE),
+      requestFlights: List(NO_OWNER, NO_OWNER),
+      processFlights: List(NO_OWNER),
+      localValues: List(NO_VALUE),
+      localExpires: List(0),
+      lru: List(List()),
+      remoteValues: List(NO_VALUE),
+      created: List(0),
+      expires: List(0),
+      watermark: List(0),
+      sources: List(),
+      owners: List(),
+      memoSlots: List(),
+      held: List()
     }
   }
 
-  pure def complete(x: State, value: int): State = {
-    pending: false,
-    memo: if (value != SOURCE_ERROR and x.scope < 2)
-      x.memo.replaceAt(x.scope, value) else x.memo,
-    o: finishPendingCalls(x.o, value),
-    ...x
-  }
-
-  pure def recordPublication(x: State, value: int): State = {
-    receipts: x.receipts.append({
-      readFailed: x.readFailed,
-      writeFailed: x.localMiss and x.failed and value != SOURCE_ERROR,
-      before: x.localBefore, after: x.localValue,
-      returned: value, call: x.o.calls.length() - 1
-    }), ...x
-  }
-
-  pure def acquired(x: State, value: int): State = {
-    val published = {
-      localValue: if (x.localMiss and not(x.failed)) value else x.localValue,
-      ...x
-    }
-    complete(recordPublication(published, value), value)
-  }
-
-  pure def admitted(x: State, scope: int): State = {
-    val call = {
-      scope: scope, localBefore: x.localValue, readFailed: x.failed,
-      localMiss: not(x.failed), acceptedRemote: x.remoteEnabled,
-      o: { calls: x.o.calls.append(CALL_PENDING), policyCalls: x.o.policyCalls + 1, ...x.o }, ...x
-    }
-    if (scope < 2 and x.memo.nth(scope) != 0) complete(call, x.memo.nth(scope))
-    else if (not(x.failed) and x.localValue != 0) complete(call, x.localValue)
-    else {
-      val read = { o: { reads: call.o.reads + (if (x.remoteEnabled) 1 else 0), ...call.o }, ...call }
-      if (x.remoteEnabled and x.remoteValue != 0)
-        acquired({ o: { loads: read.o.loads + 1, ...read.o }, ...read }, x.remoteValue)
-      else { pending: true, o: { loaders: read.o.loaders + 1, ...read.o }, ...read }
-    }
-  }
+  // One source at a time: the newest source is the pending one, if any.
+  val pending = s.sources.length() > 0 and s.sources.nth(Flights::latest(s)).result == CALL_PENDING
 
   action begin(scope: int): bool = all {
-    not(s.pending), s.o.calls.length() < 10,
+    not(pending), s.o.calls.length() < MAX_CALLS,
     // The two native injection bindings share this fallible-read domain.
-    not(s.failed) or s.localValue != 0,
+    not(s.localFailed) or s.localValues.nth(0) != NO_VALUE,
     input' = { name: "beginCall", choice: scope },
-    s' = admitted(s, scope)
+    s' = Faults::begin(s, LAYOUT, call(scope), resolution(s.policy, s.remoteAvailable), TTLS)
   }
   action beginCall = { nondet choice = Set(0, 1, 2).oneOf(); begin(choice) }
 
   action resolve(value: int): bool = all {
-    s.pending,
+    pending,
     input' = { name: "resolveLoader", choice: value },
-    val remote = if (s.acceptedRemote) {
-      remoteValue: value,
-      o: {
-        dumps: s.o.dumps + 1, writes: s.o.writes + 1,
-        writeTtls: s.o.writeTtls.append(60000), ...s.o
-      }, ...s
-    } else s
-    s' = acquired(remote, value)
+    s' = Faults::settle(s, LAYOUT, Flights::latest(s), value)
   }
   action resolveLoader = { nondet choice = Set(VALUE_ONE, VALUE_TWO).oneOf(); resolve(choice) }
   action rejectLoader = all {
-    s.pending, input' = { name: "rejectLoader", choice: -1 },
-    s' = complete(recordPublication(s, SOURCE_ERROR), SOURCE_ERROR)
+    pending, input' = { name: "rejectLoader", choice: -1 },
+    s' = Faults::settle(s, LAYOUT, Flights::latest(s), SOURCE_ERROR)
   }
   action fault(selected: int): bool = all {
     input' = { name: "localFault", choice: selected },
-    s' = { failed: selected == 1, ...s }
+    s' = { localFailed: selected == 1, ...s }
   }
   action localFault = { nondet choice = Set(0, 1).oneOf(); fault(choice) }
   action remotePolicy(selected: int): bool = all {
     input' = { name: "policy", choice: selected },
-    s' = { remoteEnabled: selected == 1, ...s }
+    s' = { policy: policyOf(selected), ...s }
   }
   action policy = { nondet choice = Set(0, 1).oneOf(); remotePolicy(choice) }
   action seeded(value: int): bool = all {
-    input' = { name: "seed", choice: value }, s' = { remoteValue: value, ...s }
+    input' = { name: "seed", choice: value }, s' = Remote::seedFrame(s, 0, value, SERVING_TTL_MS)
   }
   action seed = { nondet choice = Set(VALUE_ONE, VALUE_TWO).oneOf(); seeded(choice) }
   action step = any { beginCall, resolveLoader, rejectLoader, localFault, policy, seed }
 
-  // Independent receipts compare the old storage identity and accepted result;
-  // they do not call the transition's publication-eligibility helpers.
-  val failedReadKeepsPriorLocalValue = s.receipts.indices().forall(i => {
-    val receipt = s.receipts.nth(i)
-    not(receipt.readFailed) or receipt.after == receipt.before
+  // -- Independently stated safety properties --------------------------------
+  // Stated one step over the library records: the step that just admitted
+  // (the newest caller and, when it started one, the newest source) and the
+  // step that just settled (the newest source, the one settlement names).
+
+  val newest = s.o.calls.length() - 1
+  val justAdmitted = input.name == "beginCall"
+  val justSettled = input.name == "resolveLoader" or input.name == "rejectLoader"
+  // A call admitted under an armed fault reads nothing from local storage: it
+  // is served from its scope's memo or from the remote frame, or it starts a
+  // source that captured no local TTL, so no later settlement of that source
+  // can publish locally, whatever the switch says by then. The no-warm half (a
+  // faulted remote hit leaves local storage as it was) is not stated here, as
+  // the slot may already hold the served value; the regression
+  // localReadFailureFallsThroughAndPreservesOldLocalTest pins it.
+  val faultedReadNeverUsesLocal = not(justAdmitted and s.localFailed) or {
+    val owner = s.owners.nth(newest)
+    val value = s.o.calls.nth(newest)
+    if (owner >= 0) s.sources.nth(owner).localMs == 0
+    else (input.choice < 2 and s.memo.nth(input.choice) == value) or s.remoteValues.nth(0) == value
+  }
+  // A settlement under an armed fault carries no local TTL: the write it would
+  // have made is the one that failed. Its callers still receive the result.
+  val faultedSettlementPublishesNothingLocally = not(justSettled and s.localFailed)
+    or s.sources.nth(Flights::latest(s)).localMs == 0
+  val callsKeepSourceOutcome = s.owners.indices().forall(caller => {
+    val owner = s.owners.nth(caller)
+    owner < 0 or s.o.calls.nth(caller) == s.sources.nth(owner).result
   })
-  val failedWriteKeepsAcceptedCallerResult = s.receipts.indices().forall(i => {
-    val receipt = s.receipts.nth(i)
-    not(receipt.writeFailed) or (receipt.after == receipt.before
-      and s.o.calls.nth(receipt.call) == receipt.returned)
-  })
-  val sourceErrorsNeverReplaceLocalValue = s.receipts.indices().forall(i => {
-    val receipt = s.receipts.nth(i)
-    receipt.returned != SOURCE_ERROR or receipt.after == receipt.before
-  })
+  // Storage and memo hold accepted values only: a rejected source publishes
+  // and memoizes nothing, and a caller result is never an error code stored.
+  val storageHoldsAcceptedValuesOnly = and {
+    s.localValues.nth(0) == NO_VALUE or accepted(s.localValues.nth(0)),
+    s.remoteValues.nth(0) == NO_VALUE or accepted(s.remoteValues.nth(0)),
+    s.memo.indices().forall(slot => s.memo.nth(slot) == NO_VALUE or accepted(s.memo.nth(slot)))
+  }
 
   run localReadFailureFallsThroughAndPreservesOldLocalTest = init
     .then(begin(2)).then(resolve(VALUE_ONE))

@@ -10,7 +10,9 @@
     "diagnostics",
     "encodings",
     "flights",
+    "instances",
     "layer_policy",
+    "local_faults",
     "local_storage",
     "markers",
     "payloads",
@@ -151,8 +153,14 @@
       "id": "local-failure",
       "model": "formal/dialcache-local-failure-conformance.qnt",
       "module": "dialcache_local_failure_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 24
+      "libraryTransitions": [
+        "flights::latest",
+        "layer_policy::resolution",
+        "local_faults::begin",
+        "local_faults::settle",
+        "remote_frames::seedFrame"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "runtime-boundaries",
@@ -186,8 +194,12 @@
       "id": "local-clock",
       "model": "formal/dialcache-local-clock-conformance.qnt",
       "module": "dialcache_local_clock_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 11
+      "libraryTransitions": [
+        "clock::advanceTicks",
+        "instances::construct",
+        "serving::callLocal"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "source-budgets",
