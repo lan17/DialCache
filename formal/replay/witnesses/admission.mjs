@@ -99,34 +99,38 @@ export function admissionWitnesses(histories, recorder = createWitnessRecorder()
   return recorder.labels();
 }
 
-// The composed layout read back in the shadow's terms. A job is live while
-// its phase is not FINISHED and runs over the detached flight its loader
-// ordinal maps to; its phase is the held lifecycle's (waiting for its source,
-// decoding, confirming) and its deadline is compared while the budget is
-// pending. A held read or decode over a source with a job confirming or
-// decoding is that job's; any other is a caller flight's, whose identity is
-// its source's, whose selection is the one captured for the flight and whose
-// callers are the owners the registry names. A flight registered for sharing
-// is the process registry's entry for its identity.
-const KEYS = 3, WAITING_SOURCE = 0, FINISHED = 3, DECODING = 4, CONFIRMING = 5, JOB_DEADLINE = 2;
+// The composed layout read back in the shadow's terms. The registry is
+// pending-only, so every job is live; a job is keyed by the loader ordinal of
+// the detached flight it runs over, its phase is the held lifecycle's (waiting
+// for its source, decoding, confirming) and its deadline (keyed by its source)
+// is compared while the budget is pending. A held read or decode over a
+// source with a job confirming or decoding is that job's; any other is a
+// caller flight's, whose identity is its source's, whose selection is the one
+// captured for the flight and whose callers are the owners the registry
+// names. A flight registered for sharing is the process registry's entry for
+// its identity.
+const KEYS = 3, WAITING_SOURCE = 1, DECODING = 2, CONFIRMING = 3, JOB_DEADLINE = 2;
 const PHASES = new Map([[WAITING_SOURCE, "source"], [DECODING, "decode"], [CONFIRMING, "confirmation"]]);
 const layoutFields = ["now", "sources", "owners", "processFlights", "jobs", "deadlines", "selected", "loaders", "reads", "loads"];
 function modelView(state, context) {
   const { sources, owners, processFlights, jobs, deadlines, selected, loaders, reads, loads } = state;
   const identityOf = flight => sources[flight].instance * KEYS + sources[flight].key;
   const flightView = flight => ({ identity: identityOf(flight), selected: selected.includes(flight), callers: owners.flatMap((owned, caller) => owned === flight ? [caller] : []) });
+  const ordinalOf = job => {
+    const ordinal = loaders.indexOf(job.source);
+    if (ordinal < 0) throw new Error(`${context}: a job runs over flight ${job.source}, which no loader maps to`);
+    return ordinal;
+  };
   const effectView = (flight, phase) => {
-    const job = jobs.findIndex(candidate => candidate.source === flight && candidate.phase === phase);
-    return job >= 0 ? { job } : { flight: flightView(flight) };
+    const job = jobs.find(candidate => candidate.source === flight && candidate.phase === phase);
+    return job !== undefined ? { job: ordinalOf(job) } : { flight: flightView(flight) };
   };
   const jobViews = new Map();
-  for (const [index, job] of jobs.entries()) {
-    if (job.phase === FINISHED) continue;
-    if (loaders[index] !== job.source) throw new Error(`${context}: job ${index} runs over flight ${job.source} but loader ${index} maps to ${loaders[index]}`);
+  for (const job of jobs) {
     const phase = PHASES.get(job.phase);
-    if (phase === undefined) throw new Error(`${context}: job ${index} is in phase ${job.phase}, which the held lifecycle never takes`);
-    const due = deadlines.find(deadline => deadline.kind === JOB_DEADLINE && deadline.index === index);
-    jobViews.set(index, { identity: identityOf(job.source), phase, timedOut: job.timedOut, ...(due !== undefined ? { deadline: due.at } : {}) });
+    if (phase === undefined) throw new Error(`${context}: the job over flight ${job.source} is in phase ${job.phase}, which the held lifecycle never takes`);
+    const due = deadlines.find(deadline => deadline.kind === JOB_DEADLINE && deadline.index === job.source);
+    jobViews.set(ordinalOf(job), { identity: identityOf(job.source), phase, timedOut: job.timedOut, ...(due !== undefined ? { deadline: due.at } : {}) });
   }
   return {
     now: state.now,

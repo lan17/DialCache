@@ -5,6 +5,7 @@ module dialcache_admission_conformance {
   import layer_policy.* from "./kernel/layer-policy"
   import serving as Serving from "./kernel/serving"
   import remote_io as RemoteIO from "./kernel/remote-io"
+  import remote_writes as Writes from "./kernel/remote-writes"
   import shadow as Shadow from "./kernel/shadow"
   import deadlines as Deadlines from "./kernel/deadlines"
   import recovery as Recovery from "./kernel/recovery"
@@ -60,15 +61,18 @@ module dialcache_admission_conformance {
   // Every reply uses the remote layer alone, with the TTLs above.
   pure val REMOTE_LAYERS: Layers = { request: false, local: false, remote: true }
   pure val TTLS: Ttls = { localMs: 0, freshMs: REMOTE_TTL_MS, retentionMs: REMOTE_TTL_MS }
-  // The instance's shadow limits: two slots per instance, a 10 ms job budget.
-  pure val LIMITS: Shadow::Limits = { capacity: JOB_CAPACITY, budgetMs: SHADOW_TIMEOUT_MS }
+  // The instance's shadow policy as read when a hit is judged: the outcome
+  // hook installed, two slots per instance, a 10 ms job budget, no mismatch
+  // logging; the cohort selection consulted is the one captured for the flight.
+  pure val SHADOWING: Shadow::Shadowing = { hook: true, selected: true, capacity: JOB_CAPACITY, budgetMs: SHADOW_TIMEOUT_MS, logging: false }
 
   // State: the held remote shape with the served job registry, its budgets
   // and the cohort selections captured for pending flights, and the policy
   // in force decoded once at the policy input (whether replies coalesce,
   // whether they select the cohort). The local layer is off in every reply,
   // so local storage is declared empty; no scope is persistent, so the memo
-  // and request registries are empty.
+  // and request registries are empty; served jobs never fill, so the held
+  // lifecycle's dumps and writes are declared empty.
   type State = {
     o: Observation, io: RemoteIO::IO,
     now: int, skew: int, remoteAvailable: bool, tracked: bool, capacity: int,
@@ -78,6 +82,7 @@ module dialcache_admission_conformance {
     remoteValues: List[int], created: List[int], expires: List[int], watermark: List[int],
     sources: List[Serving::LayeredSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held],
     reads: List[RemoteIO::HeldRead], loads: List[RemoteIO::HeldLoad], loaders: List[int], retained: List[Recovery::Snapshot],
+    dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite],
     jobs: List[Shadow::Job], deadlines: List[Deadlines::Due], selected: List[int],
     coalesce: bool, shadowSelected: bool
   }
@@ -107,7 +112,7 @@ module dialcache_admission_conformance {
     expires: List(REMOTE_TTL_MS, REMOTE_TTL_MS, REMOTE_TTL_MS), watermark: List(0, 0, 0),
     sources: List(), owners: List(), memoSlots: List(), held: List(),
     reads: List(), loads: List(), loaders: List(), retained: List(),
-    jobs: List(), deadlines: List(), selected: List(),
+    dumps: List(), writes: List(), jobs: List(), deadlines: List(), selected: List(),
     coalesce: true, shadowSelected: true
   }
   action init = all { input' = { name: "init", choice: -1 }, s' = INITIAL }
@@ -142,7 +147,7 @@ module dialcache_admission_conformance {
   action loadWith(choice: int): bool = all {
     RemoteIO::holdsLoad(s, choice),
     input' = { name: "releaseLoad", choice: choice },
-    s' = Shadow::settleLoad(s, LAYOUT, choice, false, READ_BUDGET_MS, LIMITS)
+    s' = Shadow::settleLoad(s, LAYOUT, choice, false, READ_BUDGET_MS, SHADOWING)
   }
   action releaseLoad = {
     nondet choice = heldLoads.oneOf()
@@ -220,12 +225,13 @@ module dialcache_admission_conformance {
 
   // -- Independently stated safety properties over the library records --------
 
-  // A job's identity is its source's (instance, key).
+  // A job's identity is its source's (instance, key); the registry is
+  // pending-only, so every record is a live job.
   def jobInstance(i: int): int = s.sources.nth(s.jobs.nth(i).source).instance
   def jobKey(i: int): int = s.sources.nth(s.jobs.nth(i).source).key
   val capacityIsPerInstance = 0.to(INSTANCES - 1).forall(instance =>
-    Shadow::liveJobs(s).filter(i => jobInstance(i) == instance).size() <= JOB_CAPACITY)
-  val oneJobPerIdentity = Shadow::liveJobs(s).forall(i => Shadow::liveJobs(s).forall(j =>
+    s.jobs.indices().filter(i => jobInstance(i) == instance).size() <= JOB_CAPACITY)
+  val oneJobPerIdentity = s.jobs.indices().forall(i => s.jobs.indices().forall(j =>
     i == j or jobInstance(i) != jobInstance(j) or jobKey(i) != jobKey(j)))
   // A flight registered for an identity is a shared, pending flight for it
   // (the former registeredCallsArePending over the process registry).
@@ -240,12 +246,17 @@ module dialcache_admission_conformance {
     s.owners.nth(c) >= 0 and s.o.calls.nth(c) == s.sources.nth(s.owners.nth(c)).result)
   val jobsAreDiagnostic = s.o.writes == 0 and s.o.dumps == 0
     and s.o.sourceScopes.indices().forall(i => not(s.o.sourceScopes.nth(i)))
-  // Every loader is a job's detached source, in admission order; every held
-  // effect is one the drivers dispatched; every read counted was budgeted on
-  // the io channel (the former effectsMatchRecords over pending-only records
-  // and the append-only read budgets: only the decode count has no such twin).
-  val effectsMatchRecords = s.o.loaders == s.loaders.length() and s.loaders.length() == s.jobs.length()
-    and s.jobs.indices().forall(i => s.loaders.nth(i) == s.jobs.nth(i).source)
+  // Every loader runs a detached source no caller owns (only shadow jobs
+  // invoke sources), every registered job runs over a loader's flight and
+  // every pending loader flight has its job (a served job keeps its record
+  // until its detached source settles); every held effect is one the drivers
+  // dispatched; every read counted was budgeted on the io channel (the former
+  // effectsMatchRecords over pending-only records and the append-only read
+  // budgets: only the decode count has no such twin).
+  val effectsMatchRecords = s.o.loaders == s.loaders.length()
+    and s.loaders.indices().forall(k => s.owners.indices().forall(c => s.owners.nth(c) != s.loaders.nth(k)))
+    and s.jobs.indices().forall(i => s.loaders.indices().exists(k => s.loaders.nth(k) == s.jobs.nth(i).source))
+    and s.loaders.indices().forall(k => s.sources.nth(s.loaders.nth(k)).result != CALL_PENDING or Shadow::holdsJob(s, s.loaders.nth(k)))
     and s.reads.indices().forall(i => s.reads.nth(i).read < s.o.reads)
     and s.loads.indices().forall(i => s.loads.nth(i).load < s.o.loads)
     and s.io.budgets.length() == s.o.reads
@@ -256,13 +267,13 @@ module dialcache_admission_conformance {
     s.sources.nth(flight).result == CALL_PENDING
       and (s.reads.indices().exists(j => s.reads.nth(j).flight == flight) or s.loads.indices().exists(j => s.loads.nth(j).flight == flight))
   })
-  // Every pending deadline is a live job's whose budget has not expired, and
-  // every such job has exactly one.
+  // Every pending deadline is a registered job's whose budget has not
+  // expired (keyed by the job's source), and every such job has exactly one.
   val jobBudgetsBelongToLiveJobs = s.deadlines.indices().forall(i => {
     val due = s.deadlines.nth(i)
-    due.kind == Deadlines::JOB and Shadow::live(s.jobs.nth(due.index)) and not(s.jobs.nth(due.index).timedOut)
-  }) and s.jobs.indices().forall(i => not(Shadow::live(s.jobs.nth(i)) and not(s.jobs.nth(i).timedOut))
-    or Deadlines::deadlinesOf(s, Deadlines::JOB, i).length() == 1)
+    due.kind == Deadlines::JOB and Shadow::holdsJob(s, due.index) and not(Shadow::jobOf(s, due.index).timedOut)
+  }) and s.jobs.indices().forall(i => s.jobs.nth(i).timedOut
+    or Deadlines::deadlinesOf(s, Deadlines::JOB, s.jobs.nth(i).source).length() == 1)
 
   // -- Deterministic regression schedules ------------------------------------
 
@@ -287,13 +298,13 @@ module dialcache_admission_conformance {
     .then(readWith(0))
     .then(loadWith(0))
     .then(advanceBy(SHADOW_TIMEOUT_MS))
-    .expect(Shadow::liveJobs(s) == Set(0) and s.o.shadow == List("timeout"))
+    .expect(s.jobs.length() == 1 and s.jobs.nth(0).timedOut and s.o.shadow == List("timeout"))
     // A later caller still receives its cache hit, but its duplicate job drops
     // while the timed-out source owns the slot. Settlement permits admission.
     .then(beginWith(0)).then(readWith(1)).then(loadWith(1))
     .expect(s.o.loaders == 1 and s.o.shadow == List("timeout", "dropped"))
     .then(resolveWith(2))
-    .expect(Shadow::liveJobs(s) == Set())
+    .expect(s.jobs == List())
     .then(beginWith(0)).then(readWith(2)).then(loadWith(2))
     .expect(s.o.loaders == 2 and s.o.loads == 3 and s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE)
       and s.o.shadow == List("timeout", "dropped"))
@@ -304,11 +315,11 @@ module dialcache_admission_conformance {
     .then(loadWith(0))
     .then(resolveWith(2))
     .then(advanceBy(SHADOW_TIMEOUT_MS))
-    .expect(Shadow::liveJobs(s) == Set(0))
+    .expect(s.jobs.length() == 1 and s.jobs.nth(0).timedOut)
     .then(beginWith(0)).then(readWith(1)).then(loadWith(2))
     .expect(s.o.loaders == 1 and s.o.shadow == List("timeout", "dropped"))
     .then(loadWith(1))
-    .expect(Shadow::liveJobs(s) == Set() and s.o.reads == 2)
+    .expect(s.jobs == List() and s.o.reads == 2)
     .then(beginWith(0)).then(readWith(2)).then(loadWith(3))
     .expect(s.o.loaders == 2 and s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE)
       and s.o.shadow == List("timeout", "dropped"))
@@ -320,11 +331,11 @@ module dialcache_admission_conformance {
     .then(resolveWith(2))
     .then(loadWith(1))
     .then(advanceBy(SHADOW_TIMEOUT_MS))
-    .expect(Shadow::liveJobs(s) == Set(0))
+    .expect(s.jobs.length() == 1 and s.jobs.nth(0).timedOut)
     .then(beginWith(0)).then(readWith(2)).then(loadWith(2))
     .expect(s.o.loaders == 1 and s.o.shadow == List("timeout", "dropped"))
     .then(readWith(1))
-    .expect(Shadow::liveJobs(s) == Set())
+    .expect(s.jobs == List())
     .then(beginWith(0)).then(readWith(3)).then(loadWith(3))
     .expect(s.o.loaders == 2 and s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE)
       and s.o.shadow == List("timeout", "dropped"))

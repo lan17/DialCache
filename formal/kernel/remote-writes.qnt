@@ -59,6 +59,10 @@ module remote_writes {
   pure def heldDump(state: Writing[r], dump: int): HeldDump = state.dumps.select(held => held.dump == dump).nth(0)
   pure def holdsWrite(state: Writing[r], write: int): bool = state.writes.select(held => held.write == write).length() > 0
   pure def heldWrite(state: Writing[r], write: int): HeldWrite = state.writes.select(held => held.write == write).nth(0)
+  // The most recently held dump and write (the held lists are in dispatch
+  // order), for a profile whose drivers release the latest effect.
+  pure def latestDump(state: Writing[r]): HeldDump = state.dumps.nth(state.dumps.length() - 1)
+  pure def latestWrite(state: Writing[r]): HeldWrite = state.writes.nth(state.writes.length() - 1)
 
   // -- Release ---------------------------------------------------------------------
 

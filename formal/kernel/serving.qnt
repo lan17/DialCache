@@ -530,8 +530,13 @@ module serving {
   // (`dispatchWrite`, carrying the retention), then stores the frame: a dump
   // fault stops the dispatch and a write fault the storage. `publish` is the
   // publication without completion; `settle` completes after it.
+  // A refill may be written now: its authority captured a retention and the
+  // fence it observed still allows the write; a caller's refill (`refills`)
+  // and a shadow job's fill (`shadow::fill`) judge it here.
+  pure def refillAllowed(state: Served[r], retentionMs: int, fence: int): bool =
+    retentionMs > 0 and Remote::writeAllowed(state, fence)
   pure def refills(state: Served[r], source: LayeredSource, value: int): bool =
-    accepted(value) and source.retentionMs > 0 and Remote::writeAllowed(state, source.fence)
+    accepted(value) and refillAllowed(state, source.retentionMs, source.fence)
   pure def dispatchWrite(state: Served[r], retentionMs: int): Served[r] = {
     o: { writes: state.o.writes + 1, writeTtls: state.o.writeTtls.append(retentionMs), ...state.o },
     ...state
@@ -577,12 +582,14 @@ module serving {
   // (the driver adapter's `invalidate` override in
   // `test/formal/behavior-driver.ts`, `go/behavior_driver_test.go`
   // `behaviorRemote.Invalidate`); otherwise it is counted, reports
-  // ok and raises the watermark. `maintains` is whether an invalidation takes
+  // ok and raises the watermark to the wall clock plus the invalidator's
+  // future buffer (`bufferMs`, the public `futureBufferMs`; 0 where the
+  // drivers pass none). `maintains` is whether an invalidation takes
   // effect: the judgment the effective arm branches on, and the one a marker
   // lifetime (a profile that composes one stamps its marker only then) reads
   // beside this outcome.
   pure def maintains(state: Served[r]): bool = state.remoteAvailable and not(state.writeFailed)
-  pure def invalidate(state: Served[r], entity: int): Served[r] =
+  pure def invalidate(state: Served[r], entity: int, bufferMs: int): Served[r] =
     if (not(state.remoteAvailable)) {
       o: { maintenance: state.o.maintenance.append("missing_remote"), ...state.o },
       ...state
@@ -599,6 +606,6 @@ module serving {
         maintenance: state.o.maintenance.append("ok"),
         ...state.o
       },
-      ...Remote::raiseWatermark(state, entity)
+      ...Remote::raiseWatermark(state, entity, bufferMs)
     }
 }

@@ -19,21 +19,26 @@ module dialcache_shadow_layers_connection {
   pure def owned(state: profile::State, source: int): bool = Flights::ownedBy(state, source).size() > 0
   pure def identityOf(state: profile::State, source: int): int =
     state.sources.nth(source).instance * profile::KEYS + state.sources.nth(source).key
-  val admitted = profile::s.jobs.indices().filter(i => i >= before.jobs.length())
+  // The jobs this step admitted: registered over a source no job held before.
+  val admitted = profile::s.jobs.indices().filter(i => not(Shadow::holdsJob(before, profile::s.jobs.nth(i).source)))
   val lastCall = profile::s.o.calls.length() - 1
 
   // A caller no source owns was served by a layer at its release and keeps
   // that outcome: no settlement names it (hitResultsAreImmutable).
   val servedCallersKeepTheirOutcome = before.o.calls.indices().forall(c =>
     before.owners.nth(c) >= 0 or profile::s.o.calls.nth(c) == before.o.calls.nth(c))
-  // A job is admitted only under a policy whose cohort selection is on
-  // (disabledCohortsNeverOwnJobs: the disabled codes are the ones whose
-  // decoded selection is false), at a caller's release.
-  val jobsAdmittedOnlyWhenSelected = admitted.forall(_ => before.shadow and profile::input.name == "beginCall")
-  // A job captures the retention the reply in force at its admission resolved
-  // to (retentionComesFromAdmissionPolicy: 180 s under the changed-fill code,
-  // 120 s otherwise, which is `ttlsFor`'s table).
-  val jobsCaptureAdmissionRetention = admitted.forall(i => profile::s.jobs.nth(i).retentionMs == before.ttls.retentionMs)
+  // A job is admitted only under a policy whose cohort selects the key
+  // (disabledCohortsNeverOwnJobs), at a caller's release: the drivers' code
+  // table spelled here rather than the profile's decoder, so the clause binds
+  // the decoder too (codes 5, 6, 7 and 13 disable shadow; of the cohort
+  // codes only 11, the numerator above the boundary, selects).
+  val jobsAdmittedOnlyWhenSelected = admitted.forall(_ => profile::input.name == "beginCall"
+    and (before.policy == 11 or not(Set(5, 6, 7, 9, 10, 13).contains(before.policy))))
+  // A job captures the TTLs the reply in force at its admission resolved to
+  // (retentionComesFromAdmissionPolicy: a 180 s retention under the drivers'
+  // changed-fill codes 8 and 13, 120 s otherwise; the table, not `ttlsFor`).
+  val jobsCaptureAdmissionRetention = admitted.forall(i =>
+    profile::s.jobs.nth(i).ttls.retentionMs == (if (before.policy == 8 or before.policy == 13) 180000 else 120000))
   // A job's C0, when it has one, is the payload the remote layer held fresh
   // for the admitting reply's freshness at admission (retainedC0WasFreshWhenAcquired).
   val retainedC0WasFreshWhenAcquired = admitted.forall(i => {

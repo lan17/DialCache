@@ -96,7 +96,7 @@ module marker_lifetimes {
 
   // -- Markers and maintenance -----------------------------------------------------
 
-  action invalidate = all { s' = Markers::invalidate(s, ENTITY), input' = { name: "invalidate", choice: ENTITY } }
+  action invalidate = all { s' = Markers::invalidate(s, ENTITY, 0), input' = { name: "invalidate", choice: ENTITY } }
   action observe = all { s' = Markers::observe(s, ENTITY, WALL_ORIGIN_MS), input' = { name: "observeMarker", choice: ENTITY } }
 
   // -- Environment -----------------------------------------------------------------

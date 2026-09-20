@@ -32,8 +32,8 @@ module shadow_jobs {
   pure val SERVING: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: false }
   pure val DARK: Resolution = { layers: { request: false, local: false, remote: false }, coalesce: false }
   pure val TTLS: Ttls = { localMs: 0, freshMs: 1000, retentionMs: 5000 }
-  pure val SHADOWING: Shadow::Shadowing = { selected: true, limits: { capacity: 1, budgetMs: 100 } }
-  pure val UNSELECTED: Shadow::Shadowing = { selected: false, limits: { capacity: 1, budgetMs: 100 } }
+  pure val SHADOWING: Shadow::Shadowing = { hook: true, selected: true, capacity: 1, budgetMs: 100, logging: false }
+  pure val UNSELECTED: Shadow::Shadowing = { hook: true, selected: false, capacity: 1, budgetMs: 100, logging: false }
   pure def call(key: int): Call = { instance: 0, key: key, context: 1, enabled: true, keyFailed: false }
   // A call inside the one persistent scope, the scope a run can close.
   pure def scopedCall(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }
@@ -97,7 +97,7 @@ module shadow_jobs {
   action seedAged(key: int, value: int, age: int): bool = all {
     input' = { name: "seed", choice: key }, s' = Remote::seedAged(s, key, value, age, 60000)
   }
-  action invalidate(entity: int): bool = all { input' = { name: "invalidate", choice: entity }, s' = Serving::invalidate(s, entity) }
+  action invalidate(entity: int): bool = all { input' = { name: "invalidate", choice: entity }, s' = Serving::invalidate(s, entity, 0) }
   action rollback(ms: int): bool = all { input' = { name: "rollback", choice: ms }, s' = Clock::shiftWall(s, -ms) }
   action step = any { beginWith(0, DARK, Recovery::ALLOW, SHADOWING), resolve(0, VALUE_ONE), advanceBy(1) }
 
@@ -145,14 +145,14 @@ module shadow_jobs {
     .expect(s.o.reads == 1 and s.jobs.length() == 1 and s.jobs.nth(0).fence == 100000 and s.sources.nth(0).fence == NO_FENCE)
     .then(resolve(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 0 and s.o.writes == 0 and s.dumps == List()
-      and s.o.shadow == List("fill_fenced") and s.jobs.nth(0).phase == Shadow::FINISHED)
+      and s.o.shadow == List("fill_fenced") and s.jobs == List())
   // The fence is judged again when the dump is released: a wall rollback below
   // the watermark between settlement and release fences the write.
   run rolledBackWallFencesADarkFillAtDumpReleaseTest = init.then(invalidate(0)).then(advanceBy(1))
     .then(beginWith(0, DARK, Recovery::ALLOW, SHADOWING)).then(resolve(0, VALUE_ONE))
     .expect(s.o.dumps == 1 and s.jobs.nth(0).phase == Shadow::SERIALIZING)
     .then(rollback(1)).then(releaseDump(0))
-    .expect(s.o.writes == 0 and s.o.shadow == List("fill_fenced") and s.jobs.nth(0).phase == Shadow::FINISHED and s.dumps == List())
+    .expect(s.o.writes == 0 and s.o.shadow == List("fill_fenced") and s.jobs == List() and s.dumps == List())
   // The same fill a millisecond later clears the watermark and writes.
   run darkFillClearsTheWatermarkAfterItTest = init.then(invalidate(0)).then(advanceBy(1))
     .then(beginWith(0, DARK, Recovery::ALLOW, SHADOWING)).then(resolve(0, VALUE_ONE)).then(releaseDump(0))
@@ -165,13 +165,13 @@ module shadow_jobs {
     .expect(s.o.dumps == 1 and s.jobs.nth(0).phase == Shadow::SERIALIZING)
     .then(advanceBy(100)).expect(s.o.shadow == List("timeout") and s.jobs.nth(0).timedOut and s.deadlines == List())
     .then(releaseDump(0))
-    .expect(s.o.writes == 0 and s.o.shadow == List("timeout") and s.jobs.nth(0).phase == Shadow::FINISHED and s.dumps == List())
+    .expect(s.o.writes == 0 and s.o.shadow == List("timeout") and s.jobs == List() and s.dumps == List())
   run writeReleasedAfterTheBudgetStillStoresTest = init
     .then(beginWith(0, DARK, Recovery::ALLOW, SHADOWING)).then(resolve(0, VALUE_ONE)).then(releaseDump(0))
     .expect(s.o.writes == 1 and s.jobs.nth(0).phase == Shadow::WRITING)
     .then(advanceBy(100)).expect(s.o.shadow == List("timeout"))
     .then(releaseWrite(0))
-    .expect(s.remoteValues == List(VALUE_ONE, NO_VALUE) and s.o.shadow == List("timeout") and s.jobs.nth(0).phase == Shadow::FINISHED)
+    .expect(s.remoteValues == List(VALUE_ONE, NO_VALUE) and s.o.shadow == List("timeout") and s.jobs == List())
   // A dump fault along a caller's held refill dispatches no write and completes
   // the caller; a write fault stores nothing and completes it all the same.
   run heldRefillDumpFaultCompletesWithoutWriteTest = init
@@ -183,7 +183,7 @@ module shadow_jobs {
   // A dark fill whose dump or write fails ends `fill_error` with nothing written.
   run darkFillDumpFaultEndsFillErrorTest = init
     .then(beginWith(0, DARK, Recovery::ALLOW, SHADOWING)).then(resolve(0, VALUE_ONE)).then(failDump(0))
-    .expect(s.o.calls == List(VALUE_ONE) and s.o.writes == 0 and s.o.shadow == List("fill_error") and s.jobs.nth(0).phase == Shadow::FINISHED and s.dumps == List())
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.writes == 0 and s.o.shadow == List("fill_error") and s.jobs == List() and s.dumps == List())
   run darkFillWriteFaultEndsFillErrorTest = init
     .then(beginWith(0, DARK, Recovery::ALLOW, SHADOWING)).then(resolve(0, VALUE_ONE)).then(releaseDump(0)).then(failWrite(0))
     .expect(s.o.writes == 1 and s.o.shadow == List("fill_error") and s.remoteValues == List(NO_VALUE, NO_VALUE) and s.writes == List())
@@ -193,10 +193,9 @@ module shadow_jobs {
   run failedDarkC0ReadEndsRedisErrorTest = init.then(readFault(true))
     .then(beginWith(0, DARK, Recovery::ALLOW, SHADOWING))
     .expect(s.o.calls == List(CALL_PENDING) and s.o.reads == 1 and s.o.shadow == List("redis_error")
-      and s.jobs.length() == 1 and s.jobs.nth(0).phase == Shadow::FINISHED and s.jobs.nth(0).retentionMs == 0
-      and s.jobs.nth(0).fence == NO_FENCE and s.deadlines == List() and Shadow::liveJobs(s) == Set())
+      and s.jobs == List() and s.deadlines == List())
     .then(readFault(false)).then(beginWith(0, DARK, Recovery::ALLOW, SHADOWING))
-    .expect(s.o.reads == 2 and s.jobs.length() == 2 and Shadow::liveJobs(s) == Set(1) and s.o.shadow == List("redis_error"))
+    .expect(s.o.reads == 2 and s.jobs.length() == 1 and s.jobs.nth(0).source == 1 and s.o.shadow == List("redis_error"))
     .then(resolve(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.dumps == 0 and s.o.writes == 0 and s.o.shadow == List("redis_error"))
   // A confirmation read that fails ends `confirmation_error`: the decode and
@@ -206,7 +205,7 @@ module shadow_jobs {
     .expect(s.o.reads == 1 and s.jobs.nth(0).cached == VALUE_ONE)
     .then(readFault(true)).then(resolve(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.loads == 1 and s.o.reads == 2 and s.o.dumps == 0
-      and s.o.shadow == List("confirmation_error") and s.jobs.nth(0).phase == Shadow::FINISHED)
+      and s.o.shadow == List("confirmation_error") and s.jobs == List())
   // A scope closed between admission and release resolves to the bypass
   // reply: the caller's own unshared source, no job, no read, no label.
   run closedScopeReleaseAdmitsNoJobTest = init.then(admitHeld(0))
@@ -220,7 +219,7 @@ module shadow_jobs {
   // `serving::authority`, one statement for callers and jobs).
   run darkFillRetentionIsCappedForATrackedWriteTest = init
     .then(beginLong(0, DARK, SHADOWING))
-    .expect(s.jobs.nth(0).retentionMs == Remote::TRACKED_RETENTION_CAP_MS and s.sources.nth(0).retentionMs == 0)
+    .expect(s.jobs.nth(0).ttls.retentionMs == Remote::TRACKED_RETENTION_CAP_MS * 2 and s.sources.nth(0).retentionMs == 0)
     .then(resolve(0, VALUE_ONE)).then(releaseDump(0))
     .expect(s.o.writeTtls == List(Remote::TRACKED_RETENTION_CAP_MS) and s.writes.nth(0).retentionMs == Remote::TRACKED_RETENTION_CAP_MS)
   // A served job's detached source owns nobody, publishes nothing, is probed
@@ -234,10 +233,10 @@ module shadow_jobs {
   // A budget delivered inside an advance is delivered at its own instant, in
   // registration order, before the clock reaches the target.
   run budgetsDeliverInRegistrationOrderTest = init
-    .then(beginWith(0, DARK, Recovery::ALLOW, { selected: true, limits: { capacity: 2, budgetMs: 100 } })).then(advanceBy(10))
-    .then(beginWith(1, DARK, Recovery::ALLOW, { selected: true, limits: { capacity: 2, budgetMs: 100 } }))
+    .then(beginWith(0, DARK, Recovery::ALLOW, { hook: true, selected: true, capacity: 2, budgetMs: 100, logging: false })).then(advanceBy(10))
+    .then(beginWith(1, DARK, Recovery::ALLOW, { hook: true, selected: true, capacity: 2, budgetMs: 100, logging: false }))
     .expect(s.deadlines.length() == 2)
     .then(advanceBy(1000))
     .expect(s.o.shadow == List("timeout", "timeout") and s.now == 1010 and s.deadlines == List()
-      and s.jobs.nth(0).phase == Shadow::FINISHED and s.jobs.nth(1).phase == Shadow::FINISHED and s.o.calls == List(CALL_PENDING, CALL_PENDING))
+      and s.jobs == List() and s.o.calls == List(CALL_PENDING, CALL_PENDING))
 }

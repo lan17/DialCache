@@ -153,7 +153,7 @@ module payload_classes {
     s' = Remote::seedAged(s, KEY, payload, age, retentionMs), input' = { name: "seed", choice: payload }
   }
   action seed(payload: int, age: int): bool = seedWith(payload, age, 60000)
-  action invalidate = all { s' = Serving::invalidate(s, 0), input' = { name: "invalidate", choice: -1 } }
+  action invalidate = all { s' = Serving::invalidate(s, 0, 0), input' = { name: "invalidate", choice: -1 } }
 
   // -- Payload classes on the held path --------------------------------------------
 

@@ -1485,8 +1485,8 @@
       "source": "formal/kernel/shadow.qnt",
       "model": "formal/dialcache-admission-conformance.qnt",
       "invariant": "capacityIsPerInstance",
-      "before": "liveJobs(state).filter(i => sourceOf(state, state.jobs.nth(i)).instance == instance).size() >= capacity",
-      "after": "liveJobs(state).filter(i => sourceOf(state, state.jobs.nth(i)).instance == instance).size() > capacity",
+      "before": "state.jobs.select(job => sourceOf(state, job).instance == instance).length() >= capacity",
+      "after": "state.jobs.select(job => sourceOf(state, job).instance == instance).length() > capacity",
       "reproducer": {
         "kind": "exported-regression",
         "run": "fullInstanceDoesNotBlockOtherInstanceTest",
@@ -1831,8 +1831,8 @@
       "source": "formal/kernel/shadow.qnt",
       "model": "formal/dialcache-shadow-layers-connection.qnt",
       "invariant": "retainedC0WasFreshWhenAcquired",
-      "before": "if (c0.value > NO_VALUE) c0.payload else NO_VALUE, fill.retentionMs, fill.fence, shadowing.limits.budgetMs)",
-      "after": "c0.payload, fill.retentionMs, fill.fence, shadowing.limits.budgetMs)",
+      "before": "pure def acquired(observed: Remote::Observed): int = if (observed.value > NO_VALUE) observed.payload else NO_VALUE",
+      "after": "pure def acquired(observed: Remote::Observed): int = observed.payload",
       "reproducer": {
         "kind": "exported-regression",
         "run": "expiredC0CanFillAndServeNewValueTest",
@@ -1850,7 +1850,7 @@
           "policy": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "shadow": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "scope": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "admission": "Every reply enables the remote layer, so the dark arm the fault mutates is never taken.",
+          "admission": "Every reply enables the remote layer, so no dark C0 read is made and the mutated acquisition is never applied.",
           "layers": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "independent": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "recovery-read": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
@@ -1872,8 +1872,8 @@
       "source": "formal/kernel/shadow.qnt",
       "model": "formal/dialcache-shadow-layers-conformance.qnt",
       "invariant": "fillKeepsCapturedRetention",
-      "before": "inPhase(Writes::holdDump(state, job.source, job.retentionMs, job.fence), index, SERIALIZING)",
-      "after": "inPhase(Writes::holdDump(state, job.source, source.retentionMs, job.fence), index, SERIALIZING)",
+      "before": "else update(Writes::holdDump(state, job.source, authority.retentionMs, authority.fence), { phase: SERIALIZING, ...job })",
+      "after": "else update(Writes::holdDump(state, job.source, sourceOf(state, job).retentionMs, authority.fence), { phase: SERIALIZING, ...job })",
       "reproducer": {
         "kind": "exported-regression",
         "run": "darkFillRetainsPolicyThroughSerializationTest",
@@ -1889,7 +1889,7 @@
           "policy": "Does not compose the shadow module, so the mutated fill dump is never executed.",
           "shadow": "Does not compose the shadow module, so the mutated fill dump is never executed.",
           "scope": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "admission": "Served jobs never fill: the mutated arm is the atomic settleJob's, which the held lifecycle never calls.",
+          "admission": "Served jobs always carry a C0 and never fill, so the mutated fill is never reached.",
           "layers": "Does not compose the shadow module, so the mutated fill dump is never executed.",
           "independent": "Does not compose the shadow module, so the mutated fill dump is never executed.",
           "recovery-read": "Does not compose the shadow module, so the mutated fill dump is never executed.",
@@ -1902,7 +1902,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M29",
-        "text": "M29 is the native twin of kernel/shadow.qnt settleJob holding the dark fill's dump with the source's retention (0 for a dark source) instead of the retention the job captured at admission: both ports re-resolve the runtime policy at fill time and write the dark fill with the retention then in force. Detection most likely fires on the extra provider call before writeTtls diverge; shadow-layers/darkFillRetainsPolicyThroughSerializationTest is the expected evidence."
+        "text": "M29 is the native twin of kernel/shadow.qnt fill holding the dark fill's dump with the source's retention (0 for a dark source) instead of the retention the job captured at admission: both ports re-resolve the runtime policy at fill time and write the dark fill with the retention then in force. Detection most likely fires on the extra provider call before writeTtls diverge; shadow-layers/darkFillRetainsPolicyThroughSerializationTest is the expected evidence."
       }
     },
     {

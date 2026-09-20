@@ -188,7 +188,7 @@ module dialcache_independent_conformance {
   }
   action invalidate = all {
     input' = { name: "invalidate", choice: -1 },
-    s' = Serving::invalidate(s, 0)
+    s' = Serving::invalidate(s, 0, 0)
   }
   action policyWith(choice: int): bool = all {
     (0.to(3)).contains(choice),

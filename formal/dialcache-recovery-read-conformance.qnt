@@ -245,7 +245,7 @@ module dialcache_recovery_read_conformance {
   // observes the marker's external cutoff and TTL against the drivers' origin.
   action invalidate = all {
     input' = { name: "invalidate", choice: -1 },
-    s' = Markers::invalidate(s, ENTITY)
+    s' = Markers::invalidate(s, ENTITY, 0)
   }
   action observeMarker = all {
     input' = { name: "observeMarker", choice: -1 },

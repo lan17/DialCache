@@ -25,6 +25,7 @@ module held_shadow {
   import layer_policy.* from "../../../formal/kernel/layer-policy"
   import serving as Serving from "../../../formal/kernel/serving"
   import remote_io as RemoteIO from "../../../formal/kernel/remote-io"
+  import remote_writes as Writes from "../../../formal/kernel/remote-writes"
   import shadow as Shadow from "../../../formal/kernel/shadow"
   import deadlines as Deadlines from "../../../formal/kernel/deadlines"
   import recovery as Recovery from "../../../formal/kernel/recovery"
@@ -34,7 +35,7 @@ module held_shadow {
   pure val LAYOUT: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 1, operationsPerEntity: 1, probeSourceScope: true, policyProvider: true }
   pure val REMOTE: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: true }
   pure val TTLS: Ttls = { localMs: 0, freshMs: 1000, retentionMs: 5000 }
-  pure val LIMITS: Shadow::Limits = { capacity: 1, budgetMs: 100 }
+  pure val SHADOWING: Shadow::Shadowing = { hook: true, selected: true, capacity: 1, budgetMs: 100, logging: false }
   pure val READ_BUDGET = 50
   pure def call(key: int): Call = { instance: 0, key: key, context: 1, enabled: true, keyFailed: false }
   // A call inside the one persistent scope, the one a run can hold a reply for.
@@ -48,6 +49,7 @@ module held_shadow {
     remoteValues: List[int], created: List[int], expires: List[int], watermark: List[int],
     sources: List[Serving::LayeredSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held],
     reads: List[RemoteIO::HeldRead], loads: List[RemoteIO::HeldLoad], loaders: List[int], retained: List[Recovery::Snapshot],
+    dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite],
     jobs: List[Shadow::Job], deadlines: List[Deadlines::Due], selected: List[int]
   }
   var s: State
@@ -64,7 +66,7 @@ module held_shadow {
       remoteValues: List(VALUE_ONE, NO_VALUE), created: List(100000, 0), expires: List(5000, 0), watermark: List(0, 0),
       sources: List(), owners: List(), memoSlots: List(), held: List(),
       reads: List(), loads: List(), loaders: List(), retained: List(),
-      jobs: List(), deadlines: List(), selected: List()
+      dumps: List(), writes: List(), jobs: List(), deadlines: List(), selected: List()
     }
   }
   action beginWith(key: int, selected: bool): bool = all {
@@ -73,8 +75,8 @@ module held_shadow {
   }
   action releaseRead(read: int): bool = all { input' = { name: "releaseRead", choice: read }, s' = Shadow::settleRead(s, LAYOUT, read, false, Recovery::NONE) }
   action failRead(read: int): bool = all { input' = { name: "failRead", choice: read }, s' = Shadow::settleRead(s, LAYOUT, read, true, Recovery::NONE) }
-  action releaseLoad(load: int): bool = all { input' = { name: "releaseLoad", choice: load }, s' = Shadow::settleLoad(s, LAYOUT, load, false, READ_BUDGET, LIMITS) }
-  action failLoad(load: int): bool = all { input' = { name: "failLoad", choice: load }, s' = Shadow::settleLoad(s, LAYOUT, load, true, READ_BUDGET, LIMITS) }
+  action releaseLoad(load: int): bool = all { input' = { name: "releaseLoad", choice: load }, s' = Shadow::settleLoad(s, LAYOUT, load, false, READ_BUDGET, SHADOWING) }
+  action failLoad(load: int): bool = all { input' = { name: "failLoad", choice: load }, s' = Shadow::settleLoad(s, LAYOUT, load, true, READ_BUDGET, SHADOWING) }
   action resolve(ordinal: int, value: int): bool = all { input' = { name: "resolveLoader", choice: ordinal }, s' = Shadow::settleLoader(s, LAYOUT, ordinal, value, false) }
   action reject(ordinal: int): bool = all { input' = { name: "rejectLoader", choice: ordinal }, s' = Shadow::settleLoader(s, LAYOUT, ordinal, SOURCE_ERROR, false) }
   action advanceBy(ms: int): bool = all { input' = { name: "advance", choice: ms }, s' = Shadow::advance(s, ms) }
@@ -97,13 +99,13 @@ module held_shadow {
     .then(releaseLoad(0))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 1 and s.o.sourceScopes == List(false) and s.loaders == List(1)
       and s.jobs.length() == 1 and s.jobs.nth(0).cached == VALUE_ONE and s.jobs.nth(0).source == 1 and s.selected == List()
-      and Deadlines::deadlinesOf(s, Deadlines::JOB, 0).length() == 1 and s.o.shadow == List())
+      and Deadlines::deadlinesOf(s, Deadlines::JOB, 1).length() == 1 and s.o.shadow == List())
     .then(resolve(0, VALUE_ONE))
-    .expect(s.o.loads == 2 and RemoteIO::holdsLoad(s, 1) and s.jobs.nth(0).phase == Shadow::DECODING and s.o.shadow == List())
-    .then(releaseLoad(1)).expect(s.o.shadow == List("match") and s.o.reads == 1 and Shadow::liveJobs(s) == Set())
+    .expect(s.o.loads == 2 and RemoteIO::holdsLoad(s, 1) and Shadow::holdsLoad(s, 1) and s.jobs.nth(0).phase == Shadow::DECODING and s.o.shadow == List())
+    .then(releaseLoad(1)).expect(s.o.shadow == List("match") and s.o.reads == 1 and s.jobs == List())
     .then(beginWith(0, false)).expect(s.selected == List())
     .then(releaseRead(1)).then(releaseLoad(2))
-    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.jobs.length() == 1 and s.o.shadow == List("match"))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.jobs == List() and s.o.shadow == List("match"))
   // A follower joining the pending flight shares its one admission.
   run followerSharesTheLeadersAdmissionTest = init
     .then(beginWith(0, true)).then(beginWith(0, true))
@@ -140,10 +142,10 @@ module held_shadow {
     .expect(s.o.loads == 2 and RemoteIO::holdsLoad(s, 1) and s.loads.nth(0).flight == 1 and s.loads.nth(0).value == VALUE_ONE
       and s.jobs.nth(0).phase == Shadow::DECODING and s.o.shadow == List())
     .then(releaseLoad(1))
-    .expect(s.o.reads == 2 and RemoteIO::holdsRead(s, 1) and s.reads.nth(0).flight == 1 and s.io.budgets == List(READ_BUDGET, READ_BUDGET)
+    .expect(s.o.reads == 2 and RemoteIO::holdsRead(s, 1) and Shadow::holdsRead(s, 1) and s.reads.nth(0).flight == 1 and s.io.budgets == List(READ_BUDGET, READ_BUDGET)
       and s.jobs.nth(0).phase == Shadow::CONFIRMING and s.o.shadow == List())
     .then(releaseRead(1))
-    .expect(s.o.shadow == List("mismatch") and s.jobs.nth(0).phase == Shadow::FINISHED and s.reads == List() and s.deadlines == List()
+    .expect(s.o.shadow == List("mismatch") and s.jobs == List() and s.reads == List() and s.deadlines == List()
       and s.o.calls == List(VALUE_ONE) and s.o.writes == 0)
   run replacedC0IsSupersededAtTheConfirmationTest = init
     .then(beginWith(0, true)).then(releaseRead(0)).then(releaseLoad(0)).then(resolve(0, VALUE_TWO)).then(releaseLoad(1))
@@ -152,32 +154,32 @@ module held_shadow {
   run failedConfirmationReadEndsConfirmationErrorTest = init
     .then(beginWith(0, true)).then(releaseRead(0)).then(releaseLoad(0)).then(resolve(0, VALUE_TWO)).then(releaseLoad(1))
     .then(failRead(1))
-    .expect(s.o.shadow == List("confirmation_error") and Shadow::liveJobs(s) == Set() and s.reads == List())
+    .expect(s.o.shadow == List("confirmation_error") and s.jobs == List() and s.reads == List())
   run failedJobDecodeEndsDeserializationErrorTest = init
     .then(beginWith(0, true)).then(releaseRead(0)).then(releaseLoad(0)).then(resolve(0, VALUE_TWO))
     .then(failLoad(1))
-    .expect(s.o.shadow == List("deserialization_error") and s.o.reads == 1 and Shadow::liveJobs(s) == Set() and s.loads == List())
+    .expect(s.o.shadow == List("deserialization_error") and s.o.reads == 1 and s.jobs == List() and s.loads == List())
   run failedSourceEndsSourceErrorTest = init
     .then(beginWith(0, true)).then(releaseRead(0)).then(releaseLoad(0)).then(reject(0))
-    .expect(s.o.shadow == List("source_error") and s.o.loads == 1 and s.o.calls == List(VALUE_ONE) and Shadow::liveJobs(s) == Set())
+    .expect(s.o.shadow == List("source_error") and s.o.loads == 1 and s.o.calls == List(VALUE_ONE) and s.jobs == List())
   // A timed-out served job ends silently at whichever step finds it so, and
   // owns its slot until then: a second key's hit is dropped meanwhile.
   run timedOutJobEndsSilentlyAtItsDecodeTest = init
     .then(beginWith(0, true)).then(releaseRead(0)).then(releaseLoad(0)).then(resolve(0, VALUE_TWO))
     .then(advanceBy(100))
-    .expect(s.o.shadow == List("timeout") and Shadow::liveJobs(s) == Set(0) and s.deadlines == List())
+    .expect(s.o.shadow == List("timeout") and s.jobs.length() == 1 and s.jobs.nth(0).timedOut and s.deadlines == List())
     .then(seed(1, VALUE_ONE)).then(beginWith(1, true)).then(releaseRead(1)).then(releaseLoad(2))
     .expect(s.o.shadow == List("timeout", "dropped") and s.o.loaders == 1)
     .then(releaseLoad(1))
-    .expect(s.o.shadow == List("timeout", "dropped") and Shadow::liveJobs(s) == Set() and s.o.reads == 2)
+    .expect(s.o.shadow == List("timeout", "dropped") and s.jobs == List() and s.o.reads == 2)
     .then(beginWith(1, true)).then(releaseRead(2)).then(releaseLoad(3))
     .expect(s.o.loaders == 2 and s.o.shadow == List("timeout", "dropped"))
   run timedOutJobEndsSilentlyAtItsConfirmationTest = init
     .then(beginWith(0, true)).then(releaseRead(0)).then(releaseLoad(0)).then(resolve(0, VALUE_TWO)).then(releaseLoad(1))
-    .then(advanceBy(100)).expect(s.o.shadow == List("timeout") and Shadow::liveJobs(s) == Set(0))
-    .then(releaseRead(1)).expect(s.o.shadow == List("timeout") and Shadow::liveJobs(s) == Set())
+    .then(advanceBy(100)).expect(s.o.shadow == List("timeout") and s.jobs.length() == 1 and s.jobs.nth(0).timedOut)
+    .then(releaseRead(1)).expect(s.o.shadow == List("timeout") and s.jobs == List())
   run timedOutJobEndsSilentlyAtItsSourceTest = init
     .then(beginWith(0, true)).then(releaseRead(0)).then(releaseLoad(0)).then(advanceBy(100))
     .then(resolve(0, VALUE_TWO))
-    .expect(s.o.shadow == List("timeout") and s.o.loads == 1 and Shadow::liveJobs(s) == Set())
+    .expect(s.o.shadow == List("timeout") and s.o.loads == 1 and s.jobs == List())
 }

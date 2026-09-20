@@ -7,9 +7,10 @@ module remote_frames {
   // rejects a stamp from after a rollback) and, for a tracked reader, when its
   // stamp clears the entity's watermark (`cache_rules.fenceAllows`); an
   // untracked reader ignores watermarks. An invalidation never lowers a
-  // watermark: it raises it to the wall clock only when the wall clock is
-  // ahead, as the implementation's invalidation script keeps the larger of the
-  // current and the proposed watermark; only a marker's expiry lowers one, to
+  // watermark: it raises it to the wall clock plus the invalidator's future
+  // buffer only when that is ahead, as the implementation's invalidation
+  // script keeps the larger of the current and the proposed watermark; only
+  // a marker's expiry lowers one, to
   // the zero baseline (`markers`). A frame stamped at a wall clock of zero or
   // below is never served to a tracked reader (`fenceAllows` is strict against
   // the zero watermark), as the implementation treats a zero createdAt.
@@ -66,10 +67,14 @@ module remote_frames {
   // A seed the drivers stamp at an age, negative for a stamp in the future: the wall clock minus that age.
   pure def seedAged(state: Frames[r], key: int, value: int, ageMs: int, retentionMs: int): Frames[r] =
     storeFrame(state, key, value, Clock::wallOf(state) - ageMs, retentionMs)
-  pure def raiseWatermark(state: Frames[r], entity: int): Frames[r] = {
+  // An invalidation raises the watermark to the wall clock plus the
+  // invalidator's future buffer (`futureBufferMs`, application-owned: the
+  // window in which a stale write may still become visible) only when that
+  // is ahead of the current watermark.
+  pure def raiseWatermark(state: Frames[r], entity: int, bufferMs: int): Frames[r] = {
     val current = state.watermark.nth(entity)
-    val wall = Clock::wallOf(state)
-    { watermark: state.watermark.replaceAt(entity, if (wall > current) wall else current), ...state }
+    val proposed = Clock::wallOf(state) + bufferMs
+    { watermark: state.watermark.replaceAt(entity, if (proposed > current) proposed else current), ...state }
   }
   // The zero baseline of an entity's watermark, the one a profile's init
   // starts from and the one NO_FENCE and an unfenced `writeAllowed` refer to:
