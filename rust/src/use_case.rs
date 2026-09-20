@@ -11,13 +11,61 @@ use serde::Serialize;
 use crate::codec::{Codec, JsonCodec};
 use crate::engine::DialCache;
 use crate::error::{BoxError, ConfigError, Error};
-use crate::identity::{normalize_args, ArgValue, Identity};
+use crate::identity::{js_number_to_string, normalize_args, ArgValue, Identity};
 use crate::operation::{
     downcast_value, erase_load, Comparator, ErasedOperation, Operation, Preview, RecoveryPredicate,
     SourceBudget,
 };
 use crate::policy::Policy;
 use crate::scope::Scope;
+
+/// Converts an entity identifier to the text used in a cache key.
+///
+/// Strings are preserved, integers use exact decimal notation, and floats use
+/// JavaScript `String(number)` spelling (`f32` is promoted to `f64`). Shared
+/// references to these types are also accepted. For other displayable IDs,
+/// pass `id.to_string()` or implement this trait with the desired spelling.
+pub trait IntoKeyId {
+    /// Consume the identifier and return its canonical text.
+    fn into_key_id(self) -> String;
+}
+
+impl IntoKeyId for String {
+    fn into_key_id(self) -> String {
+        self
+    }
+}
+
+impl IntoKeyId for &str {
+    fn into_key_id(self) -> String {
+        self.to_owned()
+    }
+}
+
+impl<T: IntoKeyId + Clone> IntoKeyId for &T {
+    fn into_key_id(self) -> String {
+        self.clone().into_key_id()
+    }
+}
+
+macro_rules! integer_key_id {
+    ($($t:ty),*) => { $(impl IntoKeyId for $t {
+        fn into_key_id(self) -> String { self.to_string() }
+    })* };
+}
+integer_key_id!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+
+impl IntoKeyId for f64 {
+    fn into_key_id(self) -> String {
+        js_number_to_string(self)
+    }
+}
+
+impl IntoKeyId for f32 {
+    fn into_key_id(self) -> String {
+        js_number_to_string(f64::from(self))
+    }
+}
 
 /// The key of one call: the entity id and any secondary dimensions.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -30,10 +78,11 @@ pub struct KeySpec {
 }
 
 impl KeySpec {
-    /// A key with `id` and no secondary dimensions.
-    pub fn new(id: impl ToString) -> Self {
+    /// A key with `id` and no secondary dimensions. See [`IntoKeyId`] for
+    /// the shared numeric spelling and supported input types.
+    pub fn new(id: impl IntoKeyId) -> Self {
         KeySpec {
-            id: id.to_string(),
+            id: id.into_key_id(),
             args: Vec::new(),
         }
     }
@@ -58,10 +107,10 @@ impl From<&str> for KeySpec {
     }
 }
 
-macro_rules! key_from_integer {
+macro_rules! key_from_number {
     ($($t:ty),*) => { $(impl From<$t> for KeySpec { fn from(id: $t) -> Self { KeySpec::new(id) } })* };
 }
-key_from_integer!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+key_from_number!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f64, f32);
 
 impl From<&str> for ArgValue {
     fn from(value: &str) -> Self {

@@ -74,4 +74,4 @@ pub use runtime::Runtime;
 #[cfg(feature = "tokio")]
 pub use runtime::TokioRuntime;
 pub use scope::Scope;
-pub use use_case::{KeySpec, UseCase, UseCaseBuilder};
+pub use use_case::{IntoKeyId, KeySpec, UseCase, UseCaseBuilder};

@@ -15,9 +15,10 @@ possible input or schedule.
 
 ## Use
 
-The crate requires Rust 1.85 or later; CI pins 1.98.1 through
-`rust/rust-toolchain.toml`, which rustup honors when cargo runs inside
-`rust/`. Applications own their Redis connection and its timeout, retry and
+The core crate requires Rust 1.85 or later; the `redis` feature requires Rust
+1.88 with the currently locked Redis dependency. CI pins 1.98.1 through
+`rust/rust-toolchain.toml`, which rustup honors when cargo runs inside `rust/`.
+Applications own their Redis connection and its timeout, retry and
 resource budgets. The default runtime is the tokio runtime that is current
 while the cache is built.
 
@@ -66,9 +67,13 @@ failure. A source deadline returns `Error::FallbackTimeout` and does not cancel
 the source. Dropping the future returned by `get` never cancels the execution:
 sources, publications and other callers keep their contracts.
 
-`KeySpec` takes the entity id and ordered secondary dimensions;
-`normalize_args` spells scalars the JavaScript way and orders names by UTF-16
-code units so the same identity produces the same Redis key in every language.
+`KeySpec::new` accepts strings, integers and floats, including shared references
+such as `&u64`. Its `IntoKeyId` conversion preserves string IDs and exact decimal
+integers; floats use JavaScript number spelling, including negative zero and
+exponents (`f32` is promoted to `f64`). For custom displayable IDs, pass
+`id.to_string()` or implement `IntoKeyId`. `normalize_args` applies the shared
+scalar spelling to secondary dimensions and orders names by UTF-16 code units
+so the same identity produces the same Redis key in every language.
 Use the same namespace, key dimensions, codecs and policy across languages when
 sharing entries.
 
