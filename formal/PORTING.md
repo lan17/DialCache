@@ -434,7 +434,7 @@ reach; [coverage-witnesses.json](./coverage-witnesses.json) names them per
 profile. Each `witness/<profile>` completion leaf is decided by one shared,
 language-neutral evaluator under [replay/witnesses/](./replay/witnesses/). It
 reads the same histories every port replays (the profile's sampled traces plus
-its exported `replayRegressions`), keys every rule on the explicit Quint `input`
+its exported regressions, the model's public-only runs), keys every rule on the explicit Quint `input`
 record, and classifies from declared inputs and public observations;
 kernel/README.md lists the classifiers still reading private predictions. Driver
 observations never enter it, and it never supplies an implementation's inputs.
@@ -463,7 +463,7 @@ For each complete profile it writes `<out>/<profile>.json`:
 | `traces` | Number of evaluated histories |
 | `required` | The registry's required labels, in registry order |
 | `seen` | Every reached label, sorted |
-| `labels` | Per reached label: `sampled` and `regression` hit counts, and `traces`, one `{ name, kind, checkpoints }` per history that earned the label, sorted by name. `kind` is `sampled` for a history from the profile's generated directory and `regression` for an exported `replayRegressions` trace. `checkpoints` are the ascending step indices at which the classifier credited the label: the step whose public consequence the rule requires, every declared checkpoint of a public-prefix rule, `0` for labels decided by the init choice (`fixture:*`, `action:init`), and every establishing step for a rule whose consequence spans several public steps |
+| `labels` | Per reached label: `sampled` and `regression` hit counts, and `traces`, one `{ name, kind, checkpoints }` per history that earned the label, sorted by name. `kind` is `sampled` for a history from the profile's generated directory and `regression` for an exported regression trace. `checkpoints` are the ascending step indices at which the classifier credited the label: the step whose public consequence the rule requires, every declared checkpoint of a public-prefix rule, `0` for labels decided by the init choice (`fixture:*`, `action:init`), and every establishing step for a rule whose consequence spans several public steps |
 | `diversity` | Over sampled histories only: `sampledHistories`, `distinctActionSequences` (distinct sequences of action names) and `distinctObservationSequences` (distinct sequences of the observation each driver is asserted against at every step: the feature coordinator's expected observation record, the effects projection or the local-clock expected record, compared as JSON) |
 | `inputs` | `{ path, sha256 }` for `formal/profiles.json`, `formal/coverage-witnesses.json`, `formal/execution.json`, the profile's model, `formal/conformance-observations.qnt`, every Quint library, the full `formal/replay` closure (which contains the classifiers) and the profile's `witnessSources`, deduplicated in that order |
 | `corpus` | `{ name, sha256 }` per history, sorted by file name |

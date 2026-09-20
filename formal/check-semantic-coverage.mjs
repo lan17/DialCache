@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { checkSourceAudit } from './check-source-audit.mjs';
 import { checkFeatureCoverage } from './check-feature-coverage.mjs';
-import { checkMutantAnchors, readExecution, readMutantCatalog, scanDeclarations, scheduledProperties, validateExecution } from './execution.mjs';
+import { checkMutantAnchors, readExecution, readMutantCatalog, scanDeclarations, scheduleExecution, scheduledProperties, validateExecution } from './execution.mjs';
 import { protocolCorpus, readVectorArtifact } from './vector-artifacts.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -39,7 +39,7 @@ export function checkProfiles(registry = parse('formal/profiles.json')) {
 }
 
 export function checkQuintCaseAudit(audit = parse('formal/quint-case-audit.json'),
-  catalog = parse('formal/semantic-cases.json'), manifest = readExecution()) {
+  catalog = parse('formal/semantic-cases.json'), manifest = scheduleExecution()) {
   if (audit.schemaVersion !== 1 || typeof audit.scope !== 'string' || !audit.scope.trim() ||
       !Array.isArray(audit.checks) || !Array.isArray(audit.definitions) ||
       !Array.isArray(audit.limitations) || !audit.limitations.length ||
@@ -84,8 +84,8 @@ export function checkQuintCaseAudit(audit = parse('formal/quint-case-audit.json'
 
 export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.json')) {
   const profiles = checkProfiles();
-  const manifest = readExecution();
-  const execution = validateExecution(manifest);
+  const execution = validateExecution(readExecution());
+  const manifest = scheduleExecution();
   const scheduled = scheduledProperties(manifest);
   const vectorArtifacts = new Map(manifest.models.filter(model => model.vectorExport)
     .map(model => [model.vectorExport.artifact, { model, value: readVectorArtifact(model) }]));

@@ -1005,20 +1005,20 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "53b255b7edd8eb3ed944b16ce2dc8db8595d3ff8fad3882c580aca26ad1d6d98",
+      "sha256": "c1b8dfeaba7765a851eee17203e4a602b281cd6ee9da5e78fef6dc8ce3a1ba87",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
-        {"line":56,"title":"Writing conventions"},
-        {"line":150,"title":"Codifying the next behavior"},
-        {"line":198,"title":"Give reviewers focused context"},
-        {"line":213,"title":"Exporting a deterministic regression"},
-        {"line":249,"title":"Maintaining case and witness evidence"},
-        {"line":297,"title":"Reproducible committed fixtures"},
-        {"line":307,"title":"Refactoring and execution"},
-        {"line":332,"title":"Challenging every model"},
-        {"line":405,"title":"Mapping every challenge to native mutants"},
-        {"line":491,"title":"Exported runs are exactly the public-only runs"}
+        {"line":57,"title":"Writing conventions"},
+        {"line":151,"title":"Codifying the next behavior"},
+        {"line":200,"title":"Give reviewers focused context"},
+        {"line":215,"title":"Exporting a deterministic regression"},
+        {"line":253,"title":"Maintaining case and witness evidence"},
+        {"line":301,"title":"Reproducible committed fixtures"},
+        {"line":311,"title":"Refactoring and execution"},
+        {"line":339,"title":"Challenging every model"},
+        {"line":412,"title":"Mapping every challenge to native mutants"},
+        {"line":498,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "ccfb9d9abaa181ed0c8d613378cbfc7edcc383b22f564ca8427138022da10cde",
+      "sha256": "176603cd56d4006b2b17b020999cf1c6c1f2ab07ea738d4b4bd854cf3db9d245",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1288,7 +1288,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "66d28fdfea23c72e34baa9b79e423c3a16ffa758a4b425a3d5086390e2fa30d7",
+      "sha256": "2807f483a12eabe71fa7ead0d19df2d1dcf9f106da86b69d03555956472c167e",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1347,7 +1347,7 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "0317648114092eae71371cff05fe40d049be4f66f87002074fa1b6fef46f53a1",
+      "sha256": "6a7793806cd6deca260836e08be796217c05dd2c2455e2fce4dd7cb55c8f369c",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":7,"title":"Start with your task"},
@@ -1363,7 +1363,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "fe100e28fd9c3037387e5cdad3af5a33913cf27209cdfee66ffdf1cfe11a6740",
+      "sha256": "ee222a46d0e81173269b23ef84725f687f8bf71f2acf626c02e1e1790dbed1db",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1519,7 +1519,7 @@
     },
     {
       "path": "formal/WALKTHROUGH.md",
-      "sha256": "a2e81aaab41c65c8ba02aa0fb80c1cbf6e8ba442d00913a87ac82c5935cee242",
+      "sha256": "962567608980e41d5c9f888fa902d6cfc22838ee818e2330563489c8f3001bf3",
       "entries": [
         {"line":1,"title":"Follow one behavior from Quint to both ports"},
         {"line":14,"title":"Read the named run first"},

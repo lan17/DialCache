@@ -98,7 +98,7 @@ Search by `C23.policy-does-not-spend-source-budget`,
 | Catalog | Responsibility for this example |
 | --- | --- |
 | [CONTRACTS.md](./CONTRACTS.md) and [semantic-cases.json](./semantic-cases.json) | C23 names the broader obligation; the case ID connects this corner to its exact evidence |
-| [execution.json](./execution.json) | Schedules the property and named regression; `replayRegressions` also exports the run as a history for both ports |
+| [execution.json](./execution.json) | Schedules the property; the named regression is a run of the model, exported as a history for both ports because it is public-only |
 | [profiles.json](./profiles.json) | Declares `source-budgets` version, input encoding and bounded scope |
 | [quint-case-audit.json](./quint-case-audit.json) | States exactly what each cited property or regression establishes; a broad case can need several narrower checks |
 | [coverage-witnesses.json](./coverage-witnesses.json) | Requires the distinguishing `policy-wait-does-not-spend-source-budget` consequence to be reached |

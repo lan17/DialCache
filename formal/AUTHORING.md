@@ -48,7 +48,8 @@ Named predicates make the conditions readable; they do not perform cache work.
 Finally, read the invariants and `run ...Test` examples. An invariant states a
 property of explored states. A regression gives a concrete sequence and its
 expected observations. A `val` declaration can also be a helper; `execution.json`
-identifies the properties that are actually scheduled for checking. Some
+identifies the properties that are actually scheduled for checking, and every
+`run ...Test` a scheduled model declares is one of its regressions. Some
 regressions deliberately corrupt state to show that
 a property rejects the fault. They are tests of the property, not allowed system
 transitions. Passing bounded exploration is not a proof over every execution.
@@ -162,7 +163,8 @@ For each new rule or interaction:
    plausible wrong implementation of the rule; require an invariant violation,
    not merely a compiler error or failed bookkeeping check. Use symbolic checking
    for tractable finite modules and sample larger compositions. Schedule every
-   property and regression in `execution.json`. Give the challenge a
+   property in `execution.json`; every run the model declares is a regression
+   without being listed. Give the challenge a
    `nativeMutants` entry that maps it to a TypeScript mutant and a Go mutant
    injecting the same wrong behavior into `src/` and `go/`, or an enumerated
    explanation of why no native line embodies the rule (see
@@ -230,9 +232,11 @@ choice. A parameterized public action can serve both random exploration and a
 named regression. The regression must invoke those actions; an arbitrary
 assignment to private model state is not an executable input.
 
-List exportable runs in the model's `replayRegressions` in `execution.json`.
-Generation exports them under `regressions/<profile>/` alongside the sampled
-corpus. Quint's deterministic test export omits MBT action metadata.
+Every public-only run of a profile model is exported; `execution.mjs` reads
+the model's runs and classifies each one (see [Exported runs are exactly the
+public-only runs](#exported-runs-are-exactly-the-public-only-runs)), so nothing
+is listed. Generation exports them under `regressions/<profile>/` alongside the
+sampled corpus. Quint's deterministic test export omits MBT action metadata.
 `replay-inputs.mjs` adds compatibility annotations derived only from the explicit
 input record to scheduled exports; it never infers commands from expected state.
 The coordinator also accepts raw regression exports directly. `input` remains
@@ -306,11 +310,14 @@ driver, fixture and completion contracts.
 
 ## Refactoring and execution
 
-[`execution.json`](./execution.json) is the execution schedule: invariant and
-regression names, model order, exploration settings, and generated trace paths
-and bounds. [`profiles.json`](./profiles.json) records versioned conformance
-claims. Keep these purposes distinct; checking and generation consume the same
-execution settings rather than maintaining separate invariant lists.
+[`execution.json`](./execution.json) is the execution schedule: invariant
+names, model order, exploration settings, and generated trace paths and
+bounds. The regressions are the runs each model declares and the libraries are
+the Quint sources no model claims; `execution.mjs` reads both from the text
+(`scheduleExecution`) and refuses a manifest that lists them. [`profiles.json`](./profiles.json)
+records versioned conformance claims. Keep these purposes distinct; checking
+and generation consume the same execution settings rather than maintaining
+separate invariant lists.
 
 Preserve public action names, choice encodings, state/observation fields, and
 `...Test` suffixes during cleanup. Preserve the order and nesting of `any` and
@@ -361,9 +368,9 @@ deterministic `run`, its `kind`, the `failure` the fault produces (the
 condition of one top-level `.expect(...)` in that run, copied from the model),
 the fault `family` slug it belongs to, the `profiles` where the fault is
 observable, and `exclusions` mapping other known profiles to the reason they
-cannot exercise it. Two kinds exist. An `exported-regression` cites a run in a
-profile model's `replayRegressions`, so it is public-only and both ports replay
-it: use this kind for every portable behavior fault. The run normally belongs
+cannot exercise it. Two kinds exist. An `exported-regression` cites a
+public-only run of a profile model, so both ports replay it: use this kind for
+every portable behavior fault. The run normally belongs
 to the challenged model; when the fault sits in a shared library, the
 reproducer may instead name another profile `model` whose exported run reaches
 it, which is how a verification model's shared-rule challenge gets a portable
@@ -493,9 +500,10 @@ them.
 A profile run is public-only when every transition it takes records a command
 in `input`. A run that assigns `s'` inline, keeps `input' = input` across a
 state assignment, or reaches such a fixture through a helper action is
-state-patching. `execution.mjs` classifies each run from the declaration bodies
-and requires the `replayRegressions` list to equal the public-only runs
-exactly, naming any unexported public run or exported patching run. Generation
+state-patching. `execution.mjs` classifies each run from the declaration bodies:
+the public-only runs are the model's exported replay regressions and the
+state-patching runs stay model-only, with nothing listed in the manifest (a
+`replayRegressions` list is refused). Generation
 then binds every history it produces, sampled and exported alike, to the driver
 contract, so a choice outside an action's declared domain fails
 `run-models.mjs generate` rather than a later native replay.

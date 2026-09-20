@@ -9,6 +9,10 @@ import { localClockWitnesses } from "../formal/replay/witnesses/local-clock.mjs"
 import { createWitnessRecorder } from "../formal/replay/witnesses/recorder.mjs";
 import { parseLocalClockTrace, replayLocalClockTrace } from "./formal/local-clock-profile.js";
 
+// The exported regressions are the model's public-only runs, read from its Quint text.
+const { scheduleExecution } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
+  scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
+};
 const profile = "local-clock";
 const single = process.env.DIALCACHE_FEATURE_TRACE_FILE;
 const directory = process.env.DIALCACHE_FEATURE_TRACE_DIR;
@@ -16,8 +20,7 @@ const paths = single !== undefined ? (single.includes(`/${profile}/`) || single.
   : directory === undefined ? [resolve(`formal/${profile}-smoke.itf.json`)]
   : readdirSync(resolve(directory, profile)).filter(file => file.endsWith(".itf.json")).sort().map(file => resolve(directory, profile, file));
 if (directory !== undefined && single === undefined) {
-  const execution = JSON.parse(readFileSync("formal/execution.json", "utf8")) as { models: Array<{ profile?: string; replayRegressions?: string[] }> };
-  for (const name of execution.models.find(model => model.profile === profile)?.replayRegressions ?? []) {
+  for (const name of scheduleExecution().models.find(model => model.profile === profile)?.replayRegressions ?? []) {
     paths.push(resolve(directory, "..", "regressions", profile, `${name}.itf.json`));
   }
 }

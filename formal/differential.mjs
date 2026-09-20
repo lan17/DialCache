@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { copySources, importClosure, isKernelSource, isQuintSourcePath, root, validateExecution } from './execution.mjs';
+import { copySources, importClosure, isKernelSource, isQuintSourcePath, modelSchedule, root, scanDeclarationBodies, validateExecution } from './execution.mjs';
 import { parseWithSourceMap, scheduleHistories, spliceDeclarations } from './generated-fixtures.mjs';
 import { normalizeTraceFiles } from './replay-inputs.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
@@ -69,11 +69,16 @@ export function resolveMergeBase(revision, { cwd = root } = {}) {
 
 // The reference manifests are read as recorded at their revision and checked
 // only for the shape this tool consumes; the working tree's validator applies
-// to the working tree's inventory, not to another revision's.
+// to the working tree's inventory, not to another revision's. A revision that
+// recorded its exported regressions keeps them; one that reads them from the
+// Quint text (formal/execution.mjs modelSchedule) has them read from that
+// tree's text here.
 export function readManifests(directory) {
   const execution = JSON.parse(readFileSync(resolve(directory, 'formal/execution.json'), 'utf8'));
   const registry = JSON.parse(readFileSync(resolve(directory, 'formal/profiles.json'), 'utf8'));
   if (!Array.isArray(execution.models) || !execution.settings || !Array.isArray(registry.profiles)) throw new Error(`${directory}: unsupported manifests`);
+  execution.models = execution.models.map(model => model.regressions !== undefined || typeof model.path !== 'string' ? model
+    : { ...model, ...modelSchedule(model, scanDeclarationBodies(readFileSync(resolve(directory, model.path), 'utf8'))) });
   return { execution, registry };
 }
 function generationModel(manifests, profileId) {

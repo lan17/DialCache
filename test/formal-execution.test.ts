@@ -8,21 +8,20 @@ type NativeMutants = { kind: string; text: string; mutant?: string; crossContrac
 type Challenge = { id: string; contract: string; source: string; model: string; invariant: string; before: string; after: string; measures?: string; reproducer?: Reproducer; nativeMutants?: NativeMutants };
 type Manifest = {
   check: { maxSamples: number; maxSteps: number; outputDirectory: string };
-  libraries: string[];
   challenges: Challenge[];
   reproducerBacklog: string[];
   nativeMutantBacklog: string[];
   models: Array<{
     path: string;
     invariants: string[];
-    regressions: string[];
-    replayRegressions?: string[];
     profile?: string;
     challengeWaiver?: string;
     generate?: { maxSamples: number; maxSteps: number; traces: number; outputDirectory: string };
     vectorExport?: { generator: string; artifact: string; kind: string; cases: number; sources: string[] };
   }>;
 };
+// The manifest with the schedule its Quint text states: every declared run is a regression, a profile's public-only runs are its replay regressions, and the libraries are the sources no model claims.
+type Scheduled = Omit<Manifest, "models"> & { libraries: string[]; models: Array<Manifest["models"][number] & { regressions: string[]; replayRegressions?: string[] }> };
 type Command = { command: string; args: string[]; outputDirectory?: string; expectedTraces?: number; explicitInputs?: boolean; expectedFiles?: string[]; profile?: string };
 const manifest = () => JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as Manifest;
 const moduleUrl = new URL("../formal/execution.mjs", import.meta.url).href;
@@ -33,9 +32,10 @@ type Catalog = { mutations: Map<string, MutantEntry>; caseContracts: Map<string,
 type Summary = { [key: string]: unknown; nativeMutants: { mapped: number; unobservable: number; modelOnly: number; backlog: number }; unmappedMutants: number };
 type Declarations = Map<string, { kind: string; body: string[]; spans: Array<[number, number]> }>;
 type Options = { readSource?(path: string): string; scanSource?(source: string): Declarations; grandfathered?: readonly string[]; grandfatheredNative?: readonly string[]; catalog?: Catalog; files?: string[] };
-const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution, readMutantCatalog, checkMutantAnchors, mutantsForPort, challengesByMutant, nativeMutantKinds, grandfatheredReproducerBacklog, grandfatheredNativeMutantBacklog, quintSources } = await import(moduleUrl) as {
+const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution, scheduleExecution, readMutantCatalog, checkMutantAnchors, mutantsForPort, challengesByMutant, nativeMutantKinds, grandfatheredReproducerBacklog, grandfatheredNativeMutantBacklog, quintSources } = await import(moduleUrl) as {
   root: string;
   quintSources(directory?: string): string[];
+  scheduleExecution(manifest?: Manifest, options?: Options): Scheduled;
   scanDeclarations(source: string): Map<string, string>;
   scanDeclarationBodies(source: string): Declarations;
   classifyRuns(declarations: Map<string, { kind: string; body: string[] }>): { publicOnly: string[]; patching: string[] };
@@ -66,6 +66,7 @@ const scanSource = (source: string): Declarations => {
   return declarations;
 };
 const validate = (value: unknown, options?: Options) => validateExecution(value, { scanSource, ...options });
+const scheduled = () => scheduleExecution(manifest(), { scanSource });
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
@@ -75,34 +76,48 @@ describe("formal execution schedule", () => {
       nativeMutants: { mapped: 63, unobservable: 2, modelOnly: 6, backlog: 2 }, unmappedMutants: 7 });
   });
 
-  it("rejects omitted models and dropped or renamed regressions", () => {
+  it("reads the schedule from the Quint text and refuses a manifest that lists it again or leaves a model unscheduled", () => {
+    const current = scheduled();
+    expect(current.libraries).toEqual(quintSources().filter(path => !manifest().models.some(model => model.path === path)));
+    for (const model of current.models) {
+      const bodies = scanDeclarationBodies(readFileSync(root + model.path, "utf8"));
+      expect(model.regressions, model.path).toEqual([...bodies].filter(([, { kind }]) => kind === "run").map(([name]) => name));
+      expect(model.regressions.every(name => name.endsWith("Test")), model.path).toBe(true);
+      if (model.profile === undefined) expect(model.replayRegressions, model.path).toBeUndefined();
+    }
+    // A model dropped from the manifest still declares actions: it cannot pass as a helper library.
     const missingModel = manifest();
-    missingModel.models.shift();
-    expect(() => validate(missingModel)).toThrow(/file inventory changed/);
-    const hiddenModel = manifest();
-    hiddenModel.libraries.push(hiddenModel.models.shift()!.path);
-    expect(() => validate(hiddenModel)).toThrow(/stateful model/);
-    const missingTest = manifest();
-    missingTest.models[0]!.regressions.pop();
-    expect(() => validate(missingTest)).toThrow(/regression schedule/);
-    const renamedTest = manifest();
-    renamedTest.models[0]!.regressions[0] = "renamedWithoutSuffix";
-    expect(() => validate(renamedTest)).toThrow(/Test suffix/);
+    const dropped = missingModel.models.shift()!;
+    expect(() => validate(missingModel)).toThrow(new RegExp(`${dropped.path.replace(/[./]/g, "\\$&")}: a stateful Quint source must be a scheduled model`));
+    // A scheduled path the tree does not have is an inventory change.
+    const renamedModel = manifest();
+    renamedModel.models[0]!.path = "formal/dialcache-missing.qnt";
+    expect(() => validate(renamedModel)).toThrow(/file inventory changed/);
+    // The lists are copies of the text and are refused rather than compared.
+    const listed = manifest() as Manifest & { libraries?: string[] };
+    listed.libraries = current.libraries;
+    expect(() => validate(listed)).toThrow(/libraries are read from the Quint sources/);
+    const recorded = manifest();
+    (recorded.models[0] as Record<string, unknown>).regressions = current.models[0]!.regressions;
+    expect(() => validate(recorded)).toThrow(/regressions and replayRegressions are read from the model's runs/);
+    const exported = manifest();
+    (exported.models.find(model => model.profile) as Record<string, unknown>).replayRegressions = [];
+    expect(() => validate(exported)).toThrow(/regressions and replayRegressions are read from the model's runs/);
+    // A run that loses the Test suffix is refused, never silently unscheduled.
+    const first = current.models[0]!;
+    expect(() => validateExecution(manifest(), { scanSource, readSource: path => {
+      const source = readFileSync(root + path, "utf8");
+      return path === first.path ? source.replaceAll(first.regressions[0]!, `${first.regressions[0]}Probe`) : source;
+    } })).toThrow(/must keep the Test suffix/);
   });
 
   it("inventories the kernel library modules as libraries and keeps them pure", () => {
-    const listed = manifest().libraries.filter(path => path.startsWith("formal/kernel/"));
-    expect(listed.length).toBeGreaterThanOrEqual(8);
-    const unlisted = manifest();
-    unlisted.libraries = unlisted.libraries.filter(path => path !== "formal/kernel/serving.qnt");
-    expect(() => validate(unlisted)).toThrow(/file inventory changed/);
-    const nested = manifest();
-    nested.libraries[nested.libraries.indexOf("formal/kernel/serving.qnt")] = "formal/kernel/deep/serving.qnt";
-    expect(() => validate(nested)).toThrow(/file inventory changed/);
-    const stateful = manifest();
+    const { libraries } = scheduled();
+    expect(libraries.filter(path => path.startsWith("formal/kernel/")).length).toBeGreaterThanOrEqual(8);
+    expect(validate(manifest()).libraries).toBe(libraries.length);
     const kernelSource = readFileSync(new URL("../formal/kernel/clock.qnt", import.meta.url), "utf8");
-    expect(() => validate(stateful, { readSource: (path: string) => path === "formal/kernel/clock.qnt" ? kernelSource.replace("type Timed[r]", "var leaked: int\n  type Timed[r]") : readFileSync(new URL(`../${path}`, import.meta.url), "utf8") }))
-      .toThrow(/formal\/kernel\/clock\.qnt: a stateful model cannot be classified as a pure helper library/);
+    expect(() => validate(manifest(), { readSource: (path: string) => path === "formal/kernel/clock.qnt" ? kernelSource.replace("type Timed[r]", "var leaked: int\n  type Timed[r]") : readFileSync(new URL(`../${path}`, import.meta.url), "utf8") }))
+      .toThrow(/formal\/kernel\/clock\.qnt: a stateful Quint source must be a scheduled model/);
   });
 
   it("validates a composed profile's declared behavior version", () => {
@@ -124,13 +139,9 @@ describe("formal execution schedule", () => {
   });
 
   it("refuses a kernel module no scheduled model imports", () => {
-    const orphan = manifest();
-    orphan.libraries.push("formal/kernel/orphan.qnt");
     const sources = (path: string) => path === "formal/kernel/orphan.qnt" ? "module orphan { pure def unused(n: int): int = n }" : readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-    // Listed but absent from the tree: the inventory check speaks first.
-    expect(() => validate(orphan, { readSource: sources })).toThrow(/file inventory changed/);
-    // Listed and present, yet reached by no model: the orphan rule.
-    expect(() => validate(orphan, { readSource: sources, files: [...quintSources(), "formal/kernel/orphan.qnt"] })).toThrow(/Kernel modules no scheduled model imports: formal\/kernel\/orphan\.qnt/);
+    // Present in the tree, a library by construction, yet reached by no model: the orphan rule.
+    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/kernel/orphan.qnt"] })).toThrow(/Kernel modules no scheduled model imports: formal\/kernel\/orphan\.qnt/);
   });
 
   it("rejects invalid exploration bounds and unsafe generation output paths", () => {
@@ -148,18 +159,10 @@ describe("formal execution schedule", () => {
     expect(() => validate(unsafe)).toThrow(/unsafe or duplicate/);
   });
 
-  it("requires replay regressions to be scheduled tests with explicit input declarations", () => {
-    const unscheduled = manifest();
-    unscheduled.models.find(model => model.replayRegressions)!.replayRegressions = ["inventedTest"];
-    expect(() => validate(unscheduled)).toThrow(/replay regressions need declared input and scheduled tests/);
-    const duplicate = manifest();
-    const model = duplicate.models.find(model => model.replayRegressions)!;
-    model.replayRegressions!.push(model.replayRegressions![0]!);
-    expect(() => validate(duplicate)).toThrow(/replay regressions inventory/);
-    const real = manifest();
-    expect(() => validateExecution(real, { readSource: path =>
+  it("requires a profile model to declare the input variable its exported regressions record", () => {
+    expect(() => validateExecution(manifest(), { readSource: path =>
       readFileSync(root + path, "utf8").replace(/\bvar input\b/g, "var hiddenInput"),
-    })).toThrow(/replay regressions need declared input and scheduled tests/);
+    })).toThrow(/exported replay regressions need a declared input variable/);
   });
 
   it("classifies profile runs as public-only or state-patching through fixtures, comments and strings", () => {
@@ -184,25 +187,33 @@ describe("formal execution schedule", () => {
       publicOnly: ["publicTest", "stringTest"],
       patching: ["inlinePatchTest", "fixtureTest", "inlineStateOnlyTest"],
     });
-    const current = manifest();
+    const current = scheduled();
     for (const model of current.models.filter(model => model.profile)) {
       const runs = classifyRuns(scanDeclarationBodies(readFileSync(root + model.path, "utf8")));
-      expect([...runs.publicOnly].sort(), model.path).toEqual([...model.replayRegressions!].sort());
+      expect(model.replayRegressions, model.path).toEqual(runs.publicOnly);
     }
     expect(current.models.find(model => model.profile === "effects")!.replayRegressions).toHaveLength(42);
     expect(current.models.find(model => model.profile === "shadow")!.replayRegressions).toHaveLength(7);
     expect(current.models.find(model => model.profile === "independent")!.replayRegressions).toHaveLength(14);
   });
 
-  it("forces every public-only run to be exported and keeps state-patching runs out of replay", () => {
-    const unexported = manifest();
-    const core = unexported.models.find(model => model.profile === "core")!;
-    const dropped = core.replayRegressions!.pop()!;
-    expect(() => validate(unexported)).toThrow(new RegExp(`public-only runs are not exported as replay regressions: ${dropped}`));
-    const patched = manifest();
-    const effects = patched.models.find(model => model.profile === "effects")!;
-    effects.replayRegressions!.push("followerKeepsAcceptedReadBudgetTest");
-    expect(() => validate(patched)).toThrow(/state-patching runs cannot be replay regressions: followerKeepsAcceptedReadBudgetTest/);
+  it("exports every public-only run and no state-patching run, by construction of the schedule", () => {
+    const current = scheduled();
+    for (const model of current.models.filter(model => model.profile)) {
+      const runs = classifyRuns(scanDeclarationBodies(readFileSync(root + model.path, "utf8")));
+      expect(runs.patching.filter(name => model.replayRegressions!.includes(name)), model.path).toEqual([]);
+      expect(runs.publicOnly.filter(name => !model.replayRegressions!.includes(name)), model.path).toEqual([]);
+      expect(model.replayRegressions!.every(name => model.regressions.includes(name)), model.path).toBe(true);
+    }
+    // The shadow profile keeps its state-patching fixtures as model-only regressions.
+    const shadow = current.models.find(model => model.profile === "shadow")!;
+    expect(shadow.regressions.length).toBeGreaterThan(shadow.replayRegressions!.length);
+    // A reproducer may cite a state-patching run only as a model-run, never as an exported regression.
+    const patching = manifest();
+    const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
+    patching.reproducerBacklog = patching.reproducerBacklog.filter(id => id !== effects.id);
+    effects.reproducer = { kind: "exported-regression", run: "followerKeepsAcceptedReadBudgetTest", failure: "s.phase == SOURCE_RUNNING and s.deadline == 10040 and s.readAborts == 1", family: "late-acceptance", profiles: ["effects"], exclusions: {} };
+    expect(() => validate(patching)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: followerKeepsAcceptedReadBudgetTest/);
   });
 
   it("rejects a generated history whose choice leaves the driver domain at generation time", () => {
@@ -657,7 +668,7 @@ describe("formal execution schedule", () => {
     const check = dryRun("check");
     expect(check.filter(job => job.args[0] === "typecheck").map(job => job.args[1])).toEqual(manifest().models.map(model => model.path));
     expect(check.filter(job => job.args[0] === "test").map(job => job.args[1])).toEqual(
-      manifest().models.filter(model => model.regressions.length).map(model => model.path),
+      scheduled().models.filter(model => model.regressions.length).map(model => model.path),
     );
     // The catalog mutates several models; it runs once after every model has
     // been checked unmodified, never interleaved with a model's own schedule.
@@ -685,16 +696,16 @@ describe("formal execution schedule", () => {
     // Every sampled corpus is bound to its driver contract before use, exactly
     // like the exported regressions; vector and verification jobs bind nothing.
     for (const job of sampled) {
-      const model = manifest().models.find(model => model.path === job.args[1])!;
+      const model = scheduled().models.find(model => model.path === job.args[1])!;
       expect(model.profile, job.args[1]).toBeDefined();
       expect(job.profile, job.args[1]).toBe(model.profile);
       expect(job.explicitInputs, job.args[1]).toBe(model.replayRegressions !== undefined);
     }
     for (const job of [...vectors, ...check]) expect(job.profile, job.args.join(" ")).toBeUndefined();
     const regressions = generated.filter(job => job.args[0] === "test");
-    expect(regressions).toHaveLength(manifest().models.filter(model => model.replayRegressions).length);
+    expect(regressions).toHaveLength(scheduled().models.filter(model => model.replayRegressions).length);
     for (const job of regressions) {
-      const model = manifest().models.find(model => model.path === job.args[1])!;
+      const model = scheduled().models.find(model => model.path === job.args[1])!;
       expect(job.outputDirectory).toBe(`.formal-traces/regressions/${model.profile}`);
       expect(job.expectedFiles).toEqual(model.replayRegressions!.map(name => `${name}.itf.json`));
       expect(job.expectedTraces).toBe(model.replayRegressions!.length);

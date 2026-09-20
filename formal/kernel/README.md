@@ -339,10 +339,10 @@ helper library); the pull request lane runs that against the base branch
 whenever a Quint input changes and preserves the reports and replay logs.
 
 Fault challenges for rules that moved into the library anchor on the module
-source (`formal/execution.json` lists `formal/kernel/*.qnt` among its
-`libraries`, which also puts them under the purity check, the witness evidence
-inputs and the fixture lock) and are measured through the composing profile's
-scheduled invariant, as before.
+source (every `formal/kernel/*.qnt` is a library because no scheduled model
+claims it, which puts it under the purity check and the witness evidence
+inputs; the fixture lock pins the modules the recipe models import) and are
+measured through the composing profile's scheduled invariant, as before.
 
 ## Record of the layers rewrite
 

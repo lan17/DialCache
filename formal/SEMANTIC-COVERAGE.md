@@ -16,7 +16,7 @@ The checker reports these distinct categories:
 
 | Category | What is counted |
 | --- | --- |
-| Model | A cited invariant/regression scheduled in [execution.json](./execution.json) |
+| Model | A cited invariant scheduled in [execution.json](./execution.json) or a run declared by a scheduled model |
 | Portable | Fixed scenarios, witnesses, exported Quint regressions or wire vectors |
 | Generated witness | A required consequential history in [coverage-witnesses.json](./coverage-witnesses.json) |
 | Quint regression replay | A named public-action regression exported and replayed in both ports |

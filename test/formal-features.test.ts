@@ -52,9 +52,11 @@ const single = process.env.DIALCACHE_FEATURE_TRACE_FILE;
 const directory = process.env.DIALCACHE_FEATURE_TRACE_DIR;
 const selectedProfile = process.env.DIALCACHE_FEATURE_PROFILE;
 if (selectedProfile !== undefined && !Object.hasOwn(profiles, selectedProfile)) throw new Error(`Unknown selected feature profile: ${selectedProfile}`);
-const execution = JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as {
-  models: Array<{ profile?: string; replayRegressions?: string[] }>;
+// The exported regressions are each profile model's public-only runs, read from its Quint text.
+const { scheduleExecution } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
+  scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
 };
+const execution = scheduleExecution();
 for (const [name, profile] of Object.entries(profiles)) {
   if (selectedProfile !== undefined && selectedProfile !== name) continue;
   const paths = single !== undefined ? (single.includes(`/${name}/`) || single.endsWith(`${name}-smoke.itf.json`) ? [resolve(single)] : [])

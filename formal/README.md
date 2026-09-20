@@ -180,8 +180,9 @@ and their corresponding tests. Local-clock uses feature selectors with
 
 ## Evidence and scope
 
-[execution.json](./execution.json) schedules model properties, regressions,
-exports and bounds. [profiles.json](./profiles.json) declares the replay profiles.
+[execution.json](./execution.json) schedules model properties, exports and
+bounds; every run a scheduled model declares is one of its regressions.
+[profiles.json](./profiles.json) declares the replay profiles.
 [SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md) explains witness and mutation evidence.
 Query the inventories instead of copying changing totals between documents:
 

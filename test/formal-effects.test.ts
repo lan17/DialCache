@@ -10,6 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BehaviorDriver, type Input } from "./formal/behavior-driver.js";
 import { assertEffectsHistory } from "./formal/effects-contract.js";
 
+// The exported effects regressions are the model's public-only runs, read from its Quint text.
+const { scheduleExecution } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
+  scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
+};
 const singleFile = process.env.DIALCACHE_EFFECTS_TRACE_FILE;
 const directory = process.env.DIALCACHE_EFFECTS_TRACE_DIR;
 function loadTraces(): { traces: Trace[]; missing: string[] | undefined } {
@@ -18,10 +22,7 @@ function loadTraces(): { traces: Trace[]; missing: string[] | undefined } {
   else if (directory === undefined) paths = [resolve("formal/effects-smoke.itf.json")];
   else {
     paths = readdirSync(directory).filter((name) => name.endsWith(".itf.json")).sort().map((name) => resolve(directory, name));
-    const execution = JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as {
-      models: Array<{ profile?: string; replayRegressions?: string[] }>;
-    };
-    for (const name of execution.models.find(model => model.profile === "effects")?.replayRegressions ?? []) {
+    for (const name of scheduleExecution().models.find(model => model.profile === "effects")?.replayRegressions ?? []) {
       paths.push(resolve(directory, "..", "regressions", "effects", `${name}.itf.json`));
     }
   }

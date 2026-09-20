@@ -14,36 +14,6 @@
   "test": {
     "maxSamples": 1
   },
-  "libraries": [
-    "formal/conformance-observations.qnt",
-    "formal/cohort-boundaries.qnt",
-    "formal/wire-text.qnt",
-    "formal/cache-rules.qnt",
-    "formal/cache-contract.qnt",
-    "formal/kernel/encodings.qnt",
-    "formal/kernel/calls.qnt",
-    "formal/kernel/layer-policy.qnt",
-    "formal/kernel/request-memo.qnt",
-    "formal/kernel/local-storage.qnt",
-    "formal/kernel/payloads.qnt",
-    "formal/kernel/remote-frames.qnt",
-    "formal/kernel/flights.qnt",
-    "formal/kernel/clock.qnt",
-    "formal/kernel/policy-gate.qnt",
-    "formal/kernel/runtime-policy.qnt",
-    "formal/kernel/serving.qnt",
-    "formal/kernel/markers.qnt",
-    "formal/kernel/policy-overlay.qnt",
-    "formal/kernel/config-errors.qnt",
-    "formal/kernel/receipts.qnt",
-    "formal/kernel/diagnostics.qnt",
-    "formal/kernel/recovery.qnt",
-    "formal/kernel/remote-io.qnt",
-    "formal/kernel/compression.qnt",
-    "formal/kernel/deadlines.qnt",
-    "formal/kernel/remote-writes.qnt",
-    "formal/kernel/shadow.qnt"
-  ],
   "models": [
     {
       "path": "formal/dialcache-core.qnt",
@@ -60,20 +30,6 @@
         "sourceFailureNeverPublishes",
         "noLayerPolicySkipsAllStorage",
         "invalidInvocationPolicyNeverTouchesStorage"
-      ],
-      "regressions": [
-        "lateResultCannotEnterReplacementScopeTest",
-        "nestedDisablePreservesMemoTest",
-        "localReadFailureContinuesToRemoteTest",
-        "localWriteFailurePreservesSourceAndMemoTest",
-        "localWriteFailurePreservesRemoteHitTest",
-        "localReadFailureSuppressesSourcePublicationTest",
-        "untrackedSourcePublishesToAllParticipatingLayersTest",
-        "localHitWarmsRequestAndSkipsRemoteTest",
-        "remoteReadFailureStillPublishesUntrackedLocalAndRequestTest",
-        "trackedWithoutRemoteStillPublishesLocalTest",
-        "rejectedSourceNeverPublishesTest",
-        "invalidBooleanOverlayBypassesAndPreservesMemoTest"
       ]
     },
     {
@@ -84,18 +40,6 @@
         "featureLibraryDefaults",
         "existingLocalEntryKeepsInsertionTtl",
         "existingRemoteEntryKeepsPhysicalTtl"
-      ],
-      "regressions": [
-        "policyChangeDuringInvocationTest",
-        "localTtlMutationIsDetectedTest",
-        "physicalTtlMutationIsDetectedTest",
-        "omittedPolicyUsesLibraryDefaultsTest",
-        "nullProviderRetainsEveryBaselineLeafTest",
-        "sparseLocalOverridePreservesRemoteAndFeaturesTest",
-        "explicitOffReplacesInheritedFeaturesTest",
-        "reenablingDisabledBaselineKeepsDefaultCoalescingTest",
-        "disablingPolicyDoesNotEvictInsertedEntriesTest",
-        "wrongOverlayLeafIsDetectedTest"
       ]
     },
     {
@@ -114,21 +58,6 @@
         "omittedSourceBudgetUsesSixtySeconds",
         "disabledSourceDeadlineNeverTimesOut",
         "independentAcceptanceChecksCapturedDeadline"
-      ],
-      "regressions": [
-        "lateSettlementBeforeTimerTest",
-        "abandonedSourceMayOverlapNewFlightTest",
-        "acceptedPublicationOutlivesDeadlineTest",
-        "delayedLookupKeepsFullSourceBudgetTest",
-        "deadlineEpochMutationIsDetectedTest",
-        "lateFollowerKeepsLeaderSourceDeadlineTest",
-        "inactiveServingLayersKeepConcurrentCallsIndependentTest",
-        "coalescingDisabledKeepsConcurrentCallsIndependentTest",
-        "sharedCacheHitDoesNotStartSourceTest",
-        "outsideCallsIgnoreConfiguredSourceDeadlineTest",
-        "librarySourceDeadlineIsSixtySecondsTest",
-        "explicitlyUnboundedEnabledSourceAcceptsLateValueTest",
-        "keyFailureKeepsEnabledSourceDeadlineTest"
       ]
     },
     {
@@ -137,16 +66,6 @@
         "servedSnapshotClearedObservedFence",
         "staleValueAfterInvalidationIsFenced",
         "acquiredAfterInvalidationDoesNotServeStale"
-      ],
-      "regressions": [
-        "acquiredSnapshotSurvivesLaterInvalidationTest",
-        "acquisitionAfterInvalidationRejectsOldBytesTest",
-        "staleWriteAtCoveredDelayEqualityRemainsFencedTest",
-        "freshWriteBeyondBufferBecomesReadableTest",
-        "readsAndValueWritesDoNotMoveWatermarkTest",
-        "observedFutureFenceSkipsRefillTest",
-        "refillAtFenceEqualitySkipsWriteTest",
-        "laterInvalidationDoesNotRewriteMissFenceTest"
       ]
     },
     {
@@ -161,27 +80,6 @@
         "readFailureNeverRetains",
         "readFailureNeverAttemptsRecovery",
         "futureFrameIsNeverFreshOrRetained"
-      ],
-      "regressions": [
-        "servedValueCanAgeTest",
-        "decodingAtMaxAgeRejectsTest",
-        "futureFrameIsNotRetainedTest",
-        "failedReadSkipsRecoveryTest",
-        "lastFreshAgeSkipsSourceTest",
-        "firstStaleAgeRetainsWithoutDecodingTest",
-        "lastRecoveryAgeStillServesTest",
-        "exactMaximumAgeDoesNotRetainTest",
-        "invalidFrameNeverBecomesRecoveryCandidateTest",
-        "fencedFrameNeverBecomesRecoveryCandidateTest",
-        "acceptedSourceNeverDecodesRetainedBytesTest",
-        "deniedRecoveryNeverDecodesRetainedBytesTest",
-        "maximumAgeBeforeDecodeSkipsLoadingTest",
-        "recoveryDecodeFailureKeepsSourceOutcomeTest",
-        "retainedBytesSurviveRedisDeletionAndFenceTest",
-        "rollbackBelowFreshAgeStillRecoversTest",
-        "rollbackToFutureCandidateRejectsTest",
-        "initiallyTooOldCannotRecoverAfterRollbackTest",
-        "initiallyFutureCannotRecoverAfterClockAdvanceTest"
       ]
     },
     {
@@ -196,20 +94,6 @@
         "presentC0IsNeverRepaired",
         "fillsRequireMiss",
         "fencedFillDoesNotWrite"
-      ],
-      "regressions": [
-        "darkReadCanPrecedeCallerResultTest",
-        "sourceFailureNeverFillsTest",
-        "deadlineStopsFillTest",
-        "equalComparisonSkipsConfirmationTest",
-        "missingConfirmationSupersedesWithoutRepairTest",
-        "changedConfirmationSupersedesWithoutRepairTest",
-        "identicalConfirmationDiagnosesWithoutRepairTest",
-        "darkReadFailureStillAllowsCallerResultTest",
-        "droppedShadowStillAllowsCallerResultTest",
-        "timedOutShadowStillAllowsCallerResultTest",
-        "callerResultCanPrecedeDarkReadTest",
-        "undecodablePresentFrameNeverFillsTest"
       ]
     },
     {
@@ -225,18 +109,6 @@
         "validMissWatermarksArePreserved",
         "untrackedDecodingIgnoresWatermarks",
         "unsupportedFramePrecedesEncodingError"
-      ],
-      "regressions": [
-        "fencedEncodingTest",
-        "reversedPrecedenceIsDetectedTest",
-        "malformedWatermarkTest",
-        "absentValuePreservesWatermarkTest",
-        "unsupportedFramePreservesWatermarkTest",
-        "zeroTimestampPreservesWatermarkTest",
-        "droppedMissWatermarkIsDetectedTest",
-        "invalidWatermarkReplyPrecedesAbsenceTest",
-        "untrackedZeroIgnoresInvalidWatermarkReplyTest",
-        "malformedWatermarkCannotReplaceAbsenceTest"
       ]
     },
     {
@@ -247,27 +119,13 @@
         "readableRemoteHasValue",
         "servedLayerValueMatchesCache"
       ],
-      "regressions": [
-        "disabledAndRequestCallsKeepTheirOwnLifetimesTest",
-        "localValueSurvivesSourceChangeTest",
-        "coalescedPairPublishesOneReusableValueTest",
-        "invalidationRefillsFromCurrentSourceTest",
-        "failedReadPreservesPreviouslyStoredBytesTest"
-      ],
       "profile": "core",
       "generate": {
         "maxSamples": 256,
         "maxSteps": 30,
         "traces": 32,
         "outputDirectory": ".formal-traces/conformance"
-      },
-      "replayRegressions": [
-        "disabledAndRequestCallsKeepTheirOwnLifetimesTest",
-        "localValueSurvivesSourceChangeTest",
-        "coalescedPairPublishesOneReusableValueTest",
-        "invalidationRefillsFromCurrentSourceTest",
-        "failedReadPreservesPreviouslyStoredBytesTest"
-      ]
+      }
     },
     {
       "path": "formal/dialcache-effects-conformance.qnt",
@@ -282,106 +140,13 @@
         "measurementsAreNonnegative",
         "futureOffsetsArePositiveAtObservingLayer"
       ],
-      "regressions": [
-        "unknownReasonKeepsValidFenceTest",
-        "untrackedReplyCannotCarryFenceTest",
-        "missDiscriminatorWinsOverFrameFieldsTest",
-        "frameWithoutMissDiscriminatorIgnoresMetadataTest",
-        "readDurationIncludesDecodeTest",
-        "sourceDurationExcludesPublicationTest",
-        "lateSourceCannotRepeatFailureMetricTest",
-        "timedOutLoaderOverlapsNewFlightTest",
-        "acceptedWriteOutlivesDeadlineTest",
-        "delayedWriteRemainsFencedTest",
-        "readTimeoutStartsIndependentSourceDeadlineTest",
-        "lateReadCannotBecomeHitTest",
-        "acquiredDecodeSurvivesInvalidationAndDeadlineTest",
-        "readFailureNeverRefillsTest",
-        "decodeFailureMayRefillTest",
-        "dumpFailurePreservesSourceTest",
-        "writeFailurePreservesSourceTest",
-        "rollbackDuringDumpRechecksObservedFenceTest",
-        "rollbackDoesNotExtendSourceDeadlineTest",
-        "observerFailuresCannotReplaceSourceErrorTest",
-        "libraryReadBudgetIsFiftyMillisecondsTest",
-        "followerKeepsAcceptedReadBudgetTest",
-        "lateReadRejectionUsesDeadlineCategoryTest",
-        "successfulReadClearsDeadlineBeforeDecodeTest",
-        "readFailureKeepsCategoryAndDeniesRefillTest",
-        "decodeFailureKeepsCategoryAndAllowsRefillTest",
-        "dumpFailureKeepsCategoryAndSourceValueTest",
-        "writeFailureKeepsCategoryAndSourceValueTest",
-        "observerFailuresCannotPreventCacheHitTest",
-        "observerFailuresCannotPreventPublicationTest",
-        "writeStampAfterSerializationClearsInterveningFenceTest",
-        "instanceReadBudgetOverridesLibraryTest",
-        "operationReadBudgetOverridesInstanceTest",
-        "runtimeReadBudgetOverridesOperationTest",
-        "futureFrameReportsPositiveObservingOffsetTest",
-        "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
-        "nullReplyRefillsAndIsReadableTest",
-        "primitiveReplyRefillsAndIsReadableTest",
-        "legacyReplyRefillsAndIsReadableTest",
-        "kindlessReplyRefillsAndIsReadableTest",
-        "missingFenceRefillsAndIsReadableTest",
-        "negativeFenceRefillsAndIsReadableTest",
-        "fractionalFenceRefillsAndIsReadableTest",
-        "unsafeFenceRefillsAndIsReadableTest",
-        "untrackedFencedReplyRefillsAndIsReadableTest",
-        "expiredZeroFenceReplyRefillsAndIsReadableTest",
-        "absentReplyWithFutureFenceBlocksRefillTest"
-      ],
       "profile": "effects",
       "generate": {
         "maxSamples": 4096,
         "maxSteps": 60,
         "traces": 512,
         "outputDirectory": ".formal-traces/effects"
-      },
-      "replayRegressions": [
-        "observerFailuresCannotPreventCacheHitTest",
-        "observerFailuresCannotPreventPublicationTest",
-        "writeStampAfterSerializationClearsInterveningFenceTest",
-        "instanceReadBudgetOverridesLibraryTest",
-        "operationReadBudgetOverridesInstanceTest",
-        "runtimeReadBudgetOverridesOperationTest",
-        "futureFrameReportsPositiveObservingOffsetTest",
-        "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
-        "nullReplyRefillsAndIsReadableTest",
-        "primitiveReplyRefillsAndIsReadableTest",
-        "legacyReplyRefillsAndIsReadableTest",
-        "kindlessReplyRefillsAndIsReadableTest",
-        "missingFenceRefillsAndIsReadableTest",
-        "negativeFenceRefillsAndIsReadableTest",
-        "fractionalFenceRefillsAndIsReadableTest",
-        "unsafeFenceRefillsAndIsReadableTest",
-        "observerFailuresCannotReplaceSourceErrorTest",
-        "libraryReadBudgetIsFiftyMillisecondsTest",
-        "untrackedFencedReplyRefillsAndIsReadableTest",
-        "readDurationIncludesDecodeTest",
-        "sourceDurationExcludesPublicationTest",
-        "lateSourceCannotRepeatFailureMetricTest",
-        "timedOutLoaderOverlapsNewFlightTest",
-        "acceptedWriteOutlivesDeadlineTest",
-        "delayedWriteRemainsFencedTest",
-        "readTimeoutStartsIndependentSourceDeadlineTest",
-        "lateReadCannotBecomeHitTest",
-        "acquiredDecodeSurvivesInvalidationAndDeadlineTest",
-        "readFailureNeverRefillsTest",
-        "decodeFailureMayRefillTest",
-        "dumpFailurePreservesSourceTest",
-        "writeFailurePreservesSourceTest",
-        "rollbackDuringDumpRechecksObservedFenceTest",
-        "rollbackDoesNotExtendSourceDeadlineTest",
-        "lateReadRejectionUsesDeadlineCategoryTest",
-        "successfulReadClearsDeadlineBeforeDecodeTest",
-        "readFailureKeepsCategoryAndDeniesRefillTest",
-        "decodeFailureKeepsCategoryAndAllowsRefillTest",
-        "dumpFailureKeepsCategoryAndSourceValueTest",
-        "writeFailureKeepsCategoryAndSourceValueTest",
-        "expiredZeroFenceReplyRefillsAndIsReadableTest",
-        "absentReplyWithFutureFenceBlocksRefillTest"
-      ]
+      }
     },
     {
       "path": "formal/dialcache-recovery-conformance.qnt",
@@ -395,77 +160,13 @@
         "closedScopesHaveNoMemo",
         "recoveredValueWasWithinAcceptedAge"
       ],
-      "regressions": [
-        "futureFrameDoesNotCarryMissFenceTest",
-        "defaultRecoversOwnTimeoutTest",
-        "explicitDenialReplacesDefaultTest",
-        "defaultRejectsOrdinaryFailureTest",
-        "defaultRecoversPropagatedTimeoutTest",
-        "lateSuccessCannotReplaceRecoveredValueTest",
-        "failedRecoveryPreservesDeadlineErrorTest",
-        "recoveredValueMemoizesOnlyInAttachedRequestTest",
-        "crossRequestRecoveryMemoizesBothScopesTest",
-        "closedRequestCannotReceiveLateRecoveryMemoTest",
-        "rollbackCannotLowerInvalidationWatermarkTest",
-        "rollbackDuringRetainedDecodeRejectsFutureSnapshotTest",
-        "instanceAllowReplacesTimeoutOnlyDefaultTest",
-        "instanceDenialReplacesTimeoutOnlyDefaultTest",
-        "operationDenialReplacesInstanceAllowTest",
-        "lastFreshReadDoesNotInvokeSourceTest",
-        "lastRecoveryMillisecondIsServedTest",
-        "maximumAgeAtReadDoesNotDecodeTest",
-        "fencedInitialBytesNeverRecoverTest",
-        "classifierErrorPreservesSourceWithoutDecodeTest",
-        "freshDecodeFailureCannotBeRetriedAsRecoveryTest",
-        "initialReadFailureSkipsRecoveryClassificationTest",
-        "rollbackBelowFreshCeilingStillRecoversTest",
-        "replacementDoesNotChangeRetainedRecoveryTest",
-        "maximumAgeBeforeDecodePreservesSourceTest",
-        "maximumAgeAfterDecodePreservesSourceTest",
-        "operationAllowReplacesInstanceDenialTest",
-        "coalescedRecoveryClassifiesAndDecodesOnceTest",
-        "recoveredValueKeepsOriginalFallbackDiagnosticTest",
-        "recoveredFlightMemoIsReusedByBothRequestsTest"
-      ],
       "profile": "recovery",
       "generate": {
         "maxSamples": 4096,
         "maxSteps": 60,
         "traces": 512,
         "outputDirectory": ".formal-traces/features/recovery"
-      },
-      "replayRegressions": [
-        "futureFrameDoesNotCarryMissFenceTest",
-        "defaultRecoversOwnTimeoutTest",
-        "explicitDenialReplacesDefaultTest",
-        "defaultRejectsOrdinaryFailureTest",
-        "defaultRecoversPropagatedTimeoutTest",
-        "lateSuccessCannotReplaceRecoveredValueTest",
-        "failedRecoveryPreservesDeadlineErrorTest",
-        "recoveredValueMemoizesOnlyInAttachedRequestTest",
-        "crossRequestRecoveryMemoizesBothScopesTest",
-        "closedRequestCannotReceiveLateRecoveryMemoTest",
-        "rollbackCannotLowerInvalidationWatermarkTest",
-        "rollbackDuringRetainedDecodeRejectsFutureSnapshotTest",
-        "instanceAllowReplacesTimeoutOnlyDefaultTest",
-        "instanceDenialReplacesTimeoutOnlyDefaultTest",
-        "operationDenialReplacesInstanceAllowTest",
-        "lastFreshReadDoesNotInvokeSourceTest",
-        "lastRecoveryMillisecondIsServedTest",
-        "maximumAgeAtReadDoesNotDecodeTest",
-        "fencedInitialBytesNeverRecoverTest",
-        "classifierErrorPreservesSourceWithoutDecodeTest",
-        "freshDecodeFailureCannotBeRetriedAsRecoveryTest",
-        "initialReadFailureSkipsRecoveryClassificationTest",
-        "rollbackBelowFreshCeilingStillRecoversTest",
-        "replacementDoesNotChangeRetainedRecoveryTest",
-        "maximumAgeBeforeDecodePreservesSourceTest",
-        "maximumAgeAfterDecodePreservesSourceTest",
-        "operationAllowReplacesInstanceDenialTest",
-        "coalescedRecoveryClassifiesAndDecodesOnceTest",
-        "recoveredValueKeepsOriginalFallbackDiagnosticTest",
-        "recoveredFlightMemoIsReusedByBothRequestsTest"
-      ]
+      }
     },
     {
       "path": "formal/dialcache-policy-conformance.qnt",
@@ -482,79 +183,13 @@
         "remoteHitsWarmLocalForTheReplysLocalTtl",
         "joinsOnlyJoinableFlights"
       ],
-      "regressions": [
-        "invalidReadBudgetBypassesAllCachingTest",
-        "invalidLocalRampPreservesRemoteTest",
-        "invalidRemoteRampPreservesLocalTest",
-        "invalidRecoveryUsesOrdinaryRetentionTest",
-        "invalidShadowPreservesNormalServingTest",
-        "localHitDoesNotRenewInsertionTtlTest",
-        "wallRollbackDoesNotExtendLocalTtlTest",
-        "wallRollbackRejectsFutureRemoteFrameTest",
-        "independentCompletionKeepsRegisteredLeaderTest",
-        "independentFailureKeepsRegisteredLeaderTest",
-        "eachSourceKeepsPublicationPolicyTest",
-        "absentValueIsStoredAndReusedTest",
-        "independentLocalCallsStillReuseSettledValueTest",
-        "independentLocalPublicationUsesLastCompletionTest",
-        "independentFailureKeepsSettledLocalValueTest",
-        "independentRemotePublicationUsesLastCompletionTest",
-        "providerFailureBypassesAndPreservesExistingLocalTest",
-        "disablingServingKeepsExistingLocalForReenablementTest",
-        "increasedFreshTtlCanReusePhysicallyRetainedValueTest",
-        "exactRemoteFreshBoundaryStartsSourceTest",
-        "increasedFreshTtlCannotResurrectExpiredStorageTest",
-        "remoteHitStartsFullLocalInsertionTtlTest",
-        "remoteHitWarmsLocalForTheReplysLocalTtlTest",
-        "untrackedReadFailureStillWarmsActiveLocalTest",
-        "invalidRemoteTtlPreservesLocalServingTest",
-        "invalidLocalTtlStillServesFreshRemoteTest",
-        "recoveryAgeEqualToFreshTtlStillServesFreshRemoteTest",
-        "negativeRecoveryAgeStillServesFreshRemoteTest",
-        "providerFailureReportsStablePolicyCategoryTest",
-        "remoteHitBeforeBoundaryDoesNotRenewFreshnessTest",
-        "falsyRemoteValuesAreServedFromRemoteTest"
-      ],
       "profile": "policy",
       "generate": {
         "maxSamples": 2048,
         "maxSteps": 60,
         "traces": 512,
         "outputDirectory": ".formal-traces/features/policy"
-      },
-      "replayRegressions": [
-        "invalidReadBudgetBypassesAllCachingTest",
-        "invalidLocalRampPreservesRemoteTest",
-        "invalidRemoteRampPreservesLocalTest",
-        "invalidRecoveryUsesOrdinaryRetentionTest",
-        "invalidShadowPreservesNormalServingTest",
-        "localHitDoesNotRenewInsertionTtlTest",
-        "wallRollbackDoesNotExtendLocalTtlTest",
-        "wallRollbackRejectsFutureRemoteFrameTest",
-        "independentCompletionKeepsRegisteredLeaderTest",
-        "independentFailureKeepsRegisteredLeaderTest",
-        "eachSourceKeepsPublicationPolicyTest",
-        "absentValueIsStoredAndReusedTest",
-        "independentLocalCallsStillReuseSettledValueTest",
-        "independentLocalPublicationUsesLastCompletionTest",
-        "independentFailureKeepsSettledLocalValueTest",
-        "independentRemotePublicationUsesLastCompletionTest",
-        "providerFailureBypassesAndPreservesExistingLocalTest",
-        "disablingServingKeepsExistingLocalForReenablementTest",
-        "increasedFreshTtlCanReusePhysicallyRetainedValueTest",
-        "exactRemoteFreshBoundaryStartsSourceTest",
-        "increasedFreshTtlCannotResurrectExpiredStorageTest",
-        "remoteHitStartsFullLocalInsertionTtlTest",
-        "remoteHitWarmsLocalForTheReplysLocalTtlTest",
-        "untrackedReadFailureStillWarmsActiveLocalTest",
-        "invalidRemoteTtlPreservesLocalServingTest",
-        "invalidLocalTtlStillServesFreshRemoteTest",
-        "recoveryAgeEqualToFreshTtlStillServesFreshRemoteTest",
-        "negativeRecoveryAgeStillServesFreshRemoteTest",
-        "providerFailureReportsStablePolicyCategoryTest",
-        "remoteHitBeforeBoundaryDoesNotRenewFreshnessTest",
-        "falsyRemoteValuesAreServedFromRemoteTest"
-      ]
+      }
     },
     {
       "path": "formal/dialcache-shadow-conformance.qnt",
@@ -570,62 +205,13 @@
         "expiredSourceWorkSkipsRedis",
         "c0AcquisitionsRespectFreshness"
       ],
-      "regressions": [
-        "identicalTextAndBinaryBytesConfirmMismatchTest",
-        "sameDecodedValueWithDifferentBytesIsSupersededTest",
-        "binarySnapshotComparesDecodedValueTest",
-        "slowComparisonTimesOutBeforeConfirmationTest",
-        "slowComparisonFailureStillTimesOutTest",
-        "missingHookSkipsDarkJobTest",
-        "invalidShadowPolicySkipsDarkJobTest",
-        "admittedComparisonSurvivesPolicyDisableTest",
-        "explicitEqualityOverridesValuesTest",
-        "explicitInequalityRequiresConfirmationTest",
-        "comparisonFailureKeepsCallerTest",
-        "acceptedLoggingSurvivesPolicyChangeTest",
-        "ageClampsAfterWallRollbackTest",
-        "confirmationKeepsOriginalAgeTest",
-        "invalidLoggingKeepsComparisonWithoutWarningTest",
-        "sourceWorkBeforeDeadlineStillReadsTest",
-        "sourceWorkAtDeadlineSkipsDeferredReadTest",
-        "expiredDeferredJobRetainsSourceRejectionDeadlineTest",
-        "darkReadErrorCannotReplaceCallerSourceTest",
-        "sourceErrorDoesNotDecodePresentDarkBytesTest",
-        "futureDarkBytesFillWithoutDecodingTest",
-        "fencedDarkBytesCanAdmitNewerFillTest",
-        "fencedConfirmationNeverRepairsTest",
-        "futureConfirmationStillComparesBytesTest",
-        "fillSerializationFailureNeverDispatchesWriteTest",
-        "fillWriteFailurePreservesCallerResultTest",
-        "lateFillSerializationCannotDispatchWriteTest",
-        "lateFillWriteCannotEmitAnotherVerdictTest",
-        "lateDecodeCannotStartConfirmationTest",
-        "lateConfirmationCannotEmitAnotherVerdictTest",
-        "lateDarkReadCannotStartDecodeOrFillTest",
-        "omittedLoggingKeepsMismatchMetricsOnlyTest",
-        "explicitFalseLoggingOverridesEnabledDefaultTest",
-        "confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest",
-        "confirmationRollbackKeepsPayloadAndClampsAgeTest",
-        "futureDarkAcquisitionReportsOffsetAndFillsMissTest",
-        "futureLateDarkReadKeepsTimeoutAndReportsOffsetTest",
-        "c0AtExactFreshnessBoundaryRefillsTest"
-      ],
       "profile": "shadow",
       "generate": {
         "maxSamples": 4096,
         "maxSteps": 60,
         "traces": 1024,
         "outputDirectory": ".formal-traces/features/shadow"
-      },
-      "replayRegressions": [
-        "omittedLoggingKeepsMismatchMetricsOnlyTest",
-        "explicitFalseLoggingOverridesEnabledDefaultTest",
-        "confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest",
-        "confirmationRollbackKeepsPayloadAndClampsAgeTest",
-        "futureDarkAcquisitionReportsOffsetAndFillsMissTest",
-        "futureLateDarkReadKeepsTimeoutAndReportsOffsetTest",
-        "c0AtExactFreshnessBoundaryRefillsTest"
-      ]
+      }
     },
     {
       "path": "formal/dialcache-scope-conformance.qnt",
@@ -637,45 +223,13 @@
         "memoFollowsLatestSuccessfulSettlement",
         "registrationFollowsCoalescing"
       ],
-      "regressions": [
-        "lateSourceCannotPopulateReplacementTest",
-        "policyReplyAfterCloseBypassesRequestTest",
-        "nestedCloseAndDisabledBypassKeepOuterMemoTest",
-        "rejectedFlightAllowsRetryTest",
-        "sharedFailureHasOneAttributedErrorTest",
-        "disabledSourceFailureHasNoCacheTrailTest",
-        "policyClosureFailureIsAttributedWithoutCachingTest",
-        "absentValueIsMemoizedTest",
-        "independentRequestMemoUsesLastCompletionTest",
-        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest",
-        "rejectedIndependentSourceKeepsMemoizedValueTest",
-        "independentSourceIsNotRegisteredForLaterSharingTest",
-        "pendingRequestFlightIsJoinedBeforeMemoReadTest",
-        "bypassedRequestFailureIsAttributedToLocalTest"
-      ],
       "profile": "scope",
       "generate": {
         "maxSamples": 1024,
         "maxSteps": 60,
         "traces": 256,
         "outputDirectory": ".formal-traces/features/scope"
-      },
-      "replayRegressions": [
-        "lateSourceCannotPopulateReplacementTest",
-        "policyReplyAfterCloseBypassesRequestTest",
-        "nestedCloseAndDisabledBypassKeepOuterMemoTest",
-        "rejectedFlightAllowsRetryTest",
-        "sharedFailureHasOneAttributedErrorTest",
-        "disabledSourceFailureHasNoCacheTrailTest",
-        "policyClosureFailureIsAttributedWithoutCachingTest",
-        "absentValueIsMemoizedTest",
-        "independentRequestMemoUsesLastCompletionTest",
-        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest",
-        "rejectedIndependentSourceKeepsMemoizedValueTest",
-        "independentSourceIsNotRegisteredForLaterSharingTest",
-        "pendingRequestFlightIsJoinedBeforeMemoReadTest",
-        "bypassedRequestFailureIsAttributedToLocalTest"
-      ]
+      }
     },
     {
       "path": "formal/dialcache-admission-conformance.qnt",
@@ -687,29 +241,13 @@
         "jobsAreDiagnostic",
         "effectsMatchRecords"
       ],
-      "regressions": [
-        "coalescedHitAdmitsOneJobTest",
-        "duplicateDropsBeforeCapacityIsFullTest",
-        "timeoutRetainsSourceCapacityTest",
-        "timeoutRetainsDecodeCapacityTest",
-        "timeoutRetainsConfirmationCapacityTest",
-        "fullInstanceDoesNotBlockOtherInstanceTest"
-      ],
       "profile": "admission",
       "generate": {
         "maxSamples": 1024,
         "maxSteps": 60,
         "traces": 128,
         "outputDirectory": ".formal-traces/features/admission"
-      },
-      "replayRegressions": [
-        "coalescedHitAdmitsOneJobTest",
-        "duplicateDropsBeforeCapacityIsFullTest",
-        "timeoutRetainsSourceCapacityTest",
-        "timeoutRetainsDecodeCapacityTest",
-        "timeoutRetainsConfirmationCapacityTest",
-        "fullInstanceDoesNotBlockOtherInstanceTest"
-      ]
+      }
     },
     {
       "path": "formal/dialcache-layers-conformance.qnt",
@@ -724,49 +262,13 @@
         "absentRemoteHasNoAdapterEffects",
         "sourceOwnershipNeverCrossesKeyOrInstance"
       ],
-      "regressions": [
-        "absentRemoteMaintenancePreservesLocalReuseTest",
-        "absentRemotePreservesLocalReuseTest",
-        "requestMissesShareProcessAndMemoizeSeparatelyTest",
-        "localReadPromotesBeforeEvictionTest",
-        "zeroCapacityKeepsSharingWithoutStorageTest",
-        "trackedSourceWaitsForValidatedReadToWarmLocalTest",
-        "invalidationGroupsOperationsButPreservesAcquiredCachesTest",
-        "requestMemoExceedsLocalCapacityTest",
-        "separateRequestRootsRetainIndependentValuesTest",
-        "oneInstanceEvictionCannotEvictAnotherInstanceTest",
-        "pendingSourcesKeepEntityAndOperationIdentityTest",
-        "settledRequestMemoSurvivesSharedLayerRampDownTest",
-        "untrackedReadsIgnoreGroupedInvalidationTest",
-        "trackedWithoutRemotePublishesReusableLocalTest",
-        "untrackedSourcePublicationIsProbedInAllThreeLayersTest",
-        "coalescingCallerJoinsPendingFlightBeforeSeededFrameTest"
-      ],
       "profile": "layers",
       "generate": {
         "maxSamples": 2048,
         "maxSteps": 80,
         "traces": 512,
         "outputDirectory": ".formal-traces/features/layers"
-      },
-      "replayRegressions": [
-        "absentRemoteMaintenancePreservesLocalReuseTest",
-        "absentRemotePreservesLocalReuseTest",
-        "requestMissesShareProcessAndMemoizeSeparatelyTest",
-        "localReadPromotesBeforeEvictionTest",
-        "zeroCapacityKeepsSharingWithoutStorageTest",
-        "trackedSourceWaitsForValidatedReadToWarmLocalTest",
-        "invalidationGroupsOperationsButPreservesAcquiredCachesTest",
-        "requestMemoExceedsLocalCapacityTest",
-        "separateRequestRootsRetainIndependentValuesTest",
-        "oneInstanceEvictionCannotEvictAnotherInstanceTest",
-        "pendingSourcesKeepEntityAndOperationIdentityTest",
-        "settledRequestMemoSurvivesSharedLayerRampDownTest",
-        "untrackedReadsIgnoreGroupedInvalidationTest",
-        "trackedWithoutRemotePublishesReusableLocalTest",
-        "untrackedSourcePublicationIsProbedInAllThreeLayersTest",
-        "coalescingCallerJoinsPendingFlightBeforeSeededFrameTest"
-      ]
+      }
     },
     {
       "path": "formal/dialcache-independent-conformance.qnt",
@@ -779,45 +281,13 @@
         "writesKeepCapturedRetention",
         "eachSourceKeepsItsFullBudget"
       ],
-      "regressions": [
-        "independentReadDeadlinesStartSeparateSourcesTest",
-        "independentRecoveryKeepsDistinctSnapshotsTest",
-        "timedOutReadCannotAffectAnotherCallTest",
-        "acceptedFreshDecodeSurvivesOtherInvalidationTest",
-        "readFailureCannotBorrowAnotherCallsRefillTest",
-        "recoveryPolicyIsCapturedPerCallerTest",
-        "staggeredSourceStartsKeepIndependentBudgetsTest",
-        "staggeredSourcesExpireAtTheirOwnDeadlineTest",
-        "independentRecoveryAtCapturedAgeBoundaryTest",
-        "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
-        "freshDecodeFailureCannotRecoverTest",
-        "freshDecodeFailureRefillsUnfencedUnderARaisedWatermarkTest",
-        "visibleStaleMissCarriesNoFenceAndRefillsTest",
-        "readExpiryStartsItsLoaderAtTheReadsDueInstantTest"
-      ],
       "profile": "independent",
       "generate": {
         "maxSamples": 2048,
         "maxSteps": 60,
         "traces": 512,
         "outputDirectory": ".formal-traces/features/independent"
-      },
-      "replayRegressions": [
-        "staggeredSourceStartsKeepIndependentBudgetsTest",
-        "staggeredSourcesExpireAtTheirOwnDeadlineTest",
-        "independentRecoveryAtCapturedAgeBoundaryTest",
-        "independentReadDeadlinesStartSeparateSourcesTest",
-        "timedOutReadCannotAffectAnotherCallTest",
-        "readFailureCannotBorrowAnotherCallsRefillTest",
-        "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
-        "independentRecoveryKeepsDistinctSnapshotsTest",
-        "acceptedFreshDecodeSurvivesOtherInvalidationTest",
-        "recoveryPolicyIsCapturedPerCallerTest",
-        "freshDecodeFailureCannotRecoverTest",
-        "freshDecodeFailureRefillsUnfencedUnderARaisedWatermarkTest",
-        "visibleStaleMissCarriesNoFenceAndRefillsTest",
-        "readExpiryStartsItsLoaderAtTheReadsDueInstantTest"
-      ]
+      }
     },
     {
       "path": "formal/dialcache-recovery-read-conformance.qnt",
@@ -831,78 +301,6 @@
         "completedCallsHaveNoActiveWork",
         "oneExecution",
         "expiredMarkersFenceNothing"
-      ],
-      "regressions": [
-        "freshnessAfterHeldReadTest",
-        "trackedEncodingFailureSuppressesRefillTest",
-        "untrackedEncodingFailureStillPublishesLocalTest",
-        "trackedPhysicalRetentionExpiresAtCapTest",
-        "physicalCapDoesNotClampLogicalRecoveryTest",
-        "compressedRecoveryMemoizesWithoutLocalPublicationTest",
-        "corruptCompressedRecoveryKeepsOriginalSourceErrorTest",
-        "retainedCompressedRecoverySurvivesInvalidationTest",
-        "closedRequestCannotReceiveCompressedRecoveryTest",
-        "trackedSourceNeedsRemoteValidationBeforeLocalReuseTest",
-        "ordinaryValueWorkDoesNotCreateMarkerTest",
-        "ordinaryValueWorkDoesNotExtendMarkerTest",
-        "failedInvalidationPreservesExistingMarkerTest",
-        "failedInvalidationDoesNotCreateMarkerTest",
-        "freshCompressedReadReportsDecompressionTest",
-        "corruptCompressedReadReportsRawFallbackTest",
-        "heldReadJustBeforeFreshnessBoundaryStillHitsTest",
-        "untrackedCompressedRecoveryDoesNotWarmLocalTest",
-        "compressedRecoveryRechecksMaximumAfterDecodeTest",
-        "retainedSnapshotSurvivesPhysicalExpiryTest",
-        "unsafeTimestampSkipsSerializerAndAllowsRefillTest",
-        "unsupportedVersionSkipsSerializerAndAllowsRefillTest",
-        "unsupportedVersionUnderRaisedWatermarkIsAFencedMissTest",
-        "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
-        "laterInvalidationDoesNotRewriteObservedMissFenceTest",
-        "recoveredAbsenceSkipsSelectedShadowTest",
-        "recoveredValueSkipsSelectedShadowTest",
-        "untrackedRetentionIsNotCappedTest",
-        "closingAnotherScopeKeepsThisScopesMemoTest",
-        "localEntryExpiresAtItsInsertionTtlTest",
-        "expiredMarkerIsGoneTest",
-        "unsafeTimestampAtTheWatermarkStillRefillsTest",
-        "encodingFailedReadLeavesNoCandidateTest",
-        "lapsedMarkerUnfencesTheFrameStampedAtItsCutoffTest"
-      ],
-      "replayRegressions": [
-        "freshnessAfterHeldReadTest",
-        "trackedEncodingFailureSuppressesRefillTest",
-        "untrackedEncodingFailureStillPublishesLocalTest",
-        "trackedPhysicalRetentionExpiresAtCapTest",
-        "physicalCapDoesNotClampLogicalRecoveryTest",
-        "compressedRecoveryMemoizesWithoutLocalPublicationTest",
-        "corruptCompressedRecoveryKeepsOriginalSourceErrorTest",
-        "retainedCompressedRecoverySurvivesInvalidationTest",
-        "closedRequestCannotReceiveCompressedRecoveryTest",
-        "trackedSourceNeedsRemoteValidationBeforeLocalReuseTest",
-        "ordinaryValueWorkDoesNotCreateMarkerTest",
-        "ordinaryValueWorkDoesNotExtendMarkerTest",
-        "failedInvalidationPreservesExistingMarkerTest",
-        "failedInvalidationDoesNotCreateMarkerTest",
-        "freshCompressedReadReportsDecompressionTest",
-        "corruptCompressedReadReportsRawFallbackTest",
-        "heldReadJustBeforeFreshnessBoundaryStillHitsTest",
-        "untrackedCompressedRecoveryDoesNotWarmLocalTest",
-        "compressedRecoveryRechecksMaximumAfterDecodeTest",
-        "retainedSnapshotSurvivesPhysicalExpiryTest",
-        "unsafeTimestampSkipsSerializerAndAllowsRefillTest",
-        "unsupportedVersionSkipsSerializerAndAllowsRefillTest",
-        "unsupportedVersionUnderRaisedWatermarkIsAFencedMissTest",
-        "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
-        "laterInvalidationDoesNotRewriteObservedMissFenceTest",
-        "recoveredAbsenceSkipsSelectedShadowTest",
-        "recoveredValueSkipsSelectedShadowTest",
-        "untrackedRetentionIsNotCappedTest",
-        "closingAnotherScopeKeepsThisScopesMemoTest",
-        "localEntryExpiresAtItsInsertionTtlTest",
-        "expiredMarkerIsGoneTest",
-        "unsafeTimestampAtTheWatermarkStillRefillsTest",
-        "encodingFailedReadLeavesNoCandidateTest",
-        "lapsedMarkerUnfencesTheFrameStampedAtItsCutoffTest"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -918,20 +316,6 @@
         "failedReadKeepsPriorLocalValue",
         "failedWriteKeepsAcceptedCallerResult",
         "sourceErrorsNeverReplaceLocalValue"
-      ],
-      "regressions": [
-        "localReadFailureFallsThroughAndPreservesOldLocalTest",
-        "localReadFailureSkipsSourcePublicationButMemoizesTest",
-        "localWriteFailureKeepsSourceAndRequestMemoTest",
-        "sourceFailureKeepsPreviouslyAcceptedStorageTest",
-        "rejectedSourceDoesNotSeedLocalTest"
-      ],
-      "replayRegressions": [
-        "localReadFailureFallsThroughAndPreservesOldLocalTest",
-        "localReadFailureSkipsSourcePublicationButMemoizesTest",
-        "localWriteFailureKeepsSourceAndRequestMemoTest",
-        "sourceFailureKeepsPreviouslyAcceptedStorageTest",
-        "rejectedSourceDoesNotSeedLocalTest"
       ],
       "generate": {
         "maxSamples": 512,
@@ -950,64 +334,6 @@
         "callersKeepTheirSourceValue",
         "retainedValueFollowsSettlementOrder",
         "sourceEffectsMatch"
-      ],
-      "regressions": [
-        "runtimeTrueEnablesSharingOverFalseDefaultTest",
-        "inheritedFalseKeepsIndependentMemoizingSourcesTest",
-        "localCohortEqualityBypassesBeforeAboveSampleCachesTest",
-        "remoteCohortEqualityBypassesBeforeAboveSampleCachesTest",
-        "requestAbsenceAndLiteralTextStayDistinctTest",
-        "localAbsenceAndLiteralTextStayDistinctTest",
-        "remoteAbsenceAndLiteralTextStayDistinctTest",
-        "requestFalsyValuesRemainDistinctAndReusableTest",
-        "localFalsyValuesRemainDistinctAndReusableTest",
-        "remoteFalsyValuesRemainDistinctAndReusableTest",
-        "nullProviderInheritsConfiguredServingAndDefaultSharingTest",
-        "omittedRampAndSharingUseLibraryDefaultsTest",
-        "reenablingSharingUsesTheOmittedTrueDefaultTest",
-        "falseRequestLeafPreservesMemoForReenablementTest",
-        "invalidCoalesceBypassesWithoutReplacingRemoteTest",
-        "invalidRequestLocalBypassesWithoutReplacingRemoteTest",
-        "explicitNullCoalesceBypassesWithoutReplacingRemoteTest",
-        "explicitNullRequestLocalBypassesWithoutReplacingRemoteTest",
-        "runtimeLocalTtlWithoutRampActivatesLayerTest",
-        "runtimeRemoteTtlWithoutRampActivatesLayerTest",
-        "disabledBaselineRampedUpKeepsDefaultSharingTest",
-        "fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest",
-        "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
-        "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
-        "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
-        "disabledSharingDoesNotJoinRegisteredFlightTest",
-        "defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest"
-      ],
-      "replayRegressions": [
-        "runtimeTrueEnablesSharingOverFalseDefaultTest",
-        "inheritedFalseKeepsIndependentMemoizingSourcesTest",
-        "localCohortEqualityBypassesBeforeAboveSampleCachesTest",
-        "remoteCohortEqualityBypassesBeforeAboveSampleCachesTest",
-        "requestAbsenceAndLiteralTextStayDistinctTest",
-        "localAbsenceAndLiteralTextStayDistinctTest",
-        "remoteAbsenceAndLiteralTextStayDistinctTest",
-        "requestFalsyValuesRemainDistinctAndReusableTest",
-        "localFalsyValuesRemainDistinctAndReusableTest",
-        "remoteFalsyValuesRemainDistinctAndReusableTest",
-        "nullProviderInheritsConfiguredServingAndDefaultSharingTest",
-        "omittedRampAndSharingUseLibraryDefaultsTest",
-        "reenablingSharingUsesTheOmittedTrueDefaultTest",
-        "falseRequestLeafPreservesMemoForReenablementTest",
-        "invalidCoalesceBypassesWithoutReplacingRemoteTest",
-        "invalidRequestLocalBypassesWithoutReplacingRemoteTest",
-        "explicitNullCoalesceBypassesWithoutReplacingRemoteTest",
-        "explicitNullRequestLocalBypassesWithoutReplacingRemoteTest",
-        "runtimeLocalTtlWithoutRampActivatesLayerTest",
-        "runtimeRemoteTtlWithoutRampActivatesLayerTest",
-        "disabledBaselineRampedUpKeepsDefaultSharingTest",
-        "fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest",
-        "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
-        "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
-        "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
-        "disabledSharingDoesNotJoinRegisteredFlightTest",
-        "defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -1033,60 +359,6 @@
         "jobBudgetsBelongToLiveJobs",
         "heldWorkHasAcceptedResults"
       ],
-      "regressions": [
-        "darkSourcePublishesLocalBeforeShadowWriteTest",
-        "darkSourcePublishesRequestBeforeShadowWriteTest",
-        "darkPresentC0NeverBecomesLocalPublicationTest",
-        "darkPresentC0NeverBecomesRequestPublicationTest",
-        "deduplicatedJobKeepsIndependentCallerSourcesTest",
-        "darkFailureDoesNotUseEligibleStaleBytesTest",
-        "invalidShadowKeepsLocalPublicationTest",
-        "unboundedCallerSurvivesDarkJobDeadlineTest",
-        "servedAndDarkJobsShareCapacityButNotSourceOwnershipTest",
-        "fullMixedInstanceDoesNotBlockAnotherInstanceTest",
-        "servedDiagnosticSourceDoesNotPopulateLocalTest",
-        "validatedRemoteHitStopsFurtherShadowTest",
-        "ordinaryServingMissDoesNotAdmitDiagnosticSourceTest",
-        "shadowCohortBelowDoesNotAdmitTest",
-        "shadowCohortEqualityDoesNotAdmitTest",
-        "shadowCohortAboveAdmitsTest",
-        "darkFillRetainsPolicyThroughSerializationTest",
-        "retainedFreshC0StillComparesAfterFreshnessBoundaryTest",
-        "expiredC0CanFillAndServeNewValueTest",
-        "acquiredMissDoesNotRereadBeforeFillTest",
-        "localEntryExpiresAtItsInsertionTtlTest",
-        "darkPropagatedTimeoutIsSourceFailureTest",
-        "servedPropagatedTimeoutPreservesHitTest",
-        "darkC0EqualToSourceIsAMatchTest",
-        "darkC0ReplacedBeforeConfirmationIsSupersededTest"
-      ],
-      "replayRegressions": [
-        "darkSourcePublishesLocalBeforeShadowWriteTest",
-        "darkSourcePublishesRequestBeforeShadowWriteTest",
-        "darkPresentC0NeverBecomesLocalPublicationTest",
-        "darkPresentC0NeverBecomesRequestPublicationTest",
-        "deduplicatedJobKeepsIndependentCallerSourcesTest",
-        "darkFailureDoesNotUseEligibleStaleBytesTest",
-        "invalidShadowKeepsLocalPublicationTest",
-        "unboundedCallerSurvivesDarkJobDeadlineTest",
-        "servedAndDarkJobsShareCapacityButNotSourceOwnershipTest",
-        "fullMixedInstanceDoesNotBlockAnotherInstanceTest",
-        "servedDiagnosticSourceDoesNotPopulateLocalTest",
-        "validatedRemoteHitStopsFurtherShadowTest",
-        "ordinaryServingMissDoesNotAdmitDiagnosticSourceTest",
-        "shadowCohortBelowDoesNotAdmitTest",
-        "shadowCohortEqualityDoesNotAdmitTest",
-        "shadowCohortAboveAdmitsTest",
-        "darkFillRetainsPolicyThroughSerializationTest",
-        "retainedFreshC0StillComparesAfterFreshnessBoundaryTest",
-        "expiredC0CanFillAndServeNewValueTest",
-        "acquiredMissDoesNotRereadBeforeFillTest",
-        "localEntryExpiresAtItsInsertionTtlTest",
-        "darkPropagatedTimeoutIsSourceFailureTest",
-        "servedPropagatedTimeoutPreservesHitTest",
-        "darkC0EqualToSourceIsAMatchTest",
-        "darkC0ReplacedBeforeConfirmationIsSupersededTest"
-      ],
       "generate": {
         "maxSamples": 1024,
         "maxSteps": 60,
@@ -1100,18 +372,6 @@
         "localReadsUseCommonWholeMilliseconds",
         "readsNeverRenewLocalInsertion",
         "publicCallsPreserveProbeResults"
-      ],
-      "regressions": [
-        "fractionalInsertionExpiresAtWholeMillisecondTest",
-        "fractionalConstructionKeepsCommonInstanceGridTest",
-        "nonzeroOriginKeepsWholeMillisecondBoundaryTest",
-        "integerInsertionRetainsFullTtlTest"
-      ],
-      "replayRegressions": [
-        "fractionalInsertionExpiresAtWholeMillisecondTest",
-        "fractionalConstructionKeepsCommonInstanceGridTest",
-        "nonzeroOriginKeepsWholeMillisecondBoundaryTest",
-        "integerInsertionRetainsFullTtlTest"
       ],
       "profile": "local-clock",
       "generate": {
@@ -1132,30 +392,6 @@
         "followersKeepTheirOwnersOutcome",
         "onlyEnabledValidCallsResolvePolicy"
       ],
-      "regressions": [
-        "outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest",
-        "defaultSourceBudgetExpiresAtSixtySecondsTest",
-        "unboundedEnabledSourcePublishesAfterSixtySecondsTest",
-        "lateFollowerUsesLeadersRemainingBudgetTest",
-        "heldPolicyDoesNotSpendSourceBudgetTest",
-        "invalidKeyStillKeepsEnabledSourceDeadlineTest",
-        "abandonedSourceCannotReplaceSuccessfulRetryTest",
-        "localEntryExpiresAfterItsTtlTest",
-        "rejectedSourceLeavesPublishedLocalEntryTest",
-        "republishedEqualValueRestampsLocalExpiryTest"
-      ],
-      "replayRegressions": [
-        "outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest",
-        "defaultSourceBudgetExpiresAtSixtySecondsTest",
-        "unboundedEnabledSourcePublishesAfterSixtySecondsTest",
-        "lateFollowerUsesLeadersRemainingBudgetTest",
-        "heldPolicyDoesNotSpendSourceBudgetTest",
-        "invalidKeyStillKeepsEnabledSourceDeadlineTest",
-        "abandonedSourceCannotReplaceSuccessfulRetryTest",
-        "localEntryExpiresAfterItsTtlTest",
-        "rejectedSourceLeavesPublishedLocalEntryTest",
-        "republishedEqualValueRestampsLocalExpiryTest"
-      ],
       "generate": {
         "maxSamples": 1024,
         "maxSteps": 60,
@@ -1172,15 +408,6 @@
         "absentValueKeepsItsOwnClassification",
         "acceptedDurationWithinCeiling",
         "writerRejectsInvalidNumericDomain"
-      ],
-      "regressions": [
-        "allFrameVectorsTest",
-        "maximalSubpartConsumesAcceptedPrefixOnceTest",
-        "malformedSurrogateBytesRemainSeparateErrorsTest",
-        "payloadUnpairedSurrogateUsesReplacementTest",
-        "trackedFencePrecedesEncodingErrorTest",
-        "untrackedIgnoresMalformedWatermarkTest",
-        "physicalDurationRoundsUpWithinBoundTest"
       ],
       "vectorExport": {
         "generator": "formal/generate-frame-vectors.mjs",
@@ -1207,20 +434,6 @@
         "outputIsCanonicalDecimalString",
         "finiteRetentionIsExact"
       ],
-      "regressions": [
-        "absentMarkerGetsRetentionFloorTest",
-        "futureCutoffDoesNotMoveBackwardsTest",
-        "longBufferExtendsRequiredRetentionTest",
-        "persistentMalformedStringStaysPersistentTest",
-        "wrongTypeLongTtlIsNotInheritedTest",
-        "wrongTypePersistenceIsNotInheritedTest",
-        "rejectedFractionPreservesOrderedListTest",
-        "rejectedUnsafeSumPreservesPersistentMalformedTextTest",
-        "maximumBufferAndTimestampSumAreAcceptedTest",
-        "decimalZerosAreCanonicalizedTest",
-        "newlineAndPlusAreNotDecimalGrammarTest",
-        "emptyStringRetentionIsPreservedTest"
-      ],
       "vectorExport": {
         "generator": "formal/generate-invalidation-vectors.mjs",
         "artifact": "formal/quint-invalidation-vectors.json",
@@ -1241,19 +454,6 @@
         "normalizedNamesAreOrderedAndValuesAssociated",
         "normalizedIntegersRetainExactMagnitude",
         "cohortNumeratorsAreUnsignedAndBoundariesStrict"
-      ],
-      "regressions": [
-        "allCasesTest",
-        "encodingSeparatesReservedDelimitersTest",
-        "surrogatePairEncodesOneFourByteScalarTest",
-        "malformedUtf16RejectsInsteadOfReplacementTest",
-        "bracesDependOnEntityTrackingTest",
-        "normalizedNamesUseUtf16OrderingTest",
-        "trackedArgumentsDoNotChangeWatermarkTest",
-        "normalizedPrimitivesPreserveFalsyAndOmittedValuesTest",
-        "signedBigintsPreserveEveryDecimalDigitTest",
-        "orderedKeyArgumentsRetainDuplicatesTest",
-        "publishedCohortNumeratorsRemainStableTest"
       ],
       "vectorExport": {
         "generator": "formal/generate-key-vectors.mjs",
@@ -1279,19 +479,6 @@
         "compressionUsesByteThresholdAndStrictShrink",
         "unknownZeroPrefixPassesThroughUnchanged"
       ],
-      "regressions": [
-        "allEnvelopeVectorsTest",
-        "escapedCompressedMarkerRemainsLiteralTest",
-        "unknownLegacyZeroPrefixRemainsUntouchedTest",
-        "corruptCompressionPreservesMarkedBytesTest",
-        "disabledNewWritesStillReadLegacyCompressionTest",
-        "decoderLimitKeepsRawBytesTest",
-        "utf8ThresholdCountsBytesTest",
-        "compressionTieKeepsRawRepresentationTest",
-        "shrinkComparedWithEscapedRawBytesTest",
-        "thresholdPrecedesWriteLimitTest",
-        "writeLimitPrecedesCompressionTest"
-      ],
       "vectorExport": {
         "generator": "formal/generate-envelope-vectors.mjs",
         "artifact": "formal/quint-envelope-vectors.json",
@@ -1315,11 +502,6 @@
         "sourceBoundaryIsExclusive",
         "fenceBoundaryIsExclusive"
       ],
-      "regressions": [
-        "exactBoundariesRejectTest",
-        "rollbackCanRecoverRetainedBytesTest",
-        "futureAgeRejectsTest"
-      ],
       "symbolic": {
         "maxSteps": 1,
         "timeoutMs": 120000
@@ -1333,8 +515,7 @@
         "freshnessUsesReadSettlement",
         "recoveredResultsNeverPublishShared",
         "sourcesCarryCappedAdmittedRetention"
-      ],
-      "regressions": []
+      ]
     },
     {
       "path": "formal/dialcache-source-connection.qnt",
@@ -1343,16 +524,14 @@
         "sourceOwnersMatchContract",
         "acceptedSourcesMatchContract",
         "followerKeepsAcquiredOwner"
-      ],
-      "regressions": []
+      ]
     },
     {
       "path": "formal/dialcache-legacy-recovery-connection.qnt",
       "invariants": [
         "flightKeepsAcquiredSnapshot",
         "flightRecoveryMatchesContract"
-      ],
-      "regressions": []
+      ]
     },
     {
       "path": "formal/dialcache-independent-connection.qnt",
@@ -1360,16 +539,14 @@
         "independentSnapshotsMatchAcquisition",
         "independentRecoveryMatchesContract",
         "independentSourceOriginsMatchContract"
-      ],
-      "regressions": []
+      ]
     },
     {
       "path": "formal/dialcache-effects-connection.qnt",
       "invariants": [
         "effectsDeadlineMatchesSourceStart",
         "effectsPublicationMatchesAcceptedSource"
-      ],
-      "regressions": []
+      ]
     },
     {
       "path": "formal/dialcache-shadow-layers-connection.qnt",
@@ -1379,8 +556,7 @@
         "jobsCaptureAdmissionRetention",
         "retainedC0WasFreshWhenAcquired",
         "localPublicationBelongsToCaller"
-      ],
-      "regressions": []
+      ]
     }
   ],
   "symbolic": {

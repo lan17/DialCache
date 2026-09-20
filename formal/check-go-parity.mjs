@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { scheduleExecution } from './execution.mjs';
 import { readVectorArtifact } from './vector-artifacts.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -48,7 +49,7 @@ function goSymbols(path) {
 export function checkGoParity(ledger = json('formal/go-parity.json')) {
   const semantic = json('formal/semantic-cases.json');
   const applicability = json('formal/quint-case-audit.json');
-  const execution = json('formal/execution.json');
+  const execution = scheduleExecution(json('formal/execution.json'));
   const profileManifest = json('formal/profiles.json');
   const witnessCatalog = json('formal/coverage-witnesses.json');
   const audit = json('formal/source-audit.json');
@@ -82,7 +83,7 @@ export function checkGoParity(ledger = json('formal/go-parity.json')) {
     const declared = profileManifest.profiles.find(row => row.id === profile.id);
     check(declared && profile.version === declared.version && profile.model === declared.model && profile.smoke === declared.smoke, `${profile.id}: profile version/model/smoke differs from profiles.json`);
     check(profile.status === 'executable-profile-schedule', `${profile.id}: current profile inventory must not claim a completed replay`);
-    check(equal(profile.scheduledRegressions, model.replayRegressions ?? []), `${profile.id}: scheduled regression histories are stale`);
+    check(equal(sorted(profile.scheduledRegressions), sorted(model.replayRegressions ?? [])), `${profile.id}: scheduled regression histories are stale`);
     check(equal(profile.witnessSources, declared?.witnessSources ?? []), `${profile.id}: witness source inventory is stale`);
     pathExists(profile.smoke, profile.id);
   }

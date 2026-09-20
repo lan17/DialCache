@@ -162,6 +162,30 @@ export function classifyRuns(declarations) {
   return runs;
 }
 
+// The schedule a model's text states, read off its declarations rather than
+// listed in the manifest. Every run a model declares is a scheduled
+// regression, in declaration order. A profile model exports its public-only
+// runs as replay regressions, so what the ports replay is exactly what the
+// text lets them replay; its state-patching runs stay model-only.
+export function modelSchedule(model, bodies) {
+  const regressions = [...bodies].filter(([, { kind }]) => kind === 'run').map(([name]) => name);
+  return model.profile === undefined ? { regressions } : { regressions, replayRegressions: classifyRuns(bodies).publicOnly };
+}
+// Every Quint source no scheduled model claims is a helper library, in the
+// sorted order quintSources lists them.
+export function libraryPaths(manifest, files = quintSources()) {
+  const claimed = new Set(manifest.models.map(model => model.path));
+  return files.filter(path => !claimed.has(path));
+}
+// The manifest with its schedule: `libraries`, and each model's `regressions`
+// and (for a profile model) `replayRegressions`. Tools that run, export or
+// account for the schedule read it through here; the manifest carries only
+// what a person decides. Validate the manifest first (validateExecution).
+export function scheduleExecution(manifest = readExecution(), { readSource = read, scanSource = scanDeclarationBodies, files = quintSources() } = {}) {
+  return { ...manifest, libraries: libraryPaths(manifest, files),
+    models: manifest.models.map(model => ({ ...model, ...modelSchedule(model, scanSource(readSource(model.path))) })) };
+}
+
 // The checkpoint of a reproducer is the one top-level `.expect(...)` in the
 // cited run's chain whose condition is the declared `failure` text, compared
 // token by token so spacing does not matter. Returns the chain before that
@@ -582,8 +606,10 @@ export function validateExecution(manifest = readExecution(), {
   profiles = JSON.parse(read('formal/profiles.json')).profiles,
   contracts = contractIds(read('formal/CONTRACTS.md')),
 } = {}) {
-  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.models) || !manifest.models.length ||
-      !Array.isArray(manifest.libraries)) throw new Error('Unsupported model execution manifest');
+  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.models) || !manifest.models.length) throw new Error('Unsupported model execution manifest');
+  // The schedule is read from the Quint text (modelSchedule, libraryPaths); a
+  // manifest that lists it again is a copy the text would contradict.
+  if (manifest.libraries !== undefined) throw new Error('libraries are read from the Quint sources: every source no scheduled model claims; delete the list');
   if (!Array.isArray(profiles) || !profiles.length || profiles.some(profile =>
     typeof profile.id !== 'string' || !/^[a-z][a-z-]*$/.test(profile.id)) ||
     new Set(profiles.map(profile => profile.id)).size !== profiles.length) throw new Error('Invalid execution profile IDs');
@@ -596,13 +622,16 @@ export function validateExecution(manifest = readExecution(), {
   if (check.outputDirectory !== '.formal-traces/verification') throw new Error('Unsupported verification output directory');
 
   // Scheduled models live at formal/; helper libraries live there or, for the
-  // kernel library's concern modules, at formal/kernel/. Kernel modules are
-  // never scheduled on their own: a composed profile executes them, and a
-  // fault in one is measured through the profiles that compose it.
-  const paths = [...manifest.models.map(model => model.path), ...manifest.libraries];
+  // kernel library's concern modules, at formal/kernel/, and are every Quint
+  // source no model claims. Kernel modules are never scheduled on their own:
+  // a composed profile executes them, and a fault in one is measured through
+  // the profiles that compose it.
+  const modelPaths = manifest.models.map(model => model.path);
   if (manifest.models.some(model => typeof model.path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(model.path)) ||
-      manifest.libraries.some(path => typeof path !== 'string' || !isQuintSourcePath(path)) ||
-      new Set(paths).size !== paths.length || !sameMembers(paths, files)) throw new Error('Model/library file inventory changed; review the execution schedule');
+      new Set(modelPaths).size !== modelPaths.length || modelPaths.some(path => !files.includes(path))) throw new Error('Model/library file inventory changed; review the execution schedule');
+  const libraries = libraryPaths(manifest, files);
+  if (libraries.some(path => !isQuintSourcePath(path))) throw new Error('Model/library file inventory changed; review the execution schedule');
+  const paths = [...modelPaths, ...libraries];
   // One pass reads and scans each source once: the model and library loops,
   // the challenge anchors and every reproducer checkpoint share these memos,
   // so a pass costs one scan per file rather than one per citation. They live
@@ -611,7 +640,7 @@ export function validateExecution(manifest = readExecution(), {
   const texts = new Map(), scans = new Map();
   const source = path => { if (!texts.has(path)) texts.set(path, readSource(path)); return texts.get(path); };
   const scanned = path => { if (!scans.has(path)) scans.set(path, scanSource(source(path))); return scans.get(path); };
-  const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map();
+  const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map(), schedules = new Map();
   let invariants = 0, regressions = 0, generatedTraces = 0;
   let exportedRegressionTraces = 0, generatedVectors = 0, vectorModels = 0;
   const vectorPaths = new Set();
@@ -630,13 +659,13 @@ export function validateExecution(manifest = readExecution(), {
     for (const name of model.invariants) {
       if (declarations.get(name) !== 'val') throw new Error(`${model.path}: scheduled invariant is not a declared val: ${name}`);
     }
-    names(model.regressions, `${model.path} regressions`, true);
-    const declaredRuns = [...declarations].filter(([, kind]) => kind === 'run').map(([name]) => name);
-    if (model.regressions.some(name => !name.endsWith('Test')) || !sameMembers(model.regressions, declaredRuns)) {
-      throw new Error(`${model.path}: regression schedule must exactly name every run and retain the Test suffix`);
-    }
+    if (model.regressions !== undefined || model.replayRegressions !== undefined) throw new Error(`${model.path}: regressions and replayRegressions are read from the model's runs; delete the lists`);
+    const schedule = modelSchedule(model, bodies);
+    const unsuffixed = schedule.regressions.filter(name => !name.endsWith('Test'));
+    if (unsuffixed.length) throw new Error(`${model.path}: every run is a scheduled regression and must keep the Test suffix: ${unsuffixed.join(', ')}`);
+    schedules.set(model.path, schedule);
     invariants += model.invariants.length;
-    regressions += model.regressions.length;
+    regressions += schedule.regressions.length;
     if (model.propertyChallenge !== undefined) throw new Error(`${model.path}: property challenges live in the manifest challenges catalog`);
     // A composed profile's declared behavior: bumping behaviorVersion says its
     // observable behavior changed on purpose, so the corpus differential
@@ -662,22 +691,13 @@ export function validateExecution(manifest = readExecution(), {
       outputDirectories.add(generation.outputDirectory);
       generatedTraces += generation.traces;
     }
-    if (model.replayRegressions !== undefined) {
-      names(model.replayRegressions, `${model.path} replay regressions`);
-      exportedRegressionTraces += model.replayRegressions.length;
-      if (!model.profile || declarations.get('input') !== 'var' ||
-          model.replayRegressions.some(name => !model.regressions.includes(name))) throw new Error(`${model.path}: replay regressions need declared input and scheduled tests`);
-    }
     if (model.profile !== undefined) {
-      // Every deterministic history a driver could replay must be exported, and
-      // an exported history must never patch model state behind the driver.
-      const runs = classifyRuns(bodies);
-      publicOnly.set(model.path, runs.publicOnly);
-      const exported = new Set(model.replayRegressions ?? []);
-      const unexported = runs.publicOnly.filter(name => !exported.has(name));
-      const patched = runs.patching.filter(name => exported.has(name));
-      if (unexported.length) throw new Error(`${model.path}: public-only runs are not exported as replay regressions: ${unexported.join(', ')}`);
-      if (patched.length) throw new Error(`${model.path}: state-patching runs cannot be replay regressions: ${patched.join(', ')}`);
+      // A profile records every public command in `input`; its public-only
+      // runs are the histories both ports replay (modelSchedule), so a driver
+      // can replay every deterministic history and never sees a patched state.
+      if (declarations.get('input') !== 'var') throw new Error(`${model.path}: exported replay regressions need a declared input variable`);
+      exportedRegressionTraces += schedule.replayRegressions.length;
+      publicOnly.set(model.path, schedule.replayRegressions);
     }
     if (model.vectorExport !== undefined) {
       const vector = model.vectorExport;
@@ -686,7 +706,7 @@ export function validateExecution(manifest = readExecution(), {
         || !/^formal\/quint-[\w-]+-vectors\.json$/.test(vector.artifact)
         || !Array.isArray(vector.sources) || new Set(vector.sources).size !== vector.sources.length
         || !vector.sources.includes(model.path) || !vector.sources.includes(vector.generator)
-        || vector.sources.some(path => path !== model.path && path !== vector.generator && !manifest.libraries.includes(path))) {
+        || vector.sources.some(path => path !== model.path && path !== vector.generator && !libraries.includes(path))) {
         throw new Error(`${model.path}: invalid vector export boundary`);
       }
       positiveInteger(vector.cases, `${model.path} vector cases`);
@@ -697,21 +717,25 @@ export function validateExecution(manifest = readExecution(), {
       for (const path of vector.sources) read(path);
     }
   }
-  for (const path of manifest.libraries) {
-    if ([...scanned(path).values()].some(({ kind }) => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful model cannot be classified as a pure helper library`);
+  // A Quint source with actions, runs or state is a model: it runs only when
+  // the manifest schedules it, so it may not sit unscheduled among the libraries.
+  for (const path of libraries) {
+    if ([...scanned(path).values()].some(({ kind }) => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful Quint source must be a scheduled model; a helper library declares no actions, runs or state`);
   }
   // A kernel module exists to be composed: one no scheduled model reaches is
-  // never typechecked or executed by any lane, so it may not stay listed.
+  // never typechecked or executed by any lane, so it may not stay in the tree.
   const reached = new Set(manifest.models.flatMap(model => importClosure(model.path)));
-  const orphans = manifest.libraries.filter(path => isKernelSource(path) && !reached.has(path));
+  const orphans = libraries.filter(path => isKernelSource(path) && !reached.has(path));
   if (orphans.length) throw new Error(`Kernel modules no scheduled model imports: ${orphans.join(', ')}; compose them or delete them`);
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
-  const challenges = validateChallenges(manifest, { source, scanned, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, grandfathered, grandfatheredNative });
-  return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
+  const scheduled = { ...manifest, libraries, models: manifest.models.map(model => ({ ...model, ...schedules.get(model.path) })) };
+  const challenges = validateChallenges(scheduled, { source, scanned, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, grandfathered, grandfatheredNative });
+  return { models: manifest.models.length, libraries: libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
 }
 
-// Call after validateExecution: coverage links must name checks that run, not
-// merely declarations that happen to exist in a model or a comment.
+// Over a scheduled manifest (scheduleExecution) after validateExecution:
+// coverage links must name checks that run, not merely declarations that
+// happen to exist in a model or a comment.
 export function scheduledProperties(manifest) {
   return new Set(manifest.models.flatMap(model => [...model.invariants, ...model.regressions].map(name => `${model.path}:${name}`)));
 }

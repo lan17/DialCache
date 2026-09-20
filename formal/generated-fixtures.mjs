@@ -5,7 +5,7 @@ import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { encodeJson } from './compact-json.mjs';
-import { copySources, importClosure, readExecution, root, validateExecution } from './execution.mjs';
+import { copySources, importClosure, readExecution, root, scheduleExecution, validateExecution } from './execution.mjs';
 import { resolveConcurrency, runPool, spawnBuffered } from './quint-pool.mjs';
 
 const recipePath = 'formal/fixture-recipes.json';
@@ -177,7 +177,7 @@ export function spliceDeclarations(source, lines) {
   return `${source.slice(0, end)}\n${lines.join('\n')}\n${source.slice(end)}`;
 }
 
-async function exportModel(model, requests, directory, settings) {
+async function exportModel(model, requests, directory, settings, exported) {
   const source = read(model), name = /^module\s+(\w+)\s*\{/.exec(source)?.[1];
   if (!name) fail('Unsupported Quint module');
   const { parsed, sourceMap } = await parseWithSourceMap(model, directory, execute);
@@ -196,8 +196,7 @@ async function exportModel(model, requests, directory, settings) {
   for (const request of named) {
     const regression = request.recipe.regression;
     if (declarations.get(regression)?.qualifier !== 'run') fail(`Missing named Quint run ${regression}`);
-    const scheduled = readExecution().models.find(m => m.path === model)?.replayRegressions ?? [];
-    if (!scheduled.includes(regression)) fail(`Fixture run is not a scheduled public-action replay: ${regression}`);
+    if (!exported.includes(regression)) fail(`Fixture run is not a scheduled public-action replay: ${regression}`);
     request.run = regression;
   }
   if (named.length) await execute(['test', input, `--backend=${settings.backend}`, '--max-samples=1', `--seed=${settings.seed}`,
@@ -254,6 +253,7 @@ export async function generateFixtures(mode, { concurrency = resolveConcurrency(
   const execution = readExecution(); validateExecution(execution);
   const book = validateRecipes(json(recipePath), execution);
   if (mode === '--verify') return verifyFixtures(book, execution);
+  const scheduled = scheduleExecution(execution);
   if (!['--check', '--write'].includes(mode)) fail('Use --write, --check or --verify');
   const version = spawnSync('quint', ['--version'], { encoding: 'utf8' });
   if (version.status !== 0 || version.stdout.trim() !== '0.32.0') fail('Fixture export requires Quint 0.32.0');
@@ -268,7 +268,7 @@ export async function generateFixtures(mode, { concurrency = resolveConcurrency(
   await runPool([...groups].map(([model, requests]) => async () => {
     const directory = resolve(root, '.formal-traces/fixture-build', basename(model, '.qnt'));
     rmSync(directory, { recursive: true, force: true }); mkdirSync(directory, { recursive: true });
-    await exportModel(model, requests, directory, execution.settings);
+    await exportModel(model, requests, directory, execution.settings, scheduled.models.find(m => m.path === model).replayRegressions);
     console.log(`Quint fixtures: ${basename(model)} (${requests.length} histories)`);
   }), { concurrency });
   const requests = [...groups.values()].flat(), outputs = new Map();
