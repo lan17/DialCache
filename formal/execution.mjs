@@ -730,11 +730,14 @@ export function validateExecution(manifest = readExecution(), {
   for (const path of libraries) {
     if ([...scanned(path).values()].some(({ kind }) => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful Quint source must be a scheduled model; a helper library declares no actions, runs or state`);
   }
-  // A kernel module exists to be composed: one no scheduled model reaches is
-  // never typechecked or executed by any lane, so it may not stay in the tree.
+  // A library exists to be imported: one no scheduled model reaches, directly
+  // or through another library, is never typechecked or executed by any lane,
+  // so it may not stay in the tree. This is also the inventory tripwire: a
+  // stray or half-deleted stateless source at formal/ is refused here rather
+  // than admitted as a library by the directory listing.
   const reached = new Set(manifest.models.flatMap(model => importClosure(model.path)));
-  const orphans = libraries.filter(path => isKernelSource(path) && !reached.has(path));
-  if (orphans.length) throw new Error(`Kernel modules no scheduled model imports: ${orphans.join(', ')}; compose them or delete them`);
+  const orphans = libraries.filter(path => !reached.has(path));
+  if (orphans.length) throw new Error(`Quint libraries no scheduled model imports: ${orphans.join(', ')}; import them from a scheduled model or delete them`);
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
   const scheduled = { ...manifest, libraries, models: manifest.models.map(model => ({ ...model, ...schedules.get(model.path) })) };
   const challenges = validateChallenges(scheduled, { source, scanned, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, grandfathered, grandfatheredNative });

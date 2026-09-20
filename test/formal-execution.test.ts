@@ -171,10 +171,18 @@ describe("formal execution schedule", () => {
     expect(() => validate(unscheduled)).toThrow(/unsupported differential settings/);
   });
 
-  it("refuses a kernel module no scheduled model imports", () => {
-    const sources = (path: string) => path === "formal/kernel/orphan.qnt" ? "module orphan { pure def unused(n: int): int = n }" : readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  it("refuses a Quint library no scheduled model imports, at formal/ or formal/kernel/", () => {
+    const stateless = "module orphan { pure def unused(n: int): int = n }";
+    const sources = (path: string) => ["formal/kernel/orphan.qnt", "formal/stray.qnt"].includes(path) ? stateless : readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
     // Present in the tree, a library by construction, yet reached by no model: the orphan rule.
-    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/kernel/orphan.qnt"] })).toThrow(/Kernel modules no scheduled model imports: formal\/kernel\/orphan\.qnt/);
+    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/kernel/orphan.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/kernel\/orphan\.qnt/);
+    // The same rule is the inventory tripwire at formal/: a stateless source the listing would otherwise admit as
+    // a library, and that no lane would typecheck, is refused by name rather than hashed into the evidence inputs.
+    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/stray.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/stray\.qnt;/);
+    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/kernel/orphan.qnt", "formal/stray.qnt"].sort() }))
+      .toThrow(/formal\/kernel\/orphan\.qnt, formal\/stray\.qnt/);
+    // Every library in the tree is reached, so the rule admits the current inventory.
+    expect(() => validate(manifest())).not.toThrow();
   });
 
   it("rejects invalid exploration bounds and unsafe generation output paths", () => {
