@@ -1005,20 +1005,20 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "394b9af2aa1ba6cc6c8d859442547ba580f5cede775061b88f1fa0d73467845b",
+      "sha256": "abbda4d86306771ce8c8bd4df66134acaac0eb66966accba70d3b3d544f19b8f",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
-        {"line":16,"title":"Reading a model"},
-        {"line":57,"title":"Writing conventions"},
-        {"line":155,"title":"Codifying the next behavior"},
-        {"line":204,"title":"Give reviewers focused context"},
-        {"line":219,"title":"Exporting a deterministic regression"},
-        {"line":257,"title":"Maintaining case and witness evidence"},
-        {"line":310,"title":"Reproducible committed fixtures"},
-        {"line":320,"title":"Refactoring and execution"},
-        {"line":348,"title":"Challenging every model"},
-        {"line":421,"title":"Mapping every challenge to native mutants"},
-        {"line":507,"title":"Exported runs are exactly the public-only runs"}
+        {"line":20,"title":"Reading a model"},
+        {"line":61,"title":"Writing conventions"},
+        {"line":159,"title":"Codifying the next behavior"},
+        {"line":208,"title":"Give reviewers focused context"},
+        {"line":223,"title":"Exporting a deterministic regression"},
+        {"line":261,"title":"Maintaining case and witness evidence"},
+        {"line":314,"title":"Reproducible committed fixtures"},
+        {"line":324,"title":"Refactoring and execution"},
+        {"line":352,"title":"Challenging every model"},
+        {"line":425,"title":"Mapping every challenge to native mutants"},
+        {"line":511,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "ef2ff34535f49e405a92957922bc6caeac64d7c01a6aff97eaa6d61613790b91",
+      "sha256": "63f0c6f1ea3aef71e85eb25acdb4ef6103d6dbaacad4e06f96471d8ee9705235",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1273,13 +1273,13 @@
     },
     {
       "path": "formal/GO-PARITY.md",
-      "sha256": "3e106dc6ee93c15ef6da694d2031106c1454c70f1d47fde9c2cd3e6d401e461f",
+      "sha256": "2db023f6fa8c8c7c654cb52a53499cd1041615be300eda4925b1ef7420db4e31",
       "entries": [
         {"line":1,"title":"Go parity acceptance"},
         {"line":52,"title":"Required evidence"},
-        {"line":110,"title":"Reading and updating the ledger"},
-        {"line":162,"title":"Native clock precision"},
-        {"line":195,"title":"Current configuration and observability bindings"}
+        {"line":111,"title":"Reading and updating the ledger"},
+        {"line":163,"title":"Native clock precision"},
+        {"line":196,"title":"Current configuration and observability bindings"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1347,14 +1347,14 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "6a7793806cd6deca260836e08be796217c05dd2c2455e2fce4dd7cb55c8f369c",
+      "sha256": "e30f20a0a03f01a08f869d58158a59b43c130d7980ed828992fa555b58d478a2",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
-        {"line":7,"title":"Start with your task"},
-        {"line":23,"title":"How the specification connects to code"},
-        {"line":43,"title":"Models and composition profiles"},
-        {"line":94,"title":"Generating and replaying behavior"},
-        {"line":181,"title":"Evidence and scope"}
+        {"line":10,"title":"Start with your task"},
+        {"line":26,"title":"How the specification connects to code"},
+        {"line":46,"title":"Models and composition profiles"},
+        {"line":96,"title":"Generating and replaying behavior"},
+        {"line":183,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1381,17 +1381,17 @@
     },
     {
       "path": "formal/SPEC.md",
-      "sha256": "770074b5e2f32b8f4b1cc11647eefaaeb00e032c7505a23beeb1eb1dc6857a54",
+      "sha256": "f82d1d7914d1bd61d5156baff1faba9a98a999603fd222db388c559d6e48adca",
       "entries": [
         {"line":1,"title":"DialCache behavioral specification"},
-        {"line":15,"title":"Definition ownership and executable connections"},
-        {"line":53,"title":"Meaning of conformance"},
-        {"line":85,"title":"State and environmental inputs"},
-        {"line":110,"title":"Admission, policy, and traversal"},
-        {"line":159,"title":"Remote acquisition and publication"},
-        {"line":200,"title":"Time, source acceptance, and progress"},
-        {"line":230,"title":"Recovery, shadow work, and invalidation races"},
-        {"line":268,"title":"Assumptions, evidence, and claims"}
+        {"line":18,"title":"Definition ownership and executable connections"},
+        {"line":56,"title":"Meaning of conformance"},
+        {"line":88,"title":"State and environmental inputs"},
+        {"line":113,"title":"Admission, policy, and traversal"},
+        {"line":162,"title":"Remote acquisition and publication"},
+        {"line":203,"title":"Time, source acceptance, and progress"},
+        {"line":233,"title":"Recovery, shadow work, and invalidation races"},
+        {"line":271,"title":"Assumptions, evidence, and claims"}
       ],
       "review": {
         "kind": "contract-guide",

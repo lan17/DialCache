@@ -104,7 +104,7 @@
       "id": "M04",
       "case": "C34.second-fence",
       "description": "Skip the tracked fence recheck after serialization",
-      "rationale": "TypeScript src/internal/redis-cache.ts RedisCache.putWithLayer and Go go/engine.go putRemote skip the fence recheck that runs after serialization, so a frame stamped at or before a watermark observed during the dump is written anyway. The shadow fill reaches the same line through putForShadow in TypeScript and putRemote in Go, so a fenced dark fill writes and reports filled instead of fill_fenced.",
+      "rationale": "TypeScript src/internal/redis-cache.ts RedisCache.putWithLayer and Go go/engine.go putRemote skip the fence recheck that runs after serialization, so a frame stamped at or before a watermark observed during the dump is written anyway. The shadow fill reaches the same line through putForShadow in TypeScript and putRemote in Go, so a fenced dark fill writes and reports filled instead of fill_fenced. shadow/fenceRejudgedAtDumpReleaseAfterRollbackTest, whose dump is released after a wall rollback below the fence, is the expected evidence in both ports.",
       "typescript": {
         "edits": [
           {
@@ -1497,7 +1497,7 @@
       "id": "M47",
       "case": "C49.dark-source-reuse",
       "description": "Continue dark shadow work without waiting for the caller source",
-      "rationale": "TypeScript src/dialcache.ts DialCache.runShadowValidation replaces the branch that waits for the caller's source with an already-resolved undefined value, and Go go/shadow.go runShadow replaces the case that waits on the source's done channel with a default case. Dark shadow work therefore compares and fills with an undefined or zero value without waiting for the source. shadow-layers/darkSourcePublishesLocalBeforeShadowWriteTest and the shadow profile's dumps and writes counts while the loader is held are the expected evidence.",
+      "rationale": "TypeScript src/dialcache.ts DialCache.runShadowValidation replaces the branch that waits for the caller's source with an already-resolved undefined value, and Go go/shadow.go runShadow replaces the case that waits on the source's done channel with a default case. Dark shadow work therefore compares and fills with an undefined or zero value without waiting for the source. shadow/darkReadBeforeSourceWaitsForItTest (no dump while the loader is held) and shadow-layers/darkSourcePublishesLocalBeforeShadowWriteTest are the expected evidence.",
       "typescript": {
         "edits": [
           {
