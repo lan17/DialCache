@@ -25,9 +25,27 @@ The checker reports these distinct categories:
 
 These categories overlap. Definitions/helpers explain rules but are not checked
 properties. A named case is not an independent proof, and a finite corpus is not
-the full input domain. [quint-case-audit.json](./quint-case-audit.json) records
-what each cited check actually establishes; metadata validation cannot replace
-semantic review of that scope.
+the full input domain. Each Quint citation in semantic-cases.json carries a
+reviewed `scope`: what that scheduled invariant or regression (`models`) or that
+transition, helper or predicate (`definitions`) establishes for the case. A
+scheduled check supports only its stated scope, not necessarily every clause of
+the case; a cited bounded model clause complements the fixed and generated
+consequences and does not prove every host input or scheduling combination;
+definitions describe transition semantics and are not independent invariants or
+extra coverage. No model state-space exhaustion or universal refinement is
+claimed. The checker verifies that every citation has a scope, that a cited
+check is scheduled and that a cited definition is an action, def or val of a
+scheduled model or library rather than a scheduled property; it cannot automate
+the semantic judgment in the scope text. Generated witness reachability and
+implementation replay are recorded separately: a citation alone does not
+establish that a witness was reached or that both implementations passed. Weak
+accounting checks such as policy `hitsSkipSource` (loaders <= callers), recovery
+`singleReadPerFlight` (reads <= callers) and age-sample counts are not treated
+as proofs of hit traversal, single execution or sample time. No general
+generated model claim is made for native key/byte/compression/numeric limits,
+the 60000 ms default source timeout, unbounded source mode, the one-hour
+tracked cap or arbitrary backend collector behavior; fixed, vector and native
+evidence and the explicit model bounds remain relevant.
 
 Previous model-only gaps now have replay: local read/write failure consequences
 use native injection seams, and marker-preservation histories observe actual

@@ -257,8 +257,10 @@ distinct evidence categories.
 ## Maintaining case and witness evidence
 
 Use [FEATURE-COVERAGE.md](./FEATURE-COVERAGE.md) to place each new rule in its
-feature family. Update `semantic-cases.json` and `quint-case-audit.json` with
-precise contract, provenance and checked-scope references. Every positive fixed
+feature family. Update `semantic-cases.json` with precise contract and
+provenance references and a reviewed `scope` on every Quint citation, in
+`models` for a scheduled check and in `definitions` for the transition, helper
+or predicate that owns the rule. Every positive fixed
 scenario and every protocol/invalidation vector must be assigned to at least
 one semantic case. An unmapped fixture is an accounting failure, even if its
 test passes. Reuse a case for repeated evidence of the same rule; splitting

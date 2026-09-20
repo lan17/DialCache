@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "fa60479cd0d9144288a4641a4d354d4bd0ad7891900626a3f2407e78c9746681",
+      "sha256": "9b1f6572e4ae238d01904247354228994f512996a22ca19762844ee33561798e",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
@@ -1014,11 +1014,11 @@
         {"line":204,"title":"Give reviewers focused context"},
         {"line":219,"title":"Exporting a deterministic regression"},
         {"line":257,"title":"Maintaining case and witness evidence"},
-        {"line":305,"title":"Reproducible committed fixtures"},
-        {"line":315,"title":"Refactoring and execution"},
-        {"line":343,"title":"Challenging every model"},
-        {"line":416,"title":"Mapping every challenge to native mutants"},
-        {"line":502,"title":"Exported runs are exactly the public-only runs"}
+        {"line":307,"title":"Reproducible committed fixtures"},
+        {"line":317,"title":"Refactoring and execution"},
+        {"line":345,"title":"Challenging every model"},
+        {"line":418,"title":"Mapping every challenge to native mutants"},
+        {"line":504,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1257,14 +1257,14 @@
     },
     {
       "path": "formal/FEATURE-COVERAGE.md",
-      "sha256": "b218c442c6202f08497c92fed024210e466b1ab28bf686c618c9fd7122b7ba37",
+      "sha256": "81312d747f7af78d518462f3b0ab7641c1aa101dcbdf478cb3f9105c0f48b1b3",
       "entries": [
         {"line":1,"title":"DialCache features and known behavioral corners"},
         {"line":16,"title":"What is accounted for"},
-        {"line":43,"title":"Feature map"},
-        {"line":63,"title":"How a corner earns evidence"},
-        {"line":112,"title":"Native adaptations are explicit contracts"},
-        {"line":150,"title":"Remaining finite limits"}
+        {"line":42,"title":"Feature map"},
+        {"line":62,"title":"How a corner earns evidence"},
+        {"line":111,"title":"Native adaptations are explicit contracts"},
+        {"line":149,"title":"Remaining finite limits"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1273,13 +1273,13 @@
     },
     {
       "path": "formal/GO-PARITY.md",
-      "sha256": "0c492fc2316f8152e6f809520b1de92320dad08e8d57ead91da8efadc52ec32f",
+      "sha256": "3e106dc6ee93c15ef6da694d2031106c1454c70f1d47fde9c2cd3e6d401e461f",
       "entries": [
         {"line":1,"title":"Go parity acceptance"},
         {"line":52,"title":"Required evidence"},
         {"line":110,"title":"Reading and updating the ledger"},
-        {"line":161,"title":"Native clock precision"},
-        {"line":194,"title":"Current configuration and observability bindings"}
+        {"line":162,"title":"Native clock precision"},
+        {"line":195,"title":"Current configuration and observability bindings"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1363,16 +1363,16 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "ee222a46d0e81173269b23ef84725f687f8bf71f2acf626c02e1e1790dbed1db",
+      "sha256": "1d026f63937685a63f9f7f90339aa1d88696046a56083dc16a82b19a64adb807",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
-        {"line":47,"title":"Model assurance"},
-        {"line":110,"title":"Generated boundary evidence"},
-        {"line":118,"title":"Behavioral mutation comparison"},
-        {"line":132,"title":"Recorded measurements"},
-        {"line":138,"title":"Reproduction and CI"},
-        {"line":180,"title":"Model properties and cross-language execution"}
+        {"line":65,"title":"Model assurance"},
+        {"line":128,"title":"Generated boundary evidence"},
+        {"line":136,"title":"Behavioral mutation comparison"},
+        {"line":150,"title":"Recorded measurements"},
+        {"line":156,"title":"Reproduction and CI"},
+        {"line":198,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1486,7 +1486,7 @@
     },
     {
       "path": "formal/TEST-MAP.md",
-      "sha256": "b41628eb0cf5fe7c3a24334bf88e758c93b5c7fcd885e9dbf67a6959aaa8d3b5",
+      "sha256": "09e219d85671b11af9e55c7bd6be6cf8005d18d6a0579ae4fbb70a93de9cd48d",
       "entries": [
         {"line":1,"title":"Formal contract and implementation evidence map"},
         {"line":18,"title":"Behavioral map"},
@@ -1519,13 +1519,13 @@
     },
     {
       "path": "formal/WALKTHROUGH.md",
-      "sha256": "962567608980e41d5c9f888fa902d6cfc22838ee818e2330563489c8f3001bf3",
+      "sha256": "86ec1c60442e2dc1f6912d27a28924e42a32824e0a7c19fccbdb8d69d3b8a2e4",
       "entries": [
         {"line":1,"title":"Follow one behavior from Quint to both ports"},
         {"line":14,"title":"Read the named run first"},
         {"line":58,"title":"Follow input and evidence separately"},
         {"line":93,"title":"Find the rule's catalog entries"},
-        {"line":120,"title":"Run this example"}
+        {"line":119,"title":"Run this example"}
       ],
       "review": {
         "kind": "tooling-guide",

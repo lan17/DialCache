@@ -7,8 +7,8 @@ slice, then read the exact case and check scope. A link to a test file does not
 mean that every assertion in it is modeled.
 
 [CONTRACTS.md](./CONTRACTS.md) assigns obligations;
-[semantic-cases.json](./semantic-cases.json) maps cases to histories and vectors;
-[quint-case-audit.json](./quint-case-audit.json) states each checked clause;
+[semantic-cases.json](./semantic-cases.json) maps cases to histories and vectors
+and states, on each Quint citation, the clause it checks;
 [feature-coverage.json](./feature-coverage.json) keeps native adaptations separate.
 All 240 reviewed behavioral cases now have checked Quint references and
 Quint-driven implementation evidence. This accounts for known cases, not every

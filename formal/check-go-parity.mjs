@@ -74,7 +74,7 @@ export function checkGoParity(ledger = json('formal/go-parity.json'), inputs = {
     return pathExists(path, context);
   };
   check(ledger.schemaVersion === 2, 'Unsupported Go parity ledger version');
-  for (const [field, path] of Object.entries({ semanticCasesSha256: 'formal/semantic-cases.json', executionSha256: 'formal/execution.json', sourceAuditSha256: 'formal/source-audit.json', quintCaseAuditSha256: 'formal/quint-case-audit.json', featureCoverageSha256: 'formal/feature-coverage.json', coverageWitnessesSha256: 'formal/coverage-witnesses.json', profilesSha256: 'formal/profiles.json' })) {
+  for (const [field, path] of Object.entries({ semanticCasesSha256: 'formal/semantic-cases.json', executionSha256: 'formal/execution.json', sourceAuditSha256: 'formal/source-audit.json', featureCoverageSha256: 'formal/feature-coverage.json', coverageWitnessesSha256: 'formal/coverage-witnesses.json', profilesSha256: 'formal/profiles.json' })) {
     check(ledger.inputs?.[field] === digest(path), `${path}: ledger input hash is stale; review and refresh its snapshot`);
   }
   check(equal(ledger.cases?.map(row => row.id), semantic.cases.map(row => row.id)), 'Semantic case inventory/order differs from the reviewed ledger');
@@ -138,7 +138,7 @@ export function checkGoParity(ledger = json('formal/go-parity.json'), inputs = {
     check(typeof evidence?.typescript === 'string' && typeof evidence?.go === 'string' && typeof evidence?.scope === 'string' && evidence.scope.length > 40 && Array.isArray(evidence.nativeGo), `${row.id}: evidence paths or scope missing`);
     for (const reference of evidence?.nativeGo ?? []) goFile(String(reference).split(':')[0], row.id);
     for (const required of source.generated) check(models.has(required.profile), `${row.id}: required witness profile is not scheduled: ${required.profile}`);
-    for (const reference of source.models) {
+    for (const reference of source.models.map(entry => entry.ref)) {
       check(scheduledChecks.has(reference), `${row.id}: Quint check is not independently scheduled: ${reference}`);
       const match = /^(formal\/[^:]+\.qnt):([A-Za-z_]\w*)$/.exec(reference);
       check(Boolean(match), `${row.id}: malformed Quint obligation reference ${reference}`);

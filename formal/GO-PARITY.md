@@ -122,14 +122,15 @@ profile name does not connect a case to a check. Refresh the evidence paths
 after executable inputs change; a previous revision's pass must not silently
 satisfy a changed model or implementation.
 
-[`quint-case-audit.json`](quint-case-audit.json) records the reviewed scope of
-each cited scheduled invariant or regression, plus separate transition,
-helper, and predicate references. It explicitly distinguishes a checked
-safety clause from a complete case proof and records known limits of the
-properties. The ordinary metadata gates check reference kinds, scheduling,
-case membership, positive scenario/vector assignments, feature/native coverage,
-and nonempty scope notes without requiring Quint; it cannot
-automate the semantic judgment in those notes.
+Each Quint citation in [semantic-cases.json](semantic-cases.json) carries the
+reviewed scope of the cited scheduled invariant or regression, and a case's
+`definitions` cite the transition, helper or predicate that owns its rule with
+their own scopes. A scope distinguishes a checked safety clause from a
+complete case proof; the known limits of the properties are stated in
+[SEMANTIC-COVERAGE.md](SEMANTIC-COVERAGE.md). The ordinary metadata gates check
+reference kinds, scheduling, case membership, positive scenario/vector
+assignments, feature/native coverage, and nonempty scopes without requiring
+Quint; they cannot automate the semantic judgment in those scopes.
 
 The profile schedule (each profile's model, planned trace count, exported
 regressions and witness sources) is read from [execution.json](execution.json)

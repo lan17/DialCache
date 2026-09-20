@@ -8,10 +8,9 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "10b1114ba921ae82577264e9c3aa166b4737297297daa32e3e92a98fc2347d49",
+    "semanticCasesSha256": "1722ba39d4a5da92f827bd0283378a40a62642a1be0f972ae4a441c46e67e150",
     "executionSha256": "9e52c0dd9274192aa6f27f3b4b2f491874ae886a5a3aa9c902502de582ab5fd0",
-    "sourceAuditSha256": "82f164562dc18eaf34a28692f3be4633b26b4e52a757e14ea4da7a1b7f3316db",
-    "quintCaseAuditSha256": "ff24fbc20a4d8b5a2c31d4b975206df36f82d7c7dd6eaf5f5ccf210964911b7a",
+    "sourceAuditSha256": "a7cc2b785da2c4c42b72a397f8524394d505d660271b9b78aa7264e5455cbcba",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "28a9af577d3306f572de2b295eade2ff195ff910cb136e407207ab8cc3c0c539"
@@ -5078,7 +5077,6 @@
       "goTreatment": "Go uses native sparse maps and go-redis/zstd libraries with explicit decoder resource limits and caller-owned clients. Wire representation and round trips are shared-vector/integration checked; exact compressed bytes, allocation strategy, throughput and operating-system exhaustion are native boundaries. Quint computes envelope and size-selection behavior using native codec lengths that both test bindings independently verify. Different native lengths may cause compressed/not_smaller diagnostic differences at size boundaries; logical payload identity and wrapper rules remain shared."
     }
   ],
-  "scopedQuintAudit": "formal/quint-case-audit.json",
   "vectorExports": [
     {
       "model": "formal/dialcache-frame-vectors.qnt",
