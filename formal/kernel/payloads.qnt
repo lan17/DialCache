@@ -19,12 +19,15 @@ module payloads {
   // `recovery::retain` consult the value before any decode as that
   // positivity test (`valueOf(code) > NO_VALUE`), so a bare COMPRESSED or
   // CORRUPT (value 0) is routed as a visible frame the traversal declined, a
-  // miss holding no decode, reporting no compression outcome and no recovery
-  // label (pinned by the payload-classes fixture,
-  // `bareCorruptCodeIsADeclinedFrameTest`). UNSUPPORTED_ENCODING is spelled
-  // bare because it names no value. The class rules read the class alone; a
-  // profile spells a seed as the sum (`Payloads::COMPRESSED + VALUE_ONE`),
-  // arithmetic over constants, which the composition lint accepts.
+  // miss holding no decode, reporting no compression outcome and, should its
+  // loader fail, the miss label of a declined frame with no candidate (pinned
+  // by the payload-classes fixture, `bareCorruptCodeIsADeclinedFrameTest`
+  // and, for the failed loader,
+  // `codeWithoutADecodedValueIsNoRecoveryCandidateTest`). UNSUPPORTED_ENCODING
+  // is spelled bare because it names no value. The class rules read the class
+  // alone; a profile spells a seed as the sum
+  // (`Payloads::COMPRESSED + VALUE_ONE`), arithmetic over constants, which the
+  // composition lint accepts.
   //
   // The judgments are consulted once, in `remote_frames::observe`, for the
   // atomic release and the held read settlement alike, at the held decode

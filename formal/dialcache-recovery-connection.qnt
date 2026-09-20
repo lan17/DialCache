@@ -21,11 +21,13 @@ module dialcache_recovery_connection {
   // shared with the kernel, `Payloads::valueOf` (cache_contract's
   // recoveryReturnAllowed compares decoded values) and the class test
   // `Payloads::readFails`. The monitor assumes every seed is a value below
-  // 100 or a class code plus a positive value, as the profile's seed table
-  // is: a fresh observable frame storing a bare class code decodes to
-  // NO_VALUE and holds no decode where `freshnessUsesReadSettlement` expects
-  // one. One active call and the profile's finite domain bound this
-  // connection; no fairness claim.
+  // 100, an unsupported-encoding code (which fails the read, so
+  // `freshnessUsesReadSettlement` expects no decode), or a compressed or
+  // corrupt class code plus a positive value, as the profile's seed table
+  // is: a fresh observable frame storing a bare compressed or corrupt code
+  // decodes to NO_VALUE and holds no decode where
+  // `freshnessUsesReadSettlement` expects one. One active call and the
+  // profile's finite domain bound this connection; no fairness claim.
   var snapshot: RecoverySnapshot
   // The raw code the read acquired, beside the decoded snapshot: a retained
   // candidate must be that code, not another code with the same value.
