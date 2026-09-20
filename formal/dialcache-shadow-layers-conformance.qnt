@@ -275,9 +275,9 @@ module dialcache_shadow_layers_conformance {
   // every such job has exactly one.
   val jobBudgetsBelongToLiveJobs = s.deadlines.indices().forall(i => {
     val due = s.deadlines.nth(i)
-    due.kind == Shadow::JOB and Shadow::live(s.jobs.nth(due.index)) and not(s.jobs.nth(due.index).timedOut)
+    due.kind == Deadlines::JOB and Shadow::live(s.jobs.nth(due.index)) and not(s.jobs.nth(due.index).timedOut)
   }) and s.jobs.indices().forall(i => not(Shadow::live(s.jobs.nth(i)) and not(s.jobs.nth(i).timedOut))
-    or Deadlines::deadlinesOf(s, Shadow::JOB, i).length() == 1)
+    or Deadlines::deadlinesOf(s, Deadlines::JOB, i).length() == 1)
   // Every held dump or write serializes an accepted result.
   val heldWorkHasAcceptedResults = s.dumps.indices().forall(i => accepted(s.sources.nth(s.dumps.nth(i).source).result))
     and s.writes.indices().forall(i => accepted(s.sources.nth(s.writes.nth(i).source).result))
@@ -445,11 +445,10 @@ module dialcache_shadow_layers_conformance {
 
   // A local entry inserted for the local TTL expires at that instant exactly
   // (the same strict expiry the old text stated): a hit at its insertion, a
-  // miss exactly the TTL later. The source settles one millisecond after its
-  // call so the two advances the drivers offer (1 ms, 60 s) reach the expiry
-  // instant itself rather than the millisecond after it.
+  // miss exactly the TTL later; the drivers' 60 s advance after the insertion
+  // is the instant the run distinguishes.
   run localEntryExpiresAtItsInsertionTtlTest = init
-    .then(setPolicy(DARK_INVALID_SHADOW)).then(beginAt(9)).then(advanceBy(1)).then(resolveAt(1))
+    .then(setPolicy(DARK_INVALID_SHADOW)).then(beginAt(9)).then(resolveAt(1))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 1 and s.o.shadow == List())
     .then(beginAt(9))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1)
@@ -462,4 +461,16 @@ module dialcache_shadow_layers_conformance {
   run servedPropagatedTimeoutPreservesHitTest = init
     .then(seedAt(0)).then(setPolicy(SERVED_NONE)).then(beginAt(9)).then(rejectTimeoutAt(0))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.shadow == List("source_error"))
+
+  // A dark C0 compared against the source: equal decoded values are a match
+  // with no confirmation read; unequal ones whose C0 bytes were replaced
+  // before the confirmation read are superseded. Neither fills.
+  run darkC0EqualToSourceIsAMatchTest = init
+    .then(setPolicy(DARK_NONE)).then(seedAt(0)).then(beginAt(9)).then(resolveAt(1))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.loads == 1 and s.o.reads == 1
+      and s.o.dumps == 0 and s.o.shadow == List("match"))
+  run darkC0ReplacedBeforeConfirmationIsSupersededTest = init
+    .then(setPolicy(DARK_NONE)).then(seedAt(0)).then(beginAt(9)).then(seedAt(1)).then(resolveAt(2))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.loads == 1 and s.o.reads == 2
+      and s.o.dumps == 0 and s.o.shadow == List("superseded"))
 }

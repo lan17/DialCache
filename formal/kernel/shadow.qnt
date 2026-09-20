@@ -8,10 +8,15 @@ module shadow {
   // it, it publishes nothing); a miss whose reply left the remote layer off
   // admits a dark job over the caller's own source, reading its C0 from the
   // remote layer itself (the read counted; the payload when the frame is
-  // fresh for the reply's freshness, nothing otherwise); an ordinary serving
-  // miss, a request or local hit, or a key whose cohort the ramp does not
-  // select admits nothing; a live job for the same instance and key, or a
-  // full instance, drops the job (C47, `dropped`). Admission captures the
+  // fresh for the reply's freshness, nothing otherwise); a dark C0 read that
+  // fails under the adapter's read fault ends the admitted job at once
+  // (`redis_error`: its slot taken and released in the same step, the read
+  // counted, nothing filled, as the implementations return from the failed
+  // read before awaiting the source); an ordinary serving miss, a request or
+  // local hit, a key whose cohort the ramp does not select, or a caller whose
+  // scope closed before its release (the bypass reply, C01) admits nothing;
+  // a live job for the same instance and key, or a full instance, drops the
+  // job (C47, `dropped`). Admission captures the
   // fill authority a flight's remote read fixes (`serving::authority`: the
   // retention the reply resolved to, capped for a tracked write, and the fence
   // the C0 read observed when it found no visible frame), which a fill is
@@ -19,14 +24,20 @@ module shadow {
   //
   // When the job's source settles: a failed source ends the job
   // (`source_error`); with no C0 the job fills the remote layer through the
-  // held refill (`remote_writes::holdDump`, the write stamped at dump release
-  // and stored at write release, `filled`), never publishing to request or
-  // local storage; with a C0 the job decodes it (counted) and compares its
-  // value with the source's: equal is a `match`, else a confirmation read
-  // (counted) of the frame as it is now says whether the C0 bytes are still
-  // current (`mismatch`) or were replaced meanwhile (`superseded`). A served
+  // held refill when the fence its C0 read observed still allows the write
+  // (`remote_frames::writeAllowed`, judged before serializing as the
+  // implementations check the fence before encoding: a fence the wall does
+  // not clear ends the job `fill_fenced` at settlement with no dump;
+  // `remote_writes::holdDump`, the write stamped at dump release, where the
+  // fence is judged again, and stored at write release, `filled`), never
+  // publishing to request or local storage; with a C0 the job decodes it
+  // (counted) and compares its value with the source's: equal is a `match`,
+  // else a confirmation read (counted, under the adapter's read fault: a
+  // failed one ends `confirmation_error`) of the frame as it is now says
+  // whether the C0 bytes are still current (`mismatch`) or were replaced
+  // meanwhile (`superseded`). A served
   // job always has a C0, so it never fills (C54). Every job has the budget
-  // its admission resolved, kept by `deadlines` (kind JOB): at expiry the job
+  // its admission resolved, kept by `deadlines` (kind `JOB`): at expiry the job
   // is timed out and says so once; a dark job still waiting for its source
   // abandons the wait, releasing its slot while the caller's source runs on
   // unbounded; a served job keeps its detached source and its slot until
@@ -52,8 +63,6 @@ module shadow {
   import deadlines as Deadlines from "./deadlines"
   import payloads as Payloads from "./payloads"
 
-  // The deadline kind `deadlines` reserves for a job.
-  pure val JOB = 2
   pure val WAITING_SOURCE = 0
   pure val SERIALIZING = 1
   pure val WRITING = 2
@@ -93,7 +102,7 @@ module shadow {
     Deadlines::due({
       jobs: state.jobs.append({ source: source, dark: dark, cached: cached, retentionMs: retentionMs, fence: fence, phase: WAITING_SOURCE, timedOut: false }),
       ...state
-    }, JOB, state.jobs.length(), budgetMs)
+    }, Deadlines::JOB, state.jobs.length(), budgetMs)
   // Admission beside the release judged once, on the released state.
   pure def admitJobs(state: Shadowed[r], layout: Serving::Layout, judged: Serving::LayeredRelease, ttls: Ttls, shadowing: Shadowing): Shadowed[r] = {
     val call = judged.call
@@ -103,17 +112,22 @@ module shadow {
       | ServesRemote(_) => if (busy) dropped(state)
         else admit(Serving::startDetachedSource(state, layout, call), state.sources.length(), false, judged.remote.payload,
           Serving::authority(state, call, ttls, true, true, NO_FENCE).retentionMs, NO_FENCE, shadowing.budgetMs)
-      | Starts => if (judged.effective.layers.remote) state
+      // A bypass reply (the caller's scope closed before its release) admits
+      // nothing: that caller bypasses every layer (C01), shadow work included.
+      | Starts => if (not(judged.open) or judged.effective.layers.remote) state
         else if (busy) dropped(state)
         else {
           // The dark C0 read: the frame as the reply's freshness judges it now,
           // under the adapter's read fault; the job reads the remote layer on
           // its own account, so its fill authority is a flight's that read it
           // (`serving::authority` under the reply's TTLs, not the effective ones).
+          // A failed read ends the admitted job at once: the slot taken and
+          // released in the same step, its budget never pending, nothing filled.
           val c0 = Remote::observe(state, call.key, layout.operationsPerEntity, ttls.freshMs, state.readFailed)
           val fill = Serving::authority(state, call, ttls, true, not(c0.failed), Remote::fenceFor(state, call.key, layout.operationsPerEntity, c0.visible))
-          admit({ o: { reads: state.o.reads + 1, ...state.o }, ...state }, state.sources.length() - 1, true,
+          val admitted = admit({ o: { reads: state.o.reads + 1, ...state.o }, ...state }, state.sources.length() - 1, true,
             if (c0.value > NO_VALUE) c0.payload else NO_VALUE, fill.retentionMs, fill.fence, shadowing.budgetMs)
+          if (c0.failed) finishJob(admitted, state.jobs.length(), "redis_error") else admitted
         }
       | _ => state
     }
@@ -138,24 +152,30 @@ module shadow {
       jobs: state.jobs.replaceAt(index, { phase: FINISHED, ...job }),
       o: { shadow: if (job.timedOut) state.o.shadow else state.o.shadow.append(outcome), ...state.o },
       ...state
-    }, JOB, index)
+    }, Deadlines::JOB, index)
   }
   pure def inPhase(state: Shadowed[r], index: int, phase: int): Shadowed[r] =
     { jobs: state.jobs.replaceAt(index, { phase: phase, ...state.jobs.nth(index) }), ...state }
-  // The job's source has settled.
+  // The job's source has settled. A fill is fenced before it serializes, as
+  // the implementations check the fence before encoding: a fence the wall
+  // does not clear ends the job with no dump counted. The confirmation read is
+  // counted and, failed under the adapter's read fault, ends `confirmation_error`.
   pure def settleJob(state: Shadowed[r], layout: Serving::Layout, index: int): Shadowed[r] = {
     val job = state.jobs.nth(index)
     val source = sourceOf(state, job)
     if (job.timedOut) finishJob(state, index, "timeout")
     else if (not(accepted(source.result))) finishJob(state, index, "source_error")
-    else if (job.cached == NO_VALUE) inPhase(Writes::holdDump(state, job.source, job.retentionMs, job.fence), index, SERIALIZING)
+    else if (job.cached == NO_VALUE) {
+      if (not(Remote::writeAllowed(state, job.fence))) finishJob(state, index, "fill_fenced")
+      else inPhase(Writes::holdDump(state, job.source, job.retentionMs, job.fence), index, SERIALIZING)
+    }
     else {
       val decoded = { o: { loads: state.o.loads + 1, ...state.o }, ...state }
       if (Payloads::valueOf(job.cached) == source.result) finishJob(decoded, index, "match")
       else {
-        val confirmed = Remote::observe(decoded, source.key, layout.operationsPerEntity, 0, false)
+        val confirmed = Remote::observe(decoded, source.key, layout.operationsPerEntity, 0, state.readFailed)
         finishJob({ o: { reads: decoded.o.reads + 1, ...decoded.o }, ...decoded }, index,
-          if (confirmed.payload == job.cached) "mismatch" else "superseded")
+          if (confirmed.failed) "confirmation_error" else if (confirmed.payload == job.cached) "mismatch" else "superseded")
       }
     }
   }
@@ -169,8 +189,9 @@ module shadow {
 
   // A dump released: a caller's refill dispatches its write; a job's fill
   // dispatches it and writes next, unless the job's budget expired meanwhile
-  // (no write, the job ends), the dump failed (`fill_error`) or the fence
-  // stopped the write (`fill_fenced`).
+  // (no write, the job ends), the dump failed (`fill_error`) or the fence,
+  // judged again at release, stopped the write (`fill_fenced`: a wall rollback
+  // since settlement).
   pure def releaseDump(state: Shadowed[r], layout: Serving::Layout, dump: int, failed: bool): Shadowed[r] = {
     val fills = jobsOf(state, Writes::heldDump(state, dump).source, SERIALIZING)
     if (fills.size() == 0) Writes::releaseDump(state, layout, dump, failed)

@@ -1056,7 +1056,9 @@
         "acquiredMissDoesNotRereadBeforeFillTest",
         "localEntryExpiresAtItsInsertionTtlTest",
         "darkPropagatedTimeoutIsSourceFailureTest",
-        "servedPropagatedTimeoutPreservesHitTest"
+        "servedPropagatedTimeoutPreservesHitTest",
+        "darkC0EqualToSourceIsAMatchTest",
+        "darkC0ReplacedBeforeConfirmationIsSupersededTest"
       ],
       "replayRegressions": [
         "darkSourcePublishesLocalBeforeShadowWriteTest",
@@ -1081,7 +1083,9 @@
         "acquiredMissDoesNotRereadBeforeFillTest",
         "localEntryExpiresAtItsInsertionTtlTest",
         "darkPropagatedTimeoutIsSourceFailureTest",
-        "servedPropagatedTimeoutPreservesHitTest"
+        "servedPropagatedTimeoutPreservesHitTest",
+        "darkC0EqualToSourceIsAMatchTest",
+        "darkC0ReplacedBeforeConfirmationIsSupersededTest"
       ],
       "generate": {
         "maxSamples": 1024,

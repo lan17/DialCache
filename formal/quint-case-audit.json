@@ -1197,6 +1197,12 @@
       "scope": "A semantic C0/source match emits match without issuing a C1 read or repairing the cache. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
     },
     {
+      "case": "C50.equal-skips-confirmation",
+      "reference": "formal/dialcache-shadow-layers-conformance.qnt:darkC0EqualToSourceIsAMatchTest",
+      "kind": "regression",
+      "scope": "In the composed shadow-layers profile a dark job whose fresh C0 decodes to the caller source's value ends match after one decode with no confirmation read (the read count stays at the C0 read) and holds no dump; the caller completes with its source value. Public inputs only; no served-hit or repair claim."
+    },
+    {
       "case": "C52.undecodable-not-repaired",
       "reference": "formal/dialcache-shadow-validation.qnt:undecodablePresentFrameNeverFillsTest",
       "kind": "regression",
@@ -1273,6 +1279,12 @@
       "reference": "formal/dialcache-shadow-validation.qnt:identicalConfirmationDiagnosesWithoutRepairTest",
       "kind": "regression",
       "scope": "served hit shadow superseded remains diagnostic This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C51.changed-confirmation",
+      "reference": "formal/dialcache-shadow-layers-conformance.qnt:darkC0ReplacedBeforeConfirmationIsSupersededTest",
+      "kind": "regression",
+      "scope": "In the composed shadow-layers profile a dark job's fresh C0 (value 1) differs from its source (value 2) and the frame was replaced (value 2) before the confirmation read, so the second read finds other bytes and the job ends superseded: one decode, two reads, no dump, the caller completing with its source value. A dark job, not a served hit; no repair claim."
     },
     {
       "case": "C36.acquired-fresh",
@@ -2196,7 +2208,7 @@
       "case": "C09.fixed-local-ttl",
       "reference": "formal/dialcache-shadow-layers-conformance.qnt:localEntryExpiresAtItsInsertionTtlTest",
       "kind": "regression",
-      "scope": "A dark-invalid-shadow caller's source settles 1 ms after its call and warms the local slot for 60 s; the hit at that insertion and the miss at exactly 60 000 ms after it make the boundary exclusive (the drivers' advances are 1 ms, 60 s and 120 s)."
+      "scope": "A dark-invalid-shadow caller's source settles and warms the local slot for 60 s; the hit at that insertion and the miss at exactly 60 000 ms after it (the drivers' 60 s advance) make the boundary exclusive."
     },
     {
       "case": "C38.value-work-does-not-extend-marker",

@@ -4,12 +4,12 @@ module recovery {
   // the flight's loader failure, and the recheck of the snapshot's age when
   // the recovery decode settles. This module holds codes, one pending-only
   // record and judgments; `remote_io` consults them at read settlement
-  // (`retain`), at loader failure (`failure`, `missed`) and at recovery-decode
+  // (`retain`), at loader failure (`failure`) and at recovery-decode
   // settlement (`recovered`), and drops the snapshot when the flight
   // completes; `remote_writes` consults the same judgments on the atomic
   // path, retaining at release and deciding a source failure at once. No
   // profile composes a recovery transition: a profile passes the classifier
-  // in force to `remote_io::settleRead` or `remote_writes::release` (`NONE`
+  // in force to `remote_io::settleRead` or `remote_writes::releaseJudged` (`NONE`
   // where stale-on-error is not configured, so no snapshot is ever created
   // and every judgment reads NO_SNAPSHOT).
   //
@@ -101,21 +101,19 @@ module recovery {
   pure def recordOutcome(state: Recovering[r], label: str): Recovering[r] =
     { o: { recovery: state.o.recovery.append(label), ...state.o }, ...state }
   // A loader failure judged once for the held and the atomic path: the
-  // classification counted; whether recovery is allowed (the classifier, and
-  // whether the failure is a timeout: a deadline error, or a propagated
-  // timeout the profile names); whether the candidate then serves (recovery
-  // allowed and its age still admitted). What follows is the path's: a held
-  // recovery decode (`remote_io::failed`) or an immediate one
-  // (`remote_writes::failed`).
-  type Failure[r] = { state: Recovering[r], recovers: bool, serves: bool }
+  // classification counted; recovery allowed by the classifier and whether
+  // the failure is a timeout (a deadline error, or a propagated timeout the
+  // profile names); whether the candidate then serves (recovery allowed and
+  // its age still admitted), a miss recorded when recovery was allowed and it
+  // does not. What follows is the path's: a held recovery decode
+  // (`remote_io::failed`) or an immediate one (`remote_writes::failed`).
+  type Failure[r] = { state: Recovering[r], serves: bool }
   pure def failure(state: Recovering[r], snapshot: Snapshot, error: int, timeout: bool): Failure[r] = {
     val counted = classified(state, snapshot)
     val recovers = mayRecover(snapshot, timeout or error == DEADLINE_ERROR)
-    { state: counted, recovers: recovers, serves: recovers and validCandidate(counted, snapshot) }
+    val serves = recovers and validCandidate(counted, snapshot)
+    { state: if (recovers and not(serves)) recordOutcome(counted, "miss") else counted, serves: serves }
   }
-  // A failure that does not serve: a miss reported when recovery was allowed.
-  pure def missed(judged: Failure[r]): Recovering[r] =
-    if (judged.recovers) recordOutcome(judged.state, "miss") else judged.state
   // What a recovery decode settles to: the label and whether the candidate serves.
   type Recovered = { label: str, served: bool }
   pure def recovered(state: Recovering[r], snapshot: Snapshot, failed: bool): Recovered = {

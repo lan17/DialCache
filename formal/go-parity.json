@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "3ca79f325d99912830efab5defe0a9b5302bacb274fbcc78a3838875ce2eca6c",
-    "executionSha256": "a1aec1a54c87163e023527ba582b10abb2a6b103a882786e40ca824b8677c4d5",
+    "semanticCasesSha256": "4c5d8ff9ee9b139235b5cd5489b2ea5215d3b665832289932498531151e4bca1",
+    "executionSha256": "118fdee73334c43df9173c76ccb9905e712d73efa4ec3dc726ba7a94b39698f8",
     "sourceAuditSha256": "68b765959cffac2a9e49c72d758ee053cf23bbc2f8d58bf1190ea89634da5c85",
-    "quintCaseAuditSha256": "8367e331f3d8214eb0ab2cf0d5d18a95218d764942fc47418387bb26e96fae3d",
+    "quintCaseAuditSha256": "e48b11be0bdcfd9ac9b8a7c3c9717582312e1fa5c26599653e568f90766a2e6e",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d"
@@ -25,16 +25,16 @@
     "sourceDeclarations": 772,
     "casesWithScheduledChecks": 262,
     "requiredWitnesses": 440,
-    "casesWithQuintRegressionReplay": 168,
+    "casesWithQuintRegressionReplay": 170,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 33,
     "scheduledInvariants": 224,
-    "scheduledRegressions": 432,
+    "scheduledRegressions": 434,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 268
+    "exportedRegressionHistories": 270
   },
   "profiles": [
     {
@@ -510,7 +510,9 @@
         "acquiredMissDoesNotRereadBeforeFillTest",
         "localEntryExpiresAtItsInsertionTtlTest",
         "darkPropagatedTimeoutIsSourceFailureTest",
-        "servedPropagatedTimeoutPreservesHitTest"
+        "servedPropagatedTimeoutPreservesHitTest",
+        "darkC0EqualToSourceIsAMatchTest",
+        "darkC0ReplacedBeforeConfirmationIsSupersededTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -6845,7 +6847,8 @@
         "formal/dialcache-shadow-validation.qnt:missingConfirmationSupersedesWithoutRepairTest",
         "formal/dialcache-shadow-validation.qnt:changedConfirmationSupersedesWithoutRepairTest",
         "formal/dialcache-shadow-validation.qnt:identicalConfirmationDiagnosesWithoutRepairTest",
-        "formal/dialcache-shadow-conformance.qnt:sameDecodedValueWithDifferentBytesIsSupersededTest"
+        "formal/dialcache-shadow-conformance.qnt:sameDecodedValueWithDifferentBytesIsSupersededTest",
+        "formal/dialcache-shadow-layers-conformance.qnt:darkC0ReplacedBeforeConfirmationIsSupersededTest"
       ],
       "requiredGenerated": [
         {
@@ -6868,7 +6871,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "shadow-layers/darkC0ReplacedBeforeConfirmationIsSupersededTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -12096,7 +12101,8 @@
       "kind": "portable-behavior",
       "quintProperties": [
         "formal/dialcache-shadow-validation.qnt:equalComparisonSkipsConfirmationTest",
-        "formal/dialcache-shadow-conformance.qnt:binarySnapshotComparesDecodedValueTest"
+        "formal/dialcache-shadow-conformance.qnt:binarySnapshotComparesDecodedValueTest",
+        "formal/dialcache-shadow-layers-conformance.qnt:darkC0EqualToSourceIsAMatchTest"
       ],
       "requiredGenerated": [
         {
@@ -12111,7 +12117,9 @@
       "quintDefinitions": [],
       "status": "executable-generated",
       "gaps": [],
-      "quintReplays": [],
+      "quintReplays": [
+        "shadow-layers/darkC0EqualToSourceIsAMatchTest"
+      ],
       "generatedVectors": []
     },
     {

@@ -230,7 +230,7 @@ module remote_io {
     else {
       val judged = Recovery::failure(recorded, snapshot, error, timeout)
       if (judged.serves) holdLoad(judged.state, flight, NO_TTLS, snapshot.candidate, true)
-      else complete(Recovery::missed(judged), layout, flight, error)
+      else complete(judged.state, layout, flight, error)
     }
   }
   // The drivers settle a loader by its ordinal: an accepted value publishes

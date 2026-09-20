@@ -66,7 +66,8 @@ module remote_writes {
   // a source it starts after a completed remote read that served nothing (the
   // candidate, if any, is the visible frame the traversal declined). The
   // failure of such a source is judged once in `recovery::failure`, as the
-  // held path's is.
+  // held path's is. The module's one release seam: `shadow` judges the
+  // release and applies it here, then admits its jobs beside it.
   pure def releaseJudged(state: Writing[r], layout: Serving::Layout, judged: Serving::LayeredRelease, policyCall: int, ttls: Ttls, classifier: int): Writing[r] = {
     val released = Serving::releaseJudged(state, layout, judged, policyCall, ttls)
     match judged.decision.outcome {
@@ -75,13 +76,6 @@ module remote_writes {
         else released
       | _ => released
     }
-  }
-  pure def release(state: Writing[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls, classifier: int): Writing[r] =
-    releaseJudged(state, layout, Serving::layeredRelease(state, layout, policyCall, resolved, ttls), policyCall, ttls, classifier)
-  // An immediate policy reply: admission and the release in one step.
-  pure def begin(state: Writing[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, classifier: int): Writing[r] = {
-    val admitted = Serving::admit(state, layout, call)
-    if (Serving::participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls, classifier) else admitted
   }
 
   // -- Completion --------------------------------------------------------------------
@@ -110,7 +104,7 @@ module remote_writes {
         complete(Recovery::recordOutcome(decoded, outcome.label), layout, flight,
           if (outcome.served) Payloads::valueOf(snapshot.candidate) else error)
       }
-      else complete(Recovery::missed(judged), layout, flight, error)
+      else complete(judged.state, layout, flight, error)
     }
   }
 
