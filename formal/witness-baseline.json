@@ -187,7 +187,7 @@
     },
     "local-clock": {
       "sampledHistories": 128,
-      "corpusSha256": "8e6f796e9387efdd1651d71841de94d7944c783e2d2b940345f6030915731b7f",
+      "corpusSha256": "dd5c3f7d92942a834c84ec7b4e2602e4208cff99b4e94c23f8bd3e259df439ff",
       "labels": {
         "fractional-insertion-expiry": 0,
         "shared-instance-grid": 0
@@ -195,7 +195,7 @@
     },
     "local-failure": {
       "sampledHistories": 128,
-      "corpusSha256": "f299300bcf8ca50a98380a84b9ec182874f2229fe76e6c6a8b181770d283e4f0",
+      "corpusSha256": "23b06d251cefdd4e930b5d94114c5cb80907ad07a854ef94a152fb7aba4c5605",
       "labels": {
         "failed-local-read-preserves-old-value-and-memoizes-remote": 0,
         "failed-local-read-suppresses-later-source-publication": 0,

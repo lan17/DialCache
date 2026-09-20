@@ -6,7 +6,7 @@
       "formal/dialcache-frame-vectors.qnt": "d7cfaff472fce8888563ce81f62ca3b4bed1a76d51b97b46543a99362548cff8",
       "formal/wire-text.qnt": "c78f8c674f4e1470b0d2b605b209d82e3aab0e35fb4e0efae813247bf093eb27",
       "formal/generate-frame-vectors.mjs": "f27411412fc3a2593270d4747983305543ec5e8991027648558ef7d3ace0b3da",
-      "formal/cache-rules.qnt": "c439080cebd85942a9b7516076d295f18a53bf06be0e66287a35e37ded72ef17"
+      "formal/cache-rules.qnt": "cc37125b108b6e51011cfa4ff5c0561bb9498cbedd3ffefb0cabd79f3975216c"
     }
   },
   "frameVectors": [

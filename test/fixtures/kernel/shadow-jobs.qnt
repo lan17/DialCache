@@ -28,7 +28,7 @@ module shadow_jobs {
   import clock as Clock from "../../../formal/kernel/clock"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 1, operationsPerEntity: 1, probeSourceScope: true }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 1, operationsPerEntity: 1, probeSourceScope: true, policyProvider: true }
   pure val SERVING: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: false }
   pure val DARK: Resolution = { layers: { request: false, local: false, remote: false }, coalesce: false }
   pure val TTLS: Ttls = { localMs: 0, freshMs: 1000, retentionMs: 5000 }

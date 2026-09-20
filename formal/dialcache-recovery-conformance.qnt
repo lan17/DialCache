@@ -52,7 +52,7 @@ module dialcache_recovery_conformance {
   // One key on one instance, two persistent request scopes (contexts 0 and 1),
   // one operation per entity; the drivers never probe a source's scope.
   pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true
   }
   pure def call(context: int): Call = { instance: 0, key: KEY, context: context, enabled: true, keyFailed: false }
 

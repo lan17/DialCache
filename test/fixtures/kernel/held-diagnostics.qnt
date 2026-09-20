@@ -28,7 +28,7 @@ module held_diagnostics {
   import clock as Clock from "../../../formal/kernel/clock"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true }
   pure val SHARED: Resolution = { layers: { request: true, local: false, remote: true }, coalesce: true }
   pure val PROCESS_ONLY: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: true }
   pure val LOCAL_ALONE: Resolution = { layers: { request: true, local: true, remote: false }, coalesce: true }

@@ -23,8 +23,10 @@ module cache_rules {
   // Local hits never renew insertion expiry. Fractional environment time is
   // projected on the common whole-millisecond grid before computing local age.
   pure def localEntryLiveAt(observed: int, expires: int): bool = observed < expires
+  // The whole-millisecond grid a fractional instant falls on.
+  pure def wholeMs(ticks: int, ticksPerMs: int): int = ticks / ticksPerMs
   pure def localEntryLiveOnGrid(observedTicks: int, insertedTicks: int, ttlMs: int, ticksPerMs: int): bool =
-    localEntryLiveAt(observedTicks / ticksPerMs, insertedTicks / ticksPerMs + ttlMs)
+    localEntryLiveAt(wholeMs(observedTicks, ticksPerMs), wholeMs(insertedTicks, ticksPerMs) + ttlMs)
 
   // Negative budget is the canonical unbounded representation. Profiles with
   // other sentinel codes normalize them here; finite zero is already expired.

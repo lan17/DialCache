@@ -2110,9 +2110,9 @@
     },
     {
       "case": "C27.local-read-failure",
-      "reference": "formal/dialcache-local-failure-conformance.qnt:failedReadKeepsPriorLocalValue",
+      "reference": "formal/dialcache-local-failure-conformance.qnt:faultedReadNeverUsesLocal",
       "kind": "invariant",
-      "scope": "Real local storage remains behind a native exception/clock-failure injection seam. Distinct request and transient public probes check the old local value, accepted caller result and request-only memo; read failure remains publication-ineligible after the injected fault is cleared. No elapsed-time or concurrent-source claim."
+      "scope": "One-step statement over the library records: a call admitted under an armed fault is served from its scope's memo or from the remote frame, or owns a source whose captured local TTL is 0, so no later settlement of that source publishes locally even after the fault clears. The no-warm half of the rule (a faulted remote hit leaves local storage as it was) is a written equivalence pinned by localReadFailureFallsThroughAndPreservesOldLocalTest, not by this invariant. Real local storage remains behind a native exception/clock-failure injection seam; no elapsed-time or concurrent-source claim."
     },
     {
       "case": "C27.local-read-failure",
@@ -2128,9 +2128,15 @@
     },
     {
       "case": "C27.local-write-failure",
-      "reference": "formal/dialcache-local-failure-conformance.qnt:failedWriteKeepsAcceptedCallerResult",
+      "reference": "formal/dialcache-local-failure-conformance.qnt:faultedSettlementPublishesNothingLocally",
       "kind": "invariant",
-      "scope": "Real local storage remains behind a native exception/clock-failure injection seam. Distinct request and transient public probes check the old local value, accepted caller result and request-only memo; read failure remains publication-ineligible after the injected fault is cleared. No elapsed-time or concurrent-source claim."
+      "scope": "One-step statement over the library records: the source a settlement names carries no local TTL under an armed fault, so the publication warms nothing while the callers receive the result and the request memo and remote refill proceed. Real local storage remains behind a native exception/clock-failure injection seam; no elapsed-time or concurrent-source claim."
+    },
+    {
+      "case": "C27.local-write-failure",
+      "reference": "formal/dialcache-local-failure-conformance.qnt:callsKeepSourceOutcome",
+      "kind": "invariant",
+      "scope": "Every owned caller's value is its source's recorded result, so a withdrawn local write never changes an accepted caller result; the surviving request memo and the remote refill are asserted by the regression. Real local storage remains behind a native exception/clock-failure injection seam; no elapsed-time or concurrent-source claim."
     },
     {
       "case": "C27.local-write-failure",
@@ -2140,9 +2146,9 @@
     },
     {
       "case": "C27.source-error-no-publication",
-      "reference": "formal/dialcache-local-failure-conformance.qnt:sourceErrorsNeverReplaceLocalValue",
+      "reference": "formal/dialcache-local-failure-conformance.qnt:storageHoldsAcceptedValuesOnly",
       "kind": "invariant",
-      "scope": "Real local storage remains behind a native exception/clock-failure injection seam. Distinct request and transient public probes check the old local value, accepted caller result and request-only memo; read failure remains publication-ineligible after the injected fault is cleared. No elapsed-time or concurrent-source claim."
+      "scope": "The local slot, the remote frame and every memo row hold no value or an accepted one, so a rejected source publishes and memoizes nothing and an error code is never stored. Real local storage remains behind a native exception/clock-failure injection seam; no elapsed-time or concurrent-source claim."
     },
     {
       "case": "C27.source-error-no-publication",
@@ -2542,21 +2548,21 @@
     },
     {
       "case": "C09.fractional-clock-grid",
-      "reference": "formal/dialcache-local-clock-conformance.qnt:localReadsUseCommonWholeMilliseconds",
+      "reference": "formal/dialcache-local-clock-conformance.qnt:clockIsOnTheGrid",
       "kind": "invariant",
-      "scope": "Local insertion and expiry use the common process monotonic whole-millisecond grid, including fractional insertion times and cache instances constructed at different fractional times.. The deterministic regression checks the public result and subsequent reuse for this bounded fixture."
+      "scope": "Local insertion and expiry use the common process monotonic whole-millisecond grid, including fractional insertion times and cache instances constructed at different fractional times. The clock the layers read is the integer projection of the raw ticks, spelled without the clock module, so a precise-clock substitution violates it."
     },
     {
       "case": "C09.fractional-clock-grid",
-      "reference": "formal/dialcache-local-clock-conformance.qnt:readsNeverRenewLocalInsertion",
+      "reference": "formal/dialcache-local-clock-conformance.qnt:callsServeLiveEntriesOrRunTheSource",
       "kind": "invariant",
-      "scope": "Local insertion and expiry use the common process monotonic whole-millisecond grid, including fractional insertion times and cache instances constructed at different fractional times.. The deterministic regression checks the public result and subsequent reuse for this bounded fixture."
+      "scope": "Local insertion and expiry use the common process monotonic whole-millisecond grid, including fractional insertion times and cache instances constructed at different fractional times. At a call step the caller served its instance's live entry (strictly before the entry's grid expiry) and started no source, or ran its source, returned the offered value and left the entry stamped from this grid instant for the local TTL."
     },
     {
       "case": "C09.fractional-clock-grid",
-      "reference": "formal/dialcache-local-clock-conformance.qnt:publicCallsPreserveProbeResults",
+      "reference": "formal/dialcache-local-clock-conformance.qnt:publicCallsMatchSources",
       "kind": "invariant",
-      "scope": "Local insertion and expiry use the common process monotonic whole-millisecond grid, including fractional insertion times and cache instances constructed at different fractional times.. The deterministic regression checks the public result and subsequent reuse for this bounded fixture."
+      "scope": "Local insertion and expiry use the common process monotonic whole-millisecond grid, including fractional insertion times and cache instances constructed at different fractional times. One source per loader, every owned caller completed by its own source's outcome and every entry the value of a source on its instance, so the public observation agrees with the library records."
     },
     {
       "case": "C06.null-request",
@@ -4554,21 +4560,27 @@
     },
     {
       "case": "C27.local-read-failure",
-      "reference": "formal/dialcache-local-failure-conformance.qnt:acquired",
+      "reference": "formal/kernel/local-faults.qnt:begin",
       "kind": "helper",
-      "scope": "Publication requires captured local miss eligibility and successful local storage; completion preserves accepted caller result and eligible request memo."
+      "scope": "Admission under an armed fault judges the layered release with the fault as its argument (serving.judgeReleaseUnder) and applies it (serving.releaseJudged): the traversal reads nothing from local storage, a remote hit warms nothing and the source it starts captures no local TTL (publication-ineligible whatever the switch says at settlement), while the layers and the coalescing stay as the reply resolved them."
     },
     {
       "case": "C27.local-write-failure",
-      "reference": "formal/dialcache-local-failure-conformance.qnt:acquired",
+      "reference": "formal/kernel/local-faults.qnt:settle",
       "kind": "helper",
-      "scope": "Publication requires captured local miss eligibility and successful local storage; completion preserves accepted caller result and eligible request memo."
+      "scope": "Settlement under an armed fault withdraws the source's captured local TTL, so serving.publish warms nothing while the callers complete with the accepted result, the request memo is written and the remote refill proceeds."
     },
     {
       "case": "C27.source-error-no-publication",
-      "reference": "formal/dialcache-local-failure-conformance.qnt:acquired",
+      "reference": "formal/kernel/serving.qnt:publish",
       "kind": "helper",
-      "scope": "Publication requires captured local miss eligibility and successful local storage; completion preserves accepted caller result and eligible request memo."
+      "scope": "Publication warms local storage only for an accepted value with a positive captured local TTL; a rejected source refills and warms nothing and completes its callers with the error."
+    },
+    {
+      "case": "C09.fractional-clock-grid",
+      "reference": "formal/kernel/local-storage.qnt:promote",
+      "kind": "helper",
+      "scope": "A hit renews recency, never insertion: promote writes the LRU order only, so the entry keeps the grid expiry its fill stamped; the regression fractionalInsertionExpiresAtWholeMillisecondTest pins it."
     },
     {
       "case": "C44.retained-expiry",

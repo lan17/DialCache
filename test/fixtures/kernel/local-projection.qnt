@@ -18,7 +18,7 @@ module local_projection {
   pure val LOCAL_MS = 1000
   pure val SHORT_LOCAL_MS = 250
   pure val LAYOUT: Serving::Layout =
-    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false }
+    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true }
   pure val LOCAL: Resolution = { layers: { request: false, local: true, remote: false }, coalesce: true }
   pure val TTLS: Ttls = { localMs: LOCAL_MS, freshMs: 0, retentionMs: 0 }
   pure val SHORT_TTLS: Ttls = { localMs: SHORT_LOCAL_MS, freshMs: 0, retentionMs: 0 }

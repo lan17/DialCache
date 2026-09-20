@@ -44,7 +44,7 @@ module payload_classes {
   import clock as Clock from "../../../formal/kernel/clock"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true }
   pure val ALONE: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: false }
   pure val WITH_LOCAL: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: true }
   pure val TTLS: Ttls = { localMs: 0, freshMs: 1000, retentionMs: 5000 }

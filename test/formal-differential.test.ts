@@ -32,6 +32,8 @@ const differential = await import(new URL("../formal/differential.mjs", import.m
   bytesBound(model: Pick<Model, "maxBytesPerStateRatio">): { maxBytesPerStateRatio: number; source: string };
   verdict(report: Report): { failed: boolean; reasons: string[] };
   formatReport(report: Report): string;
+  boundAction(declarations: Map<string, unknown>, descriptor: unknown, action: string): string;
+  replayDescriptors: Record<string, { explicitInputs?: boolean; actionBindings?: Record<string, string> }>;
   defaultChunk: number;
   cursorVariable: string;
   maxBytesPerStateRatio: number;
@@ -140,7 +142,25 @@ describe("corpus differential comparison", () => {
     const effects = (extra: Record<string, unknown> = {}) => ({ path: "formal/dialcache-effects-conformance.qnt", profile: "effects", invariants: ["a"], regressions: [],
       generate: { maxSamples: 4, maxSteps: 4, traces: 2, outputDirectory: ".formal-traces/effects" }, ...extra });
     const effectsManifests = (models: Array<Record<string, unknown>>): Manifests => ({ execution: { settings: { backend: "rust", threads: 1, seed: "0xd1a1ca", verbosity: 1 }, models }, registry: { profiles: [{ id: "effects", version: 1 }] } });
-    expect(() => differential.differentialPlan(effectsManifests([effects()]), effectsManifests([effects()]), "effects")).toThrow(/effects has no explicit-input feature descriptor/);
+    expect(() => differential.differentialPlan(effectsManifests([effects()]), effectsManifests([effects()]), "effects")).toThrow(/effects has no explicit-input replay descriptor/);
+    // The local-clock profile, whose driver has its own runner, replays through its own descriptor beside the feature profiles.
+    expect(Object.keys(differential.replayDescriptors)).toEqual(expect.arrayContaining(["layers", "policy", "local-clock"]));
+    expect(differential.differentialPlan(differential.readManifests(root), differential.readManifests(root), "local-clock"))
+      .toMatchObject({ action: "compare", descriptor: { explicitInputs: true, actions: { call: { choices: [0, 1, 2, 3] } }, actionBindings: { call: "callCache" } } });
+  });
+
+  it("schedules an input through the descriptor binding only where the tree declares the input name as a parametrized action", () => {
+    const lambda = { name: "call", kind: "def", qualifier: "action", expr: { kind: "lambda" } };
+    const wrapper = { name: "callCache", kind: "def", qualifier: "action", expr: { kind: "app" } };
+    const descriptor = { actionBindings: { call: "callCache" } };
+    // A reference text from before the wrapper was renamed: `call` is its parametrized action, `callCache` the public one.
+    expect(differential.boundAction(new Map<string, unknown>([["call", lambda], ["callCache", wrapper]]), descriptor, "call")).toBe("callCache");
+    // A tree whose `call` is public schedules it directly; the binding is not consulted.
+    expect(differential.boundAction(new Map<string, unknown>([["call", { ...wrapper, name: "call" }], ["callCache", wrapper]]), descriptor, "call")).toBe("call");
+    // Without a binding, or without the bound declaration, the name stands and the schedule refuses it as any parametrized declaration.
+    expect(differential.boundAction(new Map<string, unknown>([["call", lambda]]), undefined, "call")).toBe("call");
+    expect(differential.boundAction(new Map<string, unknown>([["call", lambda]]), descriptor, "call")).toBe("call");
+    expect(differential.boundAction(new Map<string, unknown>(), descriptor, "teleport")).toBe("teleport");
   });
 
   it("fails the run on a disagreement in either direction or trace growth beyond the bound; wall time is advisory", () => {
@@ -186,15 +206,18 @@ describe("corpus differential comparison", () => {
     const output = mkdtempSync(join(tmpdir(), "differential-prepare-"));
     try {
       const prepared = differential.prepare("HEAD", { output });
-      const exported = (manifests: Manifests) => manifests.execution.models.find(model => model.profile === "layers")?.replayRegressions as string[] | undefined;
       expect(prepared.reference.revision).toMatch(/^[0-9a-f]{40}$/);
-      expect(exported(prepared.candidate.manifests)?.length).toBeGreaterThan(0);
-      expect(exported(prepared.reference.manifests)?.length).toBeGreaterThan(0);
+      for (const side of [prepared.reference, prepared.candidate]) {
+        expect(readFileSync(join(side.tree, "formal/dialcache-layers-conformance.qnt"), "utf8")).toContain("module dialcache_layers_conformance");
+        const layers = side.manifests.execution.models.find(model => model.profile === "layers") as { regressions?: string[]; replayRegressions?: string[] };
+        expect(layers.regressions?.length).toBeGreaterThan(0);
+        expect(layers.replayRegressions?.length).toBeGreaterThan(0);
+      }
     } finally { rmSync(output, { recursive: true, force: true }); }
   }, 30_000);
 
   it("selects the composed profiles by their kernel imports in either revision, following helper libraries, and lists every Quint source", () => {
-    expect(differential.composedProfiles(readExecution())).toEqual(["recovery", "policy", "scope", "layers", "independent", "recovery-read", "runtime-boundaries", "shadow-layers", "source-budgets"]);
+    expect(differential.composedProfiles(readExecution())).toEqual(["recovery", "policy", "scope", "layers", "independent", "recovery-read", "local-failure", "runtime-boundaries", "shadow-layers", "local-clock", "source-budgets"]);
     // A profile composed only at the reference (a rewrite off the library) is still selected.
     const referenceTree = mkdtempSync(join(tmpdir(), "differential-reference-"));
     const candidateTree = mkdtempSync(join(tmpdir(), "differential-candidate-"));
@@ -287,6 +310,29 @@ describe.skipIf(!quintAvailable)("corpus differential replay through a tree", ()
     const [verdict] = await differential.replayHistories(candidate, model, descriptor, [smokeHistory(descriptor)], { chunk: 64, output: join(output, "mutant-out"), concurrency: 1 });
     expect(verdict!.agree).toBe(false);
     expect(verdict!.fields).toEqual(["expected.loaders"]);
+  }, 180_000);
+
+  it("replays a local-clock history through a reference text whose call is the parametrized action, through the descriptor binding", async () => {
+    const plan = differential.differentialPlan(differential.readManifests(root), differential.readManifests(root), "local-clock");
+    const model = plan.candidate;
+    const descriptor = plan.descriptor as { explicitInputs: true; actions: Record<string, { choices: number[] }>; actionBindings: Record<string, string> };
+    const reference = copyTree(join(output, "pre-rename"));
+    const profile = join(reference, model.path);
+    const renamed = readFileSync(profile, "utf8");
+    expect(renamed).toContain("action callWith(instance: int, offered: int)");
+    // The text before the wrapper was renamed: `call` parametrized, `callCache` the public wrapper `step` selects.
+    const older = renamed.replaceAll("callWith", "call").replace("action call = {", "action callCache = {").replace("advanceTicks, call }", "advanceTicks, callCache }");
+    expect(older).toContain("action call(instance: int, offered: int)");
+    expect(older).toContain("action step = any { constructInstance, advanceTicks, callCache }");
+    writeFileSync(profile, older);
+    const smoke = parseTrace(JSON.parse(readFileSync(resolve(root, "formal/local-clock-smoke.itf.json"), "utf8")), "local-clock-smoke", descriptor);
+    expect(smoke.steps.filter(entry => entry.action === "call").length).toBeGreaterThan(0);
+    const [verdict] = await differential.replayHistories(reference, model, descriptor, [smoke], { chunk: 16, output: join(output, "pre-rename-out"), concurrency: 1 });
+    expect(verdict).toEqual({ path: "local-clock-smoke", agree: true });
+    // Without the binding the older text declares `call` as a parametrized action no schedule can select.
+    const { actionBindings: _bindings, ...unbound } = descriptor;
+    await expect(differential.replayHistories(reference, model, unbound, [smoke], { chunk: 16, output: join(output, "pre-rename-unbound"), concurrency: 1 }))
+      .rejects.toThrow(/parameterless public action/);
   }, 180_000);
 
   it("names the input a candidate refuses, with the evaluator's diagnostic", async () => {

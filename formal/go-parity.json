@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "0c74ce51fc4c880aef0acaf2c03f23884ec123b8b4865fed236f630ed17e4c22",
-    "executionSha256": "7a176d74eabffbcb0406ae82f09b67a33dee6592d2b51c9e6b03bd2e18cb5136",
-    "sourceAuditSha256": "769ff8845e8df0aae1097a2d5c27a2322c6c2ec8d3233df1334c3a9742bf699b",
-    "quintCaseAuditSha256": "fe7755f3aee41cc616eba52dd423a893919b9c96172ad97a7993252c35da9bf0",
+    "semanticCasesSha256": "10b1114ba921ae82577264e9c3aa166b4737297297daa32e3e92a98fc2347d49",
+    "executionSha256": "9e52c0dd9274192aa6f27f3b4b2f491874ae886a5a3aa9c902502de582ab5fd0",
+    "sourceAuditSha256": "af1880c5fa13cbfdf0e371cebc170a172ed48189bcb438f68a3bbf365a94c31d",
+    "quintCaseAuditSha256": "ff24fbc20a4d8b5a2c31d4b975206df36f82d7c7dd6eaf5f5ccf210964911b7a",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "28a9af577d3306f572de2b295eade2ff195ff910cb136e407207ab8cc3c0c539"
@@ -29,7 +29,7 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 33,
-    "scheduledInvariants": 229,
+    "scheduledInvariants": 231,
     "scheduledRegressions": 434,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
@@ -3718,7 +3718,7 @@
         "formal/dialcache-core.qnt:failedLocalReadSkipsReuseAndPublication",
         "formal/dialcache-core.qnt:localReadFailureContinuesToRemoteTest",
         "formal/dialcache-core.qnt:localReadFailureSuppressesSourcePublicationTest",
-        "formal/dialcache-local-failure-conformance.qnt:failedReadKeepsPriorLocalValue",
+        "formal/dialcache-local-failure-conformance.qnt:faultedReadNeverUsesLocal",
         "formal/dialcache-local-failure-conformance.qnt:localReadFailureFallsThroughAndPreservesOldLocalTest",
         "formal/dialcache-local-failure-conformance.qnt:localReadFailureSkipsSourcePublicationButMemoizesTest"
       ],
@@ -3745,7 +3745,7 @@
         "scope": "The local-failure profile injects a panic through Go's local-storage integer-clock boundary while successful operations use real local storage. Shared histories and public-action regressions observe fall-through, preservation of the prior local value, suppression of later local publication, and request memoization through public probes. This is a bounded fault seam, not arbitrary resource-failure coverage."
       },
       "quintDefinitions": [
-        "formal/dialcache-local-failure-conformance.qnt:acquired"
+        "formal/kernel/local-faults.qnt:begin"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -3766,7 +3766,8 @@
         "formal/dialcache-core.qnt:failedLocalWritePreservesAcceptedResult",
         "formal/dialcache-core.qnt:localWriteFailurePreservesSourceAndMemoTest",
         "formal/dialcache-core.qnt:localWriteFailurePreservesRemoteHitTest",
-        "formal/dialcache-local-failure-conformance.qnt:failedWriteKeepsAcceptedCallerResult",
+        "formal/dialcache-local-failure-conformance.qnt:faultedSettlementPublishesNothingLocally",
+        "formal/dialcache-local-failure-conformance.qnt:callsKeepSourceOutcome",
         "formal/dialcache-local-failure-conformance.qnt:localWriteFailureKeepsSourceAndRequestMemoTest"
       ],
       "requiredGenerated": [
@@ -3789,7 +3790,7 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-local-failure-conformance.qnt:acquired"
+        "formal/kernel/local-faults.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -12590,7 +12591,7 @@
       "quintProperties": [
         "formal/dialcache-core.qnt:sourceFailureNeverPublishes",
         "formal/dialcache-core.qnt:rejectedSourceNeverPublishesTest",
-        "formal/dialcache-local-failure-conformance.qnt:sourceErrorsNeverReplaceLocalValue",
+        "formal/dialcache-local-failure-conformance.qnt:storageHoldsAcceptedValuesOnly",
         "formal/dialcache-local-failure-conformance.qnt:sourceFailureKeepsPreviouslyAcceptedStorageTest",
         "formal/dialcache-local-failure-conformance.qnt:rejectedSourceDoesNotSeedLocalTest"
       ],
@@ -12607,7 +12608,7 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [
-        "formal/dialcache-local-failure-conformance.qnt:acquired"
+        "formal/kernel/serving.qnt:publish"
       ],
       "status": "executable-generated",
       "gaps": [],
@@ -12636,11 +12637,13 @@
         "formal/dialcache-local-clock-conformance.qnt:fractionalConstructionKeepsCommonInstanceGridTest",
         "formal/dialcache-local-clock-conformance.qnt:nonzeroOriginKeepsWholeMillisecondBoundaryTest",
         "formal/dialcache-local-clock-conformance.qnt:integerInsertionRetainsFullTtlTest",
-        "formal/dialcache-local-clock-conformance.qnt:localReadsUseCommonWholeMilliseconds",
-        "formal/dialcache-local-clock-conformance.qnt:readsNeverRenewLocalInsertion",
-        "formal/dialcache-local-clock-conformance.qnt:publicCallsPreserveProbeResults"
+        "formal/dialcache-local-clock-conformance.qnt:clockIsOnTheGrid",
+        "formal/dialcache-local-clock-conformance.qnt:callsServeLiveEntriesOrRunTheSource",
+        "formal/dialcache-local-clock-conformance.qnt:publicCallsMatchSources"
       ],
-      "quintDefinitions": [],
+      "quintDefinitions": [
+        "formal/kernel/local-storage.qnt:promote"
+      ],
       "requiredGenerated": [
         {
           "profile": "local-clock",
@@ -18450,7 +18453,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "769ff8845e8df0aae1097a2d5c27a2322c6c2ec8d3233df1334c3a9742bf699b",
+    "sha256": "af1880c5fa13cbfdf0e371cebc170a172ed48189bcb438f68a3bbf365a94c31d",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",
@@ -19875,7 +19878,7 @@
           "formal/cache-rules.qnt"
         ]
       },
-      "artifactSha256": "4511ddc2360c3bb04ff36ecf63f754962c1b9195830499e12dadc972e9618cc6",
+      "artifactSha256": "8483d4849166c95aa5cd77433214402cd68f7a2226e0fb7eee5cafeb88e99204",
       "status": "executable-vector-schedule"
     },
     {

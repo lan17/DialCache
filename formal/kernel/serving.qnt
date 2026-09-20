@@ -24,7 +24,8 @@ module serving {
   //
   // The layered release and settlement are each split into the judgment and
   // the steps a held remote effect suspends between (`remote_io`): the release
-  // judged with the remote layer unobserved (`judgeRelease`), its prologue up
+  // judged with the remote layer unobserved (`judgeRelease`; with the local
+  // read's fault as an argument, `judgeReleaseUnder`), its prologue up
   // to the remote layer (`applyRelease`), the publication authority fixed
   // when a remote read completes (`authority`), completion apart from the
   // recorded outcome (`complete`, `finish`) and publication apart from
@@ -44,9 +45,15 @@ module serving {
   // contexts are persistent scopes, keys per entity, and whether the drivers
   // probe each source for the scope it started under (o.sourceScopes). TTLs
   // are not layout: every release and settlement takes the `Ttls` the reply
-  // resolved to (a fixture's constant where replies carry none).
+  // resolved to (a fixture's constant where replies carry none). Whether the
+  // fixture installs a policy provider is layout: the drivers count provider
+  // invocations as `o.policyCalls`, one per enabled admission where a provider
+  // exists; an instance that resolves policy from its key's default
+  // configuration (the local-clock drivers' default instances) makes none, and
+  // composes immediate replies, since no reply is held for it.
   type Layout = {
-    keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int, probeSourceScope: bool
+    keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int, probeSourceScope: bool,
+    policyProvider: bool
   }
   // A source record is flights::Source over the payload the traversal needs to
   // publish, captured from the reply that started it so each source publishes
@@ -255,10 +262,16 @@ module serving {
   // A participating caller makes a policy call and waits for the reply; any
   // other caller (a closed scope, a disabled context, a call outside every
   // request) bypasses every layer and starts its own unshared source at once (C01).
-  pure def entered(state: Traversed[r, p], open: bool): Traversed[r, p] = Flights::admitCaller({
+  // The gate holds the caller under the policy-call count, which advances only
+  // where the layout has a policy provider: a composition that holds replies
+  // across steps (`admit` and `release` as separate transitions) needs
+  // `Layout.policyProvider`; without one the count stands still and every
+  // held caller would share one key (`policy_gate::hold`), so a layout without
+  // a provider composes immediate replies only (`beginLocal`, `callLocal`).
+  pure def entered(state: Traversed[r, p], layout: Layout, open: bool): Traversed[r, p] = Flights::admitCaller({
     o: {
       calls: state.o.calls.append(CALL_PENDING),
-      policyCalls: state.o.policyCalls + (if (open) 1 else 0),
+      policyCalls: state.o.policyCalls + (if (open and layout.policyProvider) 1 else 0),
       ...state.o
     },
     ...state
@@ -266,20 +279,20 @@ module serving {
   pure def admit(state: Served[r], layout: Layout, call: Call): Served[r] = {
     val open = participating(state, layout, call)
     val caller = state.o.calls.length()
-    if (open) Gate::hold(entered(state, open), state.o.policyCalls, caller, call)
-    else startSource(entered(state, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS, Remote::UNOBSERVED)
+    if (open) Gate::hold(entered(state, layout, open), state.o.policyCalls, caller, call)
+    else startSource(entered(state, layout, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS, Remote::UNOBSERVED)
   }
   pure def admitLocal(state: LocalServed[r], layout: Layout, call: Call): LocalServed[r] = {
     val open = participating(state, layout, call)
     val caller = state.o.calls.length()
-    if (open) Gate::hold(entered(state, open), state.o.policyCalls, caller, call)
-    else startLocalSource(entered(state, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS)
+    if (open) Gate::hold(entered(state, layout, open), state.o.policyCalls, caller, call)
+    else startLocalSource(entered(state, layout, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS)
   }
   pure def admitRequest(state: RequestServed[r], layout: Layout, call: Call): RequestServed[r] = {
     val open = participating(state, layout, call)
     val caller = state.o.calls.length()
-    if (open) Gate::hold(entered(state, open), state.o.policyCalls, caller, call)
-    else startRequestSource(entered(state, open), layout, caller, call, NO_OWNER, false, BYPASS)
+    if (open) Gate::hold(entered(state, layout, open), state.o.policyCalls, caller, call)
+    else startRequestSource(entered(state, layout, open), layout, caller, call, NO_OWNER, false, BYPASS)
   }
 
   // -- Release -------------------------------------------------------------------
@@ -301,7 +314,17 @@ module serving {
   // remote read observed (`remote_frames::Observed`: the value the remote
   // layer offered, whether it offered a visible frame at all, and whether the
   // read failed: an adapter fault, a visible frame whose payload fails the
-  // read, or a read not made) and the decision. The remote observation is a
+  // read, or a read not made), whether the local read failed, and the
+  // decision. The local read's fault is an argument of the judgment
+  // (`judgeReleaseUnder`, the local storage fault switch a profile composes
+  // through `local_faults`; `judgeRelease` judges a healthy read): a failed
+  // local read hides the local value and warms nothing from this release
+  // (`publishable`), and leaves the layers as the reply resolved them, so
+  // participation and sharing follow configuration, as the implementations
+  // decide the process flight before the read (`src/dialcache.ts`
+  // `getThroughSharedLayers`) and a local read that throws
+  // (`getThroughActiveLocal`) disables only that call's local value and
+  // write. The remote observation is a
   // parameter: an atomic release
   // observes the frame (`layeredRelease`, the judgment `release` applies and
   // the variants composed around it, `receipts`, `remote_writes` and
@@ -311,8 +334,10 @@ module serving {
   // layer on and the read is dispatched instead. It is judged on the state
   // before Gate::release, which edits only the held list, a field no layer
   // read or decision consults.
-  type LayeredRelease = { caller: int, call: Call, open: bool, effective: Resolution, remote: Remote::Observed, decision: Decision }
-  pure def judgeRelease(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls, observed: bool): LayeredRelease = {
+  type LayeredRelease = {
+    caller: int, call: Call, open: bool, effective: Resolution, remote: Remote::Observed, localFailed: bool, decision: Decision
+  }
+  pure def judgeReleaseUnder(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls, observed: bool, localFailed: bool): LayeredRelease = {
     val held = Gate::entry(state, policyCall)
     val call = held.call
     val open = participating(state, layout, call)
@@ -321,7 +346,8 @@ module serving {
     // The read is made when the traversal may reach the remote layer; a read
     // not made, like a failed one, observes nothing.
     val reads = observed and layers.remote and not(state.readFailed)
-    val localValue = if (layers.local) Local::localValue(state, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
+    // A failed local read offers no value; the layer stays on.
+    val localValue = if (layers.local and not(localFailed)) Local::localValue(state, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
     val remote = Remote::observe(state, call.key, layout.operationsPerEntity, ttls.freshMs, not(reads))
     {
       caller: held.caller,
@@ -329,9 +355,19 @@ module serving {
       open: open,
       effective: effective,
       remote: remote,
+      localFailed: localFailed,
       decision: decide(state, layout, call, effective, localValue, remote.value)
     }
   }
+  pure def judgeRelease(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls, observed: bool): LayeredRelease =
+    judgeReleaseUnder(state, layout, policyCall, resolved, ttls, observed, false)
+  // The TTLs a release publishes for: the reply's, with no local TTL after a
+  // failed local read. Nothing is warmed from a faulted read: neither the
+  // remote hit it serves (`applyRelease`) nor, through `authority`, the source
+  // it starts, which captures `localMs` 0 and so publishes nothing locally
+  // whatever the switch says when it settles.
+  pure def publishable(judged: LayeredRelease, ttls: Ttls): Ttls =
+    if (judged.localFailed) { localMs: 0, ...ttls } else ttls
   pure def layeredRelease(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LayeredRelease =
     judgeRelease(state, layout, policyCall, resolved, ttls, true)
   // The prologue every layered release shares: release the gate, attach the
@@ -363,9 +399,12 @@ module serving {
   // `releaseJudged` applies a judgment already made on this state, so a
   // variant that records beside the release (`receipts`, `remote_writes`,
   // `shadow`) judges once through `layeredRelease` and applies the same
-  // judgment; `release` is its composition with the atomic judgment.
+  // judgment, and one judged under a local read fault (`local_faults::begin`)
+  // publishes for the TTLs that judgment allows; `release` is its composition
+  // with the atomic judgment.
   pure def releaseJudged(state: Served[r], layout: Layout, judged: LayeredRelease, policyCall: int, ttls: Ttls): Served[r] = {
-    val applied = applyRelease(state, layout, judged, policyCall, ttls)
+    val publishes = publishable(judged, ttls)
+    val applied = applyRelease(state, layout, judged, policyCall, publishes)
     val observed = if (judged.effective.layers.remote and reachesRemote(judged.decision.outcome)) {
       o: {
         reads: applied.o.reads + 1,
@@ -375,7 +414,7 @@ module serving {
       ...applied
     } else applied
     match judged.decision.outcome {
-      | Starts => startSource(observed, layout, judged.caller, judged.call, judged.decision.slot, judged.open, judged.effective, ttls, judged.remote)
+      | Starts => startSource(observed, layout, judged.caller, judged.call, judged.decision.slot, judged.open, judged.effective, publishes, judged.remote)
       | JoinsRequest(_) => observed
       | JoinsProcess(_) => observed
       | ServesMemo(_) => observed
@@ -451,6 +490,19 @@ module serving {
   pure def begin(state: Served[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls): Served[r] = {
     val admitted = admit(state, layout, call)
     if (participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls) else admitted
+  }
+  pure def beginLocal(state: LocalServed[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls): LocalServed[r] = {
+    val admitted = admitLocal(state, layout, call)
+    if (participating(state, layout, call)) releaseLocal(admitted, layout, state.o.policyCalls, resolved, ttls) else admitted
+  }
+  // A call over the local projection whose loader runs inline (the drivers'
+  // loader returns before the call does, the local-clock profile): the source
+  // a miss starts settles at once with the value the loader returned, a hit
+  // starts none and settles nothing. The source is the newest, since no other
+  // work interleaves an inline call.
+  pure def callLocal(state: LocalServed[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls, value: int): LocalServed[r] = {
+    val begun = beginLocal(state, layout, call, resolved, ttls)
+    if (begun.sources.length() > state.sources.length()) settleLocal(begun, layout, Flights::latest(begun), value) else begun
   }
 
   // -- Settlement ----------------------------------------------------------------

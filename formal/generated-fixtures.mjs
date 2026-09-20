@@ -29,8 +29,7 @@ export function validateRecipes(book, execution = readExecution()) {
   for (const artifact of book.artifacts) {
     if (typeof artifact.path !== 'string' || !/^(formal\/[\w-]+-smoke\.itf|test\/fixtures\/[\w-]+)\.json$/.test(artifact.path) || paths.has(artifact.path)) fail('Invalid/duplicate fixture path');
     paths.add(artifact.path);
-    if (Object.keys(artifact).some(key => !['path', 'model', 'format', 'recipes', 'actionBindings'].includes(key))) fail('Unexpected artifact recipe field');
-    for (const [name, target] of Object.entries(artifact.actionBindings ?? {})) if (!identifier(name) || !identifier(target)) fail('Invalid public action binding');
+    if (Object.keys(artifact).some(key => !['path', 'model', 'format', 'recipes'].includes(key))) fail('Unexpected artifact recipe field');
     if (!['smoke', 'named-map', 'named-list', 'excerpts'].includes(artifact.format) || !Array.isArray(artifact.recipes) || !artifact.recipes.length) fail('Invalid fixture format');
     if (artifact.format === 'smoke' && artifact.recipes.length !== 1) fail('Smoke must select exactly one history');
     const ids = new Set();
@@ -204,9 +203,8 @@ async function exportModel(model, requests, directory, settings, exported) {
   for (const [i, request] of requests.entries()) {
     if (request.recipe.regression) continue;
     const calls = request.recipe.actions.map(([action, choice]) => {
-      const selectedAction = request.artifact.actionBindings?.[action] ?? action;
-      if (!publicActions.has(selectedAction)) fail(`Action is not exposed by the model's step: ${selectedAction}`);
-      return [selectedAction, choice];
+      if (!publicActions.has(action)) fail(`Action is not exposed by the model's step: ${action}`);
+      return [action, choice];
     });
     const { declarations: additions, schedules: [schedule] } = scheduleHistories(source, declarations, sourceMap, [calls], { prefix: 'fixture', cursor: 'fixtureCursor' });
     request.run = `fixtureHistory${i}`;

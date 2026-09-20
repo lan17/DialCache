@@ -243,61 +243,6 @@
       "sources": true,
       "ttls": true
     },
-    "local-failure": {
-      "acceptedRemote": true,
-      "failed": true,
-      "localBefore": true,
-      "localMiss": true,
-      "localValue": true,
-      "memo": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "pending": true,
-      "readFailed": true,
-      "receipts": true,
-      "remoteEnabled": true,
-      "remoteValue": true,
-      "scope": true
-    },
-    "local-clock": {
-      "constructed": true,
-      "entries": true,
-      "fills": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "probes": true,
-      "ticks": true
-    },
     "effects-13": {
       "calls": true,
       "reads": true,
@@ -1176,7 +1121,7 @@
             ["beginCall", 2],
             ["beginCall", 0]
           ],
-          "projection": "local-failure"
+          "projection": "observations"
         }
       ]
     },
@@ -1245,12 +1190,9 @@
             ["call", 1],
             ["call", 3]
           ],
-          "projection": "local-clock"
+          "projection": "observations"
         }
-      ],
-      "actionBindings": {
-        "call": "callCache"
-      }
+      ]
     },
     {
       "path": "formal/source-budgets-smoke.itf.json",

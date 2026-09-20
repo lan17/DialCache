@@ -84,6 +84,10 @@ module flights {
   }
   pure def ownedBy(state: Registry[r, p], index: int): Set[int] =
     state.owners.indices().filter(call => state.owners.nth(call) == index)
+  // The newest source, for a profile whose drivers settle the latest loader
+  // rather than one named by index (the local-failure drivers resolve
+  // `loaders - 1`) and for an inline source settled by the call that started it.
+  pure def latest(state: Registry[r, p]): int = state.sources.length() - 1
 
   // Opt-in record: the identity of the last admitted caller, for a property
   // that no source completes a caller for another instance or key.
