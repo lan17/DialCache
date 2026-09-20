@@ -247,7 +247,12 @@ check in policy.mjs binds the shadow to the model by comparing it, after every
 step, with the model's private predictions wherever a history carries them. A
 composition re-encodes that check against its new private layout and leaves
 the classifiers alone, as the policy composition did (its `modelView` maps the
-shadow to the layered shape). The classifiers still reading private
+shadow to the layered shape). The scaffold those checks share (the test for a
+history that carries private state, the layout guard and the step-by-step
+comparison) is [replay/witnesses/fidelity.mjs](../replay/witnesses/fidelity.mjs);
+a classifier hands `fidelityBinding` its public channels, the layout fields it
+reads and the view that puts its shadow beside the model's state, and keeps
+only its shadow and `modelView`. The classifiers still reading private
 predictions, to migrate the same way (layers is already composed and still
 owes this):
 `effects.mjs`, `layers.mjs`, `recovery-shadow.mjs` (the shadow profile's

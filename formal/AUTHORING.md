@@ -287,6 +287,9 @@ record and public observations; [kernel/README.md](./kernel/README.md) lists the
 classifiers still reading private predictions. Their inputs never name a
 TypeScript or Go file: `node formal/witnesses.mjs evaluate` runs them for every
 port. Declare a new module in the profile's `witnessSources` in `profiles.json`.
+A classifier that shadows the model from public channels binds that shadow to
+the private predictions through [replay/witnesses/fidelity.mjs](./replay/witnesses/fidelity.mjs)
+rather than restating the comparison.
 
 Add discriminating negative controls when introducing or changing witness
 classification. Preserve the matching fixture or phase, then remove or alter

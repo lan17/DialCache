@@ -69,6 +69,7 @@
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
         "formal/replay/witnesses/recovery.mjs",
+        "formal/replay/witnesses/fidelity.mjs",
         "formal/replay/witnesses/labels.mjs"
       ],
       "inputEncoding": "explicit-v1"
@@ -86,6 +87,7 @@
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
         "formal/replay/witnesses/policy.mjs",
+        "formal/replay/witnesses/fidelity.mjs",
         "formal/replay/witnesses/labels.mjs"
       ]
     },
@@ -151,7 +153,8 @@
         "formal/replay/witnesses/index.mjs",
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
-        "formal/replay/witnesses/independent.mjs"
+        "formal/replay/witnesses/independent.mjs",
+        "formal/replay/witnesses/fidelity.mjs"
       ]
     },
     {
@@ -350,6 +353,8 @@
     "formal/replay/witnesses/effects.mjs",
     "formal/replay/witnesses/evidence.d.mts",
     "formal/replay/witnesses/evidence.mjs",
+    "formal/replay/witnesses/fidelity.d.mts",
+    "formal/replay/witnesses/fidelity.mjs",
     "formal/replay/witnesses/independent.d.mts",
     "formal/replay/witnesses/independent.mjs",
     "formal/replay/witnesses/index.d.mts",

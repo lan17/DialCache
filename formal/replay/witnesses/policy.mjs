@@ -1,6 +1,6 @@
-import { isDeepStrictEqual } from "node:util";
 import { actionLabels } from "./labels.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
+import { fidelityBinding, shadowSequence } from "./fidelity.mjs";
 
 // The policy witnesses are decided from the recorded inputs and the asserted
 // observation alone; no rule reads the model's private state, so the profile
@@ -153,25 +153,13 @@ function modelView(shadow) {
       ({ instance: 0, key, localMs: localTtl, fence: 0, retentionMs: remoteTtl > 0 ? retention : 0, result, shared })) };
 }
 
-// A history projected to its public channels carries nothing to compare; any
-// other decoded state is the model's private layout and must match the shadow.
-const publicChannels = ["o", "policyErrors"];
-const carriesPrivateState = predictions => predictions !== undefined
-  && predictions.some(state => Object.keys(state).some(field => !publicChannels.includes(field)));
-
-// The binding between the public-only shadow and the model: the shadow after
-// each step must equal the model's private predictions field by field. When
-// the profile is recomposed from the kernel library, this view is re-encoded
-// against the new private layout; the classifiers do not change.
-function checkFidelity(frames, predictions, path) {
-  const shadows = [initialShadow(), ...frames.map(frame => frame.after)];
-  for (const [index, shadow] of shadows.entries()) {
-    const model = predictions[index];
-    for (const [field, value] of Object.entries(modelView(shadow))) {
-      if (!isDeepStrictEqual(value, model[field])) throw new Error(`${path} step ${index}: shadow ${field} ${JSON.stringify(value)} differs from the model's ${JSON.stringify(model[field])}`);
-    }
-  }
-}
+// The binding between the public-only shadow and the model: a history
+// projected to o and policyErrors carries nothing to compare; any other
+// decoded state is the model's private layout, and the shadow in the model's
+// field names must equal it after each step. When the profile is recomposed
+// from the kernel library, modelView is re-encoded against the new private
+// layout; the classifiers do not change.
+const { carriesPrivateState, checkFidelity } = fidelityBinding({ publicChannels: ["o", "policyErrors"], view: (shadow, state) => [modelView(shadow), state] });
 
 const pendingSources = shadow => shadow.sources.filter(source => source.result === 0);
 
@@ -350,7 +338,7 @@ export function policyWitnesses(histories, recorder = createWitnessRecorder()) {
   for (const { path, steps, predictions } of histories) {
     recorder.enter(path);
     const frames = shadowHistory(steps, path);
-    if (carriesPrivateState(predictions)) checkFidelity(frames, predictions, path);
+    if (carriesPrivateState(predictions)) checkFidelity(shadowSequence(initialShadow(), frames), predictions, path);
     settlementWitnesses(frames, recorder);
     clockWitnesses(frames, recorder);
     layerWitnesses(frames, recorder);

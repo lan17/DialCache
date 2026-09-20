@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { actionLabels } from "./labels.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
+import { fidelityBinding, shadowSequence } from "./fidelity.mjs";
 import { profiles } from "../features.mjs";
 
 // The independent witnesses are decided from the recorded inputs, the asserted
@@ -71,7 +72,7 @@ export function independentWitnesses(histories, recorder = createWitnessRecorder
     recorder.enter(path);
     independentSourceDeadlineWitnesses(path, steps, recorder);
     const frames = shadowHistory(steps, path);
-    if (carriesPrivateState(predictions)) checkFidelity(frames, predictions, path);
+    if (carriesPrivateState(predictions)) checkFidelity(shadowSequence(initialShadow(), frames), predictions, path);
     callWitnesses(frames, recorder);
   }
   return recorder.labels();
@@ -272,15 +273,11 @@ function shadowHistory(steps, path) {
 // its error, the outcome its flight recorded, while it decodes a candidate.
 // The instant a loader settled, a decode's value and a candidate's stamps and
 // fence are not compared.
-const publicChannels = ["o", "io"];
-const carriesPrivateState = predictions => predictions !== undefined
-  && predictions.some(state => Object.keys(state).some(field => !publicChannels.includes(field)));
 const NO_OWNER = -1, READ_DEADLINE = 0, SOURCE_DEADLINE = 1;
 const layoutFields = ["o", "now", "readBudget", "ttls", "owners", "sources", "reads", "loads", "loaders", "retained", "deadlines", "drained"];
 // The shadow's fields derived from one private layout state. A field the
 // layout does not carry at this step is left out and not compared.
 function modelView(state, context) {
-  for (const field of layoutFields) if (!Object.hasOwn(state, field)) throw new Error(`${context}: private layout is missing ${field}`);
   const { o, owners, sources, reads, loads, loaders, retained, deadlines, drained } = state;
   const ownerOf = flight => flight < 0 ? NO_OWNER : owners.indexOf(flight);
   const latestLoader = flight => loaders.reduce((latest, candidate, ordinal) => candidate === flight ? ordinal : latest, NO_SOURCE);
@@ -322,15 +319,11 @@ function shadowView(shadow, model) {
     reads: shadow.reads, loads: project(shadow.loads, model.loads), sources: project(shadow.sources, model.sources), timers: shadow.timers.filter(live) };
 }
 
-function checkFidelity(frames, predictions, path) {
-  const shadows = [initialShadow(), ...frames.map(frame => frame.after)];
-  for (const [index, shadow] of shadows.entries()) {
-    const model = modelView(predictions[index], `${path} step ${index}`);
-    for (const [field, value] of Object.entries(shadowView(shadow, model))) {
-      if (!isDeepStrictEqual(value, model[field])) throw new Error(`${path} step ${index}: shadow ${field} ${JSON.stringify(value)} differs from the model's ${JSON.stringify(model[field])}`);
-    }
-  }
-}
+// A history projected to o and io carries nothing to compare; any other
+// decoded state is the composed layout, read through modelView and compared
+// with the shadow projected to the fields the layout carries at each step.
+const { carriesPrivateState, checkFidelity } = fidelityBinding({ publicChannels: ["o", "io"], layoutFields,
+  view: (shadow, state, context) => { const model = modelView(state, context); return [shadowView(shadow, model), model]; } });
 
 // Per-call cancellation, late effects, refill authority, acquired snapshots
 // across invalidation, captured recovery age and original error identities,

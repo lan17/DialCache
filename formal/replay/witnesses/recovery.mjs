@@ -1,6 +1,6 @@
-import { isDeepStrictEqual } from "node:util";
 import { flowLabels } from "./labels.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
+import { fidelityBinding } from "./fidelity.mjs";
 
 // The recovery witnesses are decided from the recorded inputs and the two
 // driver channels (`o`, `d`) alone; no rule reads the model's private state,
@@ -138,30 +138,26 @@ function modelView(shadow) {
     drained: shadow.sources.map(source => source === SETTLED),
   };
 }
-const publicChannels = ["o", "d"];
-const carriesPrivateState = predictions => predictions !== undefined
-  && predictions.some(state => Object.keys(state).some(field => !publicChannels.includes(field)));
 // The composed layout's fields the view reads; a history in another layout
 // (the retired text's corpus until the hosted run regenerates it) is named at
 // its first missing field rather than misread.
 const layoutFields = ["now", "skew", "remoteValues", "created", "expires", "watermark", "readFailed", "loadFailed", "closed", "memo", "ttls", "resolved", "instanceClassifier", "loads", "deadlines", "retained", "drained"];
-function checkFidelity(shadows, predictions, path) {
-  for (const [index, shadow] of shadows.entries()) {
-    const m = predictions[index];
-    for (const field of layoutFields) if (!Object.hasOwn(m, field)) throw new Error(`${path} step ${index}: private layout is missing ${field}`);
-    const actual = {
-      now: m.now, skew: m.skew, remoteValues: m.remoteValues, created: m.created, expires: m.expires, watermark: m.watermark,
-      readFailed: m.readFailed, loadFailed: m.loadFailed, closed: m.closed, memo: m.memo, ttls: m.ttls, resolved: m.resolved, instanceClassifier: m.instanceClassifier,
-      decoding: m.loads.length > 0, recoveryDecoding: m.loads.length > 0 && m.loads[0].recovery === true,
-      deadlines: m.deadlines.map(due => due.at),
-      snapshot: m.retained.length > 0 ? { candidate: m.retained[0].candidate, created: m.retained[0].created, maximum: m.retained[0].maximum, classifier: m.retained[0].classifier } : null,
-      drained: m.drained,
-    };
-    for (const [field, value] of Object.entries(modelView(shadow))) {
-      if (!isDeepStrictEqual(value, actual[field])) throw new Error(`${path} step ${index}: shadow ${field} ${JSON.stringify(value)} differs from the model's ${JSON.stringify(actual[field])}`);
-    }
-  }
+// The model's private state in the shadow's terms: a decode is held while
+// `loads` is nonempty, a loader runs while a source deadline is registered,
+// and the flight's snapshot is `retained`.
+function layoutView(m) {
+  return {
+    now: m.now, skew: m.skew, remoteValues: m.remoteValues, created: m.created, expires: m.expires, watermark: m.watermark,
+    readFailed: m.readFailed, loadFailed: m.loadFailed, closed: m.closed, memo: m.memo, ttls: m.ttls, resolved: m.resolved, instanceClassifier: m.instanceClassifier,
+    decoding: m.loads.length > 0, recoveryDecoding: m.loads.length > 0 && m.loads[0].recovery === true,
+    deadlines: m.deadlines.map(due => due.at),
+    snapshot: m.retained.length > 0 ? { candidate: m.retained[0].candidate, created: m.retained[0].created, maximum: m.retained[0].maximum, classifier: m.retained[0].classifier } : null,
+    drained: m.drained,
+  };
 }
+// A history projected to o and d carries nothing to compare; any other decoded
+// state is the composed layout, which must equal the shadow after each step.
+const { carriesPrivateState, checkFidelity } = fidelityBinding({ publicChannels: ["o", "d"], layoutFields, view: (shadow, state) => [modelView(shadow), layoutView(state)] });
 
 // -- Request-scope memoization of a recovered value -----------------------------
 function recoveryScopeWitnesses(histories, recorder) {
