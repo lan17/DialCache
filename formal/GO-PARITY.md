@@ -73,9 +73,10 @@ useful for a known failure or a narrow complementary example.
 Protocol vectors and native integration tests are appropriate evidence for
 byte encodings, host numeric limits, backend registration, and actual Redis
 execution. Acceptance does not require every fixed case to become a generated
-history. It does require reviewing the consequential portable branches and
-using Quint as their behavioral source of truth, rather than treating a large
-trace count as evidence that all obligations were exercised. When several
+history. It does require reviewing the consequential portable branches against the
+Quint contract, with TypeScript as the executable reference that contract
+formalizes, rather than treating a large trace count as evidence that all
+obligations were exercised. When several
 cases share a witness, review each rule separately: reachability alone does
 not establish that the observation distinguishes its incorrect implementation.
 

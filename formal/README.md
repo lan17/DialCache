@@ -1,8 +1,11 @@
 # Executable DialCache specification
 
 Quint defines the portable contracts that TypeScript, Go and future ports must
-preserve. Native drivers execute external commands against the real libraries;
-generated expectations stay in the test coordinator.
+preserve. TypeScript is the executable reference those contracts formalize; a
+disagreement between the two is settled by a distinguishing regression and a
+recorded decision, not by editing the easier side. Native drivers execute
+external commands against the real libraries; generated expectations stay in
+the test coordinator.
 
 ## Start with your task
 

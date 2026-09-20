@@ -3,8 +3,12 @@
 The Quint files should let a reader understand a behavior without translating
 the TypeScript implementation. Readability is part of the specification's
 acceptance criteria. Executable checks then challenge that written behavior.
-Quint is the behavioral source of truth for both TypeScript and Go. The prose
-explains it; implementation tests must not become an independent, drifting
+TypeScript is the executable reference these models formalize; Quint is the
+independently reviewed contract that TypeScript, Go and later ports are held
+to. When the two disagree, neither side is edited to match the other quietly:
+the change lands with a regression that distinguishes the two behaviors and a
+comment recording the decision about which one is intended. The prose explains
+the contract; implementation tests must not become an independent, drifting
 definition of the same portable rule.
 
 For a first contribution, start with the [worked walkthrough](./WALKTHROUGH.md).
