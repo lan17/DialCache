@@ -22,8 +22,9 @@ module metrics {
   // (`value_absent` when no frame is present, `watermark_fenced` when the
   // watermark hides one, `unclassified` for a visible frame declined as
   // future-dated, after a `futureOffset` of the stamp's lead over the wall
-  // clock, `expired` for one declined as stale; a queued adapter reply's
-  // normalized reason, `adapter_replies`), and its duration (`get`) measured
+  // clock, `expired` for one declined as stale, the frame being the stored one
+  // or a queued frame reply; a queued miss reply's normalized reason,
+  // `adapter_replies`), and its duration (`get`) measured
   // from its dispatch to its settlement, or to the settlement of the fresh
   // decode it held (C59: the decode is inside the read's duration), when the
   // decode reports its own duration (`serialization` `load`) after its fault
@@ -119,15 +120,24 @@ module metrics {
       else if (Remote::visible(state, key, layout.operationsPerEntity)) state.created.nth(key) else 0
     if (stamp > Clock::wallOf(state)) stamp - Clock::wallOf(state) else 0
   }
-  // The reason a read that served nothing reports: the queued reply's, or the
-  // frames': absent, hidden by the watermark, declined as future-dated, or
-  // declined as stale.
+  // The reason a visible frame the read declined reports, the stored frame's
+  // stamp or a queued frame reply's judged alike (`src/internal/redis-cache.ts`
+  // `frameAge` and `getWithResolvedConfig`, `go/engine.go` `readServing`):
+  // `unclassified` for a stamp ahead of the wall clock, `expired` for an age
+  // that reached the freshness (`cache_rules.freshAgeAllowed` declines the
+  // ceiling itself, as the ports' `ageMs >= freshAgeMs` does).
+  pure def declinedFrameReason(stamp: int, wall: int): str =
+    if (stamp > wall) "unclassified" else "expired"
+  // The reason a read that served nothing reports: a queued miss reply's
+  // normalized reason, a queued frame reply declined by its stamp, or the
+  // frames': absent, hidden by the watermark, or declined by the stored stamp.
   pure def missReason(state: Metered[r, q], layout: Serving::Layout, key: int): str =
-    if (Replies::queued(state)) Replies::reason(state.tracked, state.reply)
+    if (Replies::queued(state))
+      (if (Replies::isFrame(state.reply)) declinedFrameReason(state.replyAt, Clock::wallOf(state))
+       else Replies::reason(state.tracked, state.reply))
     else if (not(state.remoteValues.nth(key) > NO_VALUE and Remote::retained(state, key))) "value_absent"
     else if (not(Remote::fenceCleared(state, key, layout.operationsPerEntity))) "watermark_fenced"
-    else if (state.created.nth(key) > Clock::wallOf(state)) "unclassified"
-    else "expired"
+    else declinedFrameReason(state.created.nth(key), Clock::wallOf(state))
   pure def settleRead(state: Metered[r, q], layout: Serving::Layout, read: int, failed: bool, classifier: int, bufferMs: int): Metered[r, q] = {
     val held = RemoteIO::heldRead(state, read)
     val settled = stamped(state, Replies::settleRead(state, layout, read, failed, classifier, bufferMs))

@@ -194,8 +194,9 @@ a job under a longer budget; the held refill over the held read path with the
 queued adapter reply and the metric events: a refill completing at its write,
 the sampled wall clock stopping the write after a rollback, a fenced
 acceptance holding no dump, a reply consumed by an owning or an abandoned read
-and left by a failed one, the frame reply as a hit and as a declined future
-frame, a late result reporting once and a drained one nothing)
+and left by a failed one, the frame reply as a hit at the last fresh
+millisecond, as a declined future frame and as an expired miss once its age
+reaches the freshness, a late result reporting once and a drained one nothing)
 are exercised by small profiles under `test/fixtures/kernel`. Each
 typechecks and every run it declares passes: `make kernel-fixtures` runs them
 locally with Quint on the PATH, and the model-check and differential lanes run
@@ -569,7 +570,13 @@ its three profile faults became shared-library faults on `serving.qnt`
 `metrics.qnt`, partitioned over all fifteen profiles with exported-regression
 reproducers; and the standalone flight-deadlines model and the effects
 connection model were retired, every rule they stated being a kernel rule a
-composed profile exercises.
+composed profile exercises. The composition also re-recorded 74 of the 93
+effects label counts in `witness-baseline.json`: at the pinned seed 0xd1a1ca
+the composed actions consume the random stream differently (pending-only held
+records, the favored-branch guard reading `Writes::latestDump`) and so sample
+a different corpus, the `reply:15` recorded-seed gate tripped (11 to 4) and the
+baseline was re-recorded, the both-way differential (554 of 554 forward, 560 of
+560 reverse) being the evidence that the two texts are equivalent.
 
 | Rewrite | Measured | Histories agreeing | Generation wall (advisory) | Bytes per state | Profile lines | Lint violations |
 | --- | --- | --- | --- | --- | --- | --- |

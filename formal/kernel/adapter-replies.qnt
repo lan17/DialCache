@@ -66,8 +66,9 @@ module adapter_replies {
   // wall clock plus the drivers' buffer (`bufferMs`), or none.
   pure def fenceOf(state: Queued[r], bufferMs: int): int =
     if (carriesFence(state.tracked, state.reply)) state.replyAt + bufferMs else NO_FENCE
-  // The miss reason a reply normalizes to: a known cause survives, a fenced
-  // claim needs its fence, everything else is unclassified.
+  // The miss reason a miss reply normalizes to: a known cause survives, a
+  // fenced claim needs its fence, everything else is unclassified. The frame
+  // class is not a miss: `observed` judges it by its stamp like a stored frame.
   pure def reason(tracked: bool, code: int): str =
     if (Set(FRACTIONAL_FENCE, UNSAFE_FENCE, ABSENT_WITH_FENCE, MISS_WITH_FRAME_FIELDS).contains(code)) "value_absent"
     else if (code == EXPIRED_ZERO_FENCE) "expired"

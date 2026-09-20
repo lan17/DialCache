@@ -8,8 +8,9 @@
 // (`HeldDump.sampled`) and a rollback before the release lets the second check
 // stop the write; a queued miss reply is consumed by the next successful read
 // completion, owning or abandoned, and left by a failed one; a fenced reply's
-// fence is kept only on a tracked key; a frame reply is a hit when its stamp is
-// not in the future and a declined future frame otherwise; a stored frame the
+// fence is kept only on a tracked key; a frame reply is a hit while fresh, a
+// declined future frame when its stamp is ahead of the wall clock and an
+// expired miss once its age reaches the freshness; a stored frame the
 // watermark hides is a `watermark_fenced` miss and an absent one `value_absent`;
 // a late loader result reports its duration and its failure once and a
 // drained one nothing; the read's duration includes its fresh decode; an
@@ -136,6 +137,18 @@ module held_writes {
   run futureFrameReplyIsDeclinedTest = init.then(reply(Replies::FRAME_WITH_MISS_FIELDS)).then(rollback(1000)).then(begin).then(read(0, false))
     .expect(s.o.loads == 0 and s.o.loaders == 1 and s.sources.nth(0).fence == NO_FENCE and names == List("disabled", "request", "futureOffset", "miss", "get")
       and amounts("futureOffset") == List(1000) and missReasons == List("unclassified"))
+  // A frame reply is judged by its stamp like a stored frame, the freshness
+  // boundary inclusive: at the last fresh millisecond it is a hit, one
+  // millisecond later an expired miss with no offset and no fence, and stamped
+  // one millisecond ahead of the wall clock an unclassified miss after its offset.
+  run staleFrameReplyMissIsExpiredTest = init.then(reply(Replies::FRAME_WITH_MISS_FIELDS)).then(jump(TTLS.freshMs - 1)).then(begin).then(read(0, false))
+    .expect(s.o.loads == 1 and s.o.loaders == 0).then(load(false)).expect(s.o.calls == List(VALUE_ONE))
+    .then(reply(Replies::FRAME_WITH_MISS_FIELDS)).then(jump(TTLS.freshMs)).then(begin).then(read(1, false))
+    .expect(s.o.loads == 1 and s.o.loaders == 1 and s.sources.nth(1).fence == NO_FENCE and s.remoteValues == List(NO_VALUE)
+      and names == List("disabled", "request", "serialization", "get", "disabled", "request", "miss", "get") and missReasons == List("expired"))
+  run futureDatedFrameReplyMissIsUnclassifiedTest = init.then(reply(Replies::FRAME_WITH_MISS_FIELDS)).then(rollback(1)).then(begin).then(read(0, false))
+    .expect(s.o.loads == 0 and s.o.loaders == 1 and s.sources.nth(0).fence == NO_FENCE
+      and names == List("disabled", "request", "futureOffset", "miss", "get") and amounts("futureOffset") == List(1) and missReasons == List("unclassified"))
   // A stored frame the watermark hides is a fenced miss carrying the
   // watermark; an absent frame is a plain miss.
   run hiddenFrameIsAFencedMissTest = init.then(seed).then(invalidate(0)).then(begin).then(read(0, false))
