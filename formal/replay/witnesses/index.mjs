@@ -16,7 +16,6 @@ import { createWitnessRecorder } from "./recorder.mjs";
 import { recoveryWitnesses } from "./recovery.mjs";
 import { recoveryAdmissionWitnesses } from "./recovery-admission.mjs";
 import { recoveryReadWitnesses } from "./recovery-read.mjs";
-import { recoveryShadowWitnesses } from "./recovery-shadow.mjs";
 import { runtimeWitnesses } from "./runtime.mjs";
 import { runtimeBoundaryWitnesses } from "./runtime-boundaries.mjs";
 import { scopeWitnesses } from "./scope.mjs";
@@ -68,8 +67,7 @@ export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder
     case "admission": admissionWitnesses(corpus, recorder); break;
     case "independent": independentWitnesses(corpus, recorder); break;
     case "recovery": recoveryWitnesses(corpus, recorder); break;
-    case "shadow":
-      shadowWitnesses(corpus, recorder); recoveryShadowWitnesses(profile, corpus, recorder); shadowDiagnosticsWitnesses(corpus, recorder); break;
+    case "shadow": shadowWitnesses(corpus, recorder); shadowDiagnosticsWitnesses(corpus, recorder); break;
     case "recovery-read": actionLabels(corpus, recorder); recoveryReadWitnesses(corpus, recorder); recoveryAdmissionWitnesses(corpus, recorder); break;
     case "shadow-layers": actionLabels(corpus, recorder); shadowLayersWitnesses(corpus, recorder); break;
     case "local-failure": actionLabels(corpus, recorder); localFailureWitnesses(corpus, recorder); break;

@@ -58,7 +58,6 @@ The verification models emphasize individual ownership or safety boundaries:
 | [dialcache-flight-deadlines.qnt](./dialcache-flight-deadlines.qnt) | Flights, deadlines and abandoned sources |
 | [dialcache-tracked-invalidation.qnt](./dialcache-tracked-invalidation.qnt) | Acquired snapshots, watermarks and delayed writes |
 | [dialcache-stale-recovery.qnt](./dialcache-stale-recovery.qnt) | Retained bytes, age checks and recovery authority |
-| [dialcache-shadow-validation.qnt](./dialcache-shadow-validation.qnt) | Diagnostic C0/source/C1 work and fills |
 | [dialcache-redis-protocol.qnt](./dialcache-redis-protocol.qnt) | Frame/fence validation order |
 
 Conformance profiles expose external commands that both language drivers replay:

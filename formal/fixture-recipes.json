@@ -288,91 +288,6 @@
       "tracked": true,
       "watermark": true
     },
-    "shadow-16": {
-      "abandoned": true,
-      "c0": true,
-      "created": true,
-      "deadline": true,
-      "frame": true,
-      "loadFailed": true,
-      "now": true,
-      "phase": true,
-      "readFailed": true,
-      "wall": true,
-      "watermark": true,
-      "writeFailed": true,
-      "o": {
-        "calls": true,
-        "reads": true,
-        "loads": true,
-        "loaders": true,
-        "classifications": true,
-        "dumps": true,
-        "writes": true,
-        "recovery": true,
-        "shadow": true
-      },
-      "d": {
-        "ages": true
-      }
-    },
-    "shadow-18": {
-      "abandoned": true,
-      "acceptedInvalidLog": true,
-      "acceptedLog": true,
-      "c0": true,
-      "c0Created": true,
-      "comparator": true,
-      "comparisonMs": true,
-      "created": true,
-      "d": {
-        "ages": true,
-        "coalesced": true,
-        "configErrors": true,
-        "fallbackErrors": true,
-        "warnings": true
-      },
-      "deadline": true,
-      "defaultLog": true,
-      "dumpFailed": true,
-      "fence": true,
-      "frame": true,
-      "hook": true,
-      "invalidLog": true,
-      "invalidShadow": true,
-      "loadFailed": true,
-      "log": true,
-      "mismatchAuthorizations": true,
-      "now": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "phase": true,
-      "readFailed": true,
-      "shadowActive": true,
-      "source": true,
-      "sourcePending": true,
-      "sourceValue": true,
-      "sourceWorkMs": true,
-      "wall": true,
-      "watermark": true,
-      "writeFailed": true,
-      "writeStamp": true
-    },
     "recovery-read": {
       "o": {
         "calls": true,
@@ -1557,10 +1472,10 @@
             ["releaseLoad", -1],
             ["releaseRead", -1]
           ],
-          "startState": 7,
-          "projection": "shadow-16",
-          "integers": "native",
-          "choices": false
+          "startState": 0,
+          "projection": "shadow",
+          "integers": "itf",
+          "choices": true
         }
       ]
     },
@@ -1743,10 +1658,10 @@
             ["reencode", 8],
             ["releaseRead", -1]
           ],
-          "startState": 27,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "different-c1-bytes-supersede",
@@ -1793,10 +1708,10 @@
             ["seed", 3],
             ["releaseRead", -1]
           ],
-          "startState": 30,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "late-shadow-dump-cannot-dispatch-write",
@@ -1862,10 +1777,10 @@
             ["dumpFault", 1],
             ["releaseDump", -1]
           ],
-          "startState": 47,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "fill-write-error-preserves-caller",
@@ -1887,10 +1802,10 @@
             ["writeFault", 1],
             ["releaseWrite", -1]
           ],
-          "startState": 2,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "dark-read-error-still-allows-source-result",
@@ -1927,10 +1842,10 @@
             ["writeFault", 0],
             ["resolveLoader", 1]
           ],
-          "startState": 22,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         }
       ]
     },

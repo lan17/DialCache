@@ -8,12 +8,12 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "5ccd964e5a9730016de1ad9f60c6ba38bd3c67e1eb8f655610f2a90091588460",
-    "executionSha256": "755dfdba624973e8c5c4aa666037b99efdc4bd53bd23cac0e983e8227e6f53fb",
-    "sourceAuditSha256": "ef7f309627b8078e5583491be692559725373897ac8039a9c051dab7ac476e38",
+    "semanticCasesSha256": "c3b25cff7b18f4bf0b28a16a484155776c8750e62f712e2e0d9a0c37907909f7",
+    "executionSha256": "82b91622d1e1cbaa734171ba0998135e8d2c0590e3d060f6f1ccae9680cc120d",
+    "sourceAuditSha256": "cda585d617e2b6cff0eef5aacffce50dc57902fcaa8207409af09a0a519f038f",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
-    "profilesSha256": "883915792f85bd7d4ed06b80a869f5077829217149e790aaf91a26bdcdac3905"
+    "profilesSha256": "7a6ccf7ac61ff4da75654e96df5fdd4c430fb7de995b38f763ffca703c896802"
   },
   "inventory": {
     "behavioralCases": 240,
@@ -24,16 +24,16 @@
     "sourceDeclarations": 772,
     "casesWithScheduledChecks": 262,
     "requiredWitnesses": 440,
-    "casesWithQuintRegressionReplay": 171,
+    "casesWithQuintRegressionReplay": 173,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
-    "quintModels": 33,
-    "scheduledInvariants": 233,
-    "scheduledRegressions": 436,
+    "quintModels": 32,
+    "scheduledInvariants": 227,
+    "scheduledRegressions": 425,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 272
+    "exportedRegressionHistories": 304
   },
   "cases": [
     {
