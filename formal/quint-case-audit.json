@@ -2199,6 +2199,12 @@
       "scope": "A marker's lifetime ends at its two-hour floor: the probe reads no marker at that instant and the next invalidation stamps a fresh floor marker at the new cutoff, so an expired marker is neither read nor extended."
     },
     {
+      "case": "C38.value-work-does-not-extend-marker",
+      "reference": "formal/dialcache-recovery-read-conformance.qnt:lapsedMarkerUnfencesTheFrameStampedAtItsCutoffTest",
+      "kind": "regression",
+      "scope": "Once a marker's lifetime lapses, the frame stamped exactly at its cutoff is no longer fenced: a tracked read finds it stale under the two-hour freshness and holds no decode, the loader's failure retains it as the recovery candidate, and the held decode serves it with no write, so a lapsed marker fences nothing on the public channels."
+    },
+    {
       "case": "C33.reject-unsafe-before-decode",
       "reference": "formal/dialcache-recovery-read-conformance.qnt:unsafeTimestampAtTheWatermarkStillRefillsTest",
       "kind": "regression",

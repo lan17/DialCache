@@ -10,11 +10,9 @@
 // it until its last millisecond, so the frame becomes a recovery candidate; a
 // write fault (`mutation_error`) and a missing remote layer (`missing_remote`)
 // stamping no marker; a frame stamped at the cutoff fenced while stored and
-// visible and retained after expiry; `observe` reporting NO_MARKER after
-// expiry and a floor marker on the next invalidation; and the
-// `mutation_error` outcome fields (the invalidation counted, the watermark
-// unmoved) through `Serving::invalidate` itself. Every held step keeps the
-// drivers' loader ordinals aligned with the flights they run for
+// visible and retained after expiry; and `observe` reporting NO_MARKER after
+// expiry and a floor marker on the next invalidation. Every held step keeps
+// the drivers' loader ordinals aligned with the flights they run for
 // (`ordinalsMatchLoaders`).
 module marker_lifetimes {
   import conformance_observations.* from "../../../formal/conformance-observations"
@@ -99,8 +97,6 @@ module marker_lifetimes {
   // -- Markers and maintenance -----------------------------------------------------
 
   action invalidate = all { s' = Markers::invalidate(s, ENTITY), input' = { name: "invalidate", choice: ENTITY } }
-  // The outcome rule alone, without the marker.
-  action servingInvalidate = all { s' = Serving::invalidate(s, ENTITY), input' = { name: "invalidate", choice: ENTITY } }
   action observe = all { s' = Markers::observe(s, ENTITY, WALL_ORIGIN_MS), input' = { name: "observeMarker", choice: ENTITY } }
 
   // -- Environment -----------------------------------------------------------------
@@ -113,7 +109,6 @@ module marker_lifetimes {
   action seed(value: int, age: int, retentionMs: int): bool = all {
     s' = Remote::seedAged(s, KEY, value, age, retentionMs), input' = { name: "seed", choice: value }
   }
-  action failWrites = all { s' = { writeFailed: true, ...s }, input' = { name: "writeFault", choice: 1 } }
 
   // -- Lifetimes ---------------------------------------------------------------------
 
@@ -202,17 +197,6 @@ module marker_lifetimes {
     .expect(s.o.invalidations == 0 and s.o.maintenance == List("missing_remote") and s.watermark == List(0) and s.markerExpires == List(0))
     .then(observe)
     .expect(s.markers == List(Markers::NO_MARKER))
-  // The outcome rule itself (`Serving::invalidate`): a write fault after an
-  // effective invalidation counts the invalidation, reports the mutation error
-  // and leaves the watermark where it was although the wall clock is ahead;
-  // the marker it never touched keeps its lifetime.
-  run mutationErrorCountsTheInvalidationAndKeepsTheWatermarkTest = init.then(invalidate).then(advance(1000)).then(failWrites)
-    .expect(not(Serving::maintains(s)) and Clock::wallOf(s) > s.watermark.nth(ENTITY))
-    .then(servingInvalidate)
-    .expect(s.o.invalidations == 2 and s.o.maintenance == List("ok", "mutation_error") and s.watermark == List(WALL_ORIGIN_MS)
-      and s.markerExpires == List(2 * HOUR_MS))
-    .then(observe)
-    .expect(s.markers == List({ cutoffMs: 0, ttlMs: 2 * HOUR_MS - 1000 }))
 
   // -- The observed marker -------------------------------------------------------------
 

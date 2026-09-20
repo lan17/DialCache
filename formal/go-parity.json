@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "0f91f4871e783c5b83d7068f9bdfcfb7855a385aab583fcf888f65a2445cc711",
-    "executionSha256": "6f9fd40d4498c208ecfcb24d4e106ef0fe5d4bc0c1d6518219f7d3899d1509df",
+    "semanticCasesSha256": "21af44a072de654cf95bafab39de1da50ea53ef9e69e1397e3c4735179b39a12",
+    "executionSha256": "87f0d00c6634df4d0e2ced559ea7a159e505aae37c5a080c3510d4c63a18f599",
     "sourceAuditSha256": "4d39d512662347140aabd1d83f7fe3d090ddf84d956c6541e08578d9f74ed755",
-    "quintCaseAuditSha256": "083b377311272ea6a7ec3793252a234bdcdab63cfbf1417c250735243bae406d",
+    "quintCaseAuditSha256": "78b62b2e470e93f0517250fc6db50c55ee117f9fce23fd8364a16f5a397c3012",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d"
@@ -30,11 +30,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 221,
-    "scheduledRegressions": 430,
+    "scheduledRegressions": 431,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 266
+    "exportedRegressionHistories": 267
   },
   "profiles": [
     {
@@ -397,7 +397,8 @@
         "localEntryExpiresAtItsInsertionTtlTest",
         "expiredMarkerIsGoneTest",
         "unsafeTimestampAtTheWatermarkStillRefillsTest",
-        "encodingFailedReadLeavesNoCandidateTest"
+        "encodingFailedReadLeavesNoCandidateTest",
+        "lapsedMarkerUnfencesTheFrameStampedAtItsCutoffTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -12237,6 +12238,7 @@
         "formal/dialcache-recovery-read-conformance.qnt:ordinaryValueWorkDoesNotCreateMarkerTest",
         "formal/dialcache-recovery-read-conformance.qnt:ordinaryValueWorkDoesNotExtendMarkerTest",
         "formal/dialcache-recovery-read-conformance.qnt:expiredMarkerIsGoneTest",
+        "formal/dialcache-recovery-read-conformance.qnt:lapsedMarkerUnfencesTheFrameStampedAtItsCutoffTest",
         "formal/dialcache-recovery-read-conformance.qnt:expiredMarkersFenceNothing"
       ],
       "requiredGenerated": [
@@ -12262,7 +12264,8 @@
       "quintReplays": [
         "recovery-read/ordinaryValueWorkDoesNotCreateMarkerTest",
         "recovery-read/ordinaryValueWorkDoesNotExtendMarkerTest",
-        "recovery-read/expiredMarkerIsGoneTest"
+        "recovery-read/expiredMarkerIsGoneTest",
+        "recovery-read/lapsedMarkerUnfencesTheFrameStampedAtItsCutoffTest"
       ],
       "generatedVectors": []
     },

@@ -863,7 +863,8 @@
         "localEntryExpiresAtItsInsertionTtlTest",
         "expiredMarkerIsGoneTest",
         "unsafeTimestampAtTheWatermarkStillRefillsTest",
-        "encodingFailedReadLeavesNoCandidateTest"
+        "encodingFailedReadLeavesNoCandidateTest",
+        "lapsedMarkerUnfencesTheFrameStampedAtItsCutoffTest"
       ],
       "replayRegressions": [
         "freshnessAfterHeldReadTest",
@@ -898,7 +899,8 @@
         "localEntryExpiresAtItsInsertionTtlTest",
         "expiredMarkerIsGoneTest",
         "unsafeTimestampAtTheWatermarkStillRefillsTest",
-        "encodingFailedReadLeavesNoCandidateTest"
+        "encodingFailedReadLeavesNoCandidateTest",
+        "lapsedMarkerUnfencesTheFrameStampedAtItsCutoffTest"
       ],
       "generate": {
         "maxSamples": 1024,

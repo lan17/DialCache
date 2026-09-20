@@ -21,7 +21,9 @@ module dialcache_recovery_read_conformance {
   // source/read deadlines remain in the independent/effects profiles. The read
   // budget exceeds the entire elapsed-time domain; sources are explicitly
   // unbounded. Logical age and native retention remain independent.
-  // See BEHAVIOR.md: "Generated feature profiles" and its recovery-read input table.
+  // See BEHAVIOR.md: "Additional composition profiles" for this profile's row
+  // and replay/profiles/recovery-read.mjs for the drivers' input mapping (the
+  // seed codes 0..18, the policy codes and the advance choices).
   // Every rule is a kernel transition (formal/kernel): the held remote
   // traversal (remote_io) with its recovery snapshots (recovery) and payload
   // classes (payloads) over the layered shape, admitted and released in one
@@ -428,6 +430,18 @@ module dialcache_recovery_read_conformance {
     .then(invalidate).then(observeMarker)
     .expect(s.o.invalidations == 2 and s.markers == List({ cutoffMs: 0, ttlMs: 7200000 },
       { cutoffMs: -1, ttlMs: -2 }, { cutoffMs: 7200000, ttlMs: 7200000 }))
+  // Once the marker lapses, the frame stamped exactly at its cutoff is
+  // un-fenced on the public channels: stale under the 2 h freshness, the read
+  // holds no decode, the loader's failure finds it a recovery candidate, and
+  // the held decode serves it without a write.
+  run lapsedMarkerUnfencesTheFrameStampedAtItsCutoffTest = initialized(TRACKED_MODE).then(invalidate)
+    .then(advanceBy(3600000)).then(advanceBy(3600000)).then(seedWith(6)).then(policyWith(2))
+    .then(beginIn(0)).then(releaseRead)
+    .expect(s.o.loaders == 1 and s.o.loads == 0)
+    .then(rejectLoader)
+    .expect(s.o.loads == 1 and s.o.calls == List(CALL_PENDING))
+    .then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.recovery == List("served") and s.o.writes == 0)
 
   run failedInvalidationPreservesExistingMarkerTest = initialized(TRACKED_MODE).then(invalidate).then(observeMarker)
     .then(advanceBy(1000)).then(writeFaultWith(1)).then(invalidate).then(observeMarker)
