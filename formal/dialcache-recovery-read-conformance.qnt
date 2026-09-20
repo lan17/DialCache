@@ -57,7 +57,7 @@ module dialcache_recovery_read_conformance {
   // context 2 is a transient caller), one operation per entity; the drivers
   // never probe a source's scope.
   pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true
   }
   // Every reply enables every layer and coalesces, as the implementation's
   // default policy does (layer_policy::resolution(ALL_LAYERS, true)); with

@@ -27,7 +27,7 @@ module frames_and_faults {
   pure val KEY = 0
   pure val OTHER_KEY = 1
   pure val LAYOUT: Serving::Layout =
-    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false }
+    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false, policyProvider: true }
   // The fixture's TTLs: a 1 s freshness, a 1 s retention and a 1 s local TTL.
   pure val TTLS: Ttls = { localMs: LOCAL_MS, freshMs: FRESH_MS, retentionMs: RETENTION_MS }
   pure val NO_REMOTE_TTLS: Ttls = { localMs: LOCAL_MS, freshMs: 0, retentionMs: RETENTION_MS }

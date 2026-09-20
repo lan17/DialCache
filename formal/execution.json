@@ -671,7 +671,7 @@
       "source": "formal/cache-rules.qnt",
       "model": "formal/dialcache-rule-checks.qnt",
       "invariant": "localGridUsesWholeMilliseconds",
-      "before": "localEntryLiveAt(observedTicks / ticksPerMs, insertedTicks / ticksPerMs + ttlMs)",
+      "before": "localEntryLiveAt(wholeMs(observedTicks, ticksPerMs), wholeMs(insertedTicks, ticksPerMs) + ttlMs)",
       "after": "observedTicks - insertedTicks < ttlMs * ticksPerMs",
       "nativeMutants": {
         "kind": "mapped",

@@ -59,7 +59,7 @@ module dialcache_shadow_layers_conformance {
   // Three keys per instance and per scope row, three persistent scopes, one
   // operation per entity; the drivers probe each source's scope.
   pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: KEYS, keysPerScope: KEYS, persistentContexts: SCOPES, operationsPerEntity: 1, probeSourceScope: true
+    keysPerInstance: KEYS, keysPerScope: KEYS, persistentContexts: SCOPES, operationsPerEntity: 1, probeSourceScope: true, policyProvider: true
   }
 
   // State: the layered shape with its held refills, recovery snapshots and

@@ -44,9 +44,15 @@ module serving {
   // contexts are persistent scopes, keys per entity, and whether the drivers
   // probe each source for the scope it started under (o.sourceScopes). TTLs
   // are not layout: every release and settlement takes the `Ttls` the reply
-  // resolved to (a fixture's constant where replies carry none).
+  // resolved to (a fixture's constant where replies carry none). Whether the
+  // fixture installs a policy provider is layout: the drivers count provider
+  // invocations as `o.policyCalls`, one per enabled admission where a provider
+  // exists; an instance that resolves policy from its key's default
+  // configuration (the local-clock drivers' default instances) makes none, and
+  // composes immediate replies, since no reply is held for it.
   type Layout = {
-    keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int, probeSourceScope: bool
+    keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int, probeSourceScope: bool,
+    policyProvider: bool
   }
   // A source record is flights::Source over the payload the traversal needs to
   // publish, captured from the reply that started it so each source publishes
@@ -255,10 +261,10 @@ module serving {
   // A participating caller makes a policy call and waits for the reply; any
   // other caller (a closed scope, a disabled context, a call outside every
   // request) bypasses every layer and starts its own unshared source at once (C01).
-  pure def entered(state: Traversed[r, p], open: bool): Traversed[r, p] = Flights::admitCaller({
+  pure def entered(state: Traversed[r, p], layout: Layout, open: bool): Traversed[r, p] = Flights::admitCaller({
     o: {
       calls: state.o.calls.append(CALL_PENDING),
-      policyCalls: state.o.policyCalls + (if (open) 1 else 0),
+      policyCalls: state.o.policyCalls + (if (open and layout.policyProvider) 1 else 0),
       ...state.o
     },
     ...state
@@ -266,20 +272,20 @@ module serving {
   pure def admit(state: Served[r], layout: Layout, call: Call): Served[r] = {
     val open = participating(state, layout, call)
     val caller = state.o.calls.length()
-    if (open) Gate::hold(entered(state, open), state.o.policyCalls, caller, call)
-    else startSource(entered(state, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS, Remote::UNOBSERVED)
+    if (open) Gate::hold(entered(state, layout, open), state.o.policyCalls, caller, call)
+    else startSource(entered(state, layout, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS, Remote::UNOBSERVED)
   }
   pure def admitLocal(state: LocalServed[r], layout: Layout, call: Call): LocalServed[r] = {
     val open = participating(state, layout, call)
     val caller = state.o.calls.length()
-    if (open) Gate::hold(entered(state, open), state.o.policyCalls, caller, call)
-    else startLocalSource(entered(state, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS)
+    if (open) Gate::hold(entered(state, layout, open), state.o.policyCalls, caller, call)
+    else startLocalSource(entered(state, layout, open), layout, caller, call, NO_OWNER, false, BYPASS, NO_TTLS)
   }
   pure def admitRequest(state: RequestServed[r], layout: Layout, call: Call): RequestServed[r] = {
     val open = participating(state, layout, call)
     val caller = state.o.calls.length()
-    if (open) Gate::hold(entered(state, open), state.o.policyCalls, caller, call)
-    else startRequestSource(entered(state, open), layout, caller, call, NO_OWNER, false, BYPASS)
+    if (open) Gate::hold(entered(state, layout, open), state.o.policyCalls, caller, call)
+    else startRequestSource(entered(state, layout, open), layout, caller, call, NO_OWNER, false, BYPASS)
   }
 
   // -- Release -------------------------------------------------------------------
@@ -451,6 +457,19 @@ module serving {
   pure def begin(state: Served[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls): Served[r] = {
     val admitted = admit(state, layout, call)
     if (participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls) else admitted
+  }
+  pure def beginLocal(state: LocalServed[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls): LocalServed[r] = {
+    val admitted = admitLocal(state, layout, call)
+    if (participating(state, layout, call)) releaseLocal(admitted, layout, state.o.policyCalls, resolved, ttls) else admitted
+  }
+  // A call over the local projection whose loader runs inline (the drivers'
+  // loader returns before the call does, the local-clock profile): the source
+  // a miss starts settles at once with the value the loader returned, a hit
+  // starts none and settles nothing. The source is the newest, since no other
+  // work interleaves an inline call.
+  pure def callLocal(state: LocalServed[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls, value: int): LocalServed[r] = {
+    val begun = beginLocal(state, layout, call, resolved, ttls)
+    if (begun.sources.length() > state.sources.length()) settleLocal(begun, layout, Flights::latest(begun), value) else begun
   }
 
   // -- Settlement ----------------------------------------------------------------

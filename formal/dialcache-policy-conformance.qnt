@@ -80,7 +80,7 @@ module dialcache_policy_conformance {
   // and a 5 s stale-on-error maximum, the baseline every overlay resolves
   // against (formal/replay/features.mjs policy).
   pure val LAYOUT: Serving::Layout =
-    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false }
+    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false, policyProvider: true }
   pure val BASELINE: Ttls = { localMs: ONE_SECOND_MS, freshMs: ONE_SECOND_MS, retentionMs: DEFAULT_RETENTION_MS }
   // Input decoding: every caller is enabled and asks for one key.
   pure def call(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }

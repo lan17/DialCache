@@ -27,7 +27,7 @@ module marker_lifetimes {
   import clock as Clock from "../../../formal/kernel/clock"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true }
   pure val ALONE: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: false }
   pure val HOUR_MS = 3600000
   pure val DAY_MS = 86400000

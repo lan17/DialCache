@@ -1329,10 +1329,7 @@
           ],
           "projection": "local-clock"
         }
-      ],
-      "actionBindings": {
-        "call": "callCache"
-      }
+      ]
     },
     {
       "path": "formal/source-budgets-smoke.itf.json",

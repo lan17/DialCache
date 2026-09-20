@@ -6,3 +6,4 @@ export function parseLocalClockTrace(raw:unknown,path:string):LocalClockTrace;
 export function localClockInput(action:string,choice:number):Array<{op:string;instance?:number;ticks?:number;offered?:number}>;
 export function assertLocalClockObservation(step:LocalClockStep,observed:Projected):void;
 export const localClockActions:string[];
+export const localClockDescriptor:{explicitInputs:true;actions:Record<string,{choices:number[]}>;actionBindings:Record<string,string>};

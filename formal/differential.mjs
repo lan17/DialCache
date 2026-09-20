@@ -10,6 +10,7 @@ import { parseWithSourceMap, scheduleHistories, spliceDeclarations } from './gen
 import { normalizeTraceFiles } from './replay-inputs.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 import { parseTrace, profiles } from './replay/features.mjs';
+import { localClockDescriptor } from './replay/local-clock.mjs';
 import { generationArguments } from './run-models.mjs';
 
 // Corpus differential for a composed profile (#165).
@@ -46,6 +47,13 @@ export const defaultOutput = '.formal-traces/differential';
 export const maxBytesPerStateRatio = 1.2;
 export const advisoryWallRatio = 1.5;
 export const cursorVariable = 'replayCursor';
+// The explicit-input descriptors the differential replays: the feature
+// profiles' (formal/replay/features.mjs) and the local-clock profile's, whose
+// driver has its own runner (formal/replay/local-clock.mjs). A descriptor may
+// bind an input name to the public action a tree declares for it
+// (`actionBindings`, the rule fixture recipes use): the binding applies only
+// where the tree's declaration of the input name is a parametrized action.
+export const replayDescriptors = { ...profiles, 'local-clock': localClockDescriptor };
 
 const gitShow = (revision, path, cwd) => execFileSync('git', ['show', `${revision}:${path}`], { cwd, encoding: 'utf8', maxBuffer: 1 << 26 });
 
@@ -105,8 +113,8 @@ export function differentialPlan(referenceManifests, candidateManifests, profile
   const reference = generationModel(referenceManifests, profileId);
   if (!candidate && !reference) throw new Error(`No generation profile named ${profileId} in either revision's formal/execution.json`);
   if (!candidate) return { action: 'skip', reason: 'profile removed: the candidate does not generate it', reference };
-  const descriptor = profiles[profileId];
-  if (!descriptor || !descriptor.explicitInputs) throw new Error(`Profile ${profileId} has no explicit-input feature descriptor in formal/replay/features.mjs; the differential replays explicit inputs only`);
+  const descriptor = replayDescriptors[profileId];
+  if (!descriptor || !descriptor.explicitInputs) throw new Error(`Profile ${profileId} has no explicit-input replay descriptor (formal/replay/features.mjs or the local-clock descriptor); the differential replays explicit inputs only`);
   if (!reference) return { action: 'skip', reason: 'new profile: the reference revision does not generate it', candidate, descriptor };
   if (reference.behaviorVersion !== candidate.behaviorVersion) {
     return { action: 'skip', reason: `intended divergence: behaviorVersion ${reference.behaviorVersion} -> ${candidate.behaviorVersion}`, reference, candidate, descriptor };
@@ -255,12 +263,13 @@ export async function prepareReplay(tree, model, descriptor, histories, { chunk,
   const moduleName = parsed.modules.at(-1).name;
   const declarations = new Map(parsed.modules.find(candidate => candidate.name === moduleName).declarations.map(declaration => [declaration.name, declaration]));
   const source = readFileSync(resolve(tree, model.path), 'utf8');
+  const bound = action => boundAction(declarations, descriptor, action);
   // A history whose input the tree has no public action for cannot be
   // scheduled: it disagrees at that step; the others are replayed.
   const verdicts = new Array(histories.length);
   const scheduled = [];
   histories.forEach((history, index) => {
-    const unknown = history.steps.findIndex(step => !declarations.has(step.action));
+    const unknown = history.steps.findIndex(step => !declarations.has(bound(step.action)));
     if (unknown === -1) scheduled.push({ history, index });
     else verdicts[index] = { path: history.path, agree: false, step: unknown, action: history.steps[unknown].action, choice: history.steps[unknown].choice,
       reason: `${moduleName} has no public action ${history.steps[unknown].action} (step ${unknown})` };
@@ -269,7 +278,7 @@ export async function prepareReplay(tree, model, descriptor, histories, { chunk,
     const workspace = resolve(output, `replay-${position}`);
     rmSync(workspace, { recursive: true, force: true });
     copySources(tree, workspace);
-    const schedule = scheduleHistories(source, declarations, sourceMap, batch.map(({ history }) => history.steps.map(step => [step.action, step.choice])),
+    const schedule = scheduleHistories(source, declarations, sourceMap, batch.map(({ history }) => history.steps.map(step => [bound(step.action), step.choice])),
       { prefix: 'replay', cursor: cursorVariable });
     const runs = schedule.schedules.flatMap((entry, index) => [
       ...(entry.steps ? [`action replaySchedule${index} = ${entry.step}`] : []),
@@ -301,6 +310,19 @@ export async function prepareReplay(tree, model, descriptor, histories, { chunk,
   return { tasks, collect: results => { for (const [position, verdict] of results.flat()) verdicts[position] = verdict; return verdicts; } };
 }
 
+// The public action a tree schedules for an input name: the name itself when
+// the tree declares it as a parameterless action; else the descriptor's
+// binding for it, when the tree declares that (a reference text from before a
+// wrapper was renamed declares the input name as its parametrized action and
+// the bound name as the public wrapper); else the name, which the schedule
+// then refuses as it would any parametrized declaration.
+export function boundAction(declarations, descriptor, action) {
+  const declaration = declarations.get(action);
+  if (declaration && declaration.expr?.kind !== 'lambda') return action;
+  const alternative = descriptor?.actionBindings?.[action];
+  return alternative && declarations.has(alternative) ? alternative : action;
+}
+
 // The replayed history a trace records. A run refused at its first input or
 // at init leaves fewer than the two states a trace needs: one recorded state
 // is the initialization the reference also took, none is a refused init.
@@ -326,8 +348,11 @@ export function composedProfiles(manifest, { cwd = root } = {}) {
 // a revision (its Quint sources and manifests exported as recorded), the
 // candidate is a copy of the working tree with its manifests validated.
 export function prepare(reference, { cwd = root, output = defaultOutput } = {}) {
+  // The working tree's manifest is validated as written (the validator refuses
+  // a manifest that lists the schedule its Quint text states); the manifests
+  // the run consumes carry that schedule read from the text.
+  validateExecution(JSON.parse(readFileSync(resolve(cwd, 'formal/execution.json'), 'utf8')));
   const candidateManifests = readManifests(cwd);
-  validateExecution(candidateManifests.execution);
   const revision = resolveMergeBase(reference, { cwd });
   for (const stale of ['reference', 'candidate']) rmSync(resolve(cwd, output, stale), { recursive: true, force: true });
   const referenceTree = resolve(cwd, output, 'reference', revision.slice(0, 12));
@@ -462,7 +487,8 @@ A profile whose import closure and generation settings are byte-identical in
 both revisions is reported as unchanged and not regenerated. --composed selects
 every profile that imports a kernel module in either revision; one the working
 tree no longer generates is reported as removed. Only profiles with an
-explicit-input driver descriptor (formal/replay/features.mjs) can be replayed.
+explicit-input driver descriptor (formal/replay/features.mjs, or the local-clock
+descriptor in formal/replay/local-clock.mjs) can be replayed.
 Reports:
 report.json under --out (default ${defaultOutput}/<profile>).`;
 

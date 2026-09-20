@@ -43,7 +43,7 @@ module dialcache_independent_conformance {
   // One key on one instance, no request scope, no local capacity, one
   // operation per entity; the drivers never probe a source's scope.
   pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true
   }
   pure val CALL: Call = { instance: 0, key: 0, context: 0, enabled: true, keyFailed: false }
   // Every reply enables the remote layer alone and never coalesces.

@@ -44,7 +44,7 @@ module dialcache_runtime_boundaries_conformance {
   pure val SAMPLES: Samples = { local: 4292886220, remote: 1018911151 }
   pure val CALL: Call = { instance: 0, key: 0, context: 0, enabled: true, keyFailed: false }
   pure val LAYOUT: Serving::Layout =
-    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 1, operationsPerEntity: 1, probeSourceScope: false }
+    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 1, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true }
   // The drivers' fixtures configure 60 s local and remote TTLs; the all-features
   // fixture also configures a 120 s stale-on-error maximum, the retention its
   // refills are written with (formal/replay/profiles/runtime-boundaries.mjs).

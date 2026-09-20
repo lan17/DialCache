@@ -68,7 +68,7 @@ module dialcache_local_clock_conformance {
     elapse(choice)
   }
 
-  action call(instance: int, offered: int): bool = all {
+  action callWith(instance: int, offered: int): bool = all {
     s.constructed.nth(instance),
     s.o.calls.length() < MAX_CALLS,
     val previous = s.entries.nth(instance)
@@ -86,11 +86,11 @@ module dialcache_local_clock_conformance {
     },
     input' = { name: "call", choice: instance * 2 + offered - 1 }
   }
-  action callCache = {
+  action call = {
     nondet choice = 0.to(3).filter(code => s.constructed.nth(code / 2)).oneOf()
-    call(choice / 2, choice % 2 + 1)
+    callWith(choice / 2, choice % 2 + 1)
   }
-  action step = any { constructInstance, advanceTicks, callCache }
+  action step = any { constructInstance, advanceTicks, call }
 
   // Deliberately spell out the integer projection here instead of reusing the
   // transition's localEntryLiveOnGrid helper. A precise-TTL substitution and
@@ -112,28 +112,28 @@ module dialcache_local_clock_conformance {
     and s.o.loaders == s.probes.foldl(0, (count, probe) => count + (if (probe.ranSource) 1 else 0))
 
   run fractionalInsertionExpiresAtWholeMillisecondTest = init
-    .then(construct(0)).then(elapse(700)).then(call(0, VALUE_ONE))
-    .then(elapse(999200)).then(call(0, VALUE_TWO))
+    .then(construct(0)).then(elapse(700)).then(callWith(0, VALUE_ONE))
+    .then(elapse(999200)).then(callWith(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1)
-    .then(elapse(100)).then(call(0, VALUE_TWO))
+    .then(elapse(100)).then(callWith(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO) and s.o.loaders == 2)
 
   run fractionalConstructionKeepsCommonInstanceGridTest = init
     .then(construct(0)).then(elapse(400)).then(construct(1)).then(elapse(300))
-    .then(call(0, VALUE_ONE)).then(call(1, VALUE_ONE))
-    .then(elapse(999200)).then(call(0, VALUE_TWO)).then(call(1, VALUE_TWO))
+    .then(callWith(0, VALUE_ONE)).then(callWith(1, VALUE_ONE))
+    .then(elapse(999200)).then(callWith(0, VALUE_TWO)).then(callWith(1, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.loaders == 2)
-    .then(elapse(100)).then(call(0, VALUE_TWO)).then(call(1, VALUE_TWO))
+    .then(elapse(100)).then(callWith(0, VALUE_TWO)).then(callWith(1, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_TWO)
       and s.o.loaders == 4)
 
   run nonzeroOriginKeepsWholeMillisecondBoundaryTest = init
-    .then(elapse(1000000)).then(construct(0)).then(elapse(700)).then(call(0, VALUE_ONE))
-    .then(elapse(999200)).then(call(0, VALUE_TWO)).then(elapse(100)).then(call(0, VALUE_TWO))
+    .then(elapse(1000000)).then(construct(0)).then(elapse(700)).then(callWith(0, VALUE_ONE))
+    .then(elapse(999200)).then(callWith(0, VALUE_TWO)).then(elapse(100)).then(callWith(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO) and s.o.loaders == 2)
 
   run integerInsertionRetainsFullTtlTest = init
-    .then(construct(0)).then(call(0, VALUE_ONE))
-    .then(elapse(999999)).then(call(0, VALUE_TWO)).then(elapse(1)).then(call(0, VALUE_TWO))
+    .then(construct(0)).then(callWith(0, VALUE_ONE))
+    .then(elapse(999999)).then(callWith(0, VALUE_TWO)).then(elapse(1)).then(callWith(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO) and s.o.loaders == 2)
 }
