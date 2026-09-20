@@ -4,15 +4,19 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'nod
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { encodeJson } from './compact-json.mjs';
 import { copySources, readExecution, root, validateExecution } from './execution.mjs';
 import { resolveConcurrency, runPool, spawnBuffered } from './quint-pool.mjs';
 
 const recipePath = 'formal/fixture-recipes.json';
 const lockPath = 'formal/generated-fixtures.lock.json';
 const generator = 'formal/generated-fixtures.mjs';
+const encoder = 'formal/compact-json.mjs';
 const read = path => readFileSync(resolve(root, path), 'utf8');
 const json = path => JSON.parse(read(path));
-const encode = value => JSON.stringify(value, null, 2) + '\n';
+// Every history state, excerpt step and excerpt initial state is one line.
+const record = path => ['states', 'steps'].includes(path.at(-2)) || path.at(-1) === 'initialState';
+const encode = value => encodeJson(value, record);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const integer = value => ({ '#bigint': String(value) });
 const identifier = value => typeof value === 'string' && /^[A-Za-z_]\w*$/.test(value);
@@ -229,7 +233,7 @@ async function exportModel(model, requests, directory, settings) {
 
 function inputs(book) {
   const execution = readExecution();
-  return Object.fromEntries([...new Set([recipePath, generator, 'formal/execution.mjs', 'formal/execution.json', 'formal/profiles.json',
+  return Object.fromEntries([...new Set([recipePath, generator, encoder, 'formal/execution.mjs', 'formal/execution.json', 'formal/profiles.json',
     ...execution.libraries, ...book.artifacts.flatMap(a => a.recipes.map(r => r.model ?? a.model))])].sort().map(path => [path, hash(read(path))]));
 }
 export function verifyFixtures(book = validateRecipes(json(recipePath))) {

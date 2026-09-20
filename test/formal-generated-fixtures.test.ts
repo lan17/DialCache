@@ -10,11 +10,27 @@ const { validateRecipes, verifyFixtures, project, stateDelta, constrainAction } 
   stateDelta(before: unknown, after: unknown): unknown;
   constrainAction(source: string, declaration: unknown, sourceMap: unknown, choice: number): string;
 };
+const { encodeJson } = await import(new URL("../formal/compact-json.mjs", import.meta.url).href) as {
+  encodeJson(value: unknown, record?: (path: Array<string | number>, node: unknown) => boolean): string;
+};
+type Book = { artifacts: Array<{ path: string; format: string; recipes: unknown[] }> };
 const book = () => JSON.parse(readFileSync("formal/fixture-recipes.json", "utf8"));
 
 describe("reproducible Quint fixtures", () => {
   it("binds every committed fixture to its recipes, models and exporter without requiring Quint", () => {
     expect(verifyFixtures()).toEqual({ artifacts: 31, histories: 157 });
+  });
+  it("writes the envelope indented and every record on one line, and matches JSON.stringify without records", () => {
+    const value = { a: 1, b: [1, { c: [] }, {}], d: { e: "x", f: null }, g: [] };
+    expect(encodeJson(value)).toBe(JSON.stringify(value, null, 2) + "\n");
+    expect(encodeJson({ states: [{ s: { o: [1] } }, { s: { o: [2] } }], meta: { x: 1 } }, path => path.at(-2) === "states"))
+      .toBe('{\n  "states": [\n    {"s":{"o":[1]}},\n    {"s":{"o":[2]}}\n  ],\n  "meta": {\n    "x": 1\n  }\n}\n');
+    // Every committed smoke history costs one line per state plus its envelope.
+    for (const artifact of (book() as Book).artifacts.filter(entry => entry.format === "smoke")) {
+      const text = readFileSync(artifact.path, "utf8");
+      const states = (JSON.parse(text) as { states: unknown[] }).states.length;
+      expect(text.split("\n").length - 1, artifact.path).toBeLessThanOrEqual(states + 16);
+    }
   });
   it("rejects missing fixtures, duplicate identities and expected-state recipes", () => {
     const missing = book(); missing.artifacts.pop();
