@@ -327,7 +327,9 @@ export function composedProfiles(manifest, { cwd = root } = {}) {
 // candidate is a copy of the working tree with its manifests validated.
 export function prepare(reference, { cwd = root, output = defaultOutput } = {}) {
   const candidateManifests = readManifests(cwd);
-  validateExecution(candidateManifests.execution);
+  // The working tree's manifest is validated as written: readManifests derives each model's schedule
+  // into the copy it returns, and the validator refuses a manifest that lists what it derives.
+  validateExecution(JSON.parse(readFileSync(resolve(cwd, 'formal/execution.json'), 'utf8')));
   const revision = resolveMergeBase(reference, { cwd });
   for (const stale of ['reference', 'candidate']) rmSync(resolve(cwd, output, stale), { recursive: true, force: true });
   const referenceTree = resolve(cwd, output, 'reference', revision.slice(0, 12));
