@@ -157,6 +157,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     // evidence about Quint; generation is the only producer downstream reads.
     expect(validationPlan("formal-check", { directory })).toEqual([
       { label: "Check every scheduled Quint model", command: process.execPath, args: ["formal/run-models.mjs", "check"] },
+      { label: "Measure every pinned model fault", command: process.execPath, args: ["formal/check-model-properties.mjs"] },
       { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/lint-profiles.mjs", "baseline", "--check"] },
       { label: "Check the kernel library fixtures", command: process.execPath, args: ["formal/check-kernel-fixtures.mjs"] },
     ]);
@@ -166,8 +167,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     for (const target of ["formal-ts", "formal-go", "mutations"]) {
       expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/run-models.mjs")).toBe(false);
     }
-    // ci keeps requiring the check through the aggregate; nothing else adds a second one.
-    expect(validationPlan("ci", { directory }).filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toHaveLength(1);
+    // Every acceptance entry point keeps one complete campaign, after all
+    // unmodified model checks. No filtered --only run can replace that gate.
+    for (const target of ["formal-check", "formal", "ci"]) {
+      const plan = validationPlan(target, { directory });
+      const checks = plan.filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check");
+      const campaigns = plan.filter(step => step.args?.[0] === "formal/check-model-properties.mjs");
+      expect(checks, target).toHaveLength(1);
+      expect(campaigns.map(step => step.args), target).toEqual([["formal/check-model-properties.mjs"]]);
+      expect(plan.indexOf(checks[0]!), target).toBeLessThan(plan.indexOf(campaigns[0]!));
+    }
   });
 
 

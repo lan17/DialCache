@@ -702,19 +702,19 @@ describe("formal execution schedule", () => {
     expect(() => checkSemanticCoverage(catalog)).toThrow(/not scheduled for execution/);
   });
 
-  it("preserves ordered execution, per-profile budgets, seed override, and one closing challenge run", () => {
+  it("preserves ordered model execution, per-profile budgets and seed override", () => {
     const dryRun = (mode: string) => JSON.parse(execFileSync(process.execPath, [runner, mode, "--dry-run"], {
       env: { ...process.env, QUINT_SEED: "0x1234" }, stdio: ["pipe", "pipe", "pipe"],
     }).toString()) as Command[];
     const check = dryRun("check");
     expect(check.filter(job => job.args[0] === "typecheck").map(job => job.args[1])).toEqual(manifest().models.map(model => model.path));
+    expect(check.filter(job => job.args[0] === "run").map(job => job.args[1])).toEqual(manifest().models.map(model => model.path));
     expect(check.filter(job => job.args[0] === "test").map(job => job.args[1])).toEqual(
       scheduled().models.filter(model => model.regressions.length).map(model => model.path),
     );
-    // The catalog mutates several models; it runs once after every model has
-    // been checked unmodified, never interleaved with a model's own schedule.
-    expect(check.filter(job => job.command === "node")).toEqual([{ command: "node", args: ["formal/check-model-properties.mjs"] }]);
-    expect(check.at(-1)!.args).toEqual(["formal/check-model-properties.mjs"]);
+    // The complete pinned fault campaign is a separate validation-plan step;
+    // this command retains every unmodified model check and regression.
+    expect(check.every(job => job.command === "quint")).toBe(true);
     for (const job of check.filter(job => job.args[0] === "run")) {
       expect(job.args).toEqual(expect.arrayContaining(["--backend=rust", "--n-threads=1", "--seed=0x1234", "--max-samples=2000", "--max-steps=40"]));
     }

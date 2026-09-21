@@ -170,7 +170,8 @@ export function validationPlan(target, { directory = root, environment = process
     // The model check is evidence about the Quint models (typechecks, bounded
     // runs, regressions and the mutation challenges). Nothing downstream reads
     // its output, so it is a sibling of generation rather than a prefix of it.
-    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'), lintBaseline, kernelFixtures],
+    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'),
+      node('Measure every pinned model fault', 'formal/check-model-properties.mjs'), lintBaseline, kernelFixtures],
     // Generation is the single shared producer: the corpus, wire artifacts and
     // witness evidence depend only on the models. Both ports' replays and both
     // mutation measurements read that output and can run in parallel off it.

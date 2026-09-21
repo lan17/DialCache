@@ -131,6 +131,8 @@ describe("model property challenge evidence", () => {
     });
     expect(() => validateProfileTests(compileError, 1, [run])).toThrow(/did not complete/);
     expect(() => validateProfileTests(report([run], []), 0, [run, before])).toThrow(/did not complete/);
+    expect(() => validateProfileTests(report([], [{ name: run }]).split("Error [")[0]!, 1, [run]))
+      .toThrow(/failed without complete Quint diagnostics/);
     expect(() => validateProfileTests(report([], [{ name: run }]), 2, [run])).toThrow(/exit code/);
     expect(() => validateProfileTests(report([run], []), 1, [run])).toThrow(/exit code/);
   });

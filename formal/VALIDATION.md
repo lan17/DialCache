@@ -201,8 +201,11 @@ is never reported as a failure.
 ## Exploratory runs
 
 `make explore` selects and records a fresh seed, copies current tracked and new
-source files, and runs Rust model checks and both native replays in that isolated
-snapshot. It does not run the separate symbolic lane or require Java.
+source files, and runs all unmodified Rust model checks and regressions,
+generation, witness checks and both native replays in that isolated snapshot.
+It omits the identical pinned model-fault campaign, which remains mandatory in
+`make formal-check`, `make formal` and `make ci`. It does not run the separate
+symbolic lane or require Java.
 It preserves the pinned acceptance corpus and reports in the original checkout.
 The weekly full workflow runs this lane alongside pinned validation. Exploration
 does not produce an acceptance completion: its separate report distinguishes

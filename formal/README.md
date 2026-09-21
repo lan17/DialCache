@@ -134,7 +134,12 @@ make ci NODE22_BIN=/absolute/path/to/node22/bin/node
 
 `make formal-check` is the Quint evidence lane: it typechecks and runs every
 scheduled model with the Rust evaluator, the public regressions and the model
-mutation challenges. `make formal-generate` runs generation, fixture
+mutation challenges. Its first command, `node formal/run-models.mjs check`,
+runs only the unmodified model checks and regressions; the next step runs the
+complete pinned fault campaign. `make formal` and `make ci` require both steps.
+`make explore` retains the model checks, generation and both port replays but
+omits that identical pinned campaign; its result remains non-acceptance evidence.
+`make formal-generate` runs generation, fixture
 recomputation and the shared witness evaluation; `make formal-ts` and
 `make formal-go` then complete each port's replay against that exact corpus.
 `make mutations-ts` and `make mutations-go` split the fault campaigns. The

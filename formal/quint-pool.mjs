@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
-import { availableParallelism, totalmem } from 'node:os';
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { availableParallelism, tmpdir, totalmem } from 'node:os';
+import { join } from 'node:path';
 
 // Process-level concurrency for the formal scripts that spawn Quint.
 //
@@ -42,30 +44,48 @@ export class CommandFailure extends Error {
   }
 }
 
-// Spawn with piped stdout/stderr and collect both. Never rejects: a spawn error
-// (for example a missing binary) or a timeout is reported in `error`, and
-// `status`/`signal` come from the child's close event.
-export function spawnBuffered(command, args, { cwd, env, timeoutMs } = {}) {
-  return new Promise(settle => {
-    const started = performance.now();
-    let stdout = '', stderr = '', error, timer;
-    const child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', chunk => { stdout += chunk; });
-    child.stderr.on('data', chunk => { stderr += chunk; });
-    if (timeoutMs !== undefined) {
-      timer = setTimeout(() => {
-        error ??= Object.assign(new Error(`Timed out after ${timeoutMs} ms`), { code: 'ETIMEDOUT' });
-        child.kill('SIGTERM');
-      }, timeoutMs);
-    }
-    child.once('error', cause => { error ??= cause; });
-    child.once('close', (status, signal) => {
-      clearTimeout(timer);
-      settle({ status, signal, error, stdout, stderr, durationMs: performance.now() - started });
+// Quint calls process.exit after printing failed tests. Its piped output can
+// lose buffered diagnostics at that exit; regular files make Node's writes
+// synchronous. Read both streams only after close, then remove the private files.
+// Failures (including capture failures) stay in `error`, never property evidence.
+export async function spawnBuffered(command, args, { cwd, env, timeoutMs } = {}) {
+  const started = performance.now();
+  const result = { status: null, signal: null, error: undefined, stdout: '', stderr: '', durationMs: 0 };
+  const descriptors = [];
+  let directory;
+  try {
+    directory = mkdtempSync(join(tmpdir(), 'dialcache-quint-output-'));
+    const paths = ['stdout', 'stderr'].map(name => join(directory, name));
+    for (const path of paths) descriptors.push(openSync(path, 'wx'));
+    await new Promise(settle => {
+      const child = spawn(command, args, { cwd, env, stdio: ['ignore', ...descriptors] });
+      let timer;
+      if (timeoutMs !== undefined) {
+        timer = setTimeout(() => {
+          result.error ??= Object.assign(new Error(`Timed out after ${timeoutMs} ms`), { code: 'ETIMEDOUT' });
+          child.kill('SIGTERM');
+        }, timeoutMs);
+      }
+      child.once('error', cause => { result.error ??= cause; });
+      child.once('close', (status, signal) => {
+        clearTimeout(timer);
+        Object.assign(result, { status, signal });
+        settle();
+      });
     });
-  });
+    [result.stdout, result.stderr] = paths.map(path => readFileSync(path, 'utf8'));
+  } catch (error) {
+    result.error ??= error;
+  } finally {
+    for (const descriptor of descriptors) {
+      try { closeSync(descriptor); } catch (error) { result.error ??= error; }
+    }
+    if (directory) {
+      try { rmSync(directory, { recursive: true, force: true }); } catch (error) { result.error ??= error; }
+    }
+    result.durationMs = performance.now() - started;
+  }
+  return result;
 }
 
 export function formatGroup(title, ...texts) {

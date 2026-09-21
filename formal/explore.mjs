@@ -27,6 +27,9 @@ export function explorationPlan(directory, seed, options = {}) {
   const normalized = explorationSeed(seed);
   return validationPlan('formal', { ...options, directory }).flatMap(step => {
     const script = step.args?.[0];
+    // This campaign uses the manifest's pinned seed, not the exploration seed.
+    // Full acceptance keeps it; exploration retains every unmodified model job.
+    if (script === 'formal/check-model-properties.mjs') return [];
     if (step.remove || ['formal/conformance-adapters.mjs', 'formal/check-go-replay.mjs'].includes(script)
       || script === 'formal/conformance.mjs' && step.args[1] === 'check') return [];
     if (script === 'formal/conformance.mjs' && step.args[1] === 'prepare') {

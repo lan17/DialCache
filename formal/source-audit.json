@@ -1347,15 +1347,15 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "ae0a0f9366e9c752a15ba79d78750d59150ec18a3adc9ba3bcdeb3fb6bb06ba9",
+      "sha256": "acb61cc27f29cb9b3f8996fef1d72ae301ebff65ff0793515c62778cc657a6a0",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
         {"line":26,"title":"How the specification connects to code"},
         {"line":46,"title":"Models and composition profiles"},
         {"line":99,"title":"Generating and replaying behavior"},
-        {"line":188,"title":"Shared verification and replay rules"},
-        {"line":204,"title":"Evidence and scope"}
+        {"line":193,"title":"Shared verification and replay rules"},
+        {"line":209,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1503,15 +1503,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "ac3cc9993e0c5c504a1596f6ce5183f6808a661488fc9d8a68f0f2fb1b393310",
+      "sha256": "065b585e6b646496126360c4ece767b4065c67ec5519b9a8884cdca22e2acff1",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":72,"title":"Reading a completion report"},
         {"line":90,"title":"Mutation evidence"},
         {"line":201,"title":"Exploratory runs"},
-        {"line":249,"title":"A retained sampling regression"},
-        {"line":286,"title":"Historical results"}
+        {"line":252,"title":"A retained sampling regression"},
+        {"line":289,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

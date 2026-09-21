@@ -120,6 +120,28 @@ describe("Quint process pool", () => {
     expect(failure.status).toBe(2);
   });
 
+  it("retains complete, isolated diagnostics when concurrent children exit immediately after large writes", async () => {
+    const outputs = ["first λ🙂\n", "second λ🙂\n"].map(prefix => ({
+      stdout: prefix.repeat(131_072) + "stdout-tail",
+      stderr: prefix.repeat(131_072) + "stderr-tail",
+    }));
+    const results = await Promise.all(["first λ🙂\n", "second λ🙂\n"].map(prefix =>
+      spawnBuffered(process.execPath, ["-e", `
+        const text = ${JSON.stringify(prefix)}.repeat(131_072);
+        process.stdout.write(text + 'stdout-tail');
+        process.stderr.write(text + 'stderr-tail');
+        process.exit(1);
+      `])));
+    for (const [index, result] of results.entries()) {
+      expect(result).toMatchObject({ status: 1, signal: null });
+      expect(result.error).toBeUndefined();
+      for (const stream of ["stdout", "stderr"] as const) {
+        expect(result[stream]).toHaveLength(outputs[index]![stream].length);
+        expect(result[stream]).toBe(outputs[index]![stream]);
+      }
+    }
+  });
+
   it("prints a command's log as one closed group block", () => {
     expect(formatGroup("quint run model", "line one\n", "line two")).toBe("::group::quint run model\nline one\nline two\n::endgroup::");
     expect(formatGroup("quint typecheck model", "", undefined as unknown as string)).toBe("::group::quint typecheck model\n::endgroup::");
@@ -146,16 +168,15 @@ describe("Quint process pool", () => {
     expect(pilot).toEqual([...shared, "a", "b"]);
   });
 
-  it("puts every job of the real plans into exactly one per-model chain, in plan order, without the challenge run", () => {
+  it("puts every job of the real plans into exactly one per-model chain, in plan order", () => {
     for (const mode of ["check", "generate"] as const) {
       const plan = executionPlan(mode);
       const chains = executionChains(plan);
       const chained = chains.flat();
       const challengeRuns = plan.filter(job => job.command === "node" && job.args[0] === "formal/check-model-properties.mjs");
-      expect(challengeRuns.length).toBe(mode === "check" ? 1 : 0);
-      expect(chained.length).toBe(plan.length - challengeRuns.length);
+      expect(challengeRuns).toEqual([]);
+      expect(chained.length).toBe(plan.length);
       expect(new Set(chained).size).toBe(chained.length);
-      expect(chained.filter(job => challengeRuns.includes(job))).toEqual([]);
       for (const chain of chains) {
         expect(new Set(chain.map(job => job.command === "quint" ? job.args[1] : job.args.join(" "))).size).toBe(1);
         const positions = chain.map(job => plan.indexOf(job));
@@ -164,7 +185,7 @@ describe("Quint process pool", () => {
     }
   });
 
-  it("chains a model's jobs in plan order, isolates node exports and leaves the challenge run out", () => {
+  it("chains a model's jobs in plan order and isolates node exports", () => {
     const plan = [
       { command: "quint", args: ["typecheck", "formal/a.qnt"] },
       { command: "quint", args: ["run", "formal/a.qnt", "--seed=1"] },
@@ -172,7 +193,6 @@ describe("Quint process pool", () => {
       { command: "quint", args: ["typecheck", "formal/b.qnt"] },
       { command: "node", args: ["formal/generate-key-vectors.mjs", "--check"] },
       { command: "quint", args: ["run", "formal/b.qnt", "--mbt"] },
-      { command: "node", args: ["formal/check-model-properties.mjs"] },
     ];
     expect(executionChains(plan)).toEqual([
       [plan[0], plan[1], plan[2]],
