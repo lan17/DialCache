@@ -1,9 +1,23 @@
 module cache_rules {
-  // Canonical transition judgments for C09/C23-C26/C33-C34/C40/C45.
+  // Canonical transition judgments for C09/C17/C22-C26/C31/C33-C34/C40/C45.
   // These definitions consume normalized policy and acquired timestamps. They
   // do not validate wire frames, choose a clock, or decide who owns a snapshot.
   // Callers supply times in one common unit. Wall-clock age can be negative;
   // elapsed clocks are monotonic. Assertions independently restate obligations.
+
+  // Omitted coalescing is enabled. A configured false remains a different
+  // input, resolved by the caller before applying its runtime overlay.
+  pure val libraryCoalescingDefault = true
+
+  // Remote retention keeps bytes for the larger configured age window.
+  // Tracked physical caps apply later; this is the captured logical policy.
+  pure def remoteRetentionFor(fresh: int, recovery: int): int =
+    if (recovery > fresh) recovery else fresh
+
+  // A tracked remote miss cannot authorize direct local publication of a
+  // source value. A later validated remote hit may warm local storage.
+  pure def sourceMayWarmLocal(tracked: bool, readRemote: bool): bool =
+    not(tracked and readRemote)
 
   // Fresh reads and retained recovery both reject future values. Recovery has
   // no fresh-age lower bound: wall rollback may make retained bytes fresh again.
@@ -13,6 +27,12 @@ module cache_rules {
     ageBeforeCeiling(created, observed, fresh)
   pure def recoveryAgeAllowed(created: int, observed: int, maximum: int): bool =
     ageBeforeCeiling(created, observed, maximum)
+
+  // A retained candidate is judged against its acquired maximum at both
+  // source failure and decode settlement. Initial frame classification uses
+  // recoveryAgeAllowed directly and does not rebase that maximum.
+  pure def retainedCandidateAgeAllowed(created: int, observed: int, maximum: int): bool =
+    recoveryAgeAllowed(created, observed, maximum)
 
   // Classify an initially stale candidate: F <= age < M. A profile may also
   // retain bytes for fresh decoding. Later recovery uses the acquired maximum
@@ -38,4 +58,8 @@ module cache_rules {
   // A missing watermark is normalized to zero. Timestamp validity, primary
   // atomicity and marker lifetime remain explicit responsibilities of callers.
   pure def fenceAllows(created: int, watermark: int): bool = created > watermark
+  // Untracked reads ignore a watermark entirely. For a tracked read, equal
+  // timestamps are fenced before any payload encoding is inspected.
+  pure def readFenceAllows(tracked: bool, created: int, watermark: int): bool =
+    not(tracked) or fenceAllows(created, watermark)
 }

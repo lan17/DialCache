@@ -116,6 +116,19 @@ change; the check runs in `make differential` (the pull request lane) and
 `make formal-check` (the full run), the lanes that have Quint. `make audit`
 runs without Quint and does not include it.
 
+The same lint checks state shapes separately from composition counts. Held
+reads beside held dumps require a lifecycle that accounts for both; shadow
+jobs beside a caller source budget require the dark-job lifecycle. A local
+fault switch must use the fault-aware transitions and cannot accompany the
+healthy held lifecycle. These checks follow record type aliases and fail even
+when refreshing the baseline; unsupported combinations are never recorded as
+an allowed violation count. Each state is checked against the transitions
+assigned to it, so a valid transition on another state cannot satisfy its
+requirements, and mixing a valid lifecycle with an incompatible one still
+fails. Atomic-release profiles also schedule
+`atomicPathSeedsDecodableFrames`, because their reads and shadow comparisons
+have no decode-failure settlement.
+
 The [kernel library](./kernel/README.md) holds the concern modules a composed
 profile assigns through; `formal/dialcache-layers-conformance.qnt` is the first.
 A rewrite lands only when `node formal/differential.mjs <profile>` replays the
@@ -388,15 +401,20 @@ to the challenged model; when the fault sits in a shared library, the
 reproducer may instead name another profile `model` whose exported run reaches
 it, which is how a verification model's shared-rule challenge gets a portable
 reproducer. A `model-run` cites a run that only the model executes and must
-carry a `scope` stating why the fault has no native counterpart: a vector model
+carry a `scope` explaining its evidence boundary: a vector model
 whose cases reach the codecs through an exported artifact, or instrumentation
 such as a receipt that no driver observes. A run that is exported must be cited
-as an `exported-regression`; `scope` is rejected on that kind. `profiles` must
+as an `exported-regression`; `scope` is rejected on that kind. Public inputs
+do not make every model expectation observable: a run may also check private
+retention or memo state. Keep its `nativeMutants` classification `model-only`
+or `unobservable` when those checks have no native consequence; exporting the
+history alone does not establish a native fault mapping. `profiles` must
 include the challenged model's own profile id, or its path for a model without
-a profile, and the cited run's profile. For a fault in a shared library every
-known profile must appear in `profiles` or in `exclusions`; a fault in one
-model's own file needs no exclusions, because no other profile executes that
-text.
+a profile, and the cited run's profile. For a fault in a shared library, every
+profile that imports the changed source must appear in `profiles` or in
+`exclusions`. Profiles outside that import closure are excluded structurally;
+do not repeat those relationships as catalog prose. A fault in one model's own
+file needs no exclusions, because no other profile executes that text.
 
 `check-model-properties.mjs` runs the cited history on the same copy of the
 sources as the invariant measurement, together with two probes it appends to
@@ -411,16 +429,19 @@ fault does not distinguish, or one that fails elsewhere, is a measurement
 failure, not a survivor to record. The report entry gains
 `reproducer: { ..., baseline: 'passed', mutant: 'failed', code: 'QNT508' }`.
 
-Existing challenges are backfilled as their models are touched. Until then each
-one is listed by id in the manifest's top-level `reproducerBacklog`;
-`node formal/execution.mjs` rejects a challenge that is neither listed nor
-reproduced, a listed id that does not exist or already has a reproducer, and
-reports the backlog size. The backlog is a reported gap, not a gate, and it
-only shrinks: the ids that may appear in it are frozen in
-`grandfatheredReproducerBacklog` in `formal/execution.mjs`, so a new challenge
-cannot opt out by listing itself. Adding to that constant is a reviewed code
-change; removing an id once its challenge has a reproducer is the normal path.
-The native-mutant backlog below follows the same rule.
+For a reproduced library fault, the checker also measures the profile
+partition: a profile that does not import the changed source is `structural`,
+derived from its imports without a catalog entry. Listing a non-importing
+profile as a detector fails validation. Every listed profile must detect the
+mutant through a declared run or a scheduled invariant, and every reaching exclusion must keep all its runs
+passing (`holds`). A filtered `--only` run also checks the reaching exclusions'
+scheduled invariants at the normal exploration bounds. The report records
+these results in `partition`; a changed exclusion or a listed profile that
+stops detecting the fault fails the check, so dated prose is not its evidence.
+
+Every challenge must carry a reproducer. The historical `reproducerBacklog`
+and `nativeMutantBacklog` fields remain empty for report compatibility;
+validation rejects a missing reproducer or any attempt to reopen either backlog.
 
 ### Mapping every challenge to native mutants
 
@@ -485,9 +506,7 @@ of the three, `text` is non-empty, within its length ceiling and names the
 mutant or a port file, `mutant` is present exactly for `mapped`,
 `crossContract` exactly when the case lacks the contract; two challenges that
 repeat one `(source, before, after)` fault map it the same way; and every
-challenge has a `nativeMutants` entry or is listed in the top-level
-`nativeMutantBacklog`, never both. The backlog is frozen in
-`grandfatheredNativeMutantBacklog` in `formal/execution.mjs` and only shrinks.
+challenge has a `nativeMutants` entry.
 The summary also counts catalog mutants no challenge cites.
 
 Each port's own unit suite is informational for a mutant: when a fault
@@ -507,6 +526,53 @@ mutant while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
 `.formal-traces/semantic/partial/` (and `go-semantic/partial/`) is never
 complete evidence. Then run the full lanes, or let the weekly workflow run
 them.
+
+A mapped challenge also records which assertion detects its native mutant.
+For an exported-regression reproducer, the runner derives a boundary from its
+history, the state index of its failure checkpoint (including initializer
+aliases and literal repetitions), and the public observation fields in that
+expectation. When the expectation uses a helper or needs another observation
+projection, provide `nativeMutants.evidence: { history, step, fields }` for the
+same reproducer; fields use the record actually compared by the profile.
+The coordinator records every differing observation in a separate replay:
+consequence fields count at the checkpoint, while cumulative counters count
+only when their divergence first appears there relative to the previous step.
+Each mapping reports `confirmed`, `side-effect-only`, `not-divergent`,
+`unreached`, or `unreproduced`; incomplete or failed replays never earn
+boundary credit. Both ports must replay every selected history cleanly and
+confirm its boundary under the mutant; the mutation gate names a failure as
+`<mutant>/boundary:<challenge>`, independently of cohort detections. A new
+mapped challenge needs an exported reproducer whose checkpoint compares the
+consequence, or written evidence selecting that consequence in the same run.
+Keep the history executable through completion under the fault: end at the
+decision when a later command would require an operation the fault removes.
+The Go recorder also continues through typed semantic property assertions,
+after validating the complete monitor input; those diagnostics alone earn no
+boundary credit, and malformed driver or monitor records still terminate it.
+
+For a mapped vector model-run, supply `nativeMutants.evidence.vector` with
+`artifact`, `group`, `rows` keyed by `typescript` and `go`, `fields`, and a
+`relation` explaining how those exact generated inputs exercise the named
+model regression. Use the same row in both bindings unless native codec sizes
+require different inputs for the same semantic boundary. In that case, add
+deterministic model checks for both inputs and explain their relationship.
+The artifact must be owned by the scheduled vector model, and each named row
+must exist exactly once. Expected fields are read from that artifact.
+A verification model may cite another vector model through `reproducer.model`
+only when both execute the challenged shared-library rule. Retain the original
+verification invariant, name both models in the reproducer's coverage, and
+measure the shared fault's coverage across the behavioral profiles as usual.
+
+The native vector workers receive only an operation and its external inputs.
+They return actual keys, frame classifications, decoded bytes or compression
+outcomes. Invalidation workers execute the production Lua against a private
+Redis server and report its response, stored state and measured elapsed server
+time. The coordinator bounds TTL drift only by that measurement. Transport,
+malformed reply and unexpected Lua errors earn no detection credit; known API rejection is a typed result, while process or output errors
+fail the run. The mutation gate requires a clean baseline from the same binding
+and row, verifies artifact and input fingerprints, and recomputes the mismatch
+from the recorded native value. A failure elsewhere in the vector cohort does
+not satisfy this boundary.
 
 ### Exported runs are exactly the public-only runs
 

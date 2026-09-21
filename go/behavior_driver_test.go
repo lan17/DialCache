@@ -842,6 +842,18 @@ func (d *behaviorDriver) apply(input obj) error {
 			}
 		}
 		d.append("maintenance", status)
+	case "inspectCoalescing":
+		instance := bs(input["instance"])
+		if instance == "" {
+			instance = "default"
+		}
+		state := d.instance(instance).GetCoalescingState().Process
+		var age any
+		if state.ActiveLeaders > 0 {
+			age = float64(state.OldestLeaderAge) / float64(time.Millisecond)
+		}
+		d.record("coalescingState", obj{"instance": instance, "activeLeaders": state.ActiveLeaders,
+			"activeFollowers": state.ActiveFollowers, "oldestLeaderAgeMs": age})
 	case "observeMarker":
 		identity := d.identity(bs(input["key"]), "")
 		identity.Tracked = true

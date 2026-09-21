@@ -3,7 +3,7 @@
   "provenance": {
     "model": "formal/dialcache-key-protocol.qnt",
     "sourceSha256": {
-      "formal/dialcache-key-protocol.qnt": "c1a1c4e692d4f60f3ed0be0242c62c28e473bacdfdbdf0f634569cf22683548f",
+      "formal/dialcache-key-protocol.qnt": "3e08df8a9af2182b66e8927542edabe5f82cef8d833563747fc68883660be1a2",
       "formal/generate-key-vectors.mjs": "05764a348b161ac01a30d7a723e5018cad200020a2e95a0888b544f2401fbeea",
       "formal/wire-text.qnt": "c78f8c674f4e1470b0d2b605b209d82e3aab0e35fb4e0efae813247bf093eb27",
       "formal/cohort-boundaries.qnt": "700f0b9ee734f2511b3c7f10138b9636cef93bc1045b653479a05be1766e3407"

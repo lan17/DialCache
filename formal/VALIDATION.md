@@ -35,11 +35,15 @@ driver-asserted observation of its previous corpus, or accepts an input the
 previous text refused, fails unless the manifest declares the change by bumping
 its `differential.behaviorVersion`. The job is a matrix of four shards,
 `differential (1)` to `differential (4)`: each checks the lint baseline and the
-kernel fixtures, then replays a round-robin quarter of the composed profiles
-sorted by name (`DIFFERENTIAL_SHARD=<index>/4`; one unsharded job overran its
-60-minute budget) and preserves its reports and replay logs as the
-`formal-differential-<index>` artifact. The reports are migration evidence, not
-a conformance completion report; the profile lanes still run.
+kernel fixtures, then replays its assigned composed profiles
+(`DIFFERENTIAL_SHARD=<index>/4`). Profiles are assigned by estimated replay
+time, largest first into the least-loaded shard, with deterministic ties.
+The advisory weights in `differential.mjs` include estimates for new profiles;
+they change placement only. Every profile still runs both directions through
+one bounded worker pool per job, with completed/total batches and elapsed time
+logged after each batch. Each shard preserves reports and replay logs as the
+`formal-differential-<index>` artifact. These are migration evidence, not a
+conformance completion report; the profile lanes still run.
 
 The evaluator ends with a per-profile witness report: required labels with at
 most three sampled hits and no regression, labels pinned by a regression but
@@ -89,6 +93,37 @@ and environmental assumptions are defined once in
 
 ## Mutation evidence
 
+Each native mutation report includes a `boundary` entry for every mapped
+challenge. A separate coordinator replay continues after observation mismatches
+and records the differing fields at every step; it preserves the normal driver
+and settlement checks. `confirmed` means the intended checkpoint differs on a
+consequential field or a newly differing counter; `side-effect-only` means other
+observations differ, and `not-divergent` means the history still agrees.
+`unreached` records an incomplete history, missing recording, or driver failure.
+Exported-vector model runs carry `origin: vector`; both ports execute the named
+native API against the exact vector samples and must earn `confirmed` on the
+declared fields. Clean boundary baselines must complete without divergences.
+The mutation gate requires `confirmed` for every mapping with an exported
+history or vector reproducer in both ports, alongside the required-cohort gate.
+It recomputes verdicts from current declarations and recordings: missing
+mapping entries, stale checkpoints and absent clean baselines fail, even when
+the report claims confirmation. Historical `unreproduced` states remain
+readable, but both current backlogs are empty and the execution audit forbids
+reopening them. A mapped fault cannot replace its portable evidence with a
+model run that exports no vector.
+
+Read the evidence with `node formal/mutation-reports.mjs boundary --report
+<report.json>`. Raw native assertion reports remain available for diagnosis;
+without a completed boundary recording, inspection reports `unreached` and
+does not reconstruct evidence from assertion text. Ungated inspection can read
+historical reports; it does not validate the current checkout. `--gate`
+additionally requires a complete report whose catalog, measured source inputs, recorded configuration
+and exact corpus fingerprints match the checkout. Keep the measured corpus
+artifact when checking a downloaded report; regenerating it may change its
+bytes. Missing fingerprints fail the gated command, as does any exported
+history or vector boundary that is not `confirmed`. Historical `vector` gap
+states remain readable but do not satisfy current vector declarations.
+
 Model mutations challenge the specification's independent properties.
 Implementation mutations challenge the assertions that connect generated
 histories to real TS/Go behavior. Report these measurements separately, including
@@ -107,18 +142,17 @@ of all possible defects from their scores.
 The model catalog in `execution.json` covers every scheduled model with no
 waivers; `node formal/execution.mjs` reports the challenge and distinct fault
 counts. Its report distinguishes those two counts and marks a filtered `--only`
-run as partial; only the complete run is evidence. A challenge with a deterministic reproducer is additionally
+run as partial; only the complete run is evidence. Every challenge's deterministic reproducer is additionally
 replayed on the clean and mutated model and must fail only under the fault, at
 the expectation the manifest declares; the report records that outcome per
-challenge, and `node formal/execution.mjs` reports how many challenges still
-wait in `reproducerBacklog`.
+challenge. Missing reproducers fail validation.
 
 Each challenge also maps to the native mutant that injects the same wrong
 behavior into both ports through its `nativeMutants` entry, or explains why no
 native line exists; `node formal/execution.mjs` checks the mapping against
 the mutant catalog (`formal/mutations.json`, one entry per fault with a
 TypeScript and a Go section), anchors every catalog edit in the port text, and
-reports the challenges still waiting in `nativeMutantBacklog`. The mutation lanes must detect every mapped mutant in
+rejects a missing mapping or explanation. The mutation lanes must detect every mapped mutant in
 their generated cohort, so a mapped challenge is evidence that the corpus
 would catch that mistake in a port, not only that the model would. See the
 [authoring rules](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
@@ -171,8 +205,11 @@ is never reported as a failure.
 ## Exploratory runs
 
 `make explore` selects and records a fresh seed, copies current tracked and new
-source files, and runs Rust model checks and both native replays in that isolated
-snapshot. It does not run the separate symbolic lane or require Java.
+source files, and runs all unmodified Rust model checks and regressions,
+generation, witness checks and both native replays in that isolated snapshot.
+It omits the identical pinned model-fault campaign, which remains mandatory in
+`make formal-check`, `make formal` and `make ci`. It does not run the separate
+symbolic lane or require Java.
 It preserves the pinned acceptance corpus and reports in the original checkout.
 The weekly full workflow runs this lane alongside pinned validation. Exploration
 does not produce an acceptance completion: its separate report distinguishes

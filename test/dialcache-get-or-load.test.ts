@@ -241,6 +241,7 @@ describe("DialCache getOrLoad", () => {
   });
 
   it("reads and writes Redis values with the per-invocation serializer", async () => {
+    vi.useFakeTimers();
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis } });
     const serializer: Serializer<Date> = {

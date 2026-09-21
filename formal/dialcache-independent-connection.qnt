@@ -76,15 +76,17 @@ module dialcache_independent_connection {
     if (owner >= 0) sourceSlots.replaceAt(owner, captureSource(owner, before.now, profile::SOURCE_BUDGET_MS)) else sourceSlots
   } else sourceSlots
 
-  action step = all {
+  action recordBefore = all {
     snapshots' = acquired,
     sources' = observedSources,
     before' = { frame: profile::s.remoteValues.nth(0), created: profile::s.created.nth(0), maximum: profile::s.ttls.retentionMs,
       wall: Clock::wallOf(profile::s), now: profile::s.now, calls: profile::s.o.calls.length(),
       loaderCount: profile::s.loaders.length(), reads: profile::s.reads, loads: profile::s.loads,
-      deadlines: profile::s.deadlines, owners: profile::s.owners },
-    profile::step
+      deadlines: profile::s.deadlines, owners: profile::s.owners }
   }
+  action step = all { recordBefore, profile::step }
+  action admitCaller = all { recordBefore, profile::beginCall }
+  action releaseReadAt(index: int): bool = all { recordBefore, profile::readAt(index) }
 
   // Every held read that owns its flight carries the maximum its caller was
   // admitted with; every retained snapshot carries that maximum and, when it
@@ -132,4 +134,11 @@ module dialcache_independent_connection {
         (profile::input.name != "resolveLoader" or profile::resolvedSource(profile::input.choice) != ordinal or
           not(accepted(source.result)) or sourceReturnAllowed(reference, owner, profile::s.now))
     })
+
+  // Each raw read starts the source owned by its own admission. The unchanged
+  // source-origin property observes the second loader as unowned under the
+  // owners-table fault; neither native implementation uses that table.
+  run independentReadSourcesKeepDistinctOwnersTest = init
+    .then(admitCaller).then(admitCaller).then(releaseReadAt(0)).then(releaseReadAt(1))
+    .expect(independentSourceOriginsMatchContract and profile::s.o.loaders == 2)
 }

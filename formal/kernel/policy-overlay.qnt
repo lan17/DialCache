@@ -11,6 +11,7 @@ module policy_overlay {
   // shape's (local, and remote where remote storage exists), and the traversal
   // gates each layer on its TTL at release (`layer_policy::gated`): a positive
   // reply TTL enables the layer, a zero one turns it off.
+  import cache_rules.* from "../cache-rules"
   import layer_policy.* from "./layer-policy"
 
   pure val INHERIT = 0
@@ -64,8 +65,11 @@ module policy_overlay {
     else if (base(state.policy) == RECOVERY_TWO_SECONDS) TWO_SECONDS_MS
     else if (base(state.policy) == REMOTE_FOUR_SECONDS_NO_RECOVERY) FOUR_SECONDS_MS
     else baseline.retentionMs
-  pure def ttls(state: Overlaid[r], baseline: Ttls): Ttls =
-    { localMs: localTtl(state, baseline), freshMs: remoteTtl(state, baseline), retentionMs: retention(state, baseline) }
+  pure def ttls(state: Overlaid[r], baseline: Ttls): Ttls = {
+    localMs: localTtl(state, baseline),
+    freshMs: remoteTtl(state, baseline),
+    retentionMs: remoteRetentionFor(remoteTtl(state, baseline), retention(state, baseline))
+  }
   // The reply: the shape's layers (no request layer; the remote layer where
   // remote storage exists) and whether the call coalesces.
   pure def resolve(state: Overlaid[r]): Resolution =

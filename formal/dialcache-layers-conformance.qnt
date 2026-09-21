@@ -1,5 +1,6 @@
 module dialcache_layers_conformance {
   import conformance_observations.* from "./conformance-observations"
+  import payloads as Payloads from "./kernel/payloads"
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
   import layer_policy.* from "./kernel/layer-policy"
@@ -251,6 +252,9 @@ module dialcache_layers_conformance {
     (s.localValues.nth(i) > 0)
       == (s.lru.nth(i / KEYS_PER_INSTANCE).select(key => key == i % KEYS_PER_INSTANCE).length() > 0))
 
+  // Atomic reads and shadow comparisons have no decode-failure settlement.
+  val atomicPathSeedsDecodableFrames = Payloads::atomicSafe(s)
+
   // -- Deterministic regression schedules ------------------------------------
 
   action untrackedFixture = initialize(FIXTURE_UNTRACKED)
@@ -295,6 +299,14 @@ module dialcache_layers_conformance {
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 2)
+  // The second caller must validate the tracked refill through Redis before
+  // its value is eligible for this process's local cache.
+  run trackedRefillIsReadAgainBeforeLocalReuseTest = trackedFixture
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.reads == 2 and s.o.loaders == 1)
+
   run trackedSourceWaitsForValidatedReadToWarmLocalTest = trackedFixture
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(finishSource(0, VALUE_ONE))

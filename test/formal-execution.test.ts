@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 type Reproducer = { kind: string; run: string; model?: string; failure: string; family: string; profiles: string[]; exclusions: Record<string, string>; scope?: string };
-type NativeMutants = { kind: string; text: string; mutant?: string; crossContract?: string };
+type WrittenEvidence = { history: string; step: number; fields: string[] };
+type BoundaryEvidence = { challenge: string; mutant: string; history?: string; step?: number; fields?: string[]; origin?: "derived" | "written" | "vector"; vector?: { samples: Record<string, {expected: Record<string, unknown>}> }; state?: "vector" | "unreproduced" };
+type NativeMutants = { kind: string; text: string; mutant?: string; crossContract?: string; evidence?: WrittenEvidence };
 type Challenge = { id: string; contract: string; source: string; model: string; invariant: string; before: string; after: string; measures?: string; reproducer?: Reproducer; nativeMutants?: NativeMutants };
 type Manifest = {
   check: { maxSamples: number; maxSteps: number; outputDirectory: string };
@@ -31,8 +33,8 @@ type MutantEntry = { id: string; case: string; description?: string; rationale?:
 type Catalog = { mutations: Map<string, MutantEntry>; caseContracts: Map<string, string[]> };
 type Summary = { [key: string]: unknown; nativeMutants: { mapped: number; unobservable: number; modelOnly: number; backlog: number }; unmappedMutants: number };
 type Declarations = Map<string, { kind: string; body: string[]; spans: Array<[number, number]> }>;
-type Options = { readSource?(path: string): string; scanSource?(source: string): Declarations; grandfathered?: readonly string[]; grandfatheredNative?: readonly string[]; catalog?: Catalog; files?: string[] };
-const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution, scheduleExecution, readMutantCatalog, checkMutantAnchors, mutantsForPort, challengesByMutant, nativeMutantKinds, grandfatheredReproducerBacklog, grandfatheredNativeMutantBacklog, quintSources } = await import(moduleUrl) as {
+type Options = { readSource?(path: string): string; scanSource?(source: string): Declarations; catalog?: Catalog; files?: string[] };
+const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, checkpointStep, boundaryEvidence, evidenceOf, validateExecution, scheduleExecution, readMutantCatalog, checkMutantAnchors, mutantsForPort, challengesByMutant, nativeMutantKinds, quintSources } = await import(moduleUrl) as {
   root: string;
   quintSources(directory?: string): string[];
   scheduleExecution(manifest?: Manifest, options?: Options): Scheduled;
@@ -40,14 +42,15 @@ const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerC
   scanDeclarationBodies(source: string): Declarations;
   classifyRuns(declarations: Map<string, { kind: string; body: string[] }>): { publicOnly: string[]; patching: string[] };
   reproducerCheckpoint(source: string, run: string, failure: unknown): { before: string; through: string };
+  checkpointStep(before: string, declarations: Declarations): number;
+  boundaryEvidence(manifest?: Manifest, options?: Options): BoundaryEvidence[];
+  evidenceOf(challenge: Challenge, models: Map<string, Manifest["models"][number]>, publicOnly: Map<string, string[]>, options?: Options): BoundaryEvidence | undefined;
   validateExecution(value: unknown, options?: Options): Summary;
   readMutantCatalog(readText?: (path: string) => string): Catalog;
   checkMutantAnchors(catalog: Catalog, readText?: (path: string) => string): Map<string, string>;
   mutantsForPort(catalog: Catalog, port: "typescript" | "go"): Array<{ id: string; case: string; edits: unknown[]; requiredDetections: string[] }>;
   challengesByMutant(manifest: Manifest): Map<string, string[]>;
   nativeMutantKinds: readonly string[];
-  grandfatheredReproducerBacklog: readonly string[];
-  grandfatheredNativeMutantBacklog: readonly string[];
 };
 const { checkSemanticCoverage } = await import(new URL("../formal/check-semantic-coverage.mjs", import.meta.url).href) as {
   checkSemanticCoverage(value: unknown): unknown;
@@ -81,8 +84,8 @@ describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
     // Every count is computed from the manifest and the Quint sources the validator reads, so a schedule change
     // needs no test edit. The sums are the invariants: the exported histories are the profiles' public-only
-    // runs, every model is challenged or waived, and every challenge carries a reproducer or sits in that
-    // backlog and maps to a native mutant or sits in that one.
+    // runs, every model is challenged or waived, and every challenge has both a
+    // reproducer and a native mapping or an explicit explanation of its boundary.
     const raw = manifest(), current = scheduled(), catalog = readMutantCatalog();
     const registry = JSON.parse(readFileSync(new URL("../formal/profiles.json", import.meta.url), "utf8")) as { profiles: unknown[] };
     const kinds = (kind: string) => raw.challenges.filter(challenge => challenge.nativeMutants?.kind === kind).length;
@@ -96,12 +99,14 @@ describe("formal execution schedule", () => {
       challenges: raw.challenges.length, distinctFaults: new Set(raw.challenges.map(challenge => JSON.stringify([challenge.source, challenge.before, challenge.after]))).size,
       challengedModels: challenged, waivedModels: waived, reproducers: liveReproducers(), reproducerBacklog: raw.reproducerBacklog.length,
       nativeMutants: { mapped: kinds("mapped"), unobservable: kinds("unobservable"), modelOnly: kinds("model-only"), backlog: raw.nativeMutantBacklog.length },
+      boundaryEvidence: Object.fromEntries(["derived", "written", "unreproduced", "vector"].map(kind =>
+        [kind, boundaryEvidence(raw).filter(entry => (entry.origin ?? entry.state) === kind).length])),
       unmappedMutants: catalog.mutations.size - cited.size,
     });
     expect(current.libraries.length + raw.models.length).toBe(quintSources().length);
     expect(challenged + waived).toBe(raw.models.length);
-    expect(liveReproducers() + raw.reproducerBacklog.length).toBe(raw.challenges.length);
-    expect(kinds("mapped") + kinds("unobservable") + kinds("model-only") + raw.nativeMutantBacklog.length).toBe(raw.challenges.length);
+    expect(liveReproducers()).toBe(raw.challenges.length);
+    expect(kinds("mapped") + kinds("unobservable") + kinds("model-only")).toBe(raw.challenges.length);
   });
 
   it("reads the schedule from the Quint text and refuses a manifest that lists it again or leaves a model unscheduled", () => {
@@ -302,12 +307,9 @@ describe("formal execution schedule", () => {
     const repeated = manifest();
     const { measures: _ignored, ...first } = repeated.challenges[0]!;
     repeated.challenges.push({ ...first, id: "repeated-fault" });
-    repeated.reproducerBacklog.push("repeated-fault");
-    // A test-only grandfather list: production keeps the frozen constant.
-    const grandfathered = [...grandfatheredReproducerBacklog, "repeated-fault"];
-    expect(() => validate(repeated, { grandfathered })).toThrow(/repeated-fault: repeats the fault of .* without a measures note/);
+    expect(() => validate(repeated)).toThrow(/repeated-fault: repeats the fault of .* without a measures note/);
     repeated.challenges.at(-1)!.measures = "Measures the same fault against a second invariant.";
-    expect(validate(repeated, { grandfathered }).distinctFaults).toBe(validate(manifest()).distinctFaults);
+    expect(validate(repeated).distinctFaults).toBe(validate(manifest()).distinctFaults);
     const strayNote = manifest();
     strayNote.challenges.find(challenge => !challenge.measures)!.measures = "not a repeat";
     expect(() => validate(strayNote)).toThrow(/a measures note is only for a repeated fault/);
@@ -317,8 +319,6 @@ describe("formal execution schedule", () => {
     const uncovered = manifest();
     const target = uncovered.models.find(model => model.path === "formal/dialcache-core.qnt")!;
     uncovered.challenges = uncovered.challenges.filter(challenge => challenge.model !== target.path);
-    uncovered.reproducerBacklog = uncovered.reproducerBacklog.filter(id => uncovered.challenges.some(challenge => challenge.id === id));
-    uncovered.nativeMutantBacklog = uncovered.nativeMutantBacklog.filter(id => uncovered.challenges.some(challenge => challenge.id === id));
     expect(() => validate(uncovered)).toThrow(/dialcache-core\.qnt: scheduled invariants have no model property challenge and no challengeWaiver/);
     target.challengeWaiver = "   ";
     expect(() => validate(uncovered)).toThrow(/challenge waiver must explain an unchallenged model/);
@@ -332,47 +332,38 @@ describe("formal execution schedule", () => {
     expect(() => validate(legacy)).toThrow(/property challenges live in the manifest challenges catalog/);
   });
 
-  it("requires every challenge to carry a reproducer or sit in the reported backlog, and nothing else", () => {
+  it("requires a reproducer for every challenge and keeps the legacy backlogs empty", () => {
     const current = manifest();
-    const withReproducer = current.challenges.filter(challenge => challenge.reproducer);
-    expect(withReproducer.map(challenge => challenge.id)).toEqual([
-      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "effects-wrong-acceptance-receipt", "recovery-strands-followers", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "shadow-fenced-fill-writes", "shadow-fill-before-source", "effects-fenced-source-publishes", "effects-late-source-accepted", "scope-nested-close-evicts-outer-memo", "admission-duplicate-key-admitted", "admission-capacity-off-by-one", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "local-failure-write-fault-publishes", "local-failure-source-error-published", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "local-clock-hit-renews-insertion", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry",
-    ]);
-    expect(withReproducer.map(challenge => challenge.reproducer!.kind)).toEqual([
-      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
-    ]);
-    // The shared-rule fault of a verification model is pinned by a profile's exported regression.
-    expect(withReproducer.find(challenge => challenge.id === "stale-recovery-future-candidate")!.reproducer).toMatchObject({
-      model: "formal/dialcache-policy-conformance.qnt", run: "wallRollbackRejectsFutureRemoteFrameTest", profiles: ["formal/dialcache-stale-recovery.qnt", "recovery", "policy", "shadow", "recovery-read", "effects"],
+    expect(current.reproducerBacklog).toEqual([]);
+    expect(current.nativeMutantBacklog).toEqual([]);
+    for (const challenge of current.challenges) expect(challenge.reproducer, challenge.id).toBeDefined();
+    // A shared-rule fault of a verification model can be pinned by a profile's exported regression.
+    expect(current.challenges.find(challenge => challenge.id === "stale-recovery-future-candidate")!.reproducer).toMatchObject({
+      model: "formal/dialcache-policy-conformance.qnt", run: "wallRollbackRejectsFutureRemoteFrameTest", profiles: ["formal/dialcache-stale-recovery.qnt", "recovery", "policy", "shadow", "recovery-read", "effects", "dark-layers"],
     });
-    expect([...current.reproducerBacklog].sort()).toEqual(current.challenges.filter(challenge => !challenge.reproducer).map(challenge => challenge.id).sort());
     const unlisted = manifest();
-    const dropped = unlisted.reproducerBacklog.shift()!;
-    expect(() => validate(unlisted)).toThrow(new RegExp(`${dropped}: has no reproducer and is not listed in reproducerBacklog`));
-    const both = manifest();
-    both.reproducerBacklog.push("policy-inclusive-local-expiry");
-    expect(() => validate(both)).toThrow(/policy-inclusive-local-expiry: has a reproducer and is listed in reproducerBacklog/);
-    const unknown = manifest();
-    unknown.reproducerBacklog.push("invented-fault");
-    expect(() => validate(unknown)).toThrow(/reproducerBacklog names an unknown challenge: invented-fault/);
-    // A new challenge cannot opt out by listing itself: only the frozen
-    // grandfather list may appear in the backlog, and it only shrinks.
-    const optedOut = manifest();
-    const { measures: _note, reproducer: _reproducer, ...template } = optedOut.challenges.find(challenge => challenge.reproducer)!;
-    optedOut.challenges.push({ ...template, id: "new-fault-without-reproducer", after: template.after + " and true" });
-    optedOut.reproducerBacklog.push("new-fault-without-reproducer");
-    expect(() => validate(optedOut)).toThrow(/new-fault-without-reproducer: new challenges must carry a reproducer/);
-    expect([...grandfatheredReproducerBacklog].sort()).toEqual([...manifest().reproducerBacklog].sort());
-    const duplicate = manifest();
-    duplicate.reproducerBacklog.push(duplicate.reproducerBacklog[0]!);
-    expect(() => validate(duplicate)).toThrow(/Duplicate challenge ids in reproducerBacklog/);
-    const missing = manifest();
-    delete (missing as Partial<Manifest>).reproducerBacklog;
-    expect(() => validate(missing)).toThrow(/reproducer backlog is missing/);
+    const dropped = "core-unhealthy-local-read-hits";
+    delete unlisted.challenges.find(challenge => challenge.id === dropped)!.reproducer;
+    expect(() => validate(unlisted)).toThrow(new RegExp(`${dropped}: must carry a reproducer`));
+    // Neither an existing nor a new challenge may opt out through a legacy backlog.
+    const newFault = manifest();
+    const { measures: _note, reproducer: _reproducer, ...template } = newFault.challenges[0]!;
+    newFault.challenges.push({ ...template, id: "new-fault-without-reproducer", after: template.after + " and true" });
+    expect(() => validate(newFault)).toThrow(/new-fault-without-reproducer: must carry a reproducer/);
+    for (const name of ["reproducerBacklog", "nativeMutantBacklog"] as const) {
+      for (const ids of [[dropped], ["invented-fault"], [dropped, dropped]]) {
+        const reopened = manifest();
+        reopened[name] = ids;
+        expect(() => validate(reopened)).toThrow(new RegExp(`${name} must remain empty`));
+      }
+      const missing = manifest();
+      delete (missing as Partial<Manifest>)[name];
+      expect(() => validate(missing)).toThrow(new RegExp(`${name} must remain empty`));
+    }
   });
 
   // Explicit budget: the hosted runner is about six times slower under coverage than a local run.
-  it("maps every challenge to a native mutant in the catalog or an enumerated explanation, and freezes the backlog", () => {
+  it("maps every challenge to a native mutant in the catalog or an enumerated explanation", () => {
     // A small catalog fixture: M01 and M11 require generated detection in both
     // ports, M40 sits on a C40 case and M20 requires generated detection only in
     // TypeScript.
@@ -387,14 +378,11 @@ describe("formal execution schedule", () => {
       caseContracts: new Map([["C45.maximum-age-exclusive", ["C45"]], ["C09.fixed-local-ttl", ["C09"]], ["C11.distinct-keys", ["C11"]], ["C40.future-rejected", ["C40"]]]),
     });
     // The rules are exercised against the fixture catalog, not the live mapping:
-    // start from the live manifest with every challenge explained and the frozen
-    // backlog, then vary one challenge at a time.
+    // start with every challenge explained, then vary one challenge at a time.
     const explained = () => {
       const m = manifest();
-      m.nativeMutantBacklog = [...grandfatheredNativeMutantBacklog];
       for (const challenge of m.challenges) {
-        if (m.nativeMutantBacklog.includes(challenge.id)) delete challenge.nativeMutants;
-        else challenge.nativeMutants = { kind: "model-only", text: "Fixture: no line in src/dialcache.ts carries this bookkeeping." };
+        challenge.nativeMutants = { kind: "model-only", text: "Fixture: no line in src/dialcache.ts carries this bookkeeping." };
       }
       return m;
     };
@@ -407,7 +395,6 @@ describe("formal execution schedule", () => {
     };
     const mapped = (mutant: string, crossContract?: string): NativeMutants => ({ kind: "mapped", text: `Fixture mapping of ${mutant}.`, mutant, ...(crossContract === undefined ? {} : { crossContract }) });
     expect(nativeMutantKinds).toEqual(["mapped", "unobservable", "model-only"]);
-    expect(grandfatheredNativeMutantBacklog).toEqual(["invalidation-transition-cutoff-moves-backwards", "invalidation-transition-inclusive-buffer-limit"]);
     // The mutant sits in the catalog.
     expect(withNative("policy-inclusive-local-expiry", mapped("M99"))).toThrow(/policy-inclusive-local-expiry: M99 is not in the mutant catalog/);
     expect(withNative("policy-inclusive-local-expiry", { kind: "mapped", text: "x" })).toThrow(/policy-inclusive-local-expiry: mapped nativeMutants need a mutant id/);
@@ -441,36 +428,24 @@ describe("formal execution schedule", () => {
       m.challenges.find(challenge => challenge.id === "recovery-connection-inclusive-maximum")!.nativeMutants = mapped("M40", "The recovery monitor reaches it too.");
     });
     expect(crossOnly().nativeMutants).toMatchObject({ mapped: 2 });
-    // The backlog is the exact set of challenges without an entry, and only the grandfathered ones may sit in it.
-    expect(withNative("policy-inclusive-local-expiry", undefined)).toThrow(/policy-inclusive-local-expiry: has no nativeMutants and is not listed in nativeMutantBacklog/);
-    expect(withNative("policy-inclusive-local-expiry", undefined, m => { m.nativeMutantBacklog.push("policy-inclusive-local-expiry"); }))
-      .toThrow(/policy-inclusive-local-expiry: new challenges must map to a native mutant in both ports or explain why none exists; nativeMutantBacklog only grandfathers the challenges that predate the requirement/);
-    // A test-only grandfather list admits it: production keeps the frozen constant.
-    const optedIn = explained();
-    delete optedIn.challenges.find(challenge => challenge.id === "policy-inclusive-local-expiry")!.nativeMutants;
-    optedIn.nativeMutantBacklog.push("policy-inclusive-local-expiry");
-    expect(validate(optedIn, { catalog: catalog(), grandfatheredNative: [...grandfatheredNativeMutantBacklog, "policy-inclusive-local-expiry"] }).nativeMutants).toMatchObject({ backlog: grandfatheredNativeMutantBacklog.length + 1 });
-    expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { m.nativeMutantBacklog.push("policy-inclusive-local-expiry"); })).toThrow(/policy-inclusive-local-expiry: has nativeMutants and is listed in nativeMutantBacklog/);
-    expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { m.nativeMutantBacklog.push("invented-fault"); })).toThrow(/nativeMutantBacklog names an unknown challenge: invented-fault/);
-    expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { m.nativeMutantBacklog.push(m.nativeMutantBacklog[0]!); })).toThrow(/Duplicate challenge ids in nativeMutantBacklog/);
-    expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { delete (m as Partial<Manifest>).nativeMutantBacklog; })).toThrow(/Challenge native-mutant backlog is missing/);
-    expect(withNative("invalidation-transition-cutoff-moves-backwards", { kind: "model-only", text: "Only src/internal/redis-scripts.ts carries it." })).toThrow(/invalidation-transition-cutoff-moves-backwards: has nativeMutants and is listed in nativeMutantBacklog/);
+    expect(withNative("policy-inclusive-local-expiry", undefined))
+      .toThrow(/policy-inclusive-local-expiry: must map to a native mutant in both ports or explain why none exists/);
     // The summary counts every kind, the backlog and the catalog mutants no challenge cites.
     const summary = withNative("policy-inclusive-local-expiry", mapped("M11"), m => {
       m.challenges.find(challenge => challenge.id === twins[0])!.nativeMutants = unobservable("Scope.");
       m.challenges.find(challenge => challenge.id === twins[1])!.nativeMutants = unobservable("Layers.");
     })();
-    expect(summary.nativeMutants).toEqual({ mapped: 1, unobservable: 2, modelOnly: manifest().challenges.length - grandfatheredNativeMutantBacklog.length - 3, backlog: grandfatheredNativeMutantBacklog.length });
+    expect(summary.nativeMutants).toEqual({ mapped: 1, unobservable: 2, modelOnly: manifest().challenges.length - 3, backlog: 0 });
     expect(summary.unmappedMutants).toBe(3);
     const fixture = explained();
     expect(challengesByMutant({ ...fixture, challenges: [{ ...fixture.challenges[0]!, nativeMutants: mapped("M11") }, { ...fixture.challenges[1]!, nativeMutants: mapped("M11") }, { ...fixture.challenges[2]!, nativeMutants: mapped("M01") }, fixture.challenges[3]!] }))
       .toEqual(new Map([["M11", [fixture.challenges[0]!.id, fixture.challenges[1]!.id]], ["M01", [fixture.challenges[2]!.id]]]));
   }, 60_000);
 
-  it("maps every live challenge outside the frozen native-mutant backlog, and cites only catalog mutants", () => {
+  it("classifies every live challenge and cites only catalog mutants", () => {
     const live = manifest();
-    expect([...live.nativeMutantBacklog].sort()).toEqual([...grandfatheredNativeMutantBacklog].sort());
-    expect(live.challenges.filter(challenge => challenge.nativeMutants === undefined).map(challenge => challenge.id).sort()).toEqual([...grandfatheredNativeMutantBacklog].sort());
+    expect(live.nativeMutantBacklog).toEqual([]);
+    for (const challenge of live.challenges) expect(challenge.nativeMutants, challenge.id).toBeDefined();
     const catalog = readMutantCatalog();
     const cited = challengesByMutant(live);
     for (const [mutant, ids] of cited) {
@@ -541,7 +516,13 @@ describe("formal execution schedule", () => {
   it("validates reproducer kinds, cited models, declared checkpoints, profile partitions and model-only scope", () => {
     const exported = (edit: (reproducer: Reproducer) => void) => {
       const edited = manifest();
-      edit(edited.challenges.find(challenge => challenge.id === "source-budgets-accepts-at-deadline-equality")!.reproducer!);
+      const reproducer = edited.challenges.find(challenge => challenge.id === "source-budgets-accepts-at-deadline-equality")!.reproducer!;
+      // This validation fixture deliberately uses the two-checkpoint timer
+      // history. The live native mapping uses effects' settlement-time history.
+      delete reproducer.model;
+      reproducer.run = "defaultSourceBudgetExpiresAtSixtySecondsTest";
+      reproducer.failure = "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2";
+      edit(reproducer);
       return edited;
     };
     const modelRun = (edit: (reproducer: Reproducer) => void) => {
@@ -571,16 +552,16 @@ describe("formal execution schedule", () => {
     expect(() => validate(exported(r => { r.exclusions = { invented: "no such profile" }; }))).toThrow(/reproducer exclusion must name an unlisted known profile with a reason: invented/);
     expect(() => validate(exported(r => { r.exclusions = { "source-budgets": "listed and excluded" }; }))).toThrow(/reproducer exclusion must name an unlisted known profile/);
     expect(() => validate(exported(r => { r.exclusions = { effects: "  " }; }))).toThrow(/reproducer exclusion must name an unlisted known profile with a reason: effects/);
-    // A shared-library fault partitions every profile between the listed and the excluded.
+    // Only profiles that import a shared rule need reviewed detection or exclusion claims.
     expect(() => validate(exported(r => { r.profiles = ["source-budgets", "effects"]; r.exclusions = { independent: "Its sources settle only through explicit deadlines." }; })))
-      .toThrow(/a shared-library fault must list or exclude every profile; missing core/);
-    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects", "shadow-layers", "recovery", "admission", "shadow"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(liveReproducers());
+      .toThrow(/a shared-library fault must list or exclude every importing profile; missing/);
+    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects", "shadow-layers", "recovery", "admission", "shadow", "dark-layers", "shadow-read-deadlines"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(liveReproducers());
     expect(() => validate(exported(r => { r.scope = "not model-only"; }))).toThrow(/scope belongs only to a model-run reproducer/);
     // Another profile model's exported run may be cited only for a fault in a shared library: a fault in a
     // model's own file may not name one, whatever its reproducer kind.
     const budgetsRun = { model: "formal/dialcache-source-budgets-conformance.qnt", run: "defaultSourceBudgetExpiresAtSixtySecondsTest", failure: "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2" };
     expect(() => validate(modelRun(r => { Object.assign(r, budgetsRun); })))
-      .toThrow(/reproducer model must name another profile model and is allowed only for an exported-regression of a shared-library fault: formal\/dialcache-source-budgets-conformance\.qnt/);
+      .toThrow(/reproducer model must name another profile model or vector model reached by a shared-library fault.*: formal\/dialcache-source-budgets-conformance\.qnt/);
     expect(() => validate(shared(r => { r.model = "formal/dialcache-stale-recovery.qnt"; }))).toThrow(/reproducer model must name another profile model/);
     expect(() => validate(shared(r => { r.model = "formal/dialcache-core.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/dialcache-core\.qnt/);
     expect(() => validate(shared(r => { r.model = "formal/invented.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/invented\.qnt/);
@@ -588,8 +569,10 @@ describe("formal execution schedule", () => {
     expect(() => validate(shared(r => { r.run = "localHitDoesNotRenewInsertionTtlTest"; }))).toThrow(/has no top-level expect whose condition is the declared failure/);
     expect(() => validate(shared(r => { r.profiles = ["formal/dialcache-stale-recovery.qnt", "recovery", "shadow"]; r.exclusions.policy = "excluded anyway"; })))
       .toThrow(/must name known profiles and include formal\/dialcache-stale-recovery\.qnt and policy/);
-    // A shared-library fault lists or excludes every known profile.
-    expect(() => validate(shared(r => { delete r.exclusions.core; delete r.exclusions.layers; }))).toThrow(/a shared-library fault must list or exclude every profile; missing core, layers/);
+    // Non-importers need no catalog entry; importing exclusions cannot disappear.
+    expect(validate(shared(r => { delete r.exclusions.core; })).reproducers).toBe(liveReproducers());
+    expect(() => validate(shared(r => { delete r.exclusions.core; r.profiles.push("core"); }))).toThrow(/listed profile does not import/);
+    expect(() => validate(shared(r => { delete r.exclusions.layers; }))).toThrow(/a shared-library fault must list or exclude every importing profile; missing layers/);
     expect(validate(shared(r => { delete r.exclusions.layers; r.profiles.push("layers"); })).reproducers).toBe(liveReproducers());
     // A state-patching run is a scheduled regression but never exported (the run is added to the effects text
     // through the source reader: no profile declares one), and an exported run may not be cited as a model-run.
@@ -599,22 +582,38 @@ describe("formal execution schedule", () => {
     effects.reproducer = { ...effects.reproducer!, kind: "exported-regression", run: "patchedBudgetTest", failure: budget };
     expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
     effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "patchedBudgetTest", failure: budget, scope: "Patches the read budget directly." };
-    expect(validate(patching, { readSource: withPatchingRun })).toMatchObject({ reproducers: liveReproducers(), reproducerBacklog: manifest().reproducerBacklog.length });
+    // Supplying a deterministic model run must not downgrade a mapped native
+    // fault to an unreproduced boundary while leaving both backlogs unchanged.
+    expect(() => validate(patching, { readSource: withPatchingRun }))
+      .toThrow(/mapped native mutant requires an exported-regression or an exported-vector model-run reproducer/);
     effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "lateSourceResultIsADeadlineErrorTest", failure: manifest().challenges.find(challenge => challenge.id === "effects-late-source-accepted")!.reproducer!.failure, scope: "Not a model-only run." };
     expect(() => validate(patching)).toThrow(/lateSourceResultIsADeadlineErrorTest is exported; cite it as an exported-regression reproducer/);
     expect(() => validate(modelRun(r => { delete r.scope; }))).toThrow(/model-run reproducer needs a scope/);
     expect(() => validate(modelRun(r => { r.profiles = ["recovery"]; }))).toThrow(/must name known profiles and include formal\/dialcache-envelope-vectors\.qnt/);
-    const exportedAsModelRun = manifest();
+    const exportedAsModelRun = exported(() => {});
     const budgets = exportedAsModelRun.challenges.find(challenge => challenge.id === "source-budgets-accepts-at-deadline-equality")!;
     budgets.reproducer = { ...budgets.reproducer!, kind: "model-run", scope: "Pretend it is model-only." };
     expect(() => validate(exportedAsModelRun)).toThrow(/defaultSourceBudgetExpiresAtSixtySecondsTest is exported; cite it as an exported-regression reproducer/);
     const verification = manifest();
     const core = verification.challenges.find(challenge => challenge.id === "core-unhealthy-local-read-hits")!;
-    verification.reproducerBacklog = verification.reproducerBacklog.filter(id => id !== core.id);
     core.reproducer = { kind: "exported-regression", run: "localReadFailureContinuesToRemoteTest", family: "unhealthy-read-served", profiles: ["formal/dialcache-core.qnt"], exclusions: {},
       failure: "s.origin == RemoteValue and s.localReads == 1 and s.remoteReads == 1 and s.sourceCalls == 0 and s.localWrites == 0" };
     expect(() => validate(verification)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-core\.qnt/);
   }, 60_000);
+
+  it("retains vector boundaries and native-free model reproducers", () => {
+    const current = manifest();
+    const vector = current.challenges.find(challenge => challenge.id === "envelope-strips-unknown-zero-prefix")!;
+    expect(vector).toMatchObject({ reproducer: { kind: "model-run" }, nativeMutants: { kind: "mapped" } });
+    expect(boundaryEvidence(current).find(entry => entry.challenge === vector.id))
+      .toMatchObject({ origin: "vector", step: 0 });
+    for (const kind of ["model-only", "unobservable"]) {
+      const challenge = current.challenges.find(item => item.nativeMutants?.kind === kind && item.reproducer)!;
+      expect(challenge, kind).toBeDefined();
+      expect(boundaryEvidence(current).some(entry => entry.challenge === challenge.id), kind).toBe(false);
+    }
+    expect(validate(current)).toMatchObject({ reproducers: liveReproducers(), reproducerBacklog: current.reproducerBacklog.length });
+  });
 
   it("keeps vector artifacts separate from profile histories and validates their provenance boundary", () => {
     for (const changed of [
@@ -703,19 +702,19 @@ describe("formal execution schedule", () => {
     expect(() => checkSemanticCoverage(catalog)).toThrow(/not scheduled for execution/);
   });
 
-  it("preserves ordered execution, per-profile budgets, seed override, and one closing challenge run", () => {
+  it("preserves ordered model execution, per-profile budgets and seed override", () => {
     const dryRun = (mode: string) => JSON.parse(execFileSync(process.execPath, [runner, mode, "--dry-run"], {
       env: { ...process.env, QUINT_SEED: "0x1234" }, stdio: ["pipe", "pipe", "pipe"],
     }).toString()) as Command[];
     const check = dryRun("check");
     expect(check.filter(job => job.args[0] === "typecheck").map(job => job.args[1])).toEqual(manifest().models.map(model => model.path));
+    expect(check.filter(job => job.args[0] === "run").map(job => job.args[1])).toEqual(manifest().models.map(model => model.path));
     expect(check.filter(job => job.args[0] === "test").map(job => job.args[1])).toEqual(
       scheduled().models.filter(model => model.regressions.length).map(model => model.path),
     );
-    // The catalog mutates several models; it runs once after every model has
-    // been checked unmodified, never interleaved with a model's own schedule.
-    expect(check.filter(job => job.command === "node")).toEqual([{ command: "node", args: ["formal/check-model-properties.mjs"] }]);
-    expect(check.at(-1)!.args).toEqual(["formal/check-model-properties.mjs"]);
+    // The complete pinned fault campaign is a separate validation-plan step;
+    // this command retains every unmodified model check and regression.
+    expect(check.every(job => job.command === "quint")).toBe(true);
     for (const job of check.filter(job => job.args[0] === "run")) {
       expect(job.args).toEqual(expect.arrayContaining(["--backend=rust", "--n-threads=1", "--seed=0x1234", "--max-samples=2000", "--max-steps=40"]));
     }
@@ -757,5 +756,193 @@ describe("formal execution schedule", () => {
     }
     expect(generated[0]!.args).toEqual(expect.arrayContaining(["--max-samples=256", "--max-steps=30", "--seed=0x1234"]));
     expect(sampled.find(job => job.outputDirectory === ".formal-traces/features/layers")!.args).toEqual(expect.arrayContaining(["--max-samples=2048", "--max-steps=80"]));
+  });
+});
+
+describe("native boundary evidence", () => {
+  it("counts initializer aliases, nested chains and every repeated public transition", () => {
+    const declarations = scanDeclarationBodies(`module checkpoints {
+      var s: int
+      action initialized(mode: int): bool = all { s' = mode }
+      action init = initialized(0)
+      action advance(n: int): bool = all { s' = s + n }
+      action fixture = init.then(advance(1))
+      action alias = fixture
+      action loop = 3.reps(_ => advance(1))
+      action wrapped = all { alias }
+      action circular = circular
+    }`);
+    expect(checkpointStep("initialized(1).then(advance(2)).expect(s > 0)", declarations)).toBe(1);
+    expect(checkpointStep("alias.then(2.reps(_ => advance(1).then(advance(2))))", declarations)).toBe(5);
+    expect(checkpointStep("init.then(loop)", declarations)).toBe(3);
+    expect(() => checkpointStep("missing.then(advance(1))", declarations)).toThrow(/unknown action missing/);
+    expect(() => checkpointStep("circular", declarations)).toThrow(/cyclic action alias/);
+    expect(() => checkpointStep("init.then(wrapped)", declarations)).toThrow(/nested action sequence in wrapped/);
+    expect(() => checkpointStep("init.then(n.reps(_ => advance(1)))", declarations)).toThrow(/repetition count must be a safe integer literal/);
+    expect(() => checkpointStep("init.then(if (true) advance(1) else advance(2))", declarations)).toThrow(/unknown action if/);
+    expect(() => checkpointStep("init.then(advance(1)).unknown()", declarations)).toThrow(/unsupported action-chain suffix/);
+  });
+
+  it("derives reviewed checkpoints in init, parameterized initializer and repetition histories", () => {
+    const entries = new Map(boundaryEvidence().map(entry => [entry.challenge, entry]));
+    expect(entries.get("shadow-layers-fill-uses-current-retention")).toMatchObject({
+      history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["o.writeTtls", "o.shadow"], origin: "derived",
+    });
+    expect(entries.get("recovery-connection-inclusive-maximum")).toMatchObject({
+      history: "recovery/maximumAgeAfterDecodeFromStrictlyStaleFrameTest", step: 7,
+    });
+    expect(entries.get("source-budgets-settlement-never-replaces-local-entry")).toMatchObject({
+      history: "policy/independentLocalPublicationUsesLastCompletionTest", step: 9, fields: ["o.calls", "o.loaders"],
+    });
+    expect(entries.get("source-budgets-failed-settlement-clears-local-entry")).toMatchObject({
+      history: "policy/independentFailureKeepsLocalValueWhenRemoteFailsTest", step: 10, fields: ["o.calls", "o.loaders", "o.reads"],
+    });
+    expect(entries.get("shadow-read-deadline-ignores-bounded-result")).toMatchObject({
+      history: "shadow-read-deadlines/c0ReadDeadlineKeepsRawCapacityTest", step: 3, fields: ["o.calls", "o.shadow", "io.aborted"], origin: "derived",
+    });
+    expect(entries.get("shadow-read-deadline-releases-raw-capacity")).toMatchObject({
+      history: "shadow-read-deadlines/c0ReadDeadlineKeepsRawCapacityTest", step: 4, fields: ["o.reads", "o.shadow"], origin: "derived",
+    });
+    expect(entries.get("effects-fenced-source-publishes")).toMatchObject({ fields: ["calls", "dumps", "writes"] });
+    expect(entries.get("local-clock-precise-ttl")).toMatchObject({ fields: ["calls", "loaders"] });
+    expect(entries.get("effects-wrong-acceptance-receipt")).toMatchObject({ step: 7, fields: ["events"], origin: "written" });
+    const effectsSource = readFileSync(root + "formal/dialcache-effects-conformance.qnt", "utf8");
+    expect(checkpointStep("tenMillisecondFixture", scanDeclarationBodies(effectsSource))).toBe(0);
+    const budgetsSource = readFileSync(root + "formal/dialcache-source-budgets-conformance.qnt", "utf8");
+    const repeated = reproducerCheckpoint(budgetsSource, "localEntryExpiresAfterItsTtlTest",
+      "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.o.loaders == 2");
+    expect(checkpointStep(repeated.before, scanDeclarationBodies(budgetsSource))).toBe(30);
+  });
+
+  it("reports every mapped challenge once and computes the inventory from its evidence", () => {
+    const current = manifest(), entries = boundaryEvidence(current);
+    expect(entries.map(entry => entry.challenge)).toEqual(current.challenges.filter(challenge => challenge.nativeMutants?.kind === "mapped").map(challenge => challenge.id));
+    expect(validate(current).boundaryEvidence).toEqual(Object.fromEntries(["derived", "written", "unreproduced", "vector"].map(kind =>
+      [kind, entries.filter(entry => (entry.origin ?? entry.state) === kind).length])));
+    expect(entries.find(entry => entry.challenge === "envelope-strips-unknown-zero-prefix")).toMatchObject({ origin: "vector", step: 0 });
+    expect(entries.find(entry => entry.challenge === "frame-vectors-inclusive-fence")).toMatchObject({ origin: "vector", step: 0 });
+    expect(entries.find(entry => entry.challenge === "scope-source-error-memoized")).toMatchObject({
+      history: "dark-layers/rejectedDarkSourceSeedsNoLayerTest", step: 5, origin: "derived",
+    });
+  });
+
+  it("keeps private state and string literals out of derived public paths", () => {
+    const current = manifest();
+    const entry = boundaryEvidence(current).find(item => item.challenge === "recovery-strands-followers")!;
+    expect(entry.fields).toEqual(["o.calls", "d.coalesced", "o.loads"]);
+    const challenge = structuredClone(current.challenges.find(item => item.id === "recovery-strands-followers")!);
+    const cited = current.models.find(item => item.path === (challenge.reproducer!.model ?? challenge.model))!;
+    const failure = 's.memo == 0 and s.o.calls == List("s.o.loaders")';
+    challenge.reproducer = { ...challenge.reproducer!, run: "quotedTest", failure };
+    expect(evidenceOf(challenge, new Map([[cited.path, cited]]), new Map([[cited.path, ["quotedTest"]]]), {
+      readSource: () => `module quotes { var s: int action init = all { s' = 0 }
+        action next = all { s' = 1 } run quotedTest = init.then(next).expect(${failure}) }`,
+    })).toMatchObject({ fields: ["o.calls"] });
+    const effectsChallenge = structuredClone(current.challenges.find(item => item.id === "effects-fenced-source-publishes")!);
+    const effectsModel = current.models.find(item => item.path === effectsChallenge.model)!;
+    const privateFailure = 's.reads == List() and s.o.calls == List()';
+    effectsChallenge.reproducer = { ...effectsChallenge.reproducer!, run: "privateTest", failure: privateFailure };
+    expect(evidenceOf(effectsChallenge, new Map([[effectsModel.path, effectsModel]]), new Map([[effectsModel.path, ["privateTest"]]]), {
+      readSource: () => `module private_fields { var s: int action init = all { s' = 0 }
+        action next = all { s' = 1 } run privateTest = init.then(next).expect(${privateFailure}) }`,
+    })).toMatchObject({ fields: ["calls"] });
+    const altered = structuredClone(current);
+    delete altered.challenges.find(challenge => challenge.id === "effects-wrong-acceptance-receipt")!.nativeMutants!.evidence;
+    expect(() => validate(altered)).toThrow(/checkpoint has no derived public fields; write nativeMutants.evidence/);
+  });
+
+  it("accepts only core's compared fields, never its stored-value predictions", () => {
+    const current = manifest();
+    const challenge = structuredClone(current.challenges.find(item => item.id === "conformance-local-hit-returns-source")!);
+    const model = current.models.find(item => item.path === challenge.model)!;
+    delete challenge.nativeMutants!.evidence;
+    const failure = 's.localValue == 1 and s.localCached and s.lastResult == 1 and s.localLoaderCalls == 1';
+    challenge.reproducer = { ...challenge.reproducer!, run: "coreBoundaryTest", failure };
+    expect(evidenceOf(challenge, new Map([[model.path, model]]), new Map([[model.path, ["coreBoundaryTest"]]]), {
+      readSource: () => `module core_boundary { var s: int action init = all { s' = 0 }
+        action call = all { s' = 1 } run coreBoundaryTest = init.then(call).expect(${failure}) }`,
+    })).toMatchObject({ fields: ["lastResult", "localLoaderCalls"], step: 1 });
+
+    for (const field of ["localValue", "remoteValue", "localCached", "remoteReadable", "o.calls", "calls", "lastResultExtra"]) {
+      const altered = structuredClone(current), target = altered.challenges.find(item => item.id === challenge.id)!;
+      target.nativeMutants!.evidence = { history: "core/localValueSurvivesSourceChangeTest", step: 3, fields: [field] };
+      expect(() => validate(altered), field).toThrow(/evidence fields/);
+    }
+  });
+
+  it.each([
+    { history: "shadow-layers/anotherTest", step: 7, fields: ["o.shadow"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 0, fields: ["o.shadow"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 1.5, fields: ["o.shadow"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: [] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["s.memo"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["calls"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["o.calls.0"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["o.shadow", "o.shadow"] },
+  ])("rejects malformed or unrelated written evidence: %j", evidence => {
+    const current = manifest();
+    current.challenges.find(challenge => challenge.id === "shadow-layers-fill-uses-current-retention")!.nativeMutants!.evidence = evidence;
+    expect(() => validate(current)).toThrow(/evidence (history|step|fields)/);
+  });
+
+  it("allows written evidence to override a derivation but never to choose another history", () => {
+    const current = manifest(), challenge = current.challenges.find(item => item.id === "shadow-layers-fill-uses-current-retention")!;
+    challenge.nativeMutants!.evidence = { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 6, fields: ["o.writeTtls"] };
+    expect(boundaryEvidence(current).find(entry => entry.challenge === challenge.id)).toMatchObject({ step: 6, fields: ["o.writeTtls"], origin: "written" });
+    expect(validate(current)).toHaveProperty("boundaryEvidence");
+    const model = current.models.find(item => item.path === challenge.model)!;
+    expect(() => evidenceOf(challenge, new Map([[model.path, model]]), new Map([[model.path, []]]))).toThrow(/exported public-only history/);
+    // Written evidence cannot substitute for the required reproducer.
+    delete challenge.reproducer;
+    expect(() => validate(current)).toThrow(/must carry a reproducer/);
+  });
+
+  it("requires actual flat assertion fields for effects and local-clock", () => {
+    for (const [id, fields] of [["effects-wrong-acceptance-receipt", ["o.calls"]], ["local-clock-precise-ttl", ["events"]]] as const) {
+      const current = manifest(), challenge = current.challenges.find(item => item.id === id)!;
+      const original = boundaryEvidence(current).find(item => item.challenge === id)!;
+      challenge.nativeMutants!.evidence = { history: original.history!, step: original.step!, fields: [...fields] };
+      expect(() => validate(current)).toThrow(/evidence fields/);
+    }
+  });
+
+  it("cross-checks every evidence field against the profile's actual comparison record", async () => {
+    const features = await import(new URL("../formal/replay/features.mjs", import.meta.url).href) as {
+      profiles: Record<string, { diagnosticAge?: string; readIO?: boolean; markerIO?: boolean; compressionIO?: boolean; policyErrorIO?: boolean }>;
+      parseTrace(raw: unknown, path: string, profile: unknown): { steps: unknown[] };
+      expectedObservation(step: unknown): Record<string, unknown>;
+    };
+    const effects = await import(new URL("../formal/replay/effects.mjs", import.meta.url).href) as { parseTrace(raw: unknown, path: string): { steps: Array<{ expected: Record<string, unknown> }> } };
+    const clock = await import(new URL("../formal/replay/local-clock.mjs", import.meta.url).href) as { parseLocalClockTrace(raw: unknown, path: string): { steps: Array<{ expected: Record<string, unknown> }> } };
+    const core = await import(new URL("../formal/replay/core.mjs", import.meta.url).href) as {
+      parseItfTrace(raw: unknown, path: string): { states: Array<{ state: unknown }> };
+      expectedCoreObservation(state: unknown): Record<string, unknown>;
+    };
+    const registry = JSON.parse(readFileSync(root + "formal/profiles.json", "utf8")) as { profiles: Array<{ id: string; smoke: string }> };
+    for (const entry of boundaryEvidence().filter(item => item.history !== undefined)) {
+      if (entry.vector) {
+        for (const sample of Object.values(entry.vector.samples)) for (const field of entry.fields!) {
+          expect(Object.hasOwn(sample.expected, field), `${entry.challenge}: ${field}`).toBe(true);
+        }
+        continue;
+      }
+      const profile = entry.history!.split("/")[0]!, path = registry.profiles.find(item => item.id === profile)!.smoke;
+      const raw = JSON.parse(readFileSync(root + path, "utf8")) as unknown;
+      const descriptor = features.profiles[profile];
+      const expected = profile === "effects" ? effects.parseTrace(raw, path).steps[0]!.expected
+        : profile === "local-clock" ? clock.parseLocalClockTrace(raw, path).steps[0]!.expected
+        : profile === "core" ? core.expectedCoreObservation(core.parseItfTrace(raw, path).states[0]!.state)
+        : features.expectedObservation(features.parseTrace(raw, path, descriptor).steps[0]);
+      for (const field of entry.fields!) {
+        const flag = field.startsWith("d.") ? "diagnosticAge" : field.startsWith("io.") ? "readIO"
+          : field === "markers" ? "markerIO" : field === "compression" ? "compressionIO" : field === "policyErrors" ? "policyErrorIO" : undefined;
+        if (flag) expect(descriptor?.[flag], `${entry.challenge}: ${field}`).toBeTruthy();
+        let observed: unknown = expected;
+        for (const part of field.split(".")) {
+          expect(observed !== null && typeof observed === "object" && Object.hasOwn(observed, part), `${entry.challenge}: ${field}`).toBe(true);
+          observed = (observed as Record<string, unknown>)[part];
+        }
+      }
+    }
   });
 });

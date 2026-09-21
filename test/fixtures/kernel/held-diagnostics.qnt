@@ -31,6 +31,7 @@ module held_diagnostics {
   pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true }
   pure val SHARED: Resolution = { layers: { request: true, local: false, remote: true }, coalesce: true }
   pure val PROCESS_ONLY: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: true }
+  pure val REQUEST_ALONE: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: true }
   pure val LOCAL_ALONE: Resolution = { layers: { request: true, local: true, remote: false }, coalesce: true }
   pure val TTLS: Ttls = { localMs: 0, freshMs: 1000, retentionMs: 5000 }
   pure val LOCAL_TTLS: Ttls = { localMs: 1000, freshMs: 1000, retentionMs: 5000 }
@@ -139,9 +140,16 @@ module held_diagnostics {
   // An accepted settlement records no fallback error.
   run acceptedSettlementRecordsNoErrorTest = init.then(begin(0)).then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.writes == 1 and s.d.fallbackErrors == List())
-  // A source a release starts without the remote layer is attributed to the
-  // request memo when the call memoizes; its failure names that layer.
-  run sourceWithoutRemoteLayerIsAttributedToTheRequestMemoTest = init.then(beginWith(0, LOCAL_ALONE, LOCAL_TTLS, Recovery::ALLOW))
+  // TypeScript's active local traversal owns this fallback even inside a
+  // request memo. Without a shared layer, the request owns it, including a
+  // transient request with no persistent memo slot (dark-layers native runs).
+  run activeLocalSourceIsAttributedToLocalInsideTheRequestMemoTest = init.then(beginWith(0, LOCAL_ALONE, LOCAL_TTLS, Recovery::ALLOW))
+    .expect(s.o.reads == 0 and s.o.loaders == 1 and s.sourceLayers == List("local"))
+    .then(settle(0, SOURCE_ERROR)).expect(s.d.fallbackErrors == List("local") and s.o.classifications == 0)
+  run requestOnlySourceIsAttributedToTheRequestMemoTest = init.then(beginWith(0, REQUEST_ALONE, TTLS, Recovery::ALLOW))
+    .expect(s.o.reads == 0 and s.o.loaders == 1 and s.sourceLayers == List("request_local"))
+    .then(settle(0, SOURCE_ERROR)).expect(s.d.fallbackErrors == List("request_local") and s.o.classifications == 0)
+  run transientRequestOnlySourceKeepsItsAttributionTest = init.then(beginWith(2, REQUEST_ALONE, TTLS, Recovery::ALLOW))
     .expect(s.o.reads == 0 and s.o.loaders == 1 and s.sourceLayers == List("request_local"))
     .then(settle(0, SOURCE_ERROR)).expect(s.d.fallbackErrors == List("request_local") and s.o.classifications == 0)
   // A bypass source started at admission has no layer and its failure records none.

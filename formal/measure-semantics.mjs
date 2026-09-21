@@ -1,3 +1,4 @@
+import { startRedisVectorServer } from './redis-vector-server.mjs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -6,8 +7,9 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { checkSemanticCoverage } from './check-semantic-coverage.mjs';
 import { evaluateSemanticTestReport } from './semantic-reporter.mjs';
-import { checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
-import { classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { boundaryEvidence, checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
+import { assessBoundary, classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { boundaryBaselines, boundaryTrace, mutationBoundaries, runBoundaryReplay } from './boundary-replay.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const language = languages.ts;
@@ -41,9 +43,9 @@ if (only) {
 const declaredCoverage = checkSemanticCoverage();
 const mutantCatalog = readMutantCatalog();
 const catalog = { mutations: mutantsForPort(mutantCatalog, language.port) };
-const formalTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts', 'test/formal-local-clock.test.ts', 'test/formal-protocol-vectors.test.ts'];
+const formalTests = ['test/formal-invalidation-native.test.ts', 'test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts', 'test/formal-local-clock.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const portableTests = ['test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
-const generatedPattern = 'replays |reaches every action|covers every action|reaches fractional expiry and shared instance grid|formal protocol conformance vectors (?!keeps |requires )';
+const generatedPattern = 'generated invalidation vectors |replays |reaches every action|covers every action|reaches fractional expiry and shared instance grid|formal protocol conformance vectors (?!keeps |requires )';
 // Fixed scenario names carry a feature prefix. Protocol schema/audit checks
 // start with "keeps"/"requires" and must not count as behavioral detections.
 const portablePattern = 'portable behavioral scenarios [\\w-]+: |formal protocol conformance vectors (?!keeps |requires )';
@@ -60,6 +62,7 @@ const cohorts = {
 // run; the originals restore the workspace after each mutant.
 const sourceText = checkMutantAnchors(mutantCatalog);
 const selected = selectMutations(catalog.mutations, { shard, only });
+const evidence = boundaryEvidence().filter(entry => selected.some(mutation => mutation.id === entry.mutant));
 // A hard CI cancellation may bypass finally. Keep temporary dependency links
 // outside the artifact tree even when that happens.
 const workspace = mkdtempSync(resolve(tmpdir(), 'dialcache-semantic-'));
@@ -86,6 +89,11 @@ Object.assign(env, {
   DIALCACHE_EFFECTS_TRACE_DIR: resolve(root, '.formal-traces/effects'),
   DIALCACHE_FEATURE_TRACE_DIR: resolve(root, '.formal-traces/features'),
 });
+const replayBoundary = (label, history) => runBoundaryReplay({
+  port: language.port, history, label, output, root, workspace, env,
+});
+const boundaries = (id, replay = history => replayBoundary(id, history)) =>
+  mutationBoundaries(evidence.filter(entry => entry.mutant === id), replay, assessBoundary);
 function run(label, cohort, baseline) {
   const json = resolve(output, `${label}-${cohort}.json`);
   const meta = resolve(output, `${label}-${cohort}.meta.json`);
@@ -116,7 +124,11 @@ function save() {
   writeFileSync(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 }
 save();
+let vectorServer;
 try {
+  vectorServer = startRedisVectorServer();
+  env.DIALCACHE_VECTOR_REDIS_URL = vectorServer.url;
+  report.redisVectorImage = vectorServer.image;
   for (const path of ['src', 'test', 'formal', 'docs', 'README.md', 'go/README.md', 'package.json', 'tsconfig.json', 'vitest.config.ts']) {
     cpSync(resolve(root, path), resolve(workspace, path), { recursive: true, filter: source => !source.includes('/docs/.vitepress/cache') && !source.includes('/docs/.vitepress/dist') });
   }
@@ -133,6 +145,10 @@ try {
     save();
   }
   report.baselines.portable = portableCohort(report.baselines.generated, report.baselines.fixed);
+  // These targeted runs have their own baseline and result records. They are
+  // not cohorts, and repeated challenge citations replay a history only once.
+  report.boundaryBaselines = boundaryBaselines(evidence, history => replayBoundary('baseline', history));
+  save();
   // The shared language-neutral evaluator produces the baseline witness
   // evidence over the unmodified corpus; the TypeScript suite only checks the gate.
   const evaluated = spawnSync(process.execPath, [resolve(root, 'formal/witnesses.mjs'), 'evaluate', '--profile', 'all', '--out', resolve(output, 'witnesses')],
@@ -164,7 +180,11 @@ try {
         // Recorded, never measured: the gate names the mutant while the rest of
         // the shard is still measured.
         writeFileSync(resolve(output, `${mutation.id}-compile.log`), (compile.stdout ?? '') + (compile.stderr ?? ''));
-        report.mutations.push(noncompilingResult(mutation, [...Object.keys(cohorts), 'portable'], `${mutation.id}: noncompiling mutant; see ${mutation.id}-compile.log`));
+        const reason = `${mutation.id}: noncompiling mutant; see ${mutation.id}-compile.log`;
+        const result = noncompilingResult(mutation, [...Object.keys(cohorts), 'portable'], reason);
+        result.boundary = boundaries(mutation.id, history => ({ path: boundaryTrace(history, resolve(root, '.formal-traces')).path,
+          completed: false, lastStep: -1, divergences: [], error: reason }));
+        report.mutations.push(result);
         console.log(`${mutation.id}: noncompiling`);
         save();
         continue;
@@ -172,6 +192,7 @@ try {
       const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
       for (const cohort of Object.keys(cohorts)) result.cohorts[cohort] = run(mutation.id, cohort, false);
       result.cohorts.portable = portableCohort(result.cohorts.generated, result.cohorts.fixed);
+      result.boundary = boundaries(mutation.id);
       report.mutations.push(result);
       console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, run]) => `${name}=${run.state}`).join(', ')}`);
       save();
@@ -199,4 +220,5 @@ try {
 } finally {
   // Only this run's isolated copy is removed. The user's source is never edited.
   rmSync(workspace, { recursive: true, force: true });
+  vectorServer?.close();
 }

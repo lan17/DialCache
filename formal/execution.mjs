@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveVectorEvidence } from './vector-evidence.mjs';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
 // The kernel library's concern modules live in one directory; every tool that
@@ -24,12 +25,16 @@ export function quintSources(directory = root) {
 // A model's import closure: its own text and every Quint source it reaches
 // through relative imports, in dependency order. What a model's behavior
 // depends on, so tools that hash, compare or classify a model walk it here.
-export function importClosure(path, directory = root) {
+export function importClosure(path, directory = root, {
+  readSource = source => existsSync(resolve(directory, source)) ? readFileSync(resolve(directory, source), 'utf8') : undefined,
+} = {}) {
   const closure = [];
   const visit = source => {
-    if (closure.includes(source) || !existsSync(resolve(directory, source))) return;
+    if (closure.includes(source)) return;
+    const text = readSource(source);
+    if (text === undefined) return;
     closure.push(source);
-    for (const [, target] of readFileSync(resolve(directory, source), 'utf8').matchAll(/from\s+"(\.\.?\/[^"]+)"/g)) {
+    for (const [, target] of text.matchAll(/from\s+"(\.\.?\/[^"]+)"/g)) {
       visit(posix.normalize(posix.join(posix.dirname(source), `${target}.qnt`)));
     }
   };
@@ -222,6 +227,185 @@ export function reproducerCheckpoint(source, run, failure, declarations = scanDe
   throw new Error(`${run} has no top-level expect whose condition is the declared failure`);
 }
 
+// Count states in the supported deterministic action-chain syntax, then turn
+// that count into a zero-based ITF checkpoint. Expectations add no state;
+// literal repetitions add every transition they execute. This deliberately
+// refuses an unfamiliar expression instead of assigning it an approximate
+// index: the challenge can supply reviewed written evidence in that case.
+export function checkpointStep(before, declarations) {
+  const refuse = detail => { throw new Error(`Cannot derive boundary checkpoint: ${detail}; write nativeMutants.evidence`); };
+  const matching = (tokens, start) => {
+    const close = shuts[opens.indexOf(tokens[start])];
+    let depth = 1;
+    for (let i = start + 1; i < tokens.length; i++) {
+      if (tokens[i] === tokens[start]) depth++;
+      else if (tokens[i] === close && --depth === 0) return i;
+    }
+    return refuse('unbalanced action expression');
+  };
+  const add = (a, b) => {
+    const count = a + b;
+    if (!Number.isSafeInteger(count)) refuse('checkpoint exceeds safe integer range');
+    return count;
+  };
+  function count(tokens, trail = new Set()) {
+    while (tokens[0] === '(' && matching(tokens, 0) === tokens.length - 1) tokens = tokens.slice(1, -1);
+    if (!tokens.length) return refuse('empty action expression');
+    const chain = [];
+    for (let i = 0; i < tokens.length; i++) {
+      if (opens.includes(tokens[i])) { i = matching(tokens, i); continue; }
+      if (tokens[i] === '.' && ['then', 'expect'].includes(tokens[i + 1])) {
+        if (tokens[i + 2] !== '(') return refuse('unrecognized chain operator');
+        const end = matching(tokens, i + 2);
+        chain.push({ start: i, end, method: tokens[i + 1], argument: tokens.slice(i + 3, end) });
+        i = end;
+      }
+    }
+    if (chain.length) {
+      let total = count(tokens.slice(0, chain[0].start), trail);
+      let end = chain[0].start - 1;
+      for (const part of chain) {
+        if (part.start !== end + 1) return refuse('unsupported expression between chain steps');
+        if (part.method === 'then') total = add(total, count(part.argument, trail));
+        end = part.end;
+      }
+      if (end !== tokens.length - 1) return refuse('unsupported action-chain suffix');
+      return total;
+    }
+    const dot = tokens.indexOf('.');
+    if (dot > 0 && tokens[dot + 1] === 'reps' && tokens[dot + 2] === '(' && matching(tokens, dot + 2) === tokens.length - 1) {
+      const literal = tokens.slice(0, dot).join('');
+      if (!/^\d+$/.test(literal) || !Number.isSafeInteger(Number(literal))) return refuse('repetition count must be a safe integer literal');
+      const lambda = tokens.slice(dot + 3, -1);
+      if (!/^[A-Za-z_]\w*$/.test(lambda[0] ?? '') || lambda[1] !== '=' || lambda[2] !== '>') return refuse('unsupported repetition lambda');
+      const repeated = Number(literal) * count(lambda.slice(3), trail);
+      if (!Number.isSafeInteger(repeated)) return refuse('repetition count exceeds safe integer range');
+      return repeated;
+    }
+    const name = tokens[0];
+    const declaration = declarations.get(name);
+    if (!declaration || !['action', 'run'].includes(declaration.kind)) return refuse(`unknown action ${name}`);
+    if (trail.has(name)) return refuse(`cyclic action alias ${name}`);
+    if (tokens.length !== 1 && !(tokens[1] === '(' && matching(tokens, 1) === tokens.length - 1)) return refuse(`unsupported action expression ${name}`);
+    const body = declaration.body;
+    let equals = -1;
+    for (let i = 0; i < body.length; i++) {
+      if (opens.includes(body[i])) { i = matching(body, i); continue; }
+      if (body[i] === '=') { equals = i; break; }
+    }
+    if (equals < 0) return refuse(`action ${name} has no body`);
+    const rhs = body.slice(equals + 1);
+    const sequences = rhs.some((token, i) => token === '.' && ['then', 'reps'].includes(rhs[i + 1]));
+    if (['all', 'any', '{'].includes(rhs[0])) {
+      if (sequences) return refuse(`nested action sequence in ${name}`);
+      // An atomic wrapper must not hide a multi-state action behind an alias.
+      for (const [index, token] of rhs.entries()) {
+        if (rhs[index - 1] === ':' || rhs[index - 1] === '.' || rhs[index + 1] === ':') continue;
+        if (declarations.get(token)?.kind === 'action' && count([token], new Set([...trail, name])) !== 1) {
+          return refuse(`nested action sequence in ${name}`);
+        }
+      }
+      return 1;
+    }
+    return count(rhs, new Set([...trail, name]));
+  }
+  const states = count(tokenize(before).tokens);
+  if (states < 1) refuse('history has no initial state');
+  return states - 1;
+}
+
+const observationFields = new Set(['calls', 'loaders', 'reads', 'loads', 'dumps', 'writes', 'policyCalls', 'invalidations',
+  'classifications', 'comparisons', 'maintenance', 'recovery', 'shadow', 'sourceScopes', 'writeTtls']);
+const effectsFields = new Set(['calls', 'loaders', 'reads', 'loads', 'dumps', 'writes', 'policyCalls', 'invalidations',
+  'writeTtls', 'events', 'readContexts', 'readAborts']);
+const coreFields = new Set(['sourceVersion', 'lastResult', 'outsideLoaderCalls', 'requestLoaderCalls',
+  'localLoaderCalls', 'coalescedLoaderCalls', 'remoteLoaderCalls', 'redisReads', 'redisWrites']);
+function boundaryField(profile, field) {
+  if (profile === 'core') return coreFields.has(field) ? field : undefined;
+  if (profile === 'effects' || profile === 'local-clock') {
+    if (field.startsWith('o.')) field = field.slice(2);
+    if (profile === 'effects') field = ({ 'io.budgets': 'readContexts', 'io.aborted': 'readAborts' })[field] ?? field;
+    return (profile === 'effects' ? effectsFields : observationFields).has(field) ? field : undefined;
+  }
+  return /^(o|d|io)\.\w+$/.test(field) || /^(markers|compression|policyErrors)$/.test(field) ? field : undefined;
+}
+
+// Fields name the actual assertion record, rather than the model's private
+// state. The flat replay bindings (core, effects and local-clock) are explicit;
+// feature profiles retain their channel prefix. Tests cross-check these paths
+// against the bindings without making the manifest validator import replay.
+export function evidenceOf(challenge, models, publicOnly, { readSource = read, scanSource = scanDeclarationBodies } = {}) {
+  const native = challenge.nativeMutants;
+  if (native?.kind !== 'mapped') return undefined;
+  const base = { challenge: challenge.id, mutant: native.mutant };
+  const model = models.get(challenge.reproducer?.model ?? challenge.model);
+  if (!model) throw new Error(`${challenge.id}: boundary evidence model is not scheduled`);
+  const reproducer = challenge.reproducer;
+  const written = native.evidence;
+  if (model.vectorExport && reproducer?.kind === 'model-run') {
+    if (!written || Object.keys(written).join() !== 'vector') throw new Error(`${challenge.id}: vector reproducer requires exact native vector evidence`);
+    const vector = resolveVectorEvidence(written.vector, model, readSource);
+    return { ...base, history: `vector/${reproducer.run}`, step: 0, fields: [...vector.fields], origin: 'vector', vector };
+  }
+  if (reproducer?.kind === 'model-run') {
+    throw new Error(`${challenge.id}: mapped native mutant requires an exported-regression or an exported-vector model-run reproducer`);
+  }
+  if (reproducer?.kind !== 'exported-regression') {
+    if (written !== undefined) throw new Error(`${challenge.id}: written boundary evidence requires an exported-regression reproducer`);
+    return { ...base, state: 'unreproduced' };
+  }
+  if (!model.profile || !publicOnly.get(model.path)?.includes(reproducer.run)) throw new Error(`${challenge.id}: boundary evidence requires an exported public-only history`);
+  const history = `${model.profile}/${reproducer.run}`;
+  if (written !== undefined) {
+    if (!written || typeof written !== 'object' || Array.isArray(written) ||
+      Object.keys(written).some(key => !['history', 'step', 'fields'].includes(key))) throw new Error(`${challenge.id}: invalid written boundary evidence`);
+    if (written.history !== history) throw new Error(`${challenge.id}: evidence history must equal the reproducer history ${history}`);
+    if (!Number.isSafeInteger(written.step) || written.step < 1) throw new Error(`${challenge.id}: evidence step must be a positive integer`);
+    if (!Array.isArray(written.fields) || !written.fields.length || new Set(written.fields).size !== written.fields.length ||
+      written.fields.some(field => typeof field !== 'string' || boundaryField(model.profile, field) !== field)) {
+      throw new Error(`${challenge.id}: evidence fields must be nonempty unique public assertion paths for ${model.profile}`);
+    }
+    return { ...base, history, step: written.step, fields: [...written.fields], origin: 'written' };
+  }
+  const source = readSource(model.path), declarations = scanSource(source);
+  const checkpoint = reproducerCheckpoint(source, reproducer.run, reproducer.failure, declarations);
+  const tokens = tokenize(reproducer.failure).tokens;
+  const fields = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] !== 's' || tokens[i + 1] !== '.') continue;
+    const channel = tokens[i + 2];
+    if (model.profile === 'core') {
+      const field = boundaryField(model.profile, channel);
+      if (field && !fields.includes(field)) fields.push(field);
+      continue;
+    }
+    // A private field can share a public name (effects' reads/loaders lists).
+    // Only the public channels, plus the explicitly compared root channels,
+    // contribute evidence; flat paths are produced by projection below.
+    if (!['o', 'd', 'io', 'events', 'markers', 'compression', 'policyErrors'].includes(channel)) continue;
+    const raw = ['o', 'd', 'io'].includes(channel) && tokens[i + 3] === '.'
+      ? `${channel}.${tokens[i + 4]}` : channel;
+    const field = boundaryField(model.profile, raw);
+    if (field && !fields.includes(field)) fields.push(field);
+  }
+  if (!fields.length) throw new Error(`${challenge.id}: checkpoint has no derived public fields; write nativeMutants.evidence`);
+  const step = checkpointStep(checkpoint.before, declarations);
+  if (step < 1) throw new Error(`${challenge.id}: boundary evidence checkpoint must follow initialization`);
+  return { ...base, history, step, fields, origin: 'derived' };
+}
+
+export function boundaryEvidence(manifest = readExecution(), { readSource = read, scanSource = scanDeclarationBodies } = {}) {
+  const sources = new Map(), declarations = new Map();
+  const source = path => { if (!sources.has(path)) sources.set(path, readSource(path)); return sources.get(path); };
+  const scanned = text => { if (!declarations.has(text)) declarations.set(text, scanSource(text)); return declarations.get(text); };
+  const models = new Map(manifest.models.map(model => [model.path, model]));
+  const publicOnly = new Map(manifest.models.filter(model => model.profile).map(model => [model.path, classifyRuns(scanned(source(model.path))).publicOnly]));
+  return manifest.challenges.flatMap(challenge => {
+    const evidence = evidenceOf(challenge, models, publicOnly, { readSource: source, scanSource: scanned });
+    return evidence === undefined ? [] : [evidence];
+  });
+}
+
 const positiveInteger = (value, label) => {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Invalid positive bound: ${label}`);
 };
@@ -245,12 +429,11 @@ export const contractIds = text => [...text.matchAll(/^\| ([CWEB]\d{2}) \|/gm)].
 // condition the fault breaks. `profiles` names where the fault is observable:
 // the challenged model's own profile, or its path for a model without one,
 // and the cited run's profile. `exclusions` explains why a known profile that
-// is not listed cannot exercise the fault. A shared-library fault must list or
-// exclude every profile; a fault in one model's own file needs no exclusions,
-// because no other profile executes that text.
+// imports the source but is not listed cannot exercise the fault. Profiles
+// outside that import closure are structurally excluded without catalog prose.
 const reproducerKinds = ['exported-regression', 'model-run'];
 const reproducerFields = ['kind', 'run', 'model', 'failure', 'family', 'profiles', 'exclusions', 'scope'];
-function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, source, scanned }) {
+function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, source, scanned, closures }) {
   const { id, reproducer } = challenge;
   if (!reproducer || typeof reproducer !== 'object' || Array.isArray(reproducer)) throw new Error(`${id}: invalid reproducer`);
   const unknown = Object.keys(reproducer).filter(key => !reproducerFields.includes(key));
@@ -259,8 +442,10 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
   if (!reproducerKinds.includes(kind)) throw new Error(`${id}: reproducer kind must be one of ${reproducerKinds.join(', ')}`);
   const shared = libraries.includes(challenge.source);
   const cited = reproducer.model === undefined ? model : models.get(reproducer.model);
-  if (reproducer.model !== undefined && (!cited?.profile || kind !== 'exported-regression' || !shared || cited === model)) {
-    throw new Error(`${id}: reproducer model must name another profile model and is allowed only for an exported-regression of a shared-library fault: ${reproducer.model}`);
+  const sharedProfile = cited?.profile && kind === 'exported-regression';
+  const sharedVector = cited?.vectorExport && kind === 'model-run';
+  if (reproducer.model !== undefined && (!(sharedProfile || sharedVector) || !shared || cited === model)) {
+    throw new Error(`${id}: reproducer model must name another profile model or vector model reached by a shared-library fault, with the corresponding reproducer kind: ${reproducer.model}`);
   }
   if (typeof run !== 'string' || !cited.regressions.includes(run)) throw new Error(`${id}: reproducer run is not a scheduled regression of ${cited.path}: ${run}`);
   if (!nonEmptyText(failure)) throw new Error(`${id}: reproducer failure must state the expect condition the fault breaks`);
@@ -268,9 +453,10 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
   catch (error) { throw new Error(`${id}: ${error.message}`); }
   if (!isSlug(family)) throw new Error(`${id}: reproducer family must be a fault family slug`);
   const own = model.profile ?? model.path;
-  const required = [...new Set([own, ...(cited.profile ? [cited.profile] : [])])];
+  const citedIdentity = cited.profile ?? (reproducer.model && sharedVector ? cited.path : own);
+  const required = [...new Set([own, citedIdentity])];
   if (!Array.isArray(profiles) || !profiles.length || new Set(profiles).size !== profiles.length ||
-      required.some(name => !profiles.includes(name)) || profiles.some(profile => profile !== own && !profileIds.has(profile))) {
+      required.some(name => !profiles.includes(name)) || profiles.some(profile => !required.includes(profile) && !profileIds.has(profile))) {
     throw new Error(`${id}: reproducer profiles must name known profiles and include ${required.join(' and ')}`);
   }
   if (!exclusions || typeof exclusions !== 'object' || Array.isArray(exclusions)) throw new Error(`${id}: reproducer exclusions must map profiles to reasons`);
@@ -280,8 +466,18 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
     }
   }
   if (shared) {
-    const unaccounted = [...profileIds].filter(profile => !profiles.includes(profile) && !Object.hasOwn(exclusions, profile));
-    if (unaccounted.length) throw new Error(`${id}: a shared-library fault must list or exclude every profile; missing ${unaccounted.join(', ')}`);
+    const unaccounted = [];
+    for (const profileModel of models.values()) {
+      if (!profileModel.profile) continue;
+      const reaches = closures.get(profileModel.path).includes(challenge.source);
+      if (profiles.includes(profileModel.profile) && !reaches) {
+        throw new Error(`${id}/${profileModel.profile}: listed profile does not import ${challenge.source}`);
+      }
+      if (reaches && !profiles.includes(profileModel.profile) && !Object.hasOwn(exclusions, profileModel.profile)) {
+        unaccounted.push(profileModel.profile);
+      }
+    }
+    if (unaccounted.length) throw new Error(`${id}: a shared-library fault must list or exclude every importing profile; missing ${unaccounted.join(', ')}`);
   }
   const exported = cited.replayRegressions?.includes(run) ?? false;
   if (kind === 'exported-regression') {
@@ -307,7 +503,7 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
 // the challenge's contract. The challenge text says why the mutant is the same
 // fault as the model's; the port-side account lives once on the catalog entry.
 export const nativeMutantKinds = ['mapped', 'unobservable', 'model-only'];
-const nativeMutantFields = ['kind', 'text', 'mutant', 'crossContract'];
+const nativeMutantFields = ['kind', 'text', 'mutant', 'crossContract', 'evidence'];
 const nativeMutantTextLimits = { mapped: 500, unobservable: 900, 'model-only': 900 };
 
 // One catalog of native mutants, each entry a fault described once and
@@ -386,7 +582,7 @@ export function checkMutantAnchors(catalog, readText = read) {
 }
 
 const portPath = /\b(?:src|go)\/[\w./-]+/;
-function validateNativeMutants(challenge, { catalog }) {
+function validateNativeMutants(challenge, { catalog, models, publicOnly, source, scanned }) {
   const { id, nativeMutants: native } = challenge;
   if (!native || typeof native !== 'object' || Array.isArray(native)) throw new Error(`${id}: invalid nativeMutants`);
   const unknown = Object.keys(native).filter(key => !nativeMutantFields.includes(key));
@@ -398,7 +594,7 @@ function validateNativeMutants(challenge, { catalog }) {
   // keeps the port-side account from creeping back into every citing challenge.
   if (text.length > nativeMutantTextLimits[kind]) throw new Error(`${id}: nativeMutants text exceeds ${nativeMutantTextLimits[kind]} characters; the port-side account belongs in the mutant's rationale`);
   if (kind !== 'mapped') {
-    if (mutant !== undefined || crossContract !== undefined) throw new Error(`${id}: ${kind} nativeMutants name no mutant`);
+    if (mutant !== undefined || crossContract !== undefined || native.evidence !== undefined) throw new Error(`${id}: ${kind} nativeMutants name no mutant or evidence`);
     // An explanation names the port code it examined, so a reader can check it.
     if (!portPath.test(text)) throw new Error(`${id}: ${kind} nativeMutants text must name the port file it examined`);
     return;
@@ -411,23 +607,10 @@ function validateNativeMutants(challenge, { catalog }) {
   const outside = !catalog.caseContracts.get(entry.case).includes(challenge.contract);
   if (outside && !nonEmptyText(crossContract)) throw new Error(`${id}: ${mutant} is on case ${entry.case} which does not list ${challenge.contract}; add a crossContract reason`);
   if (!outside && crossContract !== undefined) throw new Error(`${id}: crossContract note for in-contract mutant ${mutant}`);
+  return evidenceOf(challenge, models, publicOnly, {
+    readSource: source, scanSource: () => scanned(challenge.reproducer?.model ?? challenge.model),
+  });
 }
-
-// Challenges that predate the native-mutant requirement. The cutoff fault
-// lives only in the Lua invalidation script (src/internal/redis-scripts.ts,
-// go/redis_adapter.go), which no in-process cohort executes. The buffer-limit
-// fault has client-side lines in both ports (src/internal/duration.ts
-// assertSupportedFutureBufferMs, go/cache.go Invalidate), but no generated
-// history invalidates with the maximum buffer, so a mapped mutant would lack
-// its required detection; it closes when a profile exposes the buffer as an
-// input and an exported regression reaches the bound. The list may only
-// shrink: a new challenge maps to a native mutant or explains why none exists,
-// and listing it here instead is a reviewed change to this constant, never a
-// manifest edit.
-export const grandfatheredNativeMutantBacklog = Object.freeze([
-  'invalidation-transition-cutoff-moves-backwards',
-  'invalidation-transition-inclusive-buffer-limit',
-]);
 
 // Which challenges cite each mutant, in manifest order. The mutation reports
 // print it beside every measured mutant.
@@ -442,82 +625,22 @@ export function challengesByMutant(manifest) {
   return index;
 }
 
-// A backlog is the exact set of challenges lacking one field, reported and
-// frozen: it cannot hide a challenge that has the field or never existed, and
-// only the grandfathered ids may sit in it, so it only shrinks.
-function validateBacklog(challenges, ids, { name, listed, present, grandfathered, missing, has, lacks, requirement }) {
-  if (!Array.isArray(listed)) throw new Error(missing);
-  const backlog = new Set(listed);
-  if (backlog.size !== listed.length) throw new Error(`Duplicate challenge ids in ${name}`);
-  for (const id of backlog) {
-    if (!ids.has(id)) throw new Error(`${name} names an unknown challenge: ${id}`);
-  }
-  const frozen = new Set(grandfathered);
-  for (const challenge of challenges) {
-    const inBacklog = backlog.has(challenge.id);
-    if (present(challenge) && inBacklog) throw new Error(`${challenge.id}: ${has} and is listed in ${name}`);
-    if (!present(challenge) && !inBacklog) throw new Error(`${challenge.id}: ${lacks} and is not listed in ${name}`);
-    if (inBacklog && !frozen.has(challenge.id)) throw new Error(`${challenge.id}: ${requirement}; ${name} only grandfathers the challenges that predate the requirement`);
-  }
-  return backlog.size;
-}
-
-// Challenges that predate the reproducer requirement. The backlog may only
-// shrink: a new challenge must carry a reproducer, and listing it here instead
-// is a reviewed change to this constant, never a manifest edit.
-export const grandfatheredReproducerBacklog = Object.freeze([
-  'recovery-inclusive-maximum',
-  'recovery-future-candidate',
-  'local-precise-grid',
-  'source-inclusive-deadline',
-  'fence-inclusive-timestamp',
-  'profile-source-wrong-clock',
-  'profile-source-wrong-owner',
-  'independent-wrong-recovered-value',
-  'independent-source-wrong-clock',
-  'independent-source-wrong-owner',
-  'tracked-read-inclusive-fence',
-  'core-unhealthy-local-read-hits',
-  'core-tracked-fallback-warms-local',
-  'runtime-policy-coalesce-defaults-off',
-  'runtime-policy-physical-ttl-ignores-recovery',
-  'stale-recovery-inclusive-served-maximum',
-  'stale-recovery-candidate-stamped-at-read',
-  'redis-protocol-inclusive-fence',
-  'redis-protocol-untracked-fence',
-  'frame-vectors-inclusive-fence',
-  'invalidation-transition-cutoff-moves-backwards',
-  'invalidation-transition-inclusive-buffer-limit',
-  'key-protocol-untracked-brace-rejection',
-  'cohort-inclusive-threshold',
-  'envelope-vectors-tie-compresses',
-  'envelope-vectors-escape-misses-binary-marker',
-  'conformance-local-hit-returns-source',
-  'conformance-remote-miss-skips-publication',
-  'scope-late-source-repopulates-closed-memo',
-  'scope-source-error-memoized',
-  'layers-process-flight-crosses-instance',
-  'layers-late-memo-into-closed-scope',
-  'independent-fresh-frame-retained',
-  'runtime-boundaries-inclusive-cohort',
-  'runtime-boundaries-inherited-sharing-ignores-default',
-  'source-budgets-outside-call-has-deadline',
-  'source-budgets-settled-flight-stays-registered',
-]);
-
 // Compiling semantic faults, checked against independent model obligations.
 // Every scheduled model carries at least one challenge or an explicit waiver.
-// Every challenge carries a reproducer or is listed in the reported backlog,
-// and maps to native mutants in both ports or is listed in that backlog.
-function validateChallenges(manifest, { source, scanned, contracts, sources, profileIds, publicOnly, catalog,
-  grandfathered = grandfatheredReproducerBacklog, grandfatheredNative = grandfatheredNativeMutantBacklog }) {
-  const { challenges, reproducerBacklog, nativeMutantBacklog } = manifest;
+// Every challenge carries a reproducer and a native mapping or explanation.
+function validateChallenges(manifest, { source, scanned, contracts, sources, profileIds, publicOnly, catalog, closures }) {
+  const { challenges } = manifest;
   if (!Array.isArray(challenges) || !challenges.length) throw new Error('Model property challenge catalog is missing');
+  // Closed migration fields remain empty for manifest/report compatibility.
+  for (const name of ['reproducerBacklog', 'nativeMutantBacklog']) {
+    if (!Array.isArray(manifest[name]) || manifest[name].length) throw new Error(`${name} must remain empty`);
+  }
   const models = new Map(manifest.models.map(model => [model.path, model]));
   const fields = ['id', 'contract', 'source', 'model', 'invariant', 'before', 'after'];
   const optional = ['measures', 'reproducer', 'nativeMutants'];
   const ids = new Set(), faults = new Map(), challengedModels = new Set();
   const kinds = { mapped: 0, unobservable: 0, 'model-only': 0 };
+  const boundary = { derived: 0, written: 0, unreproduced: 0, vector: 0 };
   let reproducers = 0;
   for (const challenge of challenges) {
     if (!challenge || typeof challenge !== 'object' || fields.some(key => typeof challenge[key] !== 'string' || !challenge[key])) {
@@ -542,27 +665,20 @@ function validateChallenges(manifest, { source, scanned, contracts, sources, pro
       throw new Error(`${challenge.id}: a measures note is only for a repeated fault`);
     }
     challengedModels.add(challenge.model);
-    if (challenge.reproducer !== undefined) {
-      validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, source, scanned });
-      reproducers++;
-    }
-    if (challenge.nativeMutants !== undefined) {
-      validateNativeMutants(challenge, { catalog });
-      kinds[challenge.nativeMutants.kind]++;
-    }
+    if (challenge.reproducer === undefined) throw new Error(`${challenge.id}: must carry a reproducer`);
+    validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, source, scanned, closures });
+    reproducers++;
+    if (challenge.nativeMutants === undefined) throw new Error(`${challenge.id}: must map to a native mutant in both ports or explain why none exists`);
+    const evidence = validateNativeMutants(challenge, { catalog, models, publicOnly, source, scanned });
+    if (evidence) boundary[evidence.origin ?? evidence.state]++;
+    kinds[challenge.nativeMutants.kind]++;
     // One fault, one native mapping: a repeated fault measured against another
     // invariant names the same kind and mutant. The text and any crossContract
     // reason speak for the challenge's own contract and may differ.
-    const native = challenge.nativeMutants === undefined ? null
-      : JSON.stringify([challenge.nativeMutants.kind, challenge.nativeMutants.mutant ?? null]);
+    const native = JSON.stringify([challenge.nativeMutants.kind, challenge.nativeMutants.mutant ?? null]);
     if (faults.has(fault) && faults.get(fault).native !== native) throw new Error(`${challenge.id}: maps the fault of ${faults.get(fault).id} differently`);
     if (!faults.has(fault)) faults.set(fault, { id: challenge.id, native });
   }
-  const reproducerBacklogSize = validateBacklog(challenges, ids, { name: 'reproducerBacklog', listed: reproducerBacklog, present: challenge => challenge.reproducer !== undefined,
-    grandfathered, missing: 'Challenge reproducer backlog is missing', has: 'has a reproducer', lacks: 'has no reproducer', requirement: 'new challenges must carry a reproducer' });
-  const nativeBacklogSize = validateBacklog(challenges, ids, { name: 'nativeMutantBacklog', listed: nativeMutantBacklog, present: challenge => challenge.nativeMutants !== undefined,
-    grandfathered: grandfatheredNative, missing: 'Challenge native-mutant backlog is missing', has: 'has nativeMutants', lacks: 'has no nativeMutants',
-    requirement: 'new challenges must map to a native mutant in both ports or explain why none exists' });
   const waived = [];
   for (const model of manifest.models) {
     if (model.challengeWaiver !== undefined) {
@@ -577,16 +693,14 @@ function validateChallenges(manifest, { source, scanned, contracts, sources, pro
   const cited = challengesByMutant(manifest);
   const unmappedMutants = [...catalog.mutations.keys()].filter(id => !cited.has(id)).length;
   return { challenges: challenges.length, distinctFaults: faults.size, challengedModels: challengedModels.size, waivedModels: waived.length,
-    reproducers, reproducerBacklog: reproducerBacklogSize,
-    nativeMutants: { mapped: kinds.mapped, unobservable: kinds.unobservable, modelOnly: kinds['model-only'], backlog: nativeBacklogSize },
-    unmappedMutants };
+    reproducers, reproducerBacklog: 0,
+    nativeMutants: { mapped: kinds.mapped, unobservable: kinds.unobservable, modelOnly: kinds['model-only'], backlog: 0 },
+    boundaryEvidence: boundary, unmappedMutants };
 }
 
 export function validateExecution(manifest = readExecution(), {
   readSource = read,
   scanSource = scanDeclarationBodies,
-  grandfathered = grandfatheredReproducerBacklog,
-  grandfatheredNative = grandfatheredNativeMutantBacklog,
   catalog = readMutantCatalog(),
   files = quintSources(),
   profiles = JSON.parse(read('formal/profiles.json')).profiles,
@@ -721,12 +835,13 @@ export function validateExecution(manifest = readExecution(), {
   // so it may not stay in the tree. This is also the inventory tripwire: a
   // stray or half-deleted stateless source at formal/ is refused here rather
   // than admitted as a library by the directory listing.
-  const reached = new Set(manifest.models.flatMap(model => importClosure(model.path)));
+  const closures = new Map(manifest.models.map(model => [model.path, importClosure(model.path, root, { readSource: source })]));
+  const reached = new Set([...closures.values()].flat());
   const orphans = libraries.filter(path => !reached.has(path));
   if (orphans.length) throw new Error(`Quint libraries no scheduled model imports: ${orphans.join(', ')}; import them from a scheduled model or delete them`);
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
   const scheduled = { ...manifest, libraries, models: manifest.models.map(model => ({ ...model, ...schedules.get(model.path) })) };
-  const challenges = validateChallenges(scheduled, { source, scanned, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, grandfathered, grandfatheredNative });
+  const challenges = validateChallenges(scheduled, { source, scanned, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, closures });
   return { models: manifest.models.length, libraries: libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
 }
 

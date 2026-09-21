@@ -30,6 +30,7 @@ module serving {
   // when a remote read completes (`authority`), completion apart from the
   // recorded outcome (`complete`, `finish`) and publication apart from
   // completion (`publish`, `settle`). The atomic path composes the same steps.
+  import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import calls.* from "./calls"
@@ -114,9 +115,9 @@ module serving {
   }, LocalPayload]
   type RequestServed[r] = Traversed[r, {}]
 
-  // A caller participates when its call is enabled and its scope is open.
+  // A caller participates when enabled, its key is valid and its scope is open.
   pure def participating(state: Traversed[r, p], layout: Layout, call: Call): bool =
-    call.enabled and Memo::scopeOpen(state, call.context, layout.persistentContexts)
+    call.enabled and not(call.keyFailed) and Memo::scopeOpen(state, call.context, layout.persistentContexts)
   // The process identity a call serves: its instance's row of keys.
   pure def identity(layout: Layout, call: Call): int = call.instance * layout.keysPerInstance + call.key
   // The projections of a reply: without the remote layer, or with the request leaf only.
@@ -193,8 +194,12 @@ module serving {
   // participates (a positive effective TTL), whether it serves one caller at
   // release, completes a flight whose decode was held, or publishes a
   // settled source.
-  pure def warm(state: Served[r], layout: Layout, who: { instance: int, key: int | q }, value: int, localMs: int): Served[r] =
+  pure def warm(state: Local::Local[r], layout: Layout, who: { instance: int, key: int | q }, value: int, localMs: int): Local::Local[r] =
     if (localMs > 0) Local::putLocal(state, who.instance, who.key, value, localMs, layout.keysPerInstance) else state
+  // Only an accepted source value is a local publication. A rejected source
+  // leaves every previously published slot unchanged, in either traversal.
+  pure def publishLocal(state: Local::Local[r], layout: Layout, source: { instance: int, key: int, localMs: int | q }, value: int): Local::Local[r] =
+    if (accepted(value)) warm(state, layout, source, value, source.localMs) else state
   // Publication authority, fixed when a flight's remote read completes (at
   // release for an atomic read, at read settlement for a held one) from the
   // effective TTLs of the reply (`layer_policy::effectiveTtls`: a layer the
@@ -216,7 +221,7 @@ module serving {
     {
       instance: who.instance,
       key: who.key,
-      localMs: if (not(state.tracked and read)) ttls.localMs else 0,
+      localMs: if (sourceMayWarmLocal(state.tracked, read)) ttls.localMs else 0,
       fence: if (refills) fence else NO_FENCE,
       retentionMs: if (refills) Remote::physicalRetention(state, ttls.retentionMs) else 0
     }
@@ -424,14 +429,17 @@ module serving {
   }
   pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): Served[r] =
     releaseJudged(state, layout, layeredRelease(state, layout, policyCall, resolved, ttls), policyCall, ttls)
-  pure def releaseLocal(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LocalServed[r] = {
+  // The local traversal accepts the value observed by its storage clock.
+  // Ordinary profiles use insertion expiry in milliseconds; the fractional
+  // profile supplies the same local value judged from its raw insertion ticks.
+  pure def releaseLocalObserved(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls, observedLocal: int): LocalServed[r] = {
     val held = Gate::entry(state, policyCall)
     val caller = held.caller
     val call = held.call
     val released = Gate::release(state, policyCall)
     val open = participating(released, layout, call)
     val effective = if (open) localOnly(gated(resolved, ttls)) else BYPASS
-    val localValue = if (effective.layers.local) Local::localValue(released, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
+    val localValue = if (effective.layers.local) observedLocal else NO_VALUE
     val decision = decide(released, layout, call, effective, localValue, NO_VALUE)
     val slot = decision.slot
     val attached = Flights::attachCaller(released, caller, ownerOf(decision.outcome), slot)
@@ -444,6 +452,14 @@ module serving {
       | ServesRemote(_) => attached
       | Starts => startLocalSource(attached, layout, caller, call, slot, open, effective, ttls)
     }
+  }
+
+  pure def releaseLocal(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LocalServed[r] = {
+    val call = Gate::entry(state, policyCall).call
+    val localEnabled = participating(state, layout, call) and gated(resolved, ttls).layers.local
+    val observedLocal = if (localEnabled)
+      Local::localValue(state, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
+    releaseLocalObserved(state, layout, policyCall, resolved, ttls, observedLocal)
   }
 
   // The request-only release, judged once for the traversal and for the
@@ -505,6 +521,16 @@ module serving {
     if (begun.sources.length() > state.sources.length()) settleLocal(begun, layout, Flights::latest(begun), value) else begun
   }
 
+  // The same inline lifecycle with a value acquired under another local
+  // clock projection. It never uses that value unless local is enabled.
+  pure def callLocalObserved(state: LocalServed[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls, observedLocal: int, value: int): LocalServed[r] = {
+    val admitted = admitLocal(state, layout, call)
+    val begun = if (participating(state, layout, call))
+      releaseLocalObserved(admitted, layout, state.o.policyCalls, resolved, ttls, observedLocal)
+      else admitted
+    if (begun.sources.length() > state.sources.length()) settleLocal(begun, layout, Flights::latest(begun), value) else begun
+  }
+
   // -- Settlement ----------------------------------------------------------------
 
   // Every caller the source owns receives the value; an accepted value
@@ -549,7 +575,7 @@ module serving {
     val dumped = { o: { dumps: state.o.dumps + (if (serializes) 1 else 0), ...state.o }, ...state }
     val dispatched = if (dispatches) dispatchWrite(dumped, source.retentionMs) else dumped
     val frames = if (stored) Remote::seedFrame(dispatched, source.key, value, source.retentionMs) else dispatched
-    if (accepted(value)) warm(frames, layout, source, value, source.localMs) else frames
+    publishLocal(frames, layout, source, value)
   }
   pure def settle(state: Served[r], layout: Layout, index: int, value: int): Served[r] =
     finish(publish(state, layout, index, value), layout, index, value)
@@ -557,8 +583,7 @@ module serving {
   // its source captured, when it captured one.
   pure def settleLocal(state: LocalServed[r], layout: Layout, index: int, value: int): LocalServed[r] = {
     val source = state.sources.nth(index)
-    val warmed = if (accepted(value) and source.localMs > 0)
-      Local::putLocal(state, source.instance, source.key, value, source.localMs, layout.keysPerInstance) else state
+    val warmed = publishLocal(state, layout, source, value)
     finish(warmed, layout, index, value)
   }
   pure def settleRequest(state: RequestServed[r], layout: Layout, index: int, value: int): RequestServed[r] =

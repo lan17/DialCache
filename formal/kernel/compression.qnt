@@ -14,7 +14,8 @@ module compression {
   // channel its traversal never reads. A variant rather than a wrapper in the
   // profile: a wrapper forgotten at one of the two sites is invisible to the
   // composition lint, a variant is the transition. One consumer today,
-  // recovery-read.
+  // recovery-read; no variant yet records compression while delivering
+  // source deadlines or settling shadow work.
   import serving as Serving from "./serving"
   import remote_io as RemoteIO from "./remote-io"
   import payloads as Payloads from "./payloads"

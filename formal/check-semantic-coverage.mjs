@@ -18,12 +18,12 @@ export function checkProfiles(registry = parse('formal/profiles.json')) {
   if (registry.schemaVersion !== 1 || registry.specificationVersion !== '0.1.0' || registry.status !== 'experimental') throw new Error('Unsupported specification/profile registry');
   if (registry.behavioralSchemaVersion !== parse('formal/behavioral-scenarios.json').schemaVersion ||
     registry.protocolSchemaVersion !== protocol.schemaVersion || registry.invalidationSchemaVersion !== parse('formal/invalidation-vectors.json').schemaVersion) throw new Error('Profile registry schema versions have drifted');
-  const expected = ['admission', 'core', 'effects', 'independent', 'layers', 'local-clock', 'local-failure', 'policy', 'recovery', 'recovery-read', 'runtime-boundaries', 'scope', 'shadow', 'shadow-layers', 'source-budgets'];
+  const expected = ['admission', 'core', 'dark-layers', 'effects', 'independent', 'layers', 'local-clock', 'local-failure', 'policy', 'recovery', 'recovery-read', 'runtime-boundaries', 'scope', 'shadow', 'shadow-layers', 'shadow-read-deadlines', 'source-budgets'];
   if (!Array.isArray(registry.profiles) || JSON.stringify(registry.profiles.map(p => p.id).sort()) !== JSON.stringify(expected)) throw new Error('Profile inventory changed; review claims');
   read(registry.normativeDefinition);
   if (registry.behavioralAuthority?.kind !== 'quint' || registry.behavioralAuthority.executionManifest !== 'formal/execution.json' || !registry.behavioralAuthority.conflictPolicy) throw new Error('Quint behavioral authority must be explicit');
   for (const profile of registry.profiles) {
-    const supportedVersion = ["policy", "shadow"].includes(profile.id) ? 3 : ["effects", "scope", "shadow", "layers", "independent"].includes(profile.id) ? 2 : 1;
+    const supportedVersion = ["effects", "policy", "shadow"].includes(profile.id) ? 3 : ["dark-layers", "scope", "layers", "independent"].includes(profile.id) ? 2 : 1;
     if (profile.version !== supportedVersion) throw new Error(`${profile.id}: unsupported profile version`);
     read(profile.definition); read(profile.model);
     for (const path of profile.witnessSources ?? []) read(path);

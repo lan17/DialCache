@@ -87,6 +87,10 @@ it("requires executed assertions and distinguishes detection from infrastructure
     // The first violated rule travels with the error, so a mutant's cohort can be recorded against it by name.
     const thrown = (() => { try { evaluateSemanticTestReport(violated, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1); } catch (error) { return error as Error & { settlementViolation?: string }; } return undefined; })();
     expect(thrown?.settlementViolation).toBe("step 1 action beginCall: Settlement violation: read gates held 0, schedule requires 1");
+    const redisFailure = { testResults: [{ assertionResults: [{ status: "failed", fullName: "Redis vector", failureMessages: ["Error: INVALIDATION_INFRASTRUCTURE: connection refused"] }] }] };
+    expect(() => evaluateSemanticTestReport(redisFailure, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1)).toThrow(/infrastructure/);
+    const codeFrame = { testResults: [{ assertionResults: [{ status: "failed", fullName: "Redis vector", failureMessages: ['AssertionError: expected cutoff1000 to equal10000000\n 24| throw new Error("INVALIDATION_INFRASTRUCTURE: example")'] }] }] };
+    expect(evaluateSemanticTestReport(codeFrame, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1)).toMatchObject({state: "detected"});
     const timedOut = { testResults: [{ assertionResults: [{ status: "failed", fullName: "slow", failureMessages: ["Error: Test timed out in 5000ms."] }] }] };
     const slow = (() => { try { evaluateSemanticTestReport(timedOut, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1); } catch (error) { return error as Error & { settlementViolation?: string }; } return undefined; })();
     expect(slow?.settlementViolation).toBeUndefined();

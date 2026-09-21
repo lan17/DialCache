@@ -26,15 +26,18 @@ module budgeted_local {
 
   // Admission kinds: an enabled caller in persistent context 0 or 1, a caller
   // in a disabled context, a caller whose key failed to construct, and an
-  // enabled caller for key 1 (the two-key layout only).
+  // enabled caller for key 1 (the two-key layout only). A failed key can also
+  // retain the enabled flag: failure still bypasses policy and every layer.
   pure val ENABLED = 0
   pure val ENABLED_OTHER = 1
   pure val DISABLED = 2
   pure val FAILED_KEY = 3
   pure val ENABLED_KEY_ONE = 4
+  pure val ENABLED_FAILED_KEY = 5
   pure def call(kind: int): Call = {
     instance: 0, key: if (kind == ENABLED_KEY_ONE) 1 else 0, context: if (kind == ENABLED_OTHER) 1 else 0,
-    enabled: kind == ENABLED or kind == ENABLED_OTHER or kind == ENABLED_KEY_ONE, keyFailed: kind == FAILED_KEY
+    enabled: kind == ENABLED or kind == ENABLED_OTHER or kind == ENABLED_KEY_ONE or kind == ENABLED_FAILED_KEY,
+    keyFailed: kind == FAILED_KEY or kind == ENABLED_FAILED_KEY
   }
 
   type State = {
@@ -110,6 +113,20 @@ module budgeted_local {
     .expect(s.o.loaders == 3 and s.o.policyCalls == 0 and s.budgets.nth(2) == Deadlines::UNBOUNDED)
     .then(admit(ENABLED_OTHER)).then(release)
     .expect(s.o.loaders == 4 and s.o.policyCalls == 1 and s.budgets.nth(3) == BUDGET and s.sources.nth(3).shared)
+
+  // Keeping enabled true does not let a failed key read a live local entry or
+  // share source work. Both bypass callers retain their configured deadlines.
+  run enabledFailedKeyBypassesCachingWithItsDeadlineTest = init
+    .then(admit(ENABLED)).then(release).then(settle(0, VALUE_ONE))
+    .expect(s.o.calls == List(VALUE_ONE) and s.localValues == List(VALUE_ONE))
+    .then(admit(ENABLED_FAILED_KEY)).then(admit(ENABLED_FAILED_KEY))
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING, CALL_PENDING)
+      and s.o.loaders == 3 and s.o.policyCalls == 1
+      and s.o.reads == 0 and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0
+      and s.budgets == List(BUDGET, BUDGET, BUDGET))
+    .then(advance(BUDGET))
+    .expect(s.o.calls == List(VALUE_ONE, DEADLINE_ERROR, DEADLINE_ERROR)
+      and s.localValues == List(VALUE_ONE) and s.o.policyCalls == 1 and s.o.loaders == 3)
 
   // A caller whose scope closed between admission and release starts its
   // source at release, outside the cache, with the configured budget: it

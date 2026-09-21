@@ -8,32 +8,32 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "5bfe68e355c8334ad2f6e17b973618ff2c8c2a13b19c391940945e9d3b99643d",
-    "executionSha256": "0e4cf73d4db0cde21783c1d7b8ca515893ff55233a9e895ec626449c4cd8608e",
-    "sourceAuditSha256": "fded3982e16d256ab526bd7f17f93b04206b21291b539494301da1e4abf0b93b",
-    "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
-    "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
-    "profilesSha256": "5e28e00d4927c8908938fe4c8a279b1804963138b5d944bc944e4c16d74c6146"
+    "semanticCasesSha256": "faa768fbf06eddc03dc4f26570094b1df066fb075f898043b40c6ce9d8c952a1",
+    "executionSha256": "3df06c53eb69f02fb6eafabd51c6cc7a306c6739e04ab3fa521b53389da559f2",
+    "sourceAuditSha256": "2b749b2b0a17cc7134108fe939fdb7d7792c19883c591379af4b66f2135cd699",
+    "featureCoverageSha256": "91723cc5398c8fff102d2beb199ebcab82af137e11f1cb9771b8d16d0304a95c",
+    "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
+    "profilesSha256": "f8ec93fe5aa23faa69edd0a632a645874a6190a48ed613d2c65f82045219f49c"
   },
   "inventory": {
-    "behavioralCases": 240,
-    "withRequiredGeneratedWitnesses": 240,
+    "behavioralCases": 244,
+    "withRequiredGeneratedWitnesses": 244,
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
     "sourceDeclarations": 772,
-    "casesWithScheduledChecks": 262,
-    "requiredWitnesses": 440,
-    "casesWithQuintRegressionReplay": 174,
+    "casesWithScheduledChecks": 266,
+    "requiredWitnesses": 497,
+    "casesWithQuintRegressionReplay": 192,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
-    "quintModels": 30,
-    "scheduledInvariants": 213,
-    "scheduledRegressions": 413,
+    "quintModels": 32,
+    "scheduledInvariants": 253,
+    "scheduledRegressions": 468,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 310
+    "caseReferencedWitnesses": 343,
+    "exportedRegressionHistories": 358
   },
   "cases": [
     {
@@ -424,6 +424,18 @@
       "id": "C10.zero-capacity",
       "kind": "portable-behavior",
       "group": "request-and-layers",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "C11.process-inspection",
+      "kind": "portable-behavior",
+      "group": "coalescing",
       "gaps": [],
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
@@ -2863,6 +2875,18 @@
       "gaps": []
     },
     {
+      "id": "C22.adapter-frame-expiry",
+      "kind": "portable-behavior",
+      "group": "frame-age-and-retention",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "The same exported adapter frame histories establish last-fresh hit and exact-expiry miss, source refill, later reuse and expired diagnostic in both ports."
+      }
+    },
+    {
       "id": "C22.freshness-after-read",
       "group": "policy",
       "evidence": {
@@ -3199,6 +3223,30 @@
       "id": "C09.fractional-clock-grid",
       "kind": "portable-behavior",
       "gaps": []
+    },
+    {
+      "id": "C23.later-dark-budget-origins",
+      "group": "deadlines",
+      "kind": "portable-behavior",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "An immediately resolved later dark source publishes locally and returns to both caller scopes while its independent dark read remains held; both native ports replay the exact generated schedule."
+      }
+    },
+    {
+      "id": "C54.later-served-job-budget-origin",
+      "group": "shadow",
+      "kind": "portable-behavior",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "A later served-hit shadow job rejects within its own ten-millisecond budget and reports source_error, preserving the acquired caller value; both native ports replay the exact generated schedule."
+      }
     }
   ],
   "sourceDeclarationScope": {
@@ -5057,7 +5105,7 @@
     {
       "id": "X01",
       "boundary": "Optional observability integration",
-      "existingTreatment": "Backend metric names, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing precision are covered by implementation/integration tests. Current portable claims include C57–C60 diagnostic semantics and failure isolation; exact exporter schemas, buckets, registry compatibility, timing precision, and logging resource limits remain separate.",
+      "existingTreatment": "Backend metric names, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing precision are covered by implementation/integration tests. Current portable claims include C57–C60 diagnostic semantics and failure isolation plus C11 process-coalescing snapshot semantics; exact exporter schemas, buckets, registry compatibility, timing precision, and logging resource limits remain separate.",
       "goStatus": "explicit-native-binding-adaptation",
       "goTreatment": "Portable diagnostics require shared generated histories. Native metric names, labels, buckets, units, counts and bounded logging have focused Go tests. NewPrometheusMetricsWithBindings reuses caller-owned individually registered CounterVec/HistogramVec objects after checking declared construction schema, public descriptors and registry identity; new collectors register atomically. Because client_golang exposes no bucket configuration for an empty histogram, accurate caller-supplied schema is an explicit binding precondition; construction must not race with collector registration/reconfiguration. No private-field inspection or temporary series is used.",
       "nativeTests": [
@@ -5092,7 +5140,7 @@
           "formal/cache-rules.qnt"
         ]
       },
-      "artifactSha256": "8483d4849166c95aa5cd77433214402cd68f7a2226e0fb7eee5cafeb88e99204",
+      "artifactSha256": "ccc462f8093da0d72b6db3f25a10945a3130bace6dffcac65e58ea9eef870064",
       "status": "executable-vector-schedule"
     },
     {
@@ -5124,7 +5172,7 @@
           "formal/cohort-boundaries.qnt"
         ]
       },
-      "artifactSha256": "ec498a23074896062af5b454d56c6c76682cb8498c1aa0149f8802f62a97fa00",
+      "artifactSha256": "e34a95a7f6a475fa542abf5c80e1626a712f6010e510c31e0bc5559ff1902d51",
       "status": "executable-vector-schedule"
     },
     {
@@ -5140,7 +5188,7 @@
           "formal/generate-envelope-vectors.mjs"
         ]
       },
-      "artifactSha256": "8bf30df4ad878464956aa73a948e3a263c29be7aed5412662f2c22f4ddc866b2",
+      "artifactSha256": "b154c5d764215a60413eda4248891fa58e17221b784346eaa304872be45de284",
       "status": "executable-vector-schedule"
     }
   ]

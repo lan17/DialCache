@@ -134,6 +134,34 @@
         "futureOffsets": true
       }
     },
+    "dark-layers": {
+      "o": {
+        "calls": true,
+        "classifications": true,
+        "comparisons": true,
+        "dumps": true,
+        "invalidations": true,
+        "loaders": true,
+        "loads": true,
+        "maintenance": true,
+        "policyCalls": true,
+        "reads": true,
+        "recovery": true,
+        "shadow": true,
+        "sourceScopes": true,
+        "writeTtls": true,
+        "writes": true
+      },
+      "d": {
+        "ages": true,
+        "coalesced": true,
+        "configErrors": true,
+        "fallbackErrors": true,
+        "warnings": true,
+        "futureOffsets": true,
+        "inspections": true
+      }
+    },
     "policy-observations": {
       "o": {
         "calls": true,
@@ -293,6 +321,38 @@
       },
       "markers": true,
       "compression": true
+    },
+    "shadow-read-deadlines": {
+      "o": {
+        "calls": true,
+        "classifications": true,
+        "comparisons": true,
+        "dumps": true,
+        "invalidations": true,
+        "loaders": true,
+        "loads": true,
+        "maintenance": true,
+        "policyCalls": true,
+        "reads": true,
+        "recovery": true,
+        "shadow": true,
+        "sourceScopes": true,
+        "writeTtls": true,
+        "writes": true
+      },
+      "d": {
+        "ages": true,
+        "coalesced": true,
+        "configErrors": true,
+        "fallbackErrors": true,
+        "warnings": true,
+        "futureOffsets": true
+      },
+      "io": {
+        "aborted": true,
+        "budgets": true,
+        "sourceErrors": true
+      }
     }
   },
   "artifacts": [
@@ -1143,6 +1203,16 @@
         {
           "id": "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
           "regression": "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
+          "projection": "effects"
+        },
+        {
+          "id": "frameReplyAtLastFreshMillisecondHitsTest",
+          "regression": "frameReplyAtLastFreshMillisecondHitsTest",
+          "projection": "effects"
+        },
+        {
+          "id": "staleFrameReplyExpiresRefillsAndIsReadableTest",
+          "regression": "staleFrameReplyExpiresRefillsAndIsReadableTest",
           "projection": "effects"
         }
       ]
@@ -2715,6 +2785,260 @@
             ]
           ],
           "projection": "independent-shadow"
+        }
+      ]
+    },
+    {
+      "path": "formal/dark-layers-smoke.itf.json",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "format": "smoke",
+      "recipes": [
+        {
+          "id": "smoke",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "releaseDump",
+              0
+            ],
+            [
+              "releaseWrite",
+              0
+            ]
+          ],
+          "projection": "dark-layers"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/dark-layers-witnesses.json",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "format": "named-list",
+      "recipes": [
+        {
+          "id": "rejectedDarkSourceSeedsNoLayerTest",
+          "regression": "rejectedDarkSourceSeedsNoLayerTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "uncoalescedPublicationDoesNotPreemptTheRegisteredLeaderTest",
+          "regression": "uncoalescedPublicationDoesNotPreemptTheRegisteredLeaderTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "darkFillCarriesCapturedRetentionOnTheHeldPathTest",
+          "regression": "darkFillCarriesCapturedRetentionOnTheHeldPathTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "fillAtTheWatermarkInstantIsFencedTest",
+          "regression": "fillAtTheWatermarkInstantIsFencedTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "frameAtTheWatermarkIsFencedFromTheDarkReadTest",
+          "regression": "frameAtTheWatermarkIsFencedFromTheDarkReadTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "fillFenceIsRejudgedAfterAWallRollbackTest",
+          "regression": "fillFenceIsRejudgedAfterAWallRollbackTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "staleVisibleFrameDeclinedByTheDarkReadFillsUnfencedTest",
+          "regression": "staleVisibleFrameDeclinedByTheDarkReadFillsUnfencedTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "undecodableDarkC0IsNeverRepairedTest",
+          "regression": "undecodableDarkC0IsNeverRepairedTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "unsupportedEncodingFailsTheDarkReadTest",
+          "regression": "unsupportedEncodingFailsTheDarkReadTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "sourceDeadlineExpiresTheDarkJobAndAttributesToTheLocalLayerTest",
+          "regression": "sourceDeadlineExpiresTheDarkJobAndAttributesToTheLocalLayerTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest",
+          "regression": "sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "closedScopeCallerBypassesLayersAndAdmitsNoJobTest",
+          "regression": "closedScopeCallerBypassesLayersAndAdmitsNoJobTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "fullInstanceDropsAnotherKeyWhileTheC0ReadIsHeldTest",
+          "regression": "fullInstanceDropsAnotherKeyWhileTheC0ReadIsHeldTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest",
+          "regression": "dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "localPublicationStopsLaterDarkWorkTest",
+          "regression": "localPublicationStopsLaterDarkWorkTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "retainedC0AgeIsSampledAtTheVerdictTest",
+          "regression": "retainedC0AgeIsSampledAtTheVerdictTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "rollbackMakesTheSeededFrameFutureAndReportsItsOffsetTest",
+          "regression": "rollbackMakesTheSeededFrameFutureAndReportsItsOffsetTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "transientRequestOnlySourceFailureIsAttributedToRequestLayerTest",
+          "regression": "transientRequestOnlySourceFailureIsAttributedToRequestLayerTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "laterDarkSourceKeepsItsWholeBudgetTest",
+          "regression": "laterDarkSourceKeepsItsWholeBudgetTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "timedOutDarkReadKeepsCapacityUntilRawReleaseTest",
+          "regression": "timedOutDarkReadKeepsCapacityUntilRawReleaseTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "timedOutDarkDecodeKeepsCapacityUntilRawReleaseTest",
+          "regression": "timedOutDarkDecodeKeepsCapacityUntilRawReleaseTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "timedOutDarkConfirmationKeepsCapacityUntilRawReleaseTest",
+          "regression": "timedOutDarkConfirmationKeepsCapacityUntilRawReleaseTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "timedOutDarkDumpKeepsCapacityUntilRawReleaseTest",
+          "regression": "timedOutDarkDumpKeepsCapacityUntilRawReleaseTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "timedOutDarkWriteKeepsCapacityUntilRawReleaseTest",
+          "regression": "timedOutDarkWriteKeepsCapacityUntilRawReleaseTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionTracksKeysFollowersAndOldestLeaderTest",
+          "regression": "inspectionTracksKeysFollowersAndOldestLeaderTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionIsPerInstanceAndUsesMonotonicTimeTest",
+          "regression": "inspectionIsPerInstanceAndUsesMonotonicTimeTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionExcludesRequestOnlyAndUncoalescedWorkTest",
+          "regression": "inspectionExcludesRequestOnlyAndUncoalescedWorkTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionClearsTimedOutCallersWhileRawWorkRemainsTest",
+          "regression": "inspectionClearsTimedOutCallersWhileRawWorkRemainsTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionExcludesUnfinishedShadowAfterCallerSuccessTest",
+          "regression": "inspectionExcludesUnfinishedShadowAfterCallerSuccessTest",
+          "projection": "dark-layers"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/admission-budget-witnesses.json",
+      "model": "formal/dialcache-admission-conformance.qnt",
+      "format": "named-list",
+      "recipes": [
+        {
+          "id": "laterServedShadowKeepsItsWholeBudgetTest",
+          "regression": "laterServedShadowKeepsItsWholeBudgetTest",
+          "projection": "observations"
+        }
+      ]
+    },
+    {
+      "path": "formal/shadow-read-deadlines-smoke.itf.json",
+      "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "format": "smoke",
+      "recipes": [
+        {
+          "id": "smoke",
+          "regression": "c0ReadDeadlineKeepsRawCapacityTest",
+          "projection": "shadow-read-deadlines"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/shadow-read-deadlines-witnesses.json",
+      "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "format": "named-list",
+      "recipes": [
+        {
+          "id": "c0ReadDeadlineKeepsRawCapacityTest",
+          "regression": "c0ReadDeadlineKeepsRawCapacityTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "c1ReadDeadlineKeepsRawCapacityTest",
+          "regression": "c1ReadDeadlineKeepsRawCapacityTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "jobDeadlineThenReadDeadlineReportsOneVerdictTest",
+          "regression": "jobDeadlineThenReadDeadlineReportsOneVerdictTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "confirmationKeepsCapturedReadBudgetTest",
+          "regression": "confirmationKeepsCapturedReadBudgetTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "confirmationReadBudgetStartsAtItsOwnDispatchTest",
+          "regression": "confirmationReadBudgetStartsAtItsOwnDispatchTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "readBeforeDeadlineCanFillAndCancelsItsTimerTest",
+          "regression": "readBeforeDeadlineCanFillAndCancelsItsTimerTest",
+          "projection": "shadow-read-deadlines"
         }
       ]
     }

@@ -30,7 +30,10 @@ module markers {
   // drivers read, the cutoff against the origin the drivers report cutoffs
   // from (an explicit argument, not the skew, which diverges from it after a
   // wall rollback) and the remaining lifetime, or NO_MARKER (Redis PTTL -2 on
-  // a missing key). One consumer today, recovery-read.
+  // a missing key). One consumer today, recovery-read, whose inputs do not
+  // roll back the wall clock. Marker expiry during delivered deadlines needs
+  // a kernel variant that expires markers inside deadlines::deliver's walk;
+  // applying expire after that walk would miss the intermediate instants.
   import cache_rules.* from "../cache-rules"
   import clock as Clock from "./clock"
   import remote_frames as Remote from "./remote-frames"

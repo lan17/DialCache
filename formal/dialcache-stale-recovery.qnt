@@ -1,5 +1,6 @@
 module dialcache_stale_recovery {
   import cache_rules.* from "./cache-rules"
+  import cache_contract as Contract from "./cache-contract"
   // Stale-on-error for one Redis frame and one caller/coalesced flight.
   // F is the fresh ceiling; M is the exclusive recovery ceiling. Recovery uses
   // retained bytes from the initial read and deliberately has no second read.
@@ -64,7 +65,7 @@ module dialcache_stale_recovery {
     s.readHealthy and initialFrameUsable and
       retainedAgeAllowed(s.frameCreatedAt, s.now, FRESH_AGE, MAX_RECOVERY_AGE)
   val candidateWithinRecoveryAge =
-    recoveryAgeAllowed(s.candidateCreatedAt, s.now, MAX_RECOVERY_AGE)
+    retainedCandidateAgeAllowed(s.candidateCreatedAt, s.now, MAX_RECOVERY_AGE)
 
   // Initial state
   action init = s' = {
@@ -169,7 +170,7 @@ module dialcache_stale_recovery {
         PlainMiss,
       readReceipt: { recorded: true, frameCreatedAt: s.frameCreatedAt, now: s.now },
       candidateRetained: candidateAtInitialRead,
-      candidateCreatedAt: if (candidateAtInitialRead) s.frameCreatedAt else s.candidateCreatedAt,
+      candidateCreatedAt: if (candidateAtInitialRead) Contract::retainedFrameStamp(s.frameCreatedAt, s.now) else s.candidateCreatedAt,
       finalOutcome: if (freshAtInitialRead) ServedFresh else s.finalOutcome,
       ...s
     },

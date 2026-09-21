@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { assertSubset } from "./validation.mjs";
 import { assertInputMetadata, itfInteger, itfSignedInteger, record } from "./itf.mjs";
-export const actions = ["init", "beginCall", "resolveLoader", "rejectLoader", "releaseRead", "failRead", "releaseLoad", "failLoad", "releaseDump", "failDump", "releaseWrite", "failWrite", "seedRemote", "tick", "jumpClock", "rollbackWall", "observerFault", "readBudgetPolicy", "adapterReply", "invalidate", "futureFence"];
+export const actions = ["init", "beginCall", "resolveLoader", "rejectLoader", "releaseRead", "failRead", "releaseLoad", "failLoad", "releaseDump", "failDump", "releaseWrite", "failWrite", "seedRemote", "tick", "jumpClock", "rollbackWall", "advanceWall", "observerFault", "readBudgetPolicy", "adapterReply", "invalidate", "futureFence"];
 export const observedFields = ["loaders", "reads", "writes", "invalidations", "loads", "dumps", "policyCalls"];
 const eventNames = ["request", "disabled", "miss", "error", "coalesced", "invalidation", "get", "fallback", "serialization", "futureOffset", "size", "storedSize", "writeDispatch"];
 const timedEvents = new Set(["get", "fallback", "serialization", "futureOffset"]);
@@ -13,7 +13,8 @@ const timedEvents = new Set(["get", "fallback", "serialization", "futureOffset"]
 const sharedToEffectsCode = { 0: 0, 1: 1, 3: 2, 4: 3 };
 // The fixture's remote TTL, the retention every write carries.
 const REMOTE_TTL_MS = 60000;
-const chosenActions = new Set(["init", "adapterReply", "readBudgetPolicy", "observerFault", "resolveLoader", "rejectLoader", "releaseRead", "failRead"]);
+const chosenActions = new Set(["init", "advanceWall", "adapterReply", "readBudgetPolicy", "observerFault", "resolveLoader", "rejectLoader", "releaseRead", "failRead"]);
+const wallAdvances = [1, 59999, 60000];
 const choiceBounds = { init: [0, 5], readBudgetPolicy: [0, 4], observerFault: [0, 1], adapterReply: [1, 16] };
 
 function parseEvents(raw, context) {
@@ -89,6 +90,7 @@ export function parseTrace(value, path) {
     if (chosen) {
       if (encoded < 0) throw new Error(`${context}: missing effect choice`);
       choice = encoded;
+      if (action === "advanceWall" && !wallAdvances.includes(choice)) throw new Error(`${context}: unsupported wall advance`);
       const bounds = choiceBounds[action];
       if (bounds && (choice < bounds[0] || choice > bounds[1])) throw new Error(`${context}: unsupported effect choice`);
     } else if (encoded !== -1) throw new Error(`${context}: unexpected effect choice`);
@@ -105,7 +107,7 @@ export function parseTrace(value, path) {
 // with: the actions and their choice domains, over the record above.
 export const effectsDescriptor = { explicitInputs: true, parseTrace,
   actions: Object.fromEntries(actions.filter(name => name !== "init").map(name => [name,
-    chosenActions.has(name) ? { choices: choiceBounds[name] ? Array.from({ length: choiceBounds[name][1] - choiceBounds[name][0] + 1 }, (_, i) => choiceBounds[name][0] + i) : "index" } : {}])) };
+    name === "advanceWall" ? { choices: wallAdvances } : chosenActions.has(name) ? { choices: choiceBounds[name] ? Array.from({ length: choiceBounds[name][1] - choiceBounds[name][0] + 1 }, (_, i) => choiceBounds[name][0] + i) : "index" } : {}])) };
 // Concrete JSON encodings of the model's semantic reply classes. Timestamps
 // come from the controlled external clock, never expected model state.
 function adapterReply(choice, stamp) {
@@ -146,6 +148,7 @@ export function inputsFor(step, observed, environment) {
     case "readBudgetPolicy": return [{ op: "policy", value: step.choice === 0 ? {} : { remoteReadTimeoutMs: [0, 10, 20, 30, 50][step.choice] } }];
     case "adapterReply": return [{ op: "adapterReply", value: adapterReply(step.choice, environment.wallMs) }];
     case "observerFault": return [{ op: "faults", value: { observer: step.choice === 1 } }];
+    case "advanceWall": return [{ op: "shiftWall", ms: step.choice }];
     case "rollbackWall": return [{ op: "shiftWall", ms: -1000 }];
     case "invalidate": return [{ op: "invalidate" }];
     case "futureFence": return [{ op: "invalidate", futureBufferMs: 20 }];

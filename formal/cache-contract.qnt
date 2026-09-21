@@ -4,6 +4,10 @@ module cache_contract {
   // Small reference contracts for acquired recovery bytes and source ownership.
   // Profiles project their external acquisition/start events into these records.
   // Later storage, policy and caller changes cannot rewrite an acquired record.
+  // Acquiring bytes keeps their frame stamp. The read time records when the
+  // acquisition happened, never a new creation time for those bytes.
+  pure def retainedFrameStamp(frameCreated: int, readAt: int): int = frameCreated
+
   type RecoverySnapshot = {
     owner: int, payload: int, created: int, maximum: int, acquiredAt: int
   }

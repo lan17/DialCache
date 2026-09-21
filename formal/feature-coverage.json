@@ -92,7 +92,7 @@
         "C22.freshness-boundary",
         "C22.physical-vs-logical",
         "C06.absent-distinct-from-text",
-        "C22.freshness-after-read",
+        "C22.adapter-frame-expiry", "C22.freshness-after-read",
         "C05.request-hit-stops-traversal",
         "C05.local-hit-stops-traversal",
         "C09.fractional-clock-grid"
@@ -120,6 +120,7 @@
       "cases": [
         "C11.distinct-keys",
         "C11.one-registered-flight",
+        "C11.process-inspection",
         "C12.separate-request-memos",
         "C13.uncoalesced-caching",
         "C13.local-last-writer",
@@ -221,7 +222,8 @@
         "C56.late-read",
         "C56.clear-read-timer",
         "C24.independent-source-budgets",
-        "C23.policy-does-not-spend-source-budget"
+        "C23.policy-does-not-spend-source-budget",
+        "C23.later-dark-budget-origins"
       ],
       "nativeCases": [
         "B02.precise-elapsed-deadlines"
@@ -414,6 +416,7 @@
         "C53.confirmation-fails-open",
         "C54.deduplication",
         "C54.source-ownership",
+        "C54.later-served-job-budget-origin",
         "C54.decode-ownership",
         "C54.read-ownership",
         "C54.comparison-budget",
@@ -617,25 +620,25 @@
           "test": "reuses a stable use case without registering it and still rejects the reserved name",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Asserts that the TypeScript binding reuses a stable use case without registering it and still rejects the reserved name.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         },
         {
           "test": "validates and snapshots defaultConfig independently for each invocation",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Asserts that the TypeScript binding validates and snapshots defaultConfig independently for each invocation.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         },
         {
           "test": "reads and writes Redis values with the per-invocation serializer",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Asserts that the TypeScript binding reads and writes Redis values with the per-invocation serializer.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         },
         {
           "test": "uses captured values from each invocation and requires them in the direct key",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Inline operations use each invocation value and explicit key arguments; distinct captured inputs stay separated by their direct cache keys.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         }
       ],
       "go": [
@@ -683,7 +686,7 @@
           "test": "reuses a stable use case without registering it and still rejects the reserved name",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Asserts that the TypeScript binding reuses a stable use case without registering it and still rejects the reserved name.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         },
         {
           "test": "fails open when an explicit cacheKey selector throws",
@@ -1609,7 +1612,7 @@
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
-      "adaptation": "Inspection is a public diagnostic feature not currently represented by portable event traces.",
+      "adaptation": "C11.process-inspection covers public snapshot semantics through the same Quint histories in both ports. Native tests retain API shape and fractional duration precision obligations; Go zero idle duration is projected to null using the observed zero leader count.",
       "gaps": []
     },
     {

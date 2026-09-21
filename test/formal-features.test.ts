@@ -2,6 +2,7 @@ import { profiles, parseTrace, featureInput, assertFeatureObservation, type Trac
 import { SettlementLedger } from "../formal/replay/settlement.mjs";
 import { checkCorpus, loadCorpus } from "../formal/replay/witnesses/index.mjs";
 import { readFileSync, readdirSync } from "node:fs";
+import { isObservationComparison } from "../formal/replay/divergence.mjs";
 import { resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -40,7 +41,12 @@ async function replay(profile: Profile, trace: Trace, harness: { settle?: boolea
       // carry the expected/actual markers the mutation lanes credit.
       try { ledger.assert(driver.receipt(), observed, { wallMs: Date.now() }); }
       catch (cause) { throw new Error([`${context}: ${(cause as Error).message}`, driver.settlementDiagnostic()].filter(Boolean).join("\n"), { cause }); }
-      try { assertFeatureObservation(profile, step, observed); } catch (cause) { throw mismatch(cause); }
+      try { assertFeatureObservation(profile, step, observed); } catch (cause) {
+        // Mutation diagnostics must compare the same projection as the assertion,
+        // rather than the model's o/d/io records against the raw driver snapshot.
+        if (isObservationComparison(cause)) throw new Error(`${context}\ncomparison: projected-v1\nexpected: ${JSON.stringify(cause.expected)}\nactual: ${JSON.stringify(cause.actual)}`, { cause });
+        throw mismatch(cause);
+      }
     }
   } finally { await driver.dispose(); }
 }

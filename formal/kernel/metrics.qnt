@@ -74,6 +74,27 @@ module metrics {
     dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite] | r
   }, q]
 
+  // A profile's independent diagnostic property reads the raw acquisition
+  // facts beside the resulting event stream. This receipt makes no judgment
+  // about freshness or the miss category, and no transition consumes it.
+  type FrameReadReceipt = { frame: bool, owns: bool, stamp: int, wall: int,
+    freshMs: int, elapsed: int, due: int, missesBefore: int }
+  pure val NO_FRAME_READ_RECEIPT: FrameReadReceipt = { frame: false, owns: false,
+    stamp: 0, wall: 0, freshMs: 0, elapsed: 0, due: 0, missesBefore: 0 }
+  pure def frameReadReceipt(state: Metered[r, q], read: int): FrameReadReceipt = {
+    val held = RemoteIO::heldRead(state, read)
+    {
+      frame: state.reply == Replies::FRAME_WITH_MISS_FIELDS,
+      owns: held.flight != NO_OWNER,
+      stamp: state.replyAt,
+      wall: state.now + state.skew,
+      freshMs: held.ttls.freshMs,
+      elapsed: state.now,
+      due: if (held.flight == NO_OWNER) 0 else state.readStarted.nth(held.flight) + state.io.budgets.nth(read),
+      missesBefore: state.events.select(e => e.event == "miss").length()
+    }
+  }
+
   pure def event(state: Metered[r, q], name: str, location: str, detail: str, amount: int): Metered[r, q] =
     { events: state.events.append({ event: name, location: location, detail: detail, amount: amount }), ...state }
   pure def remote(state: Metered[r, q], name: str, detail: str, amount: int): Metered[r, q] =

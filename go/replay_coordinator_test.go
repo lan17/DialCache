@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -248,6 +249,19 @@ func (c *replayCoordinator) replay(d *behaviorDriver, prepared obj, monitors ...
 func (c *replayCoordinator) execute(prepared obj, apply func(obj) error, observation func() obj, wallMS func() int64, monitors ...func() error) error {
 	return c.executeWithReceipt(prepared, apply, observation, wallMS, nil, monitors...)
 }
+
+func replayRecordingError(err error) error {
+	// Full monitor input validation precedes this typed semantic assertion.
+	// Recording still requires the coordinator's complete observation comparison;
+	// this diagnostic alone never establishes boundary evidence.
+	var property *behaviorPropertyAssertion
+	if os.Getenv("DIALCACHE_REPLAY_DIVERGENCES") != "" && errors.As(err, &property) {
+		fmt.Fprintln(os.Stderr, property)
+		return nil
+	}
+	return err
+}
+
 func (c *replayCoordinator) executeWithReceipt(prepared obj, apply func(obj) error, observation func() obj, wallMS func() int64, receipt func() obj, monitors ...func() error) error {
 	session := bs(prepared["session"])
 	complete := false
@@ -264,13 +278,13 @@ func (c *replayCoordinator) executeWithReceipt(prepared obj, apply func(obj) err
 		return fmt.Errorf("replay session requires a %s receipt the driver does not report", receiptDefinition)
 	}
 	for _, input := range ba(prepared["setup"]) {
-		if err := apply(bm(input)); err != nil {
+		if err := replayRecordingError(apply(bm(input))); err != nil {
 			return err
 		}
 	}
 	for index := int64(0); index < bn(prepared["steps"]); index++ {
 		for _, monitor := range monitors {
-			if err := monitor(); err != nil {
+			if err := replayRecordingError(monitor()); err != nil {
 				return err
 			}
 		}
@@ -303,7 +317,7 @@ func (c *replayCoordinator) executeWithReceipt(prepared obj, apply func(obj) err
 			return fmt.Errorf("malformed next replay command")
 		}
 		for _, input := range ba(result["inputs"]) {
-			if err := apply(bm(input)); err != nil {
+			if err := replayRecordingError(apply(bm(input))); err != nil {
 				return err
 			}
 		}

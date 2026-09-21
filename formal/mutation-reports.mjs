@@ -2,7 +2,51 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
+import { boundaryEvidence, challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
+import { countingPaths } from './replay/divergence.mjs';
+import { assessVectorBoundary } from './vector-evidence.mjs';
+
+// Preserve profile/run identity when workspaces and artifact roots differ.
+export function historyFromPath(path) {
+  return /(?:^|\/)regressions\/([a-z-]+\/[^/]+)\.itf\.json$/.exec(String(path))?.[1];
+}
+
+// Boundary recordings are separate from the ordinary detection cohorts. A
+// failed driver or incomplete history never earns credit, even if it diverged
+// earlier. Counters already wrong at the previous step cannot impersonate a
+// consequence at this checkpoint.
+export function assessBoundary(evidence, recording) {
+  if (evidence.vector) return assessVectorBoundary(evidence, recording);
+  const result = { ...evidence, via: 'coordinator' };
+  if (['vector', 'unreproduced'].includes(evidence.state)) return result;
+  result.completed = recording?.completed === true;
+  result.lastStep = recording?.lastStep ?? -1;
+  const unreached = reason => ({ ...result, state: 'unreached', reason,
+    divergences: Array.isArray(recording?.divergences) ? recording.divergences : [] });
+  if (!recording) return unreached('No boundary recording was produced');
+  if (historyFromPath(recording.path) !== evidence.history) return unreached(`Recording names a different history: ${recording.path}`);
+  if (recording.completed !== true || recording.error !== undefined) return unreached(recording.error ?? `History stopped after observation ${recording.lastStep}`);
+  if (!Number.isSafeInteger(recording.lastStep) || recording.lastStep < evidence.step) return unreached(`Checkpoint ${evidence.step} was not reached (last observation ${recording.lastStep})`);
+  const divergences = recording.divergences;
+  if (!Array.isArray(divergences) || divergences.some((item, index) => !Number.isSafeInteger(item.step) || item.step < 0 || item.step > recording.lastStep ||
+      (index > 0 && item.step <= divergences[index - 1].step) || !Array.isArray(item.paths) || !item.paths.length || item.paths.some(path => typeof path !== 'string'))) {
+    return unreached('Malformed divergence recording');
+  }
+  const at = divergences.find(item => item.step === evidence.step)?.paths ?? [];
+  const before = divergences.find(item => item.step === evidence.step - 1)?.paths ?? [];
+  const matched = countingPaths(evidence.fields, at, before);
+  return { ...result, state: matched.length ? 'confirmed' : divergences.length ? 'side-effect-only' : 'not-divergent',
+    divergences, ...(matched.length ? { matched } : {}) };
+}
+
+export function boundaryColumn(entries) {
+  if (!entries) return 'not recorded';
+  const measured = entries.filter(entry => !['vector', 'unreproduced'].includes(entry.state));
+  const counts = `confirmed ${measured.filter(entry => entry.state === 'confirmed').length}/${measured.length}`;
+  const gaps = ['vector', 'unreproduced'].map(state => `${state} ${entries.filter(entry => entry.state === state).length}`);
+  const failures = measured.filter(entry => entry.state !== 'confirmed').map(entry => `${entry.challenge}: ${entry.state}`);
+  return [counts, ...gaps, ...failures].join('; ');
+}
 
 // Shared by measure-semantics.mjs, measure-go-semantics.mjs and
 // merge-mutation-reports.mjs: the catalog selection, the input fingerprint,
@@ -88,11 +132,15 @@ export function fingerprintFiles(directory, paths) {
 
 // Every listed catalog entry must have a measured result; a required cohort
 // that did not detect the fault is a regression named `<id>/<cohort>`.
-export function requiredDetectionRegressions(entries, results) {
+export function requiredDetectionRegressions(entries, results, boundaries = results.flatMap(result => result.boundary ?? [])) {
   return entries.flatMap(entry => {
     const result = results.find(item => item.id === entry.id);
     if (!result) throw new Error(`${entry.id}: catalog entry has no measured result`);
-    return entry.requiredDetections.filter(cohort => result.cohorts[cohort].state !== 'detected').map(cohort => `${entry.id}/${cohort}`);
+    return [
+      ...entry.requiredDetections.filter(cohort => result.cohorts[cohort].state !== 'detected').map(cohort => `${entry.id}/${cohort}`),
+      ...boundaries.filter(boundary => boundary.mutant === entry.id && !['confirmed', 'vector', 'unreproduced'].includes(boundary.state))
+        .map(boundary => `${entry.id}/boundary:${boundary.challenge}`),
+    ];
   });
 }
 
@@ -174,7 +222,7 @@ export function noncompilingResult(mutation, cohorts, reason) {
 // A partial (--only) run reports its lost required detections and stops: it
 // is not gated and never completes, so the complete report is untouched.
 export function finishPartial(report, selected, { output, save }) {
-  const lost = requiredDetectionRegressions(selected, report.mutations);
+  const lost = requiredDetectionRegressions(selected, report.mutations, currentBoundaries(report, selected));
   save();
   console.log(lost.length ? `Lost required detections (a partial run is not gated): ${lost.join(', ')}` : 'Every required detection of the selected mutants held');
   console.log(`Partial measurement of ${selected.map(m => m.id).join(', ')}: ${output}/report.json; measure the complete catalog for evidence`);
@@ -199,8 +247,8 @@ function typescriptMarkdown(report, directory = root) {
     '| --- | ---: | ---: | ---: |',
     ...['cases', 'behavioral', 'protocol'].map(scope => { const c = report.declaredCoverage[scope]; return `| ${scope} | ${c.total} | ${c.portable} | ${c.generated} |`; }), '',
     'Protocol references include invalidation vectors exercised separately by integration CI. Model references are a conservative named-property subset, not total model coverage.', '',
-    '| Mutation | Case | Challenges | Ordinary | Generated | Full portable |', '| --- | --- | --- | --- | --- | --- |',
-    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${challenges(m.id)} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.portable.state} |`), '',
+    '| Mutation | Case | Challenges | Ordinary | Generated | Full portable | Boundary |', '| --- | --- | --- | --- | --- | --- | --- |',
+    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${challenges(m.id)} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.portable.state} | ${boundaryColumn(m.boundary)} |`), '',
     'Challenges are the model property challenges whose fault the mutant injects natively (nativeMutants in formal/execution.json). Full JSON includes exact input/corpus hashes, cohort counts, reached witnesses, behavioral/protocol scores, and failing test names. Adjacent JSON/log files retain assertion diagnostics and trace paths.', ''].join('\n');
 }
 
@@ -208,8 +256,8 @@ function goMarkdown(report, directory = root) {
   const challenges = challengesColumn(directory);
   return ['# Go semantic mutation measurement', '', `Completed in ${report.elapsedSeconds}s. Counts measure this named fault catalog and exact corpus, not universal equivalence.`, '',
     ...shardsMarkdown(report),
-    '| Mutation | Contract case | Challenges | Ordinary | Quint generated | Fixed supplement | Full portable |', '| --- | --- | --- | --- | --- | --- | --- |',
-    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${challenges(m.id)} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.fixed.state} | ${m.cohorts.portable.state} |`), '',
+    '| Mutation | Contract case | Challenges | Ordinary | Quint generated | Fixed supplement | Full portable | Boundary |', '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${challenges(m.id)} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.fixed.state} | ${m.cohorts.portable.state} | ${boundaryColumn(m.boundary)} |`), '',
     'Challenges are the model property challenges whose fault the mutant injects natively (nativeMutants in formal/execution.json). Full JSON records snapshot/corpus/witness fingerprints, selected tests, actual passing/failing leaf counts, and assertion diagnostics. Compilation errors, crashes, timeouts, missing witnesses, and skipped executions cannot count as detections.', ''].join('\n');
 }
 
@@ -231,14 +279,118 @@ export const languages = {
     detection: mutations => goDetection(mutations), markdown: goMarkdown, recordsRegressions: true },
 };
 
+// Historical inspection may read a report anywhere. Gated inspection instead
+// binds its evidence to this checkout and the exact corpus it claims to test.
+// Existing report formats distinguish Go by its toolchain version and
+// TypeScript by its separately fingerprinted project configuration; Go's
+// module configuration is already covered by the go/ input tree.
+export function validateBoundaryReportFreshness(report, { directory = root } = {}) {
+  const go = typeof report.go === 'string';
+  const typescript = report.configurationSha256 !== undefined;
+  if (go === typescript) throw new Error('Boundary gate requires unambiguous TypeScript or Go report metadata');
+  const language = go ? languages.go : languages.ts;
+  const catalogSha256 = sha256(readFileSync(resolve(directory, language.catalog)));
+  if (report.catalogSha256 !== catalogSha256) throw new Error('Boundary gate: mutation catalog differs from the measured report');
+  const sameFingerprint = (recorded, measured) => recorded?.files === measured.files && recorded?.sha256 === measured.sha256;
+  if (!sameFingerprint(report.inputs, fingerprintFiles(directory, language.inputs))) {
+    throw new Error(`Boundary gate: ${language.name} source inputs differ from the measured report`);
+  }
+  if (typescript) {
+    const configuration = ['package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'vitest.config.ts'];
+    const recorded = report.configurationSha256;
+    if (!recorded || typeof recorded !== 'object' || Array.isArray(recorded) ||
+        Object.keys(recorded).sort().join() !== [...configuration].sort().join() ||
+        configuration.some(path => recorded[path] !== sha256(readFileSync(resolve(directory, path))))) {
+      throw new Error('Boundary gate: TypeScript configuration differs from the measured report');
+    }
+  }
+  const corpus = fingerprintFiles(directory, ['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
+  if (!sameFingerprint(report.corpus, corpus)) throw new Error('Boundary gate: corpus differs from the measured report');
+}
+
 // The same gate for a shard (its own catalog entries, no summary), the
 // single-process run and the merge (the whole catalog, summary, completion).
 // A shard therefore fails on its own lost detections before any merge, and the
 // merged summary is computed by the code the single run uses.
 export function gateDetections(language, report, entries, { directory = root, summarize = true } = {}) {
-  const regressions = requiredDetectionRegressions(entries, report.mutations);
+  // Recompute verdicts from the current declarations and completed recordings.
+  // An omitted mapping, a stale pin or a claimed confirmation without a clean
+  // baseline must fail just as a measured non-detection does.
+  const regressions = requiredDetectionRegressions(entries, report.mutations, currentBoundaries(report, entries, directory));
   if (summarize) report.detection = language.detection(report.mutations, directory);
   if (language.recordsRegressions) report.requiredDetectionRegressions = regressions;
   if (regressions.length) throw new Error(`Lost required detections: ${regressions.join(', ')}`);
   if (summarize) report.complete = true;
+}
+
+function currentBoundaries(report, entries, directory = root) {
+  const readSource = path => readFileSync(resolve(directory, path), 'utf8');
+  const ids = new Set(entries.map(entry => entry.id));
+  const evidence = boundaryEvidence(JSON.parse(readSource('formal/execution.json')), { readSource })
+    .filter(entry => ids.has(entry.mutant));
+  return boundaryReview(report, evidence, { requireEntries: true });
+}
+
+// Boundary evidence comes only from explicit recordings. Raw assertion logs
+// remain diagnostic artifacts and cannot establish a completed history.
+export function boundaryReview(report, evidence, { requireEntries = false } = {}) {
+  if (!Array.isArray(report.mutations)) throw new Error('Boundary report has no mutation results');
+  const goReport = typeof report.go === 'string', typescriptReport = report.configurationSha256 !== undefined;
+  const reportPort = goReport === typescriptReport ? undefined : goReport ? 'go' : 'typescript';
+  if (new Set(report.mutations.map(mutation => mutation.id)).size !== report.mutations.length) throw new Error('Boundary report repeats a mutant');
+  for (const mutation of report.mutations) {
+    if (mutation.boundary && new Set(mutation.boundary.map(entry => entry.challenge)).size !== mutation.boundary.length) {
+      throw new Error(`Boundary report repeats a challenge for ${mutation.id}`);
+    }
+  }
+  return evidence.map(entry => {
+    const mutation = report.mutations.find(mutation => mutation.id === entry.mutant);
+    if (!mutation) return { ...entry, state: 'unreached', reason: 'Mapped mutant is absent from the report', divergences: [] };
+    const recorded = mutation.boundary?.find(item => item.challenge === entry.challenge);
+    if (!recorded && requireEntries) return { ...entry, state: 'unreached', reason: 'No per-challenge boundary result was recorded', divergences: [] };
+    if (recorded) {
+      const same = ['mutant', 'history', 'step', 'fields', 'origin', 'vector'].every(key => JSON.stringify(recorded[key]) === JSON.stringify(entry[key]));
+      if (!same || (entry.state && recorded.state !== entry.state)) return { ...entry, state: 'unreached', reason: 'Recorded boundary differs from the current evidence declaration', divergences: recorded.divergences ?? [] };
+      if (entry.state) return { ...entry, via: 'coordinator' };
+      const baseline = report.boundaryBaselines?.[entry.history];
+      if (entry.vector) {
+        if (!reportPort || recorded.vectorResult?.port !== reportPort || baseline?.vectorResult?.port !== reportPort)
+          return { ...entry, state: 'unreached', reason: 'Vector records do not match the report language', divergences: [] };
+        if (assessVectorBoundary(entry, baseline).state !== 'not-divergent') return { ...entry, state: 'unreached',
+          reason: 'No clean completed baseline for this vector', divergences: [] };
+        if (recorded.vectorResult?.port !== baseline.vectorResult.port) return { ...entry, state: 'unreached',
+          reason: 'Vector baseline and mutation use different bindings', divergences: [] };
+        return assessVectorBoundary(entry, { completed: recorded.completed, lastStep: recorded.lastStep, vectorResult: recorded.vectorResult,
+          ...(recorded.reason ? { error: recorded.reason } : {}) });
+      }
+      if (baseline?.history !== entry.history || baseline.completed !== true || baseline.error !== undefined ||
+          !Array.isArray(baseline.divergences) || baseline.divergences.length || !Number.isSafeInteger(baseline.lastStep) || baseline.lastStep < entry.step) {
+        return { ...entry, state: 'unreached', reason: 'No clean completed baseline for this boundary', divergences: recorded.divergences ?? [] };
+      }
+      return assessBoundary(entry, { path: `regressions/${entry.history}.itf.json`, completed: recorded.completed, lastStep: recorded.lastStep,
+        divergences: recorded.divergences, ...(recorded.reason ? { error: recorded.reason } : {}) });
+    }
+    if (entry.state) return { ...entry, via: 'legacy' };
+    return { ...entry, via: 'legacy', state: 'unreached', reason: 'No complete boundary recording', divergences: [] };
+  });
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [command, ...args] = process.argv.slice(2);
+  try {
+    const options = {};
+    for (let i = 0; i < args.length; i++) {
+      const name = args[i];
+      if (name === '--gate') options.gate = true;
+      else if (name === '--report' && args[i + 1] && !args[i + 1].startsWith('--')) options.report = args[++i];
+      else throw new Error(`Unknown or incomplete option: ${name}`);
+    }
+    if (command !== 'boundary' || !options.report) throw new Error('Usage: node formal/mutation-reports.mjs boundary --report <report.json> [--gate]');
+    const { boundaryEvidence } = await import('./execution.mjs');
+    const report = JSON.parse(readFileSync(options.report, 'utf8'));
+    if (options.gate) validateBoundaryReportFreshness(report);
+    const entries = boundaryReview(report, boundaryEvidence(), { requireEntries: options.gate === true });
+    console.log(JSON.stringify({ sourceReport: resolve(options.report), entries }, null, 2));
+    if (options.gate && (report.complete !== true || entries.some(entry => !['confirmed', 'vector', 'unreproduced'].includes(entry.state)))) process.exitCode = 1;
+  } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

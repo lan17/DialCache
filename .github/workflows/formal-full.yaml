@@ -21,10 +21,11 @@ jobs:
   exploration:
     if: (github.event_name == 'schedule' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.exploration)
     runs-on: ubuntu-latest
-    # Run 34660598461 took 28 minutes. Hosted runners vary by about 2x between
-    # runs (run 34666226055 was 1.8x slower on every Quint phase), so every
-    # budget in this workflow leaves that headroom.
-    timeout-minutes: 60
+    # Run 35568655690 exhausted the old hour inside the expanded challenge
+    # campaign, before generation or native replay. Allow the model job's
+    # budget below plus time for the fresh corpus and both ports; individual
+    # evaluator and replay commands retain their own hang bounds.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -50,8 +51,12 @@ jobs:
     # Scheduled workflows run the default branch; keep the intended main scope explicit.
     if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Run 34660598461 spent about 8.5 minutes on this work; a 2x slower runner needs 17.
-    timeout-minutes: 30
+    # Shared-library challenges now execute the importing profiles' partitions,
+    # including clean baselines and mutant checks cached by exact source closure.
+    # The expanded partition campaign was still running after an hour in
+    # run 35568655690. Leave room for the full campaign on slower runners
+    # without reducing models, histories or partitions.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -175,6 +180,7 @@ jobs:
         with:
           name: formal-traces
           path: .formal-traces
+      # The runner provisions a private Docker Redis server for generated invalidation vectors.
       - name: Measure one shard of TypeScript assertion-based fault detection
         run: make mutations-ts
       # The shard directory alone: the merge job downloads every shard into
@@ -278,6 +284,7 @@ jobs:
         with:
           name: formal-traces
           path: .formal-traces
+      # The runner provisions a private Docker Redis server for generated invalidation vectors.
       - name: Measure one shard of Go assertion-based fault detection
         run: make mutations-go
       - name: Preserve this shard's Go mutation evidence

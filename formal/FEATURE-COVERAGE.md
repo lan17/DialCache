@@ -15,7 +15,7 @@ Use [CONTRACTS.md](./CONTRACTS.md) for the obligations and
 
 ## What is accounted for
 
-The current catalogs give all **240 behavioral cases** a checked Quint
+The current catalogs give every cataloged behavioral case a checked Quint
 reference and Quint-driven implementation evidence. Wire obligations have
 separate generated primitive artifacts and complementary fixed vectors; native
 cases remain separate API, value, clock, exporter and adapter obligations.
@@ -156,6 +156,14 @@ work, and composes retained bytes with physical expiry and compressed recovery.
 Shadow-layers covers mixed served/dark capacity, request/local publication and
 captured fill policy. Scheduled public-action regressions anchor these corners
 without relying on random selection.
+
+Dark-layers also requires competing-key rejection after the whole-job timeout
+while C0 read, decode, C1 read, dump or write remains unfinished, then admission
+only after that raw effect settles. Shadow-read-deadlines separately exercises
+C0/C1 read expiry, cancellation and raw-capacity retention, including both
+read/job deadline orderings. Confirmation keeps its admitted read budget after
+a runtime change and starts that budget at its own dispatch. These histories
+replay in both ports; a whole-job timeout alone does not establish a read deadline.
 
 Those additions do not enumerate arbitrary request trees, operation/key/instance
 sets, capacities or simultaneous failures. The short shadow job budget limits

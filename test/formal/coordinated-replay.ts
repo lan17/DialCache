@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks";
 import { vi } from "vitest";
 
 import { ReplayCoordinator, settlement } from "../../formal/replay/coordinator.mjs";
+import type { Divergence } from "../../formal/replay/divergence.mjs";
 import type { CoreCommand } from "../../formal/replay/core.mjs";
 import { wallEpochMs } from "../../formal/replay/settlement.mjs";
 import { parseJSON } from "../../formal/replay/validation.mjs";
@@ -46,7 +47,7 @@ type Observed = { complete: false; index: number; inputs: Array<Record<string, u
 // completion. Observations cross a JSON roundtrip so undefined members vanish
 // the way they do on the wire.
 export async function replayThroughCoordinator(profile: string, path: string, coordinator = new ReplayCoordinator(),
-  options: ReplayOptions = {}): Promise<{ steps: number }> {
+  options: ReplayOptions = {}): Promise<{ steps: number; divergences: Divergence[] }> {
   let id = 0;
   const request = <T>(fields: Record<string, unknown>): T =>
     coordinator.dispatch(parseJSON(JSON.stringify({ version: 1, id: ++id, ...fields }))) as T;
@@ -65,10 +66,13 @@ export async function replayThroughCoordinator(profile: string, path: string, co
       }));
       if (result.complete) {
         complete = true;
-        return { steps: result.steps };
+        return { steps: result.steps, divergences: coordinator.recording(prepared.session)?.divergences ?? [] };
       }
       for (const command of result.inputs) await driver.apply(command);
     }
+  } catch (cause) {
+    coordinator.abort(prepared.session, cause);
+    throw cause;
   } finally {
     // The coordinator drops a session on its own failure; release it after a
     // driver failure so the coordinator can be reused for another trace.
@@ -114,7 +118,7 @@ class CoordinatedBehaviorDriver implements CoordinatedDriver {
   }
 }
 
-// Core: the flat-integer conformance driver from test/formal-conformance.test.ts,
+// Core: the flat conformance driver from test/formal-conformance.test.ts,
 // consuming the coordinator's explicit advanceWall/bumpSource/invalidate/call
 // commands instead of action names.
 class CoordinatedCoreDriver implements CoordinatedDriver {
@@ -178,9 +182,13 @@ class CoordinatedCoreDriver implements CoordinatedDriver {
       this.redis.failGet = false;
     }
   }
-  observe(): Record<string, number> {
+  observe(): Record<string, number | { absent: true }> {
     return {
-      sourceVersion: this.sourceVersion, lastResult: this.lastResult, ...this.counters,
+      sourceVersion: this.sourceVersion,
+      // An absent actual result must survive the JSON roundtrip as data.
+      // Otherwise a wrong-value fault impersonates a missing driver field.
+      lastResult: this.lastResult === undefined ? { absent: true } : this.lastResult,
+      ...this.counters,
       redisReads: this.redis.getCalls + this.redis.mGetCalls, redisWrites: this.redis.setCalls,
     };
   }

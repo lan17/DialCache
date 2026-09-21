@@ -14,6 +14,7 @@
     "instances",
     "layer_policy",
     "local_faults",
+    "local_grid",
     "local_storage",
     "markers",
     "metrics",
@@ -28,7 +29,8 @@
     "request_memo",
     "runtime_policy",
     "serving",
-    "shadow"
+    "shadow",
+    "shadow_reads"
   ],
   "profiles": [
     {
@@ -48,6 +50,7 @@
         "clock::shiftWall",
         "metrics::advance",
         "metrics::begin",
+        "metrics::frameReadReceipt",
         "metrics::invalidate",
         "metrics::releaseDump",
         "metrics::releaseWrite",
@@ -248,7 +251,7 @@
       "libraryTransitions": [
         "clock::advanceTicks",
         "instances::construct",
-        "serving::callLocal"
+        "local_grid::call"
       ],
       "compositionViolations": 0
     },
@@ -261,6 +264,44 @@
         "deadlines::advanceLocal",
         "deadlines::releaseLocal",
         "deadlines::settleLocal"
+      ],
+      "compositionViolations": 0
+    },
+    {
+      "id": "dark-layers",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "module": "dialcache_dark_layers_conformance",
+      "libraryTransitions": [
+        "clock::shiftWall",
+        "flights::inspectProcess",
+        "flights::recordIdentity",
+        "flights::recordInspectionAdmission",
+        "remote_frames::seedAged",
+        "serving::closeScope",
+        "serving::invalidate",
+        "shadow::advanceHeld",
+        "shadow::beginDark",
+        "shadow::releaseDump",
+        "shadow::releaseLoad",
+        "shadow::releaseRead",
+        "shadow::releaseWrite",
+        "shadow::settleHeld"
+      ],
+      "compositionViolations": 0
+    },
+    {
+      "id": "shadow-read-deadlines",
+      "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "module": "dialcache_shadow_read_deadlines_conformance",
+      "libraryTransitions": [
+        "remote_frames::seedFrame",
+        "shadow::releaseDump",
+        "shadow::releaseWrite",
+        "shadow::settleHeld",
+        "shadow_reads::advance",
+        "shadow_reads::begin",
+        "shadow_reads::releaseLoad",
+        "shadow_reads::releaseRead"
       ],
       "compositionViolations": 0
     }

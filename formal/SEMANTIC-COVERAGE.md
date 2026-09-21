@@ -5,7 +5,7 @@ Measure named contract cases, exercised boundaries, and detected behavioral defe
 ## Evidence inventory
 
 [semantic-cases.json](./semantic-cases.json) refines the obligations in
-[CONTRACTS.md](./CONTRACTS.md) into named behavioral and wire cases. All 240
+[CONTRACTS.md](./CONTRACTS.md) into named behavioral and wire cases. All reviewed
 behavioral cases now cite checked Quint clauses and Quint-driven implementation
 evidence. The wire expansion adds Quint-derived artifacts alongside fixed
 vectors; native cases remain in [feature-coverage.json](./feature-coverage.json).
@@ -99,21 +99,24 @@ model owns at least one challenge; a `challengeWaiver` on a model entry is a
 documented gap, not coverage. A detected challenge shows that the named
 invariant rejects that one deliberate change under the manifest bounds. Model
 receipts preserve the timestamp, captured policy and owner at acceptance.
-A challenge with a `reproducer` is also pinned to one deterministic history
+Every challenge is pinned by its `reproducer` to one deterministic history
 that passes clean and fails under the fault at a declared expectation, either
 an exported public regression both ports replay or a documented model-only
-run; challenges not yet backfilled are listed in the manifest's
-`reproducerBacklog`, whose size `node formal/execution.mjs` reports beside the
-challenge counts. See the
+run. Missing reproducers fail validation. See the
 [authoring rules](./AUTHORING.md#challenging-every-model).
 Each challenge also carries a `nativeMutants` entry naming the TypeScript and
 Go mutants that inject the same wrong behavior into the ports, or an
 enumerated explanation of why no native line exists; the mutation lanes must
 detect every mapped mutant in their generated cohort. A mapped challenge
 establishes that the corpus would catch the mistake in a port; an explained
-one establishes only that the model rejects it. Unmapped challenges are listed
-in `nativeMutantBacklog`, which only shrinks. See
+one establishes only that the model rejects it. A missing mapping or
+explanation fails validation. See
 [mapping every challenge to native mutants](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
+Ownership receipts, failed-read state, closed-scope memo cleanup and initial
+recovery retention have exact model checkpoints. The closed-scope and recovery
+histories also use public inputs replayed by both ports, but their additional
+private-state assertions remain model evidence; they do not create native
+mutation coverage where later native checks hide the same internal fault.
 Boundary properties can challenge an eligibility helper by stating the
 inequality directly. Connection and composition properties may reuse that
 helper while checking independently captured inputs, ownership and history;
@@ -193,6 +196,24 @@ The runner clears inherited trace selectors, uses the complete generated directo
 
 Each catalog entry's `requiredDetections` is a regression gate. The local mutation target and full workflow fail if a required fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 
+The report separately records each mapped challenge's boundary evidence: its
+exported history, checkpoint, compared fields, and every divergence seen while
+replaying that history through the coordinator. An earlier unrelated counter
+mismatch cannot establish the later behavioral consequence. A `confirmed`
+boundary requires a complete mutant replay and a clean replay of the same
+history; driver failures, settlement violations and missing recordings remain
+`unreached`. Every mapped exported reproducer must be confirmed by the mutation
+gate in both ports; an entire cohort detecting the mutant cannot replace that
+evidence. A mapped vector reproducer has the same requirement at its selected
+generated row: record the actual native result after a clean run of that row,
+then confirm a mismatch in the declared public fields. The coordinator alone
+reads the expectations; native workers receive only the operation and inputs.
+Reports retain row identity, binding, artifact and input fingerprints, and the
+actual result so the gate can recompute the comparison. Different native codec
+sizes may require different declared rows for the same strict-shrink rule.
+Missing, malformed or stale results earn no credit. `unreproduced` mappings
+remain explicit gaps beside these measured boundaries and cohort detections.
+
 To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with the Go section of every entry in `mutations.json`. A mutant whose fault leaves a goroutine blocked or a pointer nil makes the Go port's own synctest suite panic instead of failing an assertion, and one that settles a promise the TypeScript suite was not awaiting can leave no failed assertion behind; each runner records such an ordinary cohort as `crashed`, outside the detected and survived totals, as it does every cohort of a mutant that does not compile, and the generated cohort remains the required detection. Broader interaction histories and larger domains remain separate assurance work.
 
 ## Model properties and cross-language execution
@@ -208,3 +229,12 @@ implementation mutation detection.
 Every effects replay also runs `assertEffectsHistory` over actual external source starts/settlements and public fallback/write observations. Its C23/C25/C26 checks cover source-relative budget/duration, strict deadline acceptance, and a preceding accepted success before publication. It consumes no expected model phases and permits pending prefixes. An additional causal monitor in both drivers ties writes to their actual invocation/source callback and rejects publication after that source settled too late; negative tests distinguish property failures from malformed monitor inputs. This is a bounded connection for selected properties, not full model refinement or liveness proof.
 
 The Go driver executes the same generated corpus through its own cache implementation. Its value-domain and API adaptations appear in [`go/README.md`](../go/README.md). `measure-go-semantics.mjs` independently measures the Go fault catalog; TypeScript mutation results are never credited to Go. The Go race detector covers only exercised schedules.
+
+
+Generated invalidation vectors also run inside both standard native mutation
+campaigns. Every shard provisions its own real Redis 6.2 server through Docker;
+the whole generated set shares a native connection. The exact cutoff and maximum
+buffer challenges additionally record their selected input-only vector operation.
+Their outcomes come from each port's production Lua. Server elapsed time bounds
+positive TTL drift; rejected input must preserve the prior state. Infrastructure
+errors and unexpected Lua replies are never assertion-based detections.

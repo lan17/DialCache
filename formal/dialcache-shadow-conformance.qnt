@@ -349,6 +349,7 @@ module dialcache_shadow_conformance {
 
   // Invariants: independent checks over the public channels and the library records.
   // Over the public channels, verbatim from the former text.
+  val budgetsAreOneKnob = JOB_BUDGET_MS == s.sourceBudget
   val oneSourcePerCaller = s.o.loaders == s.o.calls.length()
   val writesHaveRetention = s.o.writes == s.o.writeTtls.length()
   val missingHookHasNoShadowEffects = s.hook or (s.o.reads == 0 and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
@@ -621,7 +622,9 @@ module dialcache_shadow_conformance {
     .then(seedAt(1)).then(rollbackWall).then(beginCall).then(releaseRead)
     .expect(s.o.loads == 0 and s.o.dumps == 0
       and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 1000 }))
-    .then(resolveAt(VALUE_TWO)).then(releaseDump).then(releaseWrite)
+    .then(resolveAt(VALUE_TWO))
+    .expect(s.o.loads == 0 and s.o.dumps == 1)
+    .then(releaseDump).then(releaseWrite)
     .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List("filled")
       and s.o.loads == 0 and s.o.writes == 1
       and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 1000 }))
@@ -634,4 +637,13 @@ module dialcache_shadow_conformance {
     .expect(s.o.calls == List(DEADLINE_ERROR) and s.o.shadow == List("timeout")
       and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0
       and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 990 }))
+
+  // Stop at the observable decision so both the clean and faulty implementation
+  // can complete this boundary history without a later fault-dependent command.
+  run expiredC0BeginsFillBeforePublicationTest = initialize(2)
+    .then(seedAt(1)).then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
+    .then(releaseLoad).then(advanceWallBy(FRESHNESS_MS)).then(releaseRead)
+    .expect(s.o.shadow == List("mismatch") and s.o.loads == 1 and s.o.writes == 0)
+    .then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
+    .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.loads == 1 and s.o.dumps == 1)
 }

@@ -86,6 +86,34 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     });
   });
 
+  it("excludes only opt-in Go workers from complete replay and exploration", async () => {
+    const { loadGoReplayInventory } = await import(new URL("../formal/check-go-replay.mjs", import.meta.url).href) as {
+      loadGoReplayInventory(): { required: Array<{ name: string }> };
+    };
+    const { explorationPlan } = await import(new URL("../formal/explore.mjs", import.meta.url).href) as {
+      explorationPlan(directory: string, seed: string): Step[];
+    };
+    const goTest = (step: Step) => step.command === "go" && step.args?.includes("test");
+    const replay = validationPlan("formal-go", { directory }).find(goTest)!;
+    expect(replay.args).toContain("-skip");
+    const skipped = new RegExp(replay.args![replay.args!.indexOf("-skip") + 1]!);
+    for (const worker of ["TestGeneratedInvalidationVectors", "TestVectorBoundaryDriver"]) {
+      expect(skipped.test(worker), worker).toBe(true);
+      expect(skipped.test(`${worker}Required`), worker).toBe(false);
+      expect(skipped.test(`Other${worker}`), worker).toBe(false);
+    }
+    // Check the real inventory so adding a required corpus root cannot
+    // silently inherit a worker exclusion.
+    const requiredRoots = [...new Set(loadGoReplayInventory().required.map(entry => entry.name.split("/")[0]!))];
+    expect(requiredRoots.filter(name => skipped.test(name))).toEqual([]);
+    expect(explorationPlan(directory, "0x1").find(goTest)!.args)
+      .toEqual(replay.args);
+    for (const target of ["check-go", "smoke"]) {
+      expect(validationPlan(target, { directory }).find(goTest)!.args, target)
+        .not.toContain("-skip");
+    }
+  });
+
   it("stops at a failing child and preserves its partial native report without running later steps", async () => {
     const steps: Step[] = [
       { label: "first", command: process.execPath, args: [child, "first"] },
@@ -129,6 +157,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     // evidence about Quint; generation is the only producer downstream reads.
     expect(validationPlan("formal-check", { directory })).toEqual([
       { label: "Check every scheduled Quint model", command: process.execPath, args: ["formal/run-models.mjs", "check"] },
+      { label: "Measure every pinned model fault", command: process.execPath, args: ["formal/check-model-properties.mjs"] },
       { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/lint-profiles.mjs", "baseline", "--check"] },
       { label: "Check the kernel library fixtures", command: process.execPath, args: ["formal/check-kernel-fixtures.mjs"] },
     ]);
@@ -138,8 +167,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     for (const target of ["formal-ts", "formal-go", "mutations"]) {
       expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/run-models.mjs")).toBe(false);
     }
-    // ci keeps requiring the check through the aggregate; nothing else adds a second one.
-    expect(validationPlan("ci", { directory }).filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toHaveLength(1);
+    // Every acceptance entry point keeps one complete campaign, after all
+    // unmodified model checks. No filtered --only run can replace that gate.
+    for (const target of ["formal-check", "formal", "ci"]) {
+      const plan = validationPlan(target, { directory });
+      const checks = plan.filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check");
+      const campaigns = plan.filter(step => step.args?.[0] === "formal/check-model-properties.mjs");
+      expect(checks, target).toHaveLength(1);
+      expect(campaigns.map(step => step.args), target).toEqual([["formal/check-model-properties.mjs"]]);
+      expect(plan.indexOf(checks[0]!), target).toBeLessThan(plan.indexOf(campaigns[0]!));
+    }
   });
 
 
@@ -302,6 +339,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     }
   });
 
+  it("requires Docker for mutation measurements but not report merging", () => {
+    fakeTool("docker", 'console.error("Docker not running"); process.exit(1)');
+    for (const target of ["mutations-ts", "mutations-go"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/docker/);
+    }
+    for (const target of ["mutations-merge-ts", "mutations-merge-go"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
+    }
+  });
+
   it("allows the standalone floor target on Node 22.15 and propagates its PATH without reintroducing selectors", async () => {
     const floor = fakeTool("node22", `if (process.argv[2] === '--version') console.log('v22.15.0');
 else {
@@ -439,7 +486,7 @@ describe("full formal workflow shape", () => {
     const job = jobs.differential!;
     expect(job.if).toBe("github.event_name == 'pull_request'");
     // Every composed profile replaying both ways after a kernel change overran one 60-minute job
-    // (57 minutes, then a cancellation at the timeout); four round-robin shards keep each inside it.
+    // (57 minutes, then a cancellation at the timeout); retain the four required shard statuses.
     expect(job["timeout-minutes"]).toBe(60);
     expect(job.strategy).toEqual({ "fail-fast": false, matrix: { shard: [1, 2, 3, 4] } });
     const shards = job.strategy!.matrix!.shard as number[];

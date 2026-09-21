@@ -1,6 +1,7 @@
 module dialcache_shadow_layers_conformance {
   import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
+  import payloads as Payloads from "./kernel/payloads"
   import cohort_boundaries.* from "./cohort-boundaries"
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
@@ -285,6 +286,9 @@ module dialcache_shadow_layers_conformance {
   val heldWorkHasAcceptedResults = s.dumps.indices().forall(i => accepted(s.sources.nth(s.dumps.nth(i).source).result))
     and s.writes.indices().forall(i => accepted(s.sources.nth(s.writes.nth(i).source).result))
 
+  // Atomic reads and shadow comparisons have no decode-failure settlement.
+  val atomicPathSeedsDecodableFrames = Payloads::atomicSafe(s)
+
   // Each regression uses only public input transitions. Later calls distinguish
   // real storage reuse/publication from a counter or an internal phase alone.
   run darkSourcePublishesLocalBeforeShadowWriteTest = init
@@ -476,4 +480,10 @@ module dialcache_shadow_layers_conformance {
     .then(setPolicy(DARK_NONE)).then(seedAt(0)).then(beginAt(9)).then(seedAt(1)).then(resolveAt(2))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.loads == 1 and s.o.reads == 2
       and s.o.dumps == 0 and s.o.shadow == List("superseded"))
+
+  // Stop at the observable decision so both the clean and faulty implementation
+  // can complete this boundary history without a later fault-dependent command.
+  run expiredC0StartsFillWithoutDecodingTest = init
+    .then(setPolicy(DARK_NONE)).then(seedAt(3)).then(beginAt(9)).then(resolveAt(2))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.reads == 1 and s.o.loads == 0 and s.o.dumps == 1 and s.o.shadow == List())
 }

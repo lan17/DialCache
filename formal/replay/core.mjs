@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import { assertObservation } from "./divergence.mjs";
 import { assertInputMetadata, record, itfInteger, itfSignedInteger } from "./itf.mjs";
 export const actionNames = [
   "init", "bumpSource", "outsideCall", "requestLocalPair", "localCall",
@@ -98,5 +98,5 @@ export function expectedCoreObservation(state) {
 }
 
 export function assertCoreObservation(state, observed) {
-  assert.deepEqual(observed, expectedCoreObservation(state));
+  assertObservation(observed, expectedCoreObservation(state));
 }

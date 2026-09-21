@@ -11,6 +11,7 @@ type Report = {
   main: string;
   modules: string[];
   tableSize: number;
+  shapes: { states: Array<{ variable: string; fields: string[] }>; count: number; violations: Array<{ rule: string; variable: string; fields: string[]; detail: string }> };
   composition: { kernelModules: string[]; actions: string[]; publicActions: string[]; reachableDefinitions: number; stateAssigningDefinitions: string[]; libraryTransitions: string[]; count: number; violations: CompositionViolation[] };
   witnessIsolation: {
     witnessVariables: string[];
@@ -55,6 +56,111 @@ const witness = { witnessPattern: "^witnessed$" };
 const quintAvailable = spawnSync("quint", ["--version"], { encoding: "utf8" }).status === 0;
 const quintTimeout = 60_000;
 const cli = (...args: string[]) => spawnSync(process.execPath, ["formal/lint-profiles.mjs", ...args], { cwd: root, encoding: "utf8" });
+
+describe("atomic profile restrictions", () => {
+  it("requires every atomic-release profile to schedule the payload safety property", () => {
+    const baseline = JSON.parse(readFileSync(root + "formal/profile-lint-baseline.json", "utf8")) as Baseline;
+    const manifest = JSON.parse(readFileSync(root + "formal/execution.json", "utf8")) as { models: Array<{ profile?: string; path: string; invariants: string[] }> };
+    const atomic = new Set(["serving::begin", "serving::release", "receipts::release", "remote_writes::releaseJudged", "shadow::begin", "shadow::release", "local_faults::begin"]);
+    for (const profile of baseline.profiles.filter(profile => profile.libraryTransitions.some(transition => atomic.has(transition)))) {
+      const model = manifest.models.find(model => model.profile === profile.id)!;
+      expect(model.invariants, profile.id).toContain("atomicPathSeedsDecodableFrames");
+      expect(readFileSync(root + model.path, "utf8"), profile.id).toMatch(/val atomicPathSeedsDecodableFrames\s*=\s*Payloads::atomicSafe\(s\)/);
+    }
+  });
+});
+
+describe.skipIf(!quintAvailable)("kernel shape restrictions", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dialcache-lint-shapes-"));
+  afterAll(() => rmSync(directory, { recursive: true, force: true }));
+  for (const [module, transitions] of Object.entries({
+    shadow: ["beginDark", "settleHeld", "beginHeld", "begin", "settleJob"], metrics: ["begin", "settleLoader"],
+    local_faults: ["begin", "settle"], remote_io: ["begin"],
+    compression: ["settleLoader"], adapter_replies: ["settleRead"], remote_writes: ["settleLoader"],
+  })) writeFileSync(join(directory, `${module}.qnt`), `module ${module} {\n${transitions.map(name =>
+    `pure def ${name}(state: { n: int | r }): { n: int | r } = state`).join("\n")}\n}`);
+  async function inspect(name: string, fields: string, initial: string, transition: string, extra = "", other = false) {
+    const path = join(directory, `${name}.qnt`);
+    writeFileSync(path, `module ${name} {
+      import shadow as Shadow from "./shadow"
+      import metrics as Metrics from "./metrics"
+      import local_faults as Faults from "./local_faults"
+      import remote_io as Remote from "./remote_io"
+      import compression as Compression from "./compression"
+      import adapter_replies as Replies from "./adapter_replies"
+      import remote_writes as Writes from "./remote_writes"
+      ${extra}
+      type State = ${fields}
+      var s: State
+      ${other ? "var other: { n: int }" : ""}
+      var input: int
+      action init = all { s' = ${initial}, input' = 0 ${other ? ", other' = { n: 0 }" : ""} }
+      action step = all { s' = ${transition}, input' = 1 ${other ? ", other' = Shadow::beginDark(other)" : ""} }
+    }`);
+    const checked = spawnSync("quint", ["typecheck", path], { cwd: root, encoding: "utf8" });
+    expect(checked.status, checked.stdout + checked.stderr).toBe(0);
+    return lintModel(path, { kernelModules: ["shadow", "metrics", "local_faults", "remote_io", "compression", "adapter_replies", "remote_writes"] });
+  }
+
+  it("requires a lifecycle for jointly held reads and dumps, including type aliases", async () => {
+    const fields = "More[{ dumps: List[int], n: int }]", initial = "{ reads: List(), dumps: List(), n: 0 }";
+    const alias = "type More[r] = { reads: List[int] | r }";
+    for (const [name, transition] of [["dark", "Shadow::beginDark(s)"], ["effects", "Metrics::settleLoader(s)"], ["served", "Shadow::beginHeld(s)"]]) {
+      expect((await inspect(name!, fields, initial, transition!, alias)).shapes.count).toBe(0);
+    }
+    const bad = await inspect("mixed_held", fields, initial, "Remote::begin(s)", alias);
+    expect(bad.shapes.violations).toEqual([expect.objectContaining({ rule: "held-effects", fields: ["reads", "dumps"] })]);
+    expect(cli(join(directory, "mixed_held.qnt"), "--kernel=shadow,metrics,local_faults,remote_io").status).toBe(1);
+  }, quintTimeout);
+
+  it("requires the dark lifecycle when jobs carry a caller source budget", async () => {
+    const fields = "{ jobs: List[int], sourceBudget: int, n: int }", initial = "{ jobs: List(), sourceBudget: 10, n: 0 }";
+    expect((await inspect("dark_budget", fields, initial, "Shadow::settleHeld(s)")).shapes.count).toBe(0);
+    const bad = await inspect("served_budget", fields, initial, "Shadow::beginHeld(s)");
+    expect(bad.shapes.violations).toEqual([
+      expect.objectContaining({ rule: "held-effects", fields: ["jobs", "sourceBudget"], detail: expect.stringContaining("require one of") }),
+      expect.objectContaining({ rule: "held-effects", fields: ["jobs", "sourceBudget"], detail: expect.stringContaining("cannot compose shadow::beginHeld") }),
+    ]);
+    await expect(computeBaseline({ profiles: [{ id: "served-budget", model: join(directory, "served_budget.qnt") }] })).rejects.toThrow(/unsupported kernel shape/);
+  }, quintTimeout);
+
+  it("rejects incompatible shadow lifecycles even beside valid dark transitions", async () => {
+    const fields = "{ jobs: List[int], sourceBudget: int, n: int }", initial = "{ jobs: List(), sourceBudget: 10, n: 0 }";
+    for (const name of ["begin", "settleJob", "beginHeld"]) {
+      const bad = await inspect(`mixed_${name}`, fields, initial, `Shadow::${name}(Shadow::beginDark(s))`);
+      expect(bad.shapes.violations).toEqual([expect.objectContaining({ rule: "held-effects", detail: expect.stringContaining(`cannot compose shadow::${name}`) })]);
+    }
+  }, quintTimeout);
+
+  it("does not use a transition assigned to another state as shape evidence", async () => {
+    for (const [name, fields, initial] of [
+      ["isolated_budget", "{ jobs: List[int], sourceBudget: int, n: int }", "{ jobs: List(), sourceBudget: 10, n: 0 }"],
+      ["isolated_refill", "{ reads: List[int], dumps: List[int], n: int }", "{ reads: List(), dumps: List(), n: 0 }"],
+    ]) {
+      const bad = await inspect(name!, fields!, initial!, "Remote::begin(s)", "", true);
+      expect(bad.shapes.violations).toEqual([expect.objectContaining({ rule: "held-effects", variable: "s", detail: expect.stringContaining("require one of") })]);
+    }
+  }, quintTimeout);
+
+  it("requires local-fault transitions and rejects healthy held work even alongside them", async () => {
+    const fields = "{ localFailed: bool, n: int }", initial = "{ localFailed: false, n: 0 }";
+    expect((await inspect("local_fault", fields, initial, "Faults::begin(s)")).shapes.count).toBe(0);
+    expect((await inspect("ignored_fault", fields, initial, "s")).shapes.violations).toEqual([
+      expect.objectContaining({ rule: "local-fault", detail: expect.stringContaining("require one of") }),
+    ]);
+    const bad = await inspect("faulted_held", fields, initial, "Remote::begin(Faults::settle(s))");
+    expect(bad.shapes.violations).toEqual([expect.objectContaining({ rule: "local-fault", detail: expect.stringContaining("cannot compose remote_io::begin") })]);
+    for (const [name, transition, target] of [
+      ["faulted_compression", "Compression::settleLoader", "compression::settleLoader"],
+      ["faulted_reply", "Replies::settleRead", "adapter_replies::settleRead"],
+      ["faulted_write", "Writes::settleLoader", "remote_writes::settleLoader"],
+      ["faulted_metrics", "Metrics::begin", "metrics::begin"],
+    ]) {
+      const wrapper = await inspect(name!, fields, initial, `${transition}(Faults::settle(s))`);
+      expect(wrapper.shapes.violations).toEqual([expect.objectContaining({ rule: "local-fault", detail: expect.stringContaining(`cannot compose ${target}`) })]);
+    }
+  }, quintTimeout);
+});
 
 describe("profile lint baseline diff", () => {
   const baseline: Baseline = { schemaVersion: 3, quintVersion: "0.32.0", kernelModules: ["serving"], profiles: [
@@ -461,6 +567,6 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
   it("passes baseline --check from the CLI on the committed file", () => {
     const result = cli("baseline", "--check");
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain(`${baselinePath} matches 15 profiles`);
+    expect(result.stdout).toContain(`${baselinePath} matches ${JSON.parse(readFileSync(join(root, baselinePath), "utf8")).profiles.length} profiles`);
   }, 180_000);
 });

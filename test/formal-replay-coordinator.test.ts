@@ -1,4 +1,5 @@
 import { AssertionError } from "node:assert";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { Readable } from "node:stream";
@@ -6,7 +7,8 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { bindTrace, profileActions } from "../formal/replay/bindings.mjs";
-import { ReplayCoordinator, settlement } from "../formal/replay/coordinator.mjs";
+import { ReplayCoordinator, settlement, type ReplayRecording } from "../formal/replay/coordinator.mjs";
+import { diffPaths, isObservationComparison } from "../formal/replay/divergence.mjs";
 import { expectedCoreObservation, parseItfTrace } from "../formal/replay/core.mjs";
 import { featureInput, profiles } from "../formal/replay/features.mjs";
 import { inputsFor } from "../formal/replay/effects.mjs";
@@ -17,6 +19,7 @@ import { parseJSON, replayLines } from "../formal/replay/validation.mjs";
 import { replaySources } from "../formal/replay/sources.mjs";
 import { BehaviorDriver, type Fixture, type Input } from "./formal/behavior-driver.js";
 import { replayThroughCoordinator, smokeTracePath } from "./formal/coordinated-replay.js";
+import { LocalCache } from "../src/internal/local-cache.js";
 
 type Raw = { states: Array<Record<string, unknown> & { s: Record<string, unknown> }> };
 function smoke(profile: string): Raw {
@@ -26,8 +29,7 @@ function smoke(profile: string): Raw {
 const environment = { wallMs: wallEpochMs };
 const roundtrip = (value: unknown) => parseJSON(JSON.stringify(value));
 
-function replaySession(raw: Raw, profile = "core") {
-  const coordinator = new ReplayCoordinator();
+function replaySession(raw: Raw, profile = "core", coordinator = new ReplayCoordinator()) {
   let id = 0;
   const request = (fields: Record<string, unknown>) => coordinator.dispatch(roundtrip({ version: 1, id: ++id, ...fields }));
   const prepared = request({ op: "prepare", profile, path: "control.itf.json", raw: JSON.stringify(raw) });
@@ -189,6 +191,9 @@ describe("observation encoding contract", () => {
     { profile: "shadow", definition: "behaviorObservation", path: "observed.events[0].seconds", observed: () => ({ ...behaviorObservation("shadow"), events: [{ event: "shadowAge", cacheNamespace: "urn", useCase: "Behavior", keyType: "id", outcome: "match", seconds: "1" }] }) },
     { profile: "effects", definition: "behaviorObservation", path: "observed.writeTtls[0]", observed: () => ({ ...behaviorObservation("effects"), writeTtls: [60000.5] }) },
     { profile: "core", definition: "coreObservation", path: "observed.redisReads", observed: () => ({ ...coreObservation(), redisReads: -1 }) },
+    { profile: "core", definition: "coreObservation", path: "observed.lastResult", observed: () => ({ ...coreObservation(), lastResult: null }) },
+    { profile: "core", definition: "coreObservation", path: "observed.lastResult", observed: () => ({ ...coreObservation(), lastResult: { absent: false } }) },
+    { profile: "core", definition: "coreObservation", path: "observed.lastResult", observed: () => { const { lastResult: _value, ...rest } = coreObservation(); return rest; } },
     { profile: "core", definition: "coreObservation", path: "observed.redisWrites", observed: () => { const { redisWrites: _writes, ...rest } = coreObservation(); return rest; } },
     { profile: "local-clock", definition: "localClockObservation", path: "observed.calls[0]", observed: () => ({ ...emptyObservation(), calls: [{ status: "pending" }] }) },
     { profile: "local-clock", definition: "localClockObservation", path: "observed.events", observed: () => ({ ...emptyObservation(), calls: [], events: [] }) },
@@ -501,9 +506,31 @@ describe("fixture work on the receipt clocks", () => {
 });
 
 describe("coordinated end-to-end replay with the real drivers", () => {
+  it("records an absent actual core hit as a wrong result, preserving the complete history", async () => {
+    const raw = smoke("core");
+    raw.states = raw.states.slice(0, 6); // Warm local, change source, then read the stored value.
+    const original = LocalCache.prototype.getWithResolvedConfig;
+    vi.spyOn(LocalCache.prototype, "getWithResolvedConfig").mockImplementation(function (this: LocalCache, ...args) {
+      const result = original.apply(this, args);
+      return result.status === "hit" ? { ...result, value: undefined } : result;
+    });
+    const directory = mkdtempSync(resolve(tmpdir(), "dialcache-core-absent-"));
+    const records: ReplayRecording[] = [];
+    try {
+      const path = resolve(directory, "absent.itf.json");
+      writeFileSync(path, JSON.stringify(raw));
+      const result = await replayThroughCoordinator("core", path, new ReplayCoordinator({ record: true, onRecord: record => records.push(record) }));
+      expect(result.divergences).toEqual([{ step: 5, action: "localCall", paths: ["lastResult"] }]);
+      expect(records).toEqual([{ path, completed: true, lastStep: 5, divergences: result.divergences }]);
+    } finally { vi.restoreAllMocks(); rmSync(directory, { recursive: true, force: true }); }
+  });
+
   it.each(Object.keys(profileActions()))("replays the committed %s smoke trace through the coordinator", async profile => {
-    const result = await replayThroughCoordinator(profile, smokeTracePath(profile));
+    const records: ReplayRecording[] = [];
+    const result = await replayThroughCoordinator(profile, smokeTracePath(profile), new ReplayCoordinator({ record: true, onRecord: record => records.push(record) }));
     expect(result.steps).toBe(smoke(profile).states.length);
+    expect(result.divergences).toEqual([]);
+    expect(records).toEqual([{ path: smokeTracePath(profile), completed: true, lastStep: result.steps - 1, divergences: [] }]);
   });
 
   it("reports a driver observation the model did not predict as a mismatch, not a shape error", async () => {
@@ -514,6 +541,115 @@ describe("coordinated end-to-end replay with the real drivers", () => {
       const path = resolve(directory, "tampered.itf.json");
       writeFileSync(path, JSON.stringify(raw));
       await expect(replayThroughCoordinator("core", path)).rejects.toThrow(/step 1 action outsideCall: Observation mismatch\nexpected: .*"redisReads":999/);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+});
+
+describe("recording divergent histories", () => {
+  it("stops at a transient projection assertion instead of making a carried counter look new", () => {
+    const raw = smoke("recovery");
+    (raw.states[0]!.s.o as Record<string, unknown>).policyCalls = { "#bigint": "999" };
+    const records: ReplayRecording[] = [];
+    const session = replaySession(raw, "recovery", new ReplayCoordinator({ record: true, onRecord: record => records.push(record) }));
+    const empty = emptyObservation(session.binding.fixture as unknown as Fixture);
+    session.observe(0, empty);
+    // The age event was emitted before the decode marked recovery served. Its
+    // scalar outcome assertion hides the already divergent load counter.
+    const early = { ...empty, loads: 1, events: [{ event: "recoveryAge", cacheNamespace: "urn", useCase: "Behavior", keyType: "id", outcome: "served", seconds: 0 }] };
+    expect(() => session.observe(1, early)).toThrow(/Observation projection assertion did not compare a complete record/);
+    expect(records).toEqual([{ path: "control.itf.json", completed: false, lastStep: 0,
+      divergences: [{ step: 0, action: "init", paths: ["o.policyCalls"] }], error: expect.stringMatching(/step 1 action .*Observation projection assertion/) }]);
+    // Once recovery is marked served, projection can compare the load count.
+    // Continuing the previous recording would falsely call that counter new.
+    const repaired = { ...early, recovery: ["served"] };
+    try { session.binding.assert(1, repaired); throw new Error("Expected comparison failure"); }
+    catch (cause) {
+      expect(isObservationComparison(cause)).toBe(true);
+      const compared = cause as AssertionError;
+      expect(diffPaths(compared.expected, compared.actual)).toContain("o.loads");
+    }
+    expect(() => session.observe(1, repaired)).toThrow(/Unknown replay session/);
+  });
+
+  it("continues every comparison while preserving wire replies and independent command selection", () => {
+    const original = smoke("core");
+    original.states = original.states.slice(0, 3);
+    const changed = structuredClone(original);
+    changed.states[1]!.s.redisReads = { "#bigint": "998" };
+    changed.states[2]!.s.redisReads = { "#bigint": "999" };
+    const observations = parseItfTrace(original, "original").states.map(step => expectedCoreObservation(step.state));
+    const records: ReplayRecording[] = [];
+    const coordinator = new ReplayCoordinator({ record: true, onRecord: record => records.push(record) });
+    const session = replaySession(changed, "core", coordinator);
+    const clean = replaySession(original);
+    for (const [index, observation] of observations.entries()) expect(session.observe(index, observation)).toEqual(clean.observe(index, observation));
+    const recording = coordinator.recording(session.prepared.session as string)!;
+    expect(recording).toEqual({ path: "control.itf.json", completed: true, lastStep: 2,
+      divergences: [1, 2].map(step => ({ step, action: session.binding.trace.steps[step]!.action, paths: ["redisReads"] })) });
+    expect(records).toEqual([recording]);
+    recording.divergences[0]!.paths.push("tampered");
+    expect(coordinator.recording(session.prepared.session as string)!.divergences[0]!.paths).toEqual(["redisReads"]);
+    expect(() => session.observe(3, {})).toThrow(/Unknown replay session/);
+  });
+
+  it("retains an earlier divergence when settlement refuses the next observation", () => {
+    const raw = smoke("independent");
+    (raw.states[0]!.s.o as Record<string, unknown>).policyCalls = { "#bigint": "999" };
+    const records: ReplayRecording[] = [];
+    const session = replaySession(raw, "independent", new ReplayCoordinator({ record: true, onRecord: record => records.push(record) }));
+    const observed = emptyObservation(session.binding.fixture as unknown as Fixture);
+    session.observe(0, observed);
+    const fields = session.settlementFields(observed) as { receipt: SettlementReceipt; environment: { wallMs: number } };
+    expect(() => session.observe(1, observed, { ...fields, receipt: { ...fields.receipt, runnable: 1 } }))
+      .toThrow(/step 1 action .*Settlement violation: 1 runnable task/);
+    expect(records).toEqual([{ path: "control.itf.json", completed: false, lastStep: 0,
+      divergences: [{ step: 0, action: "init", paths: ["o.policyCalls"] }], error: expect.stringMatching(/step 1 action .*Settlement violation: 1 runnable task/) }]);
+  });
+
+  it("records a driver failure after a divergence without completing the history", async () => {
+    const raw = smoke("shadow-layers");
+    raw.states = raw.states.slice(0, 2);
+    (raw.states[0]!.s.o as Record<string, unknown>).reads = { "#bigint": "999" };
+    Object.assign(raw.states[1]!, { input: { name: "releaseDump", choice: { "#bigint": "0" } },
+      "mbt::actionTaken": "releaseDump", "mbt::nondetPicks": { choice: { tag: "Some", value: { "#bigint": "0" } } } });
+    const directory = mkdtempSync(resolve(tmpdir(), "dialcache-recording-failure-"));
+    const records: ReplayRecording[] = [];
+    try {
+      const path = resolve(directory, "unreachable.itf.json");
+      writeFileSync(path, JSON.stringify(raw));
+      await expect(replayThroughCoordinator("shadow-layers", path, new ReplayCoordinator({ record: true, onRecord: record => records.push(record) })))
+        .rejects.toThrow(/No pending dump 0/);
+      expect(records).toEqual([{ path, completed: false, lastStep: 0,
+        divergences: [{ step: 0, action: "init", paths: ["o.reads"] }], error: expect.stringContaining("step 1 action releaseDump: No pending dump 0") }]);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  it.each([false, true])("writes terminal JSONL evidence out of band (failure=%s)", failed => {
+    const original = smoke("core");
+    original.states = original.states.slice(0, 2);
+    const changed = structuredClone(original);
+    changed.states[0]!.s.redisReads = { "#bigint": "999" };
+    const observations = parseItfTrace(original, "original").states.map(step => expectedCoreObservation(step.state));
+    const directory = mkdtempSync(resolve(tmpdir(), "dialcache-recording-wire-"));
+    try {
+      const output = resolve(directory, "divergences.jsonl");
+      const requests = [
+        { version: 1, id: 1, op: "prepare", profile: "core", path: "wire.itf.json", raw: JSON.stringify(changed) },
+        ...observations.map((observed, index) => ({ version: 1, id: index + 2, op: "observe", session: "1", index, settlement,
+          observed: failed && index === 1 ? {} : observed, environment: { wallMs: wallEpochMs + index } })),
+      ];
+      const process = spawnSync(globalThis.process.execPath, [resolve("formal/replay/coordinator.mjs")], {
+        input: requests.map(request => JSON.stringify(request)).join("\n") + "\n", encoding: "utf8",
+        env: { ...globalThis.process.env, DIALCACHE_REPLAY_DIVERGENCES: output },
+      });
+      expect(process.status, process.stderr).toBe(0);
+      const replies = process.stdout.trim().split("\n").map(line => JSON.parse(line) as Record<string, unknown>);
+      for (const reply of replies) expect(() => assertSchema(reply, "response")).not.toThrow();
+      expect(replies.at(-1)).toMatchObject(failed ? { ok: false, error: expect.stringContaining("Malformed replay observation") }
+        : { ok: true, result: { complete: true, steps: 2 } });
+      const records = readFileSync(output, "utf8").trim().split("\n").map(line => JSON.parse(line) as ReplayRecording);
+      expect(records).toEqual([{ path: "wire.itf.json", completed: !failed, lastStep: failed ? 0 : 1,
+        divergences: [{ step: 0, action: "init", paths: ["redisReads"] }], ...(failed ? { error: expect.stringContaining("step 1 action outsideCall: Malformed replay observation") } : {}) }]);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });

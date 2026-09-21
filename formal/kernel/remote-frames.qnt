@@ -85,7 +85,7 @@ module remote_frames {
   pure def fresh(state: Frames[r], key: int, freshMs: int): bool =
     freshAgeAllowed(state.created.nth(key), Clock::wallOf(state), freshMs)
   pure def fenceCleared(state: Frames[r], key: int, operationsPerEntity: int): bool =
-    not(state.tracked) or fenceAllows(state.created.nth(key), state.watermark.nth(entityOf(key, operationsPerEntity)))
+    readFenceAllows(state.tracked, state.created.nth(key), state.watermark.nth(entityOf(key, operationsPerEntity)))
   // A frame the adapter returns: present, retained and (tracked) fence-cleared, whatever its age.
   pure def visible(state: Frames[r], key: int, operationsPerEntity: int): bool =
     state.remoteValues.nth(key) > NO_VALUE and retained(state, key) and fenceCleared(state, key, operationsPerEntity)

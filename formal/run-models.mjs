@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,9 +50,6 @@ export function executionPlan(mode, manifest = readExecution(), seed = process.e
       }
     }
   }
-  // Every compiling fault in the manifest catalog runs once, after the models
-  // it mutates have been checked in their unmodified form.
-  if (mode === 'check') commands.push({ command: 'node', args: ['formal/check-model-properties.mjs'] });
   return commands;
 }
 
@@ -68,14 +64,11 @@ export function bindGeneratedTrace(profile, text, path) {
 // Group a plan into chains that run side by side. A model's Quint jobs keep
 // their plan order inside one chain (check: typecheck, run, test; generate:
 // sampled run, then regression export); jobs for different models and the
-// vector exports are independent. The closing challenge run is not a chain: it
-// mutates its own copies of several models and starts only after every chain
-// has checked those models unmodified.
-const isChallengeRun = job => job.command === 'node' && job.args[0] === 'formal/check-model-properties.mjs';
+// vector exports are independent. The full validation plan runs the pinned
+// fault campaign separately, after these unmodified model checks complete.
 export function executionChains(commands) {
   const chains = [], byModel = new Map();
   for (const job of commands) {
-    if (isChallengeRun(job)) continue;
     if (job.command !== 'quint') { chains.push([job]); continue; }
     const model = job.args[1];
     if (!byModel.has(model)) { byModel.set(model, []); chains.push(byModel.get(model)); }
@@ -114,13 +107,6 @@ async function executePlan(mode, manifest, commands) {
   const chains = executionChains(commands);
   console.log(`Running ${chains.length} Quint job chains, ${concurrency} at a time, one thread each`);
   await runPool(chains.map(chain => async () => { for (const job of chain) await executeJob(job); }), { concurrency });
-  for (const job of commands.filter(isChallengeRun)) {
-    // The challenge run prints its own log groups; wrapping it would nest them.
-    console.log(`${job.command} ${job.args.join(' ')}`);
-    const result = spawnSync(job.command, job.args, { cwd: root, stdio: 'inherit' });
-    if (result.error) throw result.error;
-    if (result.status !== 0) throw new CommandFailure(`${job.args.join(' ')} failed (${result.signal ?? `exit ${result.status}`})`, result);
-  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

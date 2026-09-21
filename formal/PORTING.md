@@ -78,6 +78,13 @@ Invocation counters and IDs also come from actual native observations. The
 coordinator retains expected state; its command responses do not contain
 predictions. Duplicate or skipped observation indices are errors.
 
+The `inspectCoalescing` command calls the port's public inspection API and records
+`coalescingState` in the selected event channel. Its counts and oldest age come
+from the implementation. TypeScript exposes a nullable millisecond age; Go
+exposes a duration and projects idle age to null only when the observed leader
+count is zero. The dark-layers profile compares whole-millisecond snapshots;
+native fractional precision remains a separate binding check.
+
 The shared command definitions and per-profile bindings are in
 [replay/bindings.mjs](./replay/bindings.mjs). Their normalization, dynamic input
 selection and assertions are maintained once. The Go transport adapter is
@@ -199,9 +206,9 @@ infrastructure error, never an observation mismatch: it carries no
 
 | Caller | Definition | Encoding |
 | --- | --- | --- |
-| Feature profiles (12) | `behaviorObservation` | The full behavior record below; `events` is present exactly when the fixture has an `observe` list |
+| Feature profiles | `behaviorObservation` | The full behavior record below; `events` is present exactly when the fixture has an `observe` list |
 | `effects` | `behaviorObservation` | The same record; the fixture observes every metric event kind plus `readContext`/`readAbort` |
-| `core` | `coreObservation` | Nine nonnegative integers: `sourceVersion`, `lastResult`, `outsideLoaderCalls`, `requestLoaderCalls`, `localLoaderCalls`, `coalescedLoaderCalls`, `remoteLoaderCalls`, `redisReads`, `redisWrites` |
+| `core` | `coreObservation` | `sourceVersion` and the seven loader/Redis counters are nonnegative integers. `lastResult` is the actual returned integer, or `{ "absent": true }` for an absent return; it must remain present even when the implementation returns no value. Core histories offer integers, so absence is a behavioral mismatch. |
 | `local-clock` | `localClockObservation` | The behavior record without `events`; `calls` holds the plain integer each call returned, `loaders` counts source invocations, every other counter is zero and every other list empty |
 
 Behavior observation fields:

@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import { assertObservation } from "./divergence.mjs";
 import { profiles, parseTrace, featureInput, assertFeatureObservation } from "./features.mjs";
 import * as effects from "./effects.mjs";
 import * as localClock from "./local-clock.mjs";
@@ -87,7 +87,7 @@ export function bindTrace(name, raw, path) {
         return effects.inputsFor(input, observed, environment);
       },
       assert(index, observed) {
-        assert.deepEqual(effects.project(observed), expected[index]);
+        assertObservation(effects.project(observed), expected[index]);
       },
     };
   }

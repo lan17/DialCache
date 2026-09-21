@@ -25,6 +25,15 @@ describe("Go local-clock mutation assertion attribution", () => {
       "TestLocalClockConformance/trace.itf.json": "observation-mismatch",
     } });
   });
+  it("retains the raw failing assertion for diagnosis", () => {
+    const message = "/tmp/corpus/regressions/shadow-layers/capturedRetentionTest.itf.json step 4 action resolveLoader: Observation mismatch\n" +
+      "expected: {\"o\":{\"policyCalls\":1,\"writeTtls\":[]}}\nactual: {\"o\":{\"policyCalls\":2,\"writeTtls\":[]}}";
+    const result = evaluateGoTestEvents(replayFailure("TestFeatureConformance", "feature_replay_test.go",
+      message), 1);
+    expect(result).toMatchObject({ assertionEvidence: {
+      "TestFeatureConformance/trace.itf.json": `    feature_replay_test.go:84: ${message}\n`,
+    } });
+  });
   it("credits the core replay's coalesced-pair assertion, which carries no expected/actual pair", () => {
     const pair = replayFailure("TestCoreConformance", "core_replay_test.go", "pair returned different values");
     expect(evaluateGoTestEvents(pair, 1)).toMatchObject({ state: "detected", assertionKinds: { "TestCoreConformance/trace.itf.json": "pair-value-mismatch" } });
@@ -51,4 +60,12 @@ describe("Go local-clock mutation assertion attribution", () => {
       expect(() => evaluateGoTestEvents(localClockFailure(message), 1)).toThrow(/replay failure lacks observation/);
     },
   );
+});
+
+
+it("does not count Redis transport or driver errors as native assertions", () => {
+  expect(() => evaluateGoTestEvents(replayFailure("TestGeneratedInvalidationVectors", "invalidation_vector_driver_test.go",
+    "INVALIDATION_INFRASTRUCTURE: connection refused"), 1)).toThrow(/Redis vector infrastructure failure/);
+  expect(evaluateGoTestEvents(replayFailure("TestGeneratedInvalidationVectors", "invalidation_vector_driver_test.go",
+    "invalidation result: got cutoff=1000 want cutoff=10000000"), 1)).toMatchObject({state: "detected"});
 });
