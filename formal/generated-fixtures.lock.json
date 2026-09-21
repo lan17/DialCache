@@ -25,6 +25,7 @@
     "formal/dialcache-scope-conformance.qnt": "7cde548402db5767ad3175baa9266f0c318b68c4cda4eb5b3f7727c350c24e1b",
     "formal/dialcache-shadow-conformance.qnt": "b4806f313929597cafd64cd8ef8f9a7c2f38c63d27481da7e36702063f82a7c7",
     "formal/dialcache-shadow-layers-conformance.qnt": "76a1219307e707b713acc20998c0d9852fa64f782bf18c7c2c634eab74b1e5c9",
+    "formal/dialcache-shadow-read-deadlines-conformance.qnt": "b68a94693990aacdccc56b397cc5e835f37a53a71db380db8177d9717e756eff",
     "formal/dialcache-source-budgets-conformance.qnt": "fb9707785725add09358fb8c0c7cb764f86cd42e659ed1f4cc459fd5afe93574",
     "formal/fixture-recipes.json": "2f948b437e77919285c21609a1dda0a31ecab087e140cbb3ade942658f126f5d",
     "formal/generated-fixtures.mjs": "f73a527cbbc0178be167c11ff8ff21985f05976379ae4054d5f61caa889e34c2",
@@ -54,7 +55,8 @@
     "formal/kernel/request-memo.qnt": "e7897bfe9949a4d31b8138b35c32a7df0939e81e1f9c13739340a794a3d5073f",
     "formal/kernel/runtime-policy.qnt": "41ebb180f8b8b561d0db43b237abbee04e69613521436f6c624241cfece536ae",
     "formal/kernel/serving.qnt": "989160d393c069c9d4d07b473b73fc156b3b278c505a696163144707bbd6f338",
-    "formal/kernel/shadow.qnt": "467148b13c519f33069ab049e94a021f2b122e89c68e886ae09236641a26dc63"
+    "formal/kernel/shadow-reads.qnt": "f07f05499c736301eabe1907e860dd68814446de85d97ca87cec9a8c0f037efd",
+    "formal/kernel/shadow.qnt": "90f656ec0537186df163cc09049340077f01d0956d43f99f058c8972b1eeffb5"
   },
   "artifacts": {
     "formal/conformance-smoke.itf.json": "be38ab847b7a5d4c15914bd6bd2fd2fd72cb2fc9af7edb15ba209c53f2ccfa37",

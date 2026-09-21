@@ -67,6 +67,7 @@
                 "scope",
                 "shadow",
                 "shadow-layers",
+                "shadow-read-deadlines",
                 "source-budgets"
               ]
             },

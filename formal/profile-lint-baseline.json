@@ -28,7 +28,8 @@
     "request_memo",
     "runtime_policy",
     "serving",
-    "shadow"
+    "shadow",
+    "shadow_reads"
   ],
   "profiles": [
     {
@@ -284,6 +285,22 @@
         "shadow::releaseRead",
         "shadow::releaseWrite",
         "shadow::settleHeld"
+      ],
+      "compositionViolations": 0
+    },
+    {
+      "id": "shadow-read-deadlines",
+      "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "module": "dialcache_shadow_read_deadlines_conformance",
+      "libraryTransitions": [
+        "remote_frames::seedFrame",
+        "shadow::releaseDump",
+        "shadow::releaseWrite",
+        "shadow::settleHeld",
+        "shadow_reads::advance",
+        "shadow_reads::begin",
+        "shadow_reads::releaseLoad",
+        "shadow_reads::releaseRead"
       ],
       "compositionViolations": 0
     }

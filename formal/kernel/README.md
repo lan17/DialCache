@@ -615,3 +615,23 @@ request-only failure to request_local even without a persistent memo slot.
 The sampled corpus contains nine match verdicts, eight mismatches, one
 supersession and no confirmation errors, and 79 request-local follower joins.
 The separate shadow profile retains named confirmation-error coverage.
+
+
+## Separate shadow read deadlines
+
+`shadow-reads.qnt` composes the held dark lifecycle with each read's bounded
+result and raw completion. A 5 ms read may end validation before its 10 ms
+job deadline; a 20 ms read can outlive that deadline. Bounded errors cancel
+the read and forget the job timer while the raw adapter operation keeps its
+registration. Late raw completion only releases capacity. The caller source
+keeps its independent result. C1 captures the job's admitted read policy,
+then measures its read deadline from C1 dispatch.
+
+`shadow-read-deadlines` schedules six public histories, with required witnesses
+for cancellation, contexts, verdicts, competing-key rejection and readmission.
+Independent properties require every held raw read to retain its registration,
+every cancelled read to have ended its bounded result, and ended reads to have
+no remaining job timer. M61 and M62 distinguish losing bounded completion from
+releasing raw ownership early, in the model and both native implementations.
+Existing profiles retain their simpler projection when their bounds cannot
+reach a separate shadow read deadline; factoring `retireJob` preserves it.

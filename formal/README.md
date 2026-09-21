@@ -82,6 +82,7 @@ Conformance profiles expose external commands that both language drivers replay:
 | [local-clock](./dialcache-local-clock-conformance.qnt) | Fractional environment time and the shared whole-millisecond process-local expiry grid |
 | [source-budgets](./dialcache-source-budgets-conformance.qnt) | Default/unbounded/finite source deadlines, held policy, followers, outside calls and key failures |
 | [dark-layers](./dialcache-dark-layers-conformance.qnt) | Held dark work across request/local reuse, source deadlines, instance isolation, captured fill policy, tracked fences and clock rollback |
+| [shadow-read-deadlines](./dialcache-shadow-read-deadlines-conformance.qnt) | Separate C0/C1 read deadlines, raw capacity ownership, cancellation, captured read policy and whole-job ordering |
 
 These profiles deliberately bound callers, keys, contexts, capacities, payloads
 and time. Their introduction does not imply that every product of those domains

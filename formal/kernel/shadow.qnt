@@ -289,15 +289,18 @@ module shadow {
 
   // -- Settlement ------------------------------------------------------------------------
 
+  // Raw work has drained: remove its registration and any remaining budget.
+  // A bounded read can have reported its result before reaching this point.
+  pure def retireJob(state: Jobs[r], source: int): Jobs[r] =
+    Deadlines::forget({ jobs: state.jobs.select(other => other.source != source), ...state }, Deadlines::JOB, source)
   // A job ends with its outcome, its record and deadline gone; a timed-out
   // job said so already and adds nothing.
   pure def finishJob(state: Jobs[r], source: int, outcome: str): Jobs[r] = {
     val job = jobOf(state, source)
-    Deadlines::forget({
-      jobs: state.jobs.select(other => other.source != source),
+    retireJob({
       o: { shadow: if (job.timedOut) state.o.shadow else state.o.shadow.append(outcome), ...state.o },
       ...state
-    }, Deadlines::JOB, source)
+    }, source)
   }
   // The label a failed source gives its job: the caller's deadline error is
   // the job's `timeout` (the implementations race the caller's bounded

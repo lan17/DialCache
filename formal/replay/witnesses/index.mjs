@@ -24,6 +24,7 @@ import { shadowDiagnosticsWitnesses } from "./shadow-diagnostics.mjs";
 import { shadowLayersWitnesses } from "./shadow-layers.mjs";
 import { darkLayersWitnesses } from "./dark-layers.mjs";
 import { sourceBudgetsWitnesses } from "./source-budgets.mjs";
+import { shadowReadDeadlinesWitnesses } from "./shadow-read-deadlines.mjs";
 import { readTrace, witnessStates } from "./trace.mjs";
 
 // One language-neutral witness evaluator for every profile with a completion
@@ -73,6 +74,7 @@ export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder
     case "shadow": shadowWitnesses(corpus, recorder); shadowDiagnosticsWitnesses(corpus, recorder); break;
     case "recovery-read": actionLabels(corpus, recorder); recoveryReadWitnesses(corpus, recorder); recoveryAdmissionWitnesses(corpus, recorder); break;
     case "shadow-layers": actionLabels(corpus, recorder); shadowLayersWitnesses(corpus, recorder); break;
+    case "shadow-read-deadlines": actionLabels(corpus, recorder); shadowReadDeadlinesWitnesses(corpus, recorder); break;
     case "dark-layers": actionLabels(corpus, recorder); darkLayersWitnesses(corpus, recorder); break;
     case "local-failure": actionLabels(corpus, recorder); localFailureWitnesses(corpus, recorder); break;
     case "source-budgets": actionLabels(corpus, recorder); sourceBudgetsWitnesses(corpus, recorder); break;

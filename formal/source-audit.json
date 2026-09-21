@@ -1257,7 +1257,7 @@
     },
     {
       "path": "formal/FEATURE-COVERAGE.md",
-      "sha256": "08d9c27c34c48747e0c8bbeb4927e82729f65b2dc868bdbefb2afd9a90d5cfae",
+      "sha256": "54d4078122d376f0bcd73db7a54dc1b39990de049770121ba84433d0ab5cefa2",
       "entries": [
         {"line":1,"title":"DialCache features and known behavioral corners"},
         {"line":16,"title":"What is accounted for"},
@@ -1347,14 +1347,14 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "5f65e6f0f28fe5e1b5542f07e5a99e1cd7749b044b06856db6827f01c59263a9",
+      "sha256": "3f8700c2d4753720b3ff77b3eb09a6458d91ccb65e05c1d6ff666d6e36d7584b",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
         {"line":26,"title":"How the specification connects to code"},
         {"line":46,"title":"Models and composition profiles"},
-        {"line":98,"title":"Generating and replaying behavior"},
-        {"line":185,"title":"Evidence and scope"}
+        {"line":99,"title":"Generating and replaying behavior"},
+        {"line":186,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",

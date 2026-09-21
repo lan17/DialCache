@@ -1,0 +1,37 @@
+import { publicPrefixWitnesses, publicPrefixRule as rule, publicCheckpoint as check, witnessCommand as command } from "./public-prefix.mjs";
+
+// Inputs select the schedule; public verdicts, read contexts and cancellation
+// signals establish the consequences without reading model-owned jobs/timers.
+export const shadowReadDeadlinesWitnessRules = [
+  rule("c0-read-timeout-retains-raw-capacity", "c0ReadDeadlineKeepsRawCapacityTest",
+    [command("init"), command("beginCall", 0), command("resolveLoader", 1), command("advance", 5), command("beginCall", 1), command("resolveLoader", 3), command("advance", 10), command("releaseRead", 0), command("beginCall", 1)],
+    check(3, { calls: [1], shadow: ["redis_error"] }, undefined, { aborted: [0] }),
+    check(4, { reads: 1, shadow: ["redis_error", "dropped"] }),
+    check(6, { calls: [1, 1], shadow: ["redis_error", "dropped"] }),
+    check(8, { reads: 2, loaders: 3, loads: 0, dumps: 0, shadow: ["redis_error", "dropped"] })),
+  rule("c1-read-timeout-retains-raw-capacity", "c1ReadDeadlineKeepsRawCapacityTest",
+    [command("init"), command("seed", 0), command("beginCall", 0), command("releaseRead", 0), command("resolveLoader", 2), command("releaseLoad", 0), command("advance", 5), command("beginCall", 1), command("resolveLoader", 3), command("advance", 10), command("releaseRead", 1), command("beginCall", 1)],
+    check(6, { calls: [2], shadow: ["confirmation_error"] }, undefined, { aborted: [1] }),
+    check(7, { reads: 2, shadow: ["confirmation_error", "dropped"] }),
+    check(9, { shadow: ["confirmation_error", "dropped"] }),
+    check(11, { reads: 3, loaders: 3, dumps: 0, shadow: ["confirmation_error", "dropped"] })),
+  rule("job-then-read-timeout-has-one-verdict", "jobDeadlineThenReadDeadlineReportsOneVerdictTest",
+    [command("init"), command("policy", 20), command("beginCall", 0), command("resolveLoader", 1), command("advance", 10), command("beginCall", 1), command("resolveLoader", 3), command("advance", 10), command("releaseRead", 0), command("beginCall", 1)],
+    check(4, { shadow: ["timeout"] }, undefined, { aborted: [] }),
+    check(5, { reads: 1, shadow: ["timeout", "dropped"] }),
+    check(7, { calls: [1, 1], shadow: ["timeout", "dropped"] }, undefined, { aborted: [0] }),
+    check(9, { reads: 2, loaders: 3, shadow: ["timeout", "dropped"] })),
+  rule("confirmation-keeps-captured-read-budget", "confirmationKeepsCapturedReadBudgetTest",
+    [command("init"), command("seed", 0), command("beginCall", 0), command("releaseRead", 0), command("policy", 20), command("resolveLoader", 2), command("releaseLoad", 0), command("advance", 5), command("releaseRead", 1), command("beginCall", 1)],
+    check(6, {}, undefined, { budgets: [5, 5] }),
+    check(7, { shadow: ["confirmation_error"] }, undefined, { aborted: [1] }),
+    check(9, { reads: 3 }, undefined, { budgets: [5, 5, 20] })),
+  rule("confirmation-read-budget-starts-at-dispatch", "confirmationReadBudgetStartsAtItsOwnDispatchTest",
+    [command("init"), command("seed", 0), command("beginCall", 0), command("releaseRead", 0), command("advance", 4), command("resolveLoader", 2), command("releaseLoad", 0), command("advance", 4), command("advance", 1)],
+    check(7, { calls: [2], shadow: [] }, undefined, { aborted: [] }),
+    check(8, { shadow: ["confirmation_error"] }, undefined, { aborted: [1] })),
+  rule("timely-shadow-read-cancels-deadline-and-fills", "readBeforeDeadlineCanFillAndCancelsItsTimerTest",
+    [command("init"), command("beginCall", 0), command("resolveLoader", 1), command("advance", 4), command("releaseRead", 0), command("releaseDump", 0), command("releaseWrite", 0), command("advance", 10)],
+    check(7, { calls: [1], shadow: ["filled"], writes: 1 }, undefined, { aborted: [] })),
+];
+export const shadowReadDeadlinesWitnesses = (histories, recorder) => publicPrefixWitnesses(histories, shadowReadDeadlinesWitnessRules, recorder);

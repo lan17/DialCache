@@ -321,6 +321,38 @@
       },
       "markers": true,
       "compression": true
+    },
+    "shadow-read-deadlines": {
+      "o": {
+        "calls": true,
+        "classifications": true,
+        "comparisons": true,
+        "dumps": true,
+        "invalidations": true,
+        "loaders": true,
+        "loads": true,
+        "maintenance": true,
+        "policyCalls": true,
+        "reads": true,
+        "recovery": true,
+        "shadow": true,
+        "sourceScopes": true,
+        "writeTtls": true,
+        "writes": true
+      },
+      "d": {
+        "ages": true,
+        "coalesced": true,
+        "configErrors": true,
+        "fallbackErrors": true,
+        "warnings": true,
+        "futureOffsets": true
+      },
+      "io": {
+        "aborted": true,
+        "budgets": true,
+        "sourceErrors": true
+      }
     }
   },
   "artifacts": [
@@ -5535,6 +5567,55 @@
           "id": "laterServedShadowKeepsItsWholeBudgetTest",
           "regression": "laterServedShadowKeepsItsWholeBudgetTest",
           "projection": "observations"
+        }
+      ]
+    },
+    {
+      "path": "formal/shadow-read-deadlines-smoke.itf.json",
+      "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "format": "smoke",
+      "recipes": [
+        {
+          "id": "smoke",
+          "regression": "c0ReadDeadlineKeepsRawCapacityTest",
+          "projection": "shadow-read-deadlines"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/shadow-read-deadlines-witnesses.json",
+      "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "format": "named-list",
+      "recipes": [
+        {
+          "id": "c0ReadDeadlineKeepsRawCapacityTest",
+          "regression": "c0ReadDeadlineKeepsRawCapacityTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "c1ReadDeadlineKeepsRawCapacityTest",
+          "regression": "c1ReadDeadlineKeepsRawCapacityTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "jobDeadlineThenReadDeadlineReportsOneVerdictTest",
+          "regression": "jobDeadlineThenReadDeadlineReportsOneVerdictTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "confirmationKeepsCapturedReadBudgetTest",
+          "regression": "confirmationKeepsCapturedReadBudgetTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "confirmationReadBudgetStartsAtItsOwnDispatchTest",
+          "regression": "confirmationReadBudgetStartsAtItsOwnDispatchTest",
+          "projection": "shadow-read-deadlines"
+        },
+        {
+          "id": "readBeforeDeadlineCanFillAndCancelsItsTimerTest",
+          "regression": "readBeforeDeadlineCanFillAndCancelsItsTimerTest",
+          "projection": "shadow-read-deadlines"
         }
       ]
     }

@@ -519,5 +519,13 @@
     "timed-out-dark-confirmation-retains-capacity-until-raw-release",
     "timed-out-dark-dump-retains-capacity-until-raw-release",
     "timed-out-dark-write-retains-capacity-until-raw-release"
+  ],
+  "shadow-read-deadlines": [
+    "c0-read-timeout-retains-raw-capacity",
+    "c1-read-timeout-retains-raw-capacity",
+    "job-then-read-timeout-has-one-verdict",
+    "confirmation-keeps-captured-read-budget",
+    "confirmation-read-budget-starts-at-dispatch",
+    "timely-shadow-read-cancels-deadline-and-fills"
   ]
 }

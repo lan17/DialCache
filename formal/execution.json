@@ -592,6 +592,24 @@
         "traces": 256,
         "outputDirectory": ".formal-traces/features/dark-layers"
       }
+    },
+    {
+      "path": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "profile": "shadow-read-deadlines",
+      "invariants": [
+        "capacityIsBounded",
+        "rawReadsKeepTheirRegistration",
+        "abortedReadsHaveEndedTheirResult",
+        "endedReadsHaveNoJobTimer",
+        "liveReadDeadlinesAreOwned",
+        "callerResultsBelongToTheirSources"
+      ],
+      "generate": {
+        "maxSamples": 1024,
+        "maxSteps": 40,
+        "traces": 128,
+        "outputDirectory": ".formal-traces/features/shadow-read-deadlines"
+      }
     }
   ],
   "symbolic": {
@@ -722,7 +740,8 @@
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "local-failure": "Composes the remote freshness judgment (ageBeforeCeiling), but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets a ceiling (re-measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated (re-measured 2026-09-20 over the composed text).",
-          "runtime-boundaries": "No scheduled history reaches an exact age boundary: every regression passes under the mutant."
+          "runtime-boundaries": "No scheduled history reaches an exact age boundary: every regression passes under the mutant.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -762,7 +781,8 @@
           "scope": "Composes the request-only projection, which never reads local storage.",
           "layers": "Composes local storage, but its 60 s entries never reach their insertion expiry within the bound of 1 ms ticks.",
           "runtime-boundaries": "Composes local storage, but no input advances the clock, so no entry reaches its expiry.",
-          "dark-layers": "The named dark-job histories and invariants do not distinguish inclusive local expiry. The sampled local-expiry witness drives native replay, but this profile supplies no model-side assertion for that exact local boundary."
+          "dark-layers": "The named dark-job histories and invariants do not distinguish inclusive local expiry. The sampled local-expiry witness drives native replay, but this profile supplies no model-side assertion for that exact local boundary.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -865,7 +885,8 @@
           "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -904,7 +925,8 @@
           "shadow-layers",
           "source-budgets",
           "dark-layers",
-          "admission"
+          "admission",
+          "shadow-read-deadlines"
         ],
         "exclusions": {
           "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
@@ -964,7 +986,8 @@
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
-          "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot."
+          "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -1006,7 +1029,8 @@
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
-          "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read."
+          "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -1048,7 +1072,8 @@
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
-          "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read."
+          "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -1102,7 +1127,8 @@
           "shadow-layers": "Uses the atomic caller traversal and RemoteWrites settlement, never RemoteIO::settleLoad; its guard also excludes ordinary stale caller recovery.",
           "local-clock": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
           "source-budgets": "Uses the budgeted local projection, with no remote layer or held caller decode; it never executes RemoteIO::settleLoad.",
-          "dark-layers": "Every reply disables caller remote serving; held C0 decodes belong to shadow jobs, and no caller retains a recovery candidate."
+          "dark-layers": "Every reply disables caller remote serving; held C0 decodes belong to shadow jobs, and no caller retains a recovery candidate.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -1137,7 +1163,8 @@
           "shadow-layers": "Does not import metrics; the mutated text is never executed.",
           "local-clock": "Does not import metrics; the mutated text is never executed.",
           "source-budgets": "Does not import metrics; the mutated text is never executed.",
-          "dark-layers": "Dark-layers does not import formal/kernel/metrics.qnt; the mutation is outside its executable closure."
+          "dark-layers": "Dark-layers does not import formal/kernel/metrics.qnt; the mutation is outside its executable closure.",
+          "shadow-read-deadlines": "Does not import formal/kernel/metrics.qnt; the mutation is outside its executable closure."
         }
       },
       "nativeMutants": {
@@ -1184,7 +1211,8 @@
           "core": "Does not import the kernel library, so the mutated completion is never executed; its own completion rule is stated in its own text.",
           "shadow": "Coalescing is off and one caller runs at a time: every flight has one owner.",
           "local-failure": "Composes serving.complete through local_faults.settle, but admits one source at a time (no call begins while a source is pending), so every flight has one owner and the mutant's minimum-owner fold finishes the same call.",
-          "local-clock": "Composes serving.complete through serving.callLocal, whose inline source settles in the step that starts it, so no flight ever gains a second owner and the mutant's minimum-owner fold finishes the same call."
+          "local-clock": "Composes serving.complete through serving.callLocal, whose inline source settles in the step that starts it, so no flight ever gains a second owner and the mutant's minimum-owner fold finishes the same call.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -1296,7 +1324,8 @@
           "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -1331,7 +1360,8 @@
           "scope": "Composes the request-only projection, which never reads a remote frame.",
           "source-budgets": "Composes the local projection, which never reads a remote frame.",
           "layers": "Composes remote frames, but its 60 s freshness is never reached within the bound of 1 ms ticks.",
-          "runtime-boundaries": "Composes remote frames, but no input advances the clock, so no frame ages to its freshness boundary."
+          "runtime-boundaries": "Composes remote frames, but no input advances the clock, so no frame ages to its freshness boundary.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -1371,7 +1401,8 @@
           "local-failure": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "runtime-boundaries": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "local-clock": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed."
+          "source-budgets": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -1500,7 +1531,8 @@
           "runtime-boundaries": "Does not compose remote_writes, so the mutated dispatch is never executed.",
           "shadow-layers": "Composes remote_writes::dispatch but never raises a watermark (no invalidate input), so every fence is NO_FENCE and the recheck never refuses a write.",
           "local-clock": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "source-budgets": "Does not compose remote_writes, so the mutated dispatch is never executed."
+          "source-budgets": "Does not compose remote_writes, so the mutated dispatch is never executed.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -1540,7 +1572,8 @@
           "runtime-boundaries": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
           "shadow-layers": "Composes the atomic lifecycle: the dark C0 read is made at the release and the job waits in the registry until remote_writes::settle, so the held read settlement the fault mutates is never executed.",
           "local-clock": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated C0 read settlement is never executed."
+          "source-budgets": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
+          "shadow-read-deadlines": "No named history supplies a detecting assertion: 3 histories are disabled by the mutation before their expected result, and the others pass. The scheduled 2000 x 40 invariant check passes; these disabled histories are not credited as detection."
         }
       }
     },
@@ -1890,7 +1923,8 @@
           "shadow-layers": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock.",
           "local-clock": "The local projection has no remote layer, so refills is never judged.",
           "source-budgets": "The local projection never refills the remote layer, so refills is never judged.",
-          "dark-layers": "Caller remote serving is off, so callers capture no remote-refill authority. Dark fills apply the shadow job fence independently of this caller-publication guard."
+          "dark-layers": "Caller remote serving is off, so callers capture no remote-refill authority. Dark fills apply the shadow job fence independently of this caller-publication guard.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -1930,7 +1964,8 @@
           "shadow-layers": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained.",
           "local-clock": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
           "source-budgets": "Its late settlements are delivered deadlines: arrival never finds a reached deadline undelivered.",
-          "dark-layers": "Elapsed-time advances deliver source deadlines before later settlements; this profile has no clock jump without timer delivery to expose the arrival-time check independently."
+          "dark-layers": "Elapsed-time advances deliver source deadlines before later settlements; this profile has no clock jump without timer delivery to expose the arrival-time check independently.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -1989,7 +2024,8 @@
           "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -2024,7 +2060,8 @@
           "local-clock": "Composes the local projection with no request scope (persistentContexts 0) and no closeScope input.",
           "source-budgets": "Composes the local projection with no request scope: no input opens or closes a scope and every reply disables the request layer, so request_memo.closeScope is never executed.",
           "dark-layers": "The fault can clear peer request memos, but named histories never probe a previously populated peer memo after closing another scope. memoHoldsAcceptedValues permits empty rows; named runs and bounded invariant checks pass.",
-          "layers": "Closing a scope can clear another open scope under this fault, but no scheduled layers regression closes a scope or probes another memo afterward. Scheduled invariants constrain closed rows and accepted ownership, not preservation of open memo rows; named runs and the bounded invariant check pass."
+          "layers": "Closing a scope can clear another open scope under this fault, but no scheduled layers regression closes a scope or probes another memo afterward. Scheduled invariants constrain closed rows and accepted ownership, not preservation of open memo rows; named runs and the bounded invariant check pass.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2064,7 +2101,8 @@
           "runtime-boundaries": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
           "local-clock": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
           "source-budgets": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "dark-layers": "One job fills the instance capacity of one, so the unchanged full-capacity check still drops a duplicate even when the duplicate test is removed."
+          "dark-layers": "One job fills the instance capacity of one, so the unchanged full-capacity check still drops a duplicate even when the duplicate test is removed.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2089,7 +2127,8 @@
         "profiles": [
           "admission",
           "shadow-layers",
-          "dark-layers"
+          "dark-layers",
+          "shadow-read-deadlines"
         ],
         "exclusions": {
           "core": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
@@ -2150,7 +2189,8 @@
           "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -2214,7 +2254,8 @@
           "shadow-layers": "Composes deadlines' delivery for job budgets whose expiry reads no clock and whose registration order is job order, so delivering at the target instead of each due instant yields the same labels in the same order.",
           "local-clock": "Does not compose the deadlines module: its sources have no budget and no deadline is ever delivered.",
           "source-budgets": "Composes the budgeted local lifecycle, whose deliveries inside one advance complete the same sources with the same deadline error whichever instants the fold visits, and no delivery there starts further bounded work; only its private settledAt history sees the instant.",
-          "dark-layers": "No recovery decode or source-duration observation samples the delivery instant inside an advance. Named runs and scheduled invariants still see the same final errors and retired jobs."
+          "dark-layers": "No recovery decode or source-duration observation samples the delivery instant inside an advance. Named runs and scheduled invariants still see the same final errors and retired jobs.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2255,7 +2296,8 @@
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
-          "dark-layers": "No caller recovery candidate is retained while remote serving is off; the recovery maximum is never judged."
+          "dark-layers": "No caller recovery candidate is retained while remote serving is off; the recovery maximum is never judged.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2297,7 +2339,8 @@
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
-          "dark-layers": "No caller enters recovery or releases a recovery decode; dark jobs decode their own C0 and never use the challenged recovery publication arm."
+          "dark-layers": "No caller enters recovery or releases a recovery decode; dark jobs decode their own C0 and never use the challenged recovery publication arm.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2337,7 +2380,8 @@
           "runtime-boundaries": "Composes serving.authority, but its 120000 ms retention is written for an untracked entity, which the cap never applies to.",
           "scope": "Composes the request-only projection, which never reaches serving.authority.",
           "source-budgets": "Composes the local projection, which never reaches serving.authority.",
-          "dark-layers": "Caller remote serving is off, so callers capture no refill retention. Held dark fills cap their own captured retention through remote_frames.physicalRetention."
+          "dark-layers": "Caller remote serving is off, so callers capture no refill retention. Held dark fills cap their own captured retention through remote_frames.physicalRetention.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2381,7 +2425,8 @@
           "shadow-layers": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
           "local-clock": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
           "source-budgets": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "dark-layers": "Dark-layers does not import formal/kernel/local-faults.qnt; the mutation is outside its executable closure."
+          "dark-layers": "Dark-layers does not import formal/kernel/local-faults.qnt; the mutation is outside its executable closure.",
+          "shadow-read-deadlines": "Does not import formal/kernel/local-faults.qnt; the mutation is outside its executable closure."
         }
       }
     },
@@ -2421,7 +2466,8 @@
           "runtime-boundaries": "Composes the layered shape and reaches the mutated warm when a source is rejected while local storage participates, but none of its scheduled invariants or exported regressions reads the local slot between that rejection and the next publication (measured under the mutant at 2000 x 40 and over its exported regressions).",
           "shadow-layers": "Composes the layered shape and reaches the mutated warm when a source is rejected while local storage participates, but none of its scheduled invariants or exported regressions reads the local slot between that rejection and the next publication (measured under the mutant at 2000 x 40 and over its exported regressions).",
           "local-clock": "Its inline sources only return accepted values, so the acceptance judgment in publishLocal never rejects one.",
-          "dark-layers": "The held source lifecycle rejects errors before the accepted-only serving publication call. Native M37 also edits a serving/recovery failure-publication site outside finishRampedDownRemote; both ports replay this dark corpus unchanged under the absent-value mutation."
+          "dark-layers": "The held source lifecycle rejects errors before the accepted-only serving publication call. Native M37 also edits a serving/recovery failure-publication site outside finishRampedDownRemote; both ports replay this dark corpus unchanged under the absent-value mutation.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -2552,7 +2598,8 @@
           "local-failure": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "runtime-boundaries": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "local-clock": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed."
+          "source-budgets": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2593,7 +2640,8 @@
           "local-failure": "Does not compose the shadow module, so the mutated fill dump is never executed.",
           "runtime-boundaries": "Does not compose the shadow module, so the mutated fill dump is never executed.",
           "local-clock": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated fill dump is never executed."
+          "source-budgets": "Does not compose the shadow module, so the mutated fill dump is never executed.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2633,7 +2681,8 @@
           "runtime-boundaries": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
           "shadow-layers": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
           "source-budgets": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
-          "dark-layers": "The environment advances in whole milliseconds and never calls clock.advanceTicks; wall rollback changes no monotonic insertion grid."
+          "dark-layers": "The environment advances in whole milliseconds and never calls clock.advanceTicks; wall rollback changes no monotonic insertion grid.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2679,7 +2728,8 @@
           "local-failure": "Composes local storage, but no input advances the clock, so a renewed insertion is invisible.",
           "runtime-boundaries": "Composes local storage, but no input advances the clock, so a renewed insertion is invisible.",
           "shadow-layers": "Composes local storage; its one expiry regression reads the entry again only after the advances that expire it, with no hit in between, so a renewed insertion is invisible (measured under the mutant at 2000 x 40 and over its exported regressions).",
-          "dark-layers": "The named dark-job histories and invariants do not constrain renewing local insertion expiry on a hit. Local-clock supplies the detecting model boundary; this profile does not claim that property."
+          "dark-layers": "The named dark-job histories and invariants do not constrain renewing local insertion expiry on a hit. Local-clock supplies the detecting model boundary; this profile does not claim that property.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -2726,7 +2776,8 @@
           "local-failure": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
           "runtime-boundaries": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
           "shadow-layers": "Uses Shadow::begin with the atomic serving lifecycle and no source budget; only shadow jobs are timed, so caller admission never uses the changed rule.",
-          "local-clock": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure."
+          "local-clock": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -2811,7 +2862,8 @@
           "runtime-boundaries": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
           "shadow-layers": "Frames are stamped with the wall clock at write release (remote_writes.dispatch) or seeded at a non-negative age; the skew is 0 and never shifts, so no history observes a future stamp.",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated.",
-          "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated."
+          "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2880,7 +2932,8 @@
           "admission",
           "shadow",
           "effects",
-          "dark-layers"
+          "dark-layers",
+          "shadow-read-deadlines"
         ],
         "exclusions": {
           "core": "does not compose the deadlines module: its sources have no budget",
@@ -2931,7 +2984,8 @@
           "shadow-layers": "Coalescing is off in every reply: decide's join arms are never taken and the request registry is never written.",
           "local-clock": "Composes serving.decide over the local projection, but an inline source settles in the step that starts it, so no flight is pending at any admission and the join arms are never taken.",
           "scope": "Composes the request-only projection, which passes no layer values to the decision, so no layer hit can precede a join.",
-          "source-budgets": "Its replies always coalesce and its bypass sources warm nothing, so a live entry and a pending registered flight never coexist."
+          "source-budgets": "Its replies always coalesce and its bypass sources warm nothing, so a live entry and a pending registered flight never coexist.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -2971,7 +3025,8 @@
           "local-clock": "Composes serving.decide over the local projection, but an inline source settles in the step that starts it, so no flight is pending at any admission and the join arms are never taken.",
           "layers": "Its replies always coalesce, so the conjunct the fault removes is always true and no history observes it.",
           "scope": "Composes the request-only projection, whose process join requires a shared layer this shape never has.",
-          "source-budgets": "Its replies always coalesce, so the conjunct the fault removes is always true and no history observes it."
+          "source-budgets": "Its replies always coalesce, so the conjunct the fault removes is always true and no history observes it.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -3011,7 +3066,8 @@
           "recovery-read": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; the partition checker remeasures that exclusion.",
           "local-failure": "Only one source can be pending, time never expires a local entry, and a failed local read withdraws local publication authority. The profile never requires replacing an occupied slot.",
           "shadow-layers": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; the partition checker remeasures that exclusion.",
-          "dark-layers": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; the partition checker remeasures that exclusion."
+          "dark-layers": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; the partition checker remeasures that exclusion.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         },
         "model": "formal/dialcache-policy-conformance.qnt"
       },
@@ -3052,7 +3108,8 @@
           "runtime-boundaries": "No scheduled history or sampled property at the check bounds probes a previously published local value after another source rejects; the partition checker remeasures that exclusion.",
           "shadow-layers": "Rejected sources go through remote_writes.failed, which completes or recovers them without calling publishLocal with the rejected value.",
           "local-clock": "Its inline sources only return accepted values, so the failure-preserves-local branch is never taken.",
-          "dark-layers": "Rejected held sources complete without calling publishLocal with the rejected value, so they cannot take the mutated failure branch."
+          "dark-layers": "Rejected held sources complete without calling publishLocal with the rejected value, so they cannot take the mutated failure branch.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         },
         "model": "formal/dialcache-policy-conformance.qnt"
       },
@@ -3098,7 +3155,8 @@
           "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "measures": "Repeats the layers identity fault against the held dark path: every caller must own a source for its own key and instance."
@@ -3217,7 +3275,8 @@
           "shadow",
           "admission",
           "shadow-layers",
-          "dark-layers"
+          "dark-layers",
+          "shadow-read-deadlines"
         ],
         "exclusions": {
           "core": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
@@ -3379,6 +3438,88 @@
             "d.inspections"
           ]
         }
+      }
+    },
+    {
+      "id": "shadow-read-deadline-ignores-bounded-result",
+      "contract": "C54",
+      "source": "formal/kernel/shadow-reads.qnt",
+      "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "invariant": "abortedReadsHaveEndedTheirResult",
+      "before": "    finishReadResult(aborted, read, job)",
+      "after": "    aborted",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "c0ReadDeadlineKeepsRawCapacityTest",
+        "failure": "s.o.calls == List(VALUE_ONE) and s.o.shadow == List(\"redis_error\") and s.io.aborted == List(0)",
+        "family": "shadow-read-deadline-ignores-bounded-result",
+        "profiles": [
+          "shadow-read-deadlines"
+        ],
+        "exclusions": {
+          "core": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "effects": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "recovery": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "policy": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "shadow": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "scope": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "admission": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "independent": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "recovery-read": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "local-failure": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "runtime-boundaries": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "shadow-layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "local-clock": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "source-budgets": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "dark-layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M61",
+        "text": "M61 is the native twin of this model fault. Both ports keep the read timer and cancellation but wait for the raw reply instead of consuming the bounded read error. The shadow-reads kernel fault records cancellation without ending that read result, and the generated C0 history detects the missing redis_error at exactly 5 ms."
+      }
+    },
+    {
+      "id": "shadow-read-deadline-releases-raw-capacity",
+      "contract": "C54",
+      "source": "formal/kernel/shadow-reads.qnt",
+      "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
+      "invariant": "rawReadsKeepTheirRegistration",
+      "before": "      expiredReads: state.expiredReads.append(read),",
+      "after": "      jobs: state.jobs.select(other => other.source != job.source),\n      expiredReads: state.expiredReads.append(read),",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "c0ReadDeadlineKeepsRawCapacityTest",
+        "failure": "s.o.reads == 1 and s.o.shadow == List(\"redis_error\", \"dropped\")",
+        "family": "shadow-read-deadline-releases-raw-capacity",
+        "profiles": [
+          "shadow-read-deadlines"
+        ],
+        "exclusions": {
+          "core": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "effects": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "recovery": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "policy": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "shadow": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "scope": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "admission": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "independent": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "recovery-read": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "local-failure": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "runtime-boundaries": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "shadow-layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "local-clock": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "source-budgets": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
+          "dark-layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M62",
+        "text": "M62 is the native twin of this model fault. Both ports complete the bounded read error but release its shadow registration before the raw adapter operation settles. The kernel removes the same job while retaining the raw read, and the generated competing-key admission checkpoint detects the premature capacity release."
       }
     }
   ],

@@ -8,6 +8,7 @@ import { localFailureProfile } from "./profiles/local-failure.mjs";
 import { runtimeBoundariesProfile } from "./profiles/runtime-boundaries.mjs";
 import { shadowLayersProfile } from "./profiles/shadow-layers.mjs";
 import { sourceBudgetsProfile } from "./profiles/source-budgets.mjs";
+import { shadowReadDeadlinesProfile } from "./profiles/shadow-read-deadlines.mjs";
 import { darkLayersProfile } from "./profiles/dark-layers.mjs";
 const settle = (op) => ({
   ...(op === "resolve" ? { choices: [1, 2] } : {}),
@@ -48,6 +49,7 @@ const shadowSeed = { choices: [1, 2, 3, 4, 5, 6, 7, 8], input: (choice) => choic
       : { op: "seed", payloadHex: choice === 3 ? "31" : choice === 4 ? "32" : "2031" } };
 export const profiles = {
   "dark-layers": darkLayersProfile,
+  "shadow-read-deadlines": shadowReadDeadlinesProfile,
   "source-budgets": sourceBudgetsProfile,
   "runtime-boundaries": runtimeBoundariesProfile,
   "shadow-layers": shadowLayersProfile,
@@ -409,6 +411,7 @@ function projectBaseObservation(profile, observed) {
           throw new Error("Unknown actual source error identity");
         return Number(call.error.slice("source:".length)) + 1;
       }) };
+    const diagnostics = [];
     for (const event of events) {
       if (event.event === "readContext") {
         assert.deepEqual(event.index, io.budgets.length);
@@ -422,13 +425,15 @@ function projectBaseObservation(profile, observed) {
           throw new Error("Missing actual cancellation identity");
         io.aborted.push(event.index);
       }
+      else if (profile.diagnosticAge !== undefined) diagnostics.push(event);
       else {
         if (typeof event.event !== "string")
           throw new Error("Missing actual read event kind");
         assertObservedDomain(false, { event: event.event }, { event: ["readContext", "readAbort"] });
       }
     }
-    return { o: project(base), io };
+    return { ...(profile.diagnosticAge === undefined ? { o: project(base) }
+      : projectBaseObservation({ ...profile, readIO: false }, { ...base, events: diagnostics })), io };
   }
   if (profile.diagnosticAge === undefined)
     return { o: project(observed) };

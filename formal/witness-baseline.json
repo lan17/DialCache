@@ -566,6 +566,18 @@
         "ordinary-serving-miss-has-no-diagnostic-source": 0
       }
     },
+    "shadow-read-deadlines": {
+      "sampledHistories": 128,
+      "corpusSha256": "ea77c01153937b49307768d155de915cc8bc6fb7194ecc3df7fef34f0040a624",
+      "labels": {
+        "c0-read-timeout-retains-raw-capacity": 0,
+        "c1-read-timeout-retains-raw-capacity": 0,
+        "job-then-read-timeout-has-one-verdict": 0,
+        "confirmation-keeps-captured-read-budget": 0,
+        "confirmation-read-budget-starts-at-dispatch": 0,
+        "timely-shadow-read-cancels-deadline-and-fills": 0
+      }
+    },
     "source-budgets": {
       "sampledHistories": 256,
       "corpusSha256": "66f0cf911392eb56088394edb53eb471c86d55378ec8ca0670214d3cf079b064",

@@ -1940,6 +1940,70 @@
           "portable"
         ]
       }
+    },
+    {
+      "id": "M61",
+      "case": "C54.read-ownership",
+      "description": "Ignore the bounded shadow read result while the raw adapter operation remains pending",
+      "rationale": "Both ports retain the read deadline and cancellation signal, but shadow validation waits for the raw result instead of consuming its bounded result. The C0 or C1 error therefore fails to appear at its own read deadline, while whole-job timeout and raw ownership continue independently.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "src/internal/redis-cache.ts",
+            "before": "result: bounded.then((result) => this.validateReadResult(key, result)),",
+            "after": "result: (unrefTimer ? (void bounded.catch(() => undefined), pending) : bounded).then((result) => this.validateReadResult(key, result)),"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow.go",
+            "before": "bounded, raw := x.rawRead()\n\t\treads = append(reads, raw)",
+            "after": "bounded, raw := x.rawRead()\n\t\tbounded = raw\n\t\treads = append(reads, raw)"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M62",
+      "case": "C54.read-ownership",
+      "description": "Release shadow capacity at bounded read failure before the raw adapter operation settles",
+      "rationale": "Both ports remove the shadow registration once validation has produced its bounded read error, omitting the additional raw read wait. A competing key is admitted before that raw read settles; the existing cancellation and error result remain intact.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "src/dialcache.ts",
+            "before": "if (operationFinished && pendingRedisReads.size === 0) {",
+            "after": "if (operationFinished) {"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow.go",
+            "before": "\t\t\t\tfor _, r := range reads {\n\t\t\t\t\t<-r.done\n\t\t\t\t}\n",
+            "after": ""
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
     }
   ]
 }
