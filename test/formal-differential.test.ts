@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,7 @@ const differential = await import(new URL("../formal/differential.mjs", import.m
   composedProfiles(manifest: { models: Array<{ path: string; profile?: string }> }, options?: { cwd?: string }): string[];
   prepare(reference: string, options?: { cwd?: string; output?: string }): { reference: { revision: string; tree: string; manifests: Manifests }; candidate: { tree: string; manifests: Manifests } };
   selectProfiles(prepared: { reference: { manifests: Manifests; tree: string }; candidate: { manifests: Manifests; tree: string } }): string[];
+  shardProfiles(names: string[], index: number, count: number): string[];
   closureSkip(reference: Model, candidate: Model, referenceSources: Record<string, string>, candidateSources: Record<string, string>): string | null;
   bytesBound(model: Pick<Model, "maxBytesPerStateRatio">): { maxBytesPerStateRatio: number; source: string };
   verdict(report: Report): { failed: boolean; reasons: string[] };
@@ -256,6 +257,50 @@ describe("corpus differential comparison", () => {
     expect(sources).toContain("formal/dialcache-layers-conformance.qnt");
     expect(sources).toContain("formal/kernel/serving.qnt");
     expect([...sources].sort()).toEqual(sources);
+  });
+
+  it("deals the composed profiles round-robin into shards by sorted name, every profile in exactly one shard, and refuses an index outside 1..count", () => {
+    const names = ["shadow", "admission", "recovery-read", "effects", "layers", "recovery", "scope"];
+    const sorted = [...names].sort();
+    for (const count of [1, 2, 3, 4, 7, 9]) {
+      const shards = Array.from({ length: count }, (_, position) => differential.shardProfiles(names, position + 1, count));
+      // The union is the input with no name repeated, whatever the input's order.
+      expect(shards.flat().sort(), `${count} shards`).toEqual(sorted);
+      expect(shards.flat(), `${count} shards`).toHaveLength(names.length);
+      expect(shards, `${count} shards`).toEqual(Array.from({ length: count }, (_, position) => differential.shardProfiles(sorted, position + 1, count)));
+    }
+    // Round-robin, not contiguous slices: alphabetical neighbours (recovery, recovery-read) part ways.
+    expect(differential.shardProfiles(names, 1, 4)).toEqual(["admission", "recovery-read"]);
+    expect(differential.shardProfiles(names, 2, 4)).toEqual(["effects", "scope"]);
+    expect(differential.shardProfiles(names, 3, 4)).toEqual(["layers", "shadow"]);
+    expect(differential.shardProfiles(names, 4, 4)).toEqual(["recovery"]);
+    expect(differential.shardProfiles(names, 1, 1)).toEqual(sorted);
+    // A shard past the number of profiles is empty, not an error.
+    expect(differential.shardProfiles(["a", "b"], 3, 3)).toEqual([]);
+    expect(differential.shardProfiles([], 1, 4)).toEqual([]);
+    const refused: Array<[number, number]> = [[0, 4], [5, 4], [-1, 4], [1.5, 4], [1, 2.5], [Number.NaN, 4], [1, 0], [1, Number.POSITIVE_INFINITY]];
+    for (const [index, count] of refused) {
+      expect(() => differential.shardProfiles(names, index, count), `${index}/${count}`).toThrow(/Shard (index|count) must be a positive integer|exceeds the shard count/);
+    }
+  });
+
+  it("refuses --shard outside --composed and a malformed shard before preparing any tree", () => {
+    const output = mkdtempSync(join(tmpdir(), "differential-shard-"));
+    try {
+      const run = (...args: string[]) => spawnSync(process.execPath, [resolve(root, "formal/differential.mjs"), ...args, `--out=${output}`], { cwd: root, encoding: "utf8" });
+      for (const args of [["layers", "--shard=1/4"], ["--shard=1/4", "--reference=HEAD"]]) {
+        const result = run(...args);
+        expect(result.status, args.join(" ")).toBe(1);
+        expect(result.stderr, args.join(" ")).toMatch(/--shard applies to --composed only/);
+      }
+      for (const value of ["0/4", "5/4", "2", "a/b", "1/4/2"]) {
+        const result = run("--composed", `--shard=${value}`);
+        expect(result.status, value).toBe(1);
+        expect(result.stderr, value).toMatch(/--shard must be <index>\/<count> with 1 <= index <= count/);
+      }
+      // Refused before any tree is exported: nothing is written under --out.
+      expect(readdirSync(output)).toEqual([]);
+    } finally { rmSync(output, { recursive: true, force: true }); }
   });
 });
 

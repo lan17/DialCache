@@ -150,6 +150,19 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       { label: "Replay composed profiles against their reference corpus", command: process.execPath, args: ["formal/differential.mjs", "--composed", "--reference=origin/release"] },
     ]);
     expect(validationPlan("differential", { directory, environment }).at(-1)!.args).toEqual(["formal/differential.mjs", "--composed", "--reference=origin/main"]);
+    // DIFFERENTIAL_SHARD narrows the replay to one shard, keeps the two cheap checks in every shard, and is validated as the script parses it.
+    const sharded = validationPlan("differential", { directory, environment: { ...environment, DIFFERENTIAL_SHARD: "2/4" } });
+    expect(sharded.map(step => step.args)).toEqual([["formal/lint-profiles.mjs", "baseline", "--check"], ["formal/check-kernel-fixtures.mjs"],
+      ["formal/differential.mjs", "--composed", "--reference=origin/main", "--shard=2/4"]]);
+    expect(validationPlan("differential", { directory, environment }).flatMap(step => step.args ?? []).some(argument => argument.startsWith("--shard"))).toBe(false);
+    for (const value of ["0/4", "5/4", "2", "a/b", ""]) {
+      expect(() => validationPlan("differential", { directory, environment: { ...environment, DIFFERENTIAL_SHARD: value } }), value).toThrow(/DIFFERENTIAL_SHARD must be <index>\/<count>/);
+    }
+    // Other targets ignore the variable, even a malformed one: no aggregate includes the differential.
+    for (const target of ["check-ts", "formal-check", "ci"]) {
+      expect(validationPlan(target, { directory, environment: { ...environment, DIFFERENTIAL_SHARD: "9/1" } }), target).toEqual(validationPlan(target, { directory, environment }));
+    }
+    expect(targetDescriptions.differential).toMatch(/DIFFERENTIAL_SHARD=<index>\/<count>/);
   });
   it("ends generation with the shared witness evaluation and starts each replay lane from a prepared context", () => {
     const generate = validationPlan("formal-generate", { directory });
@@ -425,15 +438,19 @@ describe("full formal workflow shape", () => {
     const jobs = parse(readFileSync(new URL("../.github/workflows/formal.yaml", import.meta.url), "utf8")).jobs;
     const job = jobs.differential!;
     expect(job.if).toBe("github.event_name == 'pull_request'");
-    // Six composed profiles replaying both ways after a kernel change took about 35 minutes hosted.
+    // Every composed profile replaying both ways after a kernel change overran one 60-minute job
+    // (57 minutes, then a cancellation at the timeout); four round-robin shards keep each inside it.
     expect(job["timeout-minutes"]).toBe(60);
+    expect(job.strategy).toEqual({ "fail-fast": false, matrix: { shard: [1, 2, 3, 4] } });
+    const shards = job.strategy!.matrix!.shard as number[];
     expect(job.steps.find(step => step.uses?.startsWith("actions/checkout"))!.with).toEqual({ "fetch-depth": 0 });
     expect(job.steps.some(step => step.uses === "./.github/actions/setup-quint")).toBe(true);
     const run = job.steps.find(step => step.run === "make differential")!;
-    expect(run.env).toEqual({ DIFFERENTIAL_REFERENCE: "origin/$" + "{{ github.base_ref }}" });
+    // The count in DIFFERENTIAL_SHARD must agree with the matrix, or a profile is replayed twice or never.
+    expect(run.env).toEqual({ DIFFERENTIAL_REFERENCE: "origin/$" + "{{ github.base_ref }}", DIFFERENTIAL_SHARD: "$" + "{{ matrix.shard }}/" + shards.length });
     expect(run.if).toBe("steps.fixture-scope.outputs.recompute == 'true'");
     const upload = job.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!;
-    expect(upload.with!.name).toBe("formal-differential");
+    expect(upload.with!.name).toBe("formal-differential-$" + "{{ matrix.shard }}");
     expect(String(upload.with!.path)).toContain("**/replay-*/quint-test.log");
   });
 });

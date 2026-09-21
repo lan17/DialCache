@@ -28,7 +28,7 @@ export const targetDescriptions = {
   'formal-go': 'Complete prepared Go replay of the generated corpus with race detection',
   'fixtures-check': 'Recompute every committed model-derived artifact with pinned Quint',
   'kernel-fixtures': 'Typecheck the kernel library fixtures (test/fixtures/kernel) and run every run they declare',
-  differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions',
+  differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions (DIFFERENTIAL_SHARD=<index>/<count> replays one round-robin shard of the composed profiles, as the hosted lane does with four)',
   explore: 'Explore a new recorded seed and replay both ports in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
   mutations: 'Measure TypeScript and Go semantic mutations over the generated corpus and shared witness evidence',
@@ -73,6 +73,20 @@ export function mutationSelectionArguments(target, environment = process.env) {
   }
   try { parseOnly(value); } catch { throw new Error(`MUTATION_ONLY must be <id>,<id> naming distinct mutant ids (for example M14,M15); got ${JSON.stringify(value)}.`); }
   return [`--only=${value}`];
+}
+
+// DIFFERENTIAL_SHARD=<index>/<count> narrows make differential to one
+// round-robin shard of the composed profiles (formal/differential.mjs
+// shardProfiles), the way the hosted lane's four-shard matrix does; every shard
+// keeps the lint baseline and the kernel fixtures, so each is self-contained.
+// No aggregate includes the differential, so other targets ignore the variable.
+// The script parses the value with the same function: the runner cannot accept
+// a value the script rejects.
+export function differentialShardArguments(target, environment = process.env) {
+  const value = environment.DIFFERENTIAL_SHARD;
+  if (value === undefined || !expandTargets(target).includes('differential')) return [];
+  try { parseShard(value); } catch { throw new Error(`DIFFERENTIAL_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/4); got ${JSON.stringify(value)}.`); }
+  return [`--shard=${value}`];
 }
 
 // Local shells may retain a one-file replay, protocol subset or alternate
@@ -133,6 +147,7 @@ export function validationPlan(target, { directory = root, environment = process
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   const node22 = floorExecutable(environment, runnerNode, nodeVersion) ?? '<NODE22_BIN>';
   const selection = mutationSelectionArguments(target, environment);
+  const differentialShard = differentialShardArguments(target, environment);
   const plans = {
     'check-ts': [pnpm('Typecheck TypeScript', 'typecheck'), pnpm('Run TypeScript unit tests with coverage', 'test'),
       pnpm('Build package', 'build'), pnpm('Check packed package on Node 24', 'test:package')],
@@ -145,7 +160,7 @@ export function validationPlan(target, { directory = root, environment = process
     smoke: [tsReplay(false), nativeGo(false)],
     'fixtures-check': [node('Recompute all committed Quint artifacts', 'formal/generate-artifacts.mjs', '--check')],
     'kernel-fixtures': [kernelFixtures],
-    differential: [lintBaseline, kernelFixtures, node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${environment.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`)],
+    differential: [lintBaseline, kernelFixtures, node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${environment.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`, ...differentialShard)],
     explore: [node('Explore and replay an isolated alternate-seed corpus', 'formal/explore.mjs')],
     'model-check': [node('Symbolically verify the scheduled finite rules', 'formal/check-symbolic-models.mjs')],
     // The model check is evidence about the Quint models (typechecks, bounded
@@ -362,6 +377,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log('formal-check is the Quint evidence lane (models, regressions, challenges); the port and mutation lanes read only the formal-generate output and do not wait for it.');
     console.log('Sharded mutation runs: MUTATION_SHARD=<index>/<count> make mutations-ts for every index, matching the workflow matrix, on any machines with the same corpus, then make mutations-merge-ts; the merged report is the only complete evidence.');
     console.log('One mutant locally: MUTATION_ONLY=M14,M15 make mutations-ts (or mutations-go) writes a partial report under partial/ and leaves the complete report alone.');
+    console.log('Sharded differential runs: DIFFERENTIAL_SHARD=<index>/<count> make differential replays one round-robin shard of the composed profiles, matching the pull request workflow\'s four-shard matrix; every shard checks the lint baseline and the kernel fixtures.');
     console.log('Full local CI: make ci NODE22_BIN=/absolute/path/to/node22/bin/node (exact 22.15.0).');
   } else {
     try { await runTarget(target); }

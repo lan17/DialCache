@@ -399,8 +399,11 @@ the public wrapper, and is deleted once the merge base with main carries the
 renamed text. `make
 differential` runs the lint baseline check and then the differential for every
 profile that imports a kernel module in either revision (directly or through a
-helper library); the pull request lane runs that against the base branch
-whenever a Quint input changes and preserves the reports and replay logs.
+helper library); `DIFFERENTIAL_SHARD=<index>/<count>` narrows it to one
+round-robin shard of those profiles sorted by name. The pull request lane runs
+four such shards against the base branch whenever a Quint input changes and
+preserves each shard's reports and replay logs as the
+`formal-differential-<index>` artifact.
 
 Fault challenges for rules that moved into the library anchor on the module
 source (every `formal/kernel/*.qnt` is a library because no scheduled model

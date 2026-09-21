@@ -1502,15 +1502,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "111212b262ce4651edbfc39b49f927792270f6ce1f5d640a8447d6a51c652dff",
+      "sha256": "b7211947e99a84098ae07879c8be22862c00bcb83f91d0ef0f0ee3e4143bcf6c",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
-        {"line":67,"title":"Reading a completion report"},
-        {"line":85,"title":"Mutation evidence"},
-        {"line":166,"title":"Exploratory runs"},
-        {"line":214,"title":"A retained sampling regression"},
-        {"line":251,"title":"Historical results"}
+        {"line":72,"title":"Reading a completion report"},
+        {"line":90,"title":"Mutation evidence"},
+        {"line":171,"title":"Exploratory runs"},
+        {"line":219,"title":"A retained sampling regression"},
+        {"line":256,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

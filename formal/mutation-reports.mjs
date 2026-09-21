@@ -12,7 +12,8 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // --shard=<index>/<count> is 1-based; the default 1/1 is the complete
-// single-process measurement.
+// single-process measurement. The differential (formal/differential.mjs) and
+// the runner's DIFFERENTIAL_SHARD read the same form with this parser.
 export function parseShard(value) {
   if (value === undefined) return { index: 1, count: 1 };
   const match = /^([1-9]\d*)\/([1-9]\d*)$/.exec(value);

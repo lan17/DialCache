@@ -33,8 +33,13 @@ The pull request lane's `differential` job runs `make differential` against the
 base branch whenever a Quint input changes: a composed profile that changes any
 driver-asserted observation of its previous corpus, or accepts an input the
 previous text refused, fails unless the manifest declares the change by bumping
-its `differential.behaviorVersion`. Its report is migration evidence, not a
-conformance completion report; the profile lanes still run.
+its `differential.behaviorVersion`. The job is a matrix of four shards,
+`differential (1)` to `differential (4)`: each checks the lint baseline and the
+kernel fixtures, then replays a round-robin quarter of the composed profiles
+sorted by name (`DIFFERENTIAL_SHARD=<index>/4`; one unsharded job overran its
+60-minute budget) and preserves its reports and replay logs as the
+`formal-differential-<index>` artifact. The reports are migration evidence, not
+a conformance completion report; the profile lanes still run.
 
 The evaluator ends with a per-profile witness report: required labels with at
 most three sampled hits and no regression, labels pinned by a regression but

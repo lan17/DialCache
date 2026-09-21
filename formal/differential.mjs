@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { copySources, importClosure, isKernelSource, isQuintSourcePath, modelSchedule, root, scanDeclarationBodies, validateExecution } from './execution.mjs';
 import { parseWithSourceMap, scheduleHistories, spliceDeclarations } from './generated-fixtures.mjs';
+import { parseShard } from './mutation-reports.mjs';
 import { normalizeTraceFiles } from './replay-inputs.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 import { parseTrace, profiles } from './replay/features.mjs';
@@ -381,6 +382,22 @@ export function selectProfiles(prepared) {
     ...composedProfiles(prepared.candidate.manifests.execution, { cwd: prepared.candidate.tree })])].sort();
 }
 
+// The profiles one shard of a sharded run replays (--shard=<index>/<count>;
+// DIFFERENTIAL_SHARD in the hosted lane, which runs four): the names sorted,
+// then dealt round-robin (positions index-1, index-1+count, ...) rather than
+// cut into contiguous slices, so alphabetical neighbours (recovery and
+// recovery-read, shadow and shadow-layers) fall to different shards and, with
+// four shards, the two heaviest profiles, effects and shadow, do not share one.
+// Every name lands in exactly one shard; a shard past the number of profiles is
+// empty.
+export function shardProfiles(names, index, count) {
+  for (const [label, value] of [['index', index], ['count', count]]) {
+    if (!Number.isSafeInteger(value) || value < 1) throw new Error(`Shard ${label} must be a positive integer; got ${String(value)}`);
+  }
+  if (index > count) throw new Error(`Shard index ${index} exceeds the shard count ${count}; use 1 <= index <= count`);
+  return [...names].sort().filter((_, position) => position % count === index - 1);
+}
+
 // A generation whose inputs are byte-identical in both revisions is the same
 // deterministic computation under the pinned Quint and seed: nothing to compare.
 export function closureSkip(referenceModel, candidateModel, referenceSources, candidateSources) {
@@ -480,7 +497,7 @@ export function formatReport(report) {
   return lines.join('\n');
 }
 
-const usage = `Usage: node formal/differential.mjs <profile> | --composed [--reference=<revision>] [--chunk=<n>] [--out=<directory>]
+const usage = `Usage: node formal/differential.mjs <profile> | --composed [--shard=<index>/<count>] [--reference=<revision>] [--chunk=<n>] [--out=<directory>]
 
 Generates <profile>'s corpus and exported regressions from the merge base with
 <revision> (default origin/main) and from the working tree, each with its own
@@ -495,7 +512,9 @@ compared; a profile the reference does not generate is reported as new.
 A profile whose import closure and generation settings are byte-identical in
 both revisions is reported as unchanged and not regenerated. --composed selects
 every profile that imports a kernel module in either revision; one the working
-tree no longer generates is reported as removed. Only profiles with an
+tree no longer generates is reported as removed. --shard=<index>/<count>, with
+--composed only, replays the index-th of count round-robin shards of those
+profiles sorted by name (the hosted lane runs four). Only profiles with an
 explicit-input driver descriptor (formal/replay/features.mjs, or the local-clock
 descriptor in formal/replay/local-clock.mjs) can be replayed.
 Reports:
@@ -508,13 +527,29 @@ async function main(argv) {
     const separator = argument.indexOf('=');
     if (separator === -1) options[argument.slice(2)] = true; else options[argument.slice(2, separator)] = argument.slice(separator + 1);
   }
-  if (options.help || (positional.length !== 1 && !options.composed) || (positional.length && options.composed)) { console.log(usage); return 2; }
+  if (options.help) { console.log(usage); return 2; }
+  // --shard is refused before any tree is prepared, and parsed by the function
+  // the runner (formal/validation.mjs) applies to DIFFERENTIAL_SHARD: neither
+  // accepts a value the other rejects.
+  if (options.shard !== undefined && !options.composed) throw new Error('--shard applies to --composed only; a single named profile is replayed whole');
+  if ((positional.length !== 1 && !options.composed) || (positional.length && options.composed)) { console.log(usage); return 2; }
   const chunk = options.chunk === undefined ? defaultChunk : Number(options.chunk);
   if (!Number.isSafeInteger(chunk) || chunk < 1) throw new Error('--chunk must be a positive integer');
+  let shard;
+  if (options.shard !== undefined) {
+    try { shard = parseShard(options.shard); }
+    catch { throw new Error(`--shard must be <index>/<count> with 1 <= index <= count (for example 2/4); got ${JSON.stringify(options.shard)}`); }
+  }
   const settings = { chunk, ...(typeof options.out === 'string' ? { output: options.out } : {}) };
   const prepared = prepare(typeof options.reference === 'string' ? options.reference : 'origin/main', { output: settings.output ?? defaultOutput });
-  const selected = options.composed ? selectProfiles(prepared) : positional;
-  if (!selected.length) { console.log('No profile imports a kernel module in either revision; nothing to replay.'); return 0; }
+  const composed = options.composed ? selectProfiles(prepared) : positional;
+  if (!composed.length) { console.log('No profile imports a kernel module in either revision; nothing to replay.'); return 0; }
+  const selected = shard ? shardProfiles(composed, shard.index, shard.count) : composed;
+  if (shard) {
+    const others = composed.filter(profileId => !selected.includes(profileId));
+    console.log(`Shard ${shard.index}/${shard.count} covers ${selected.length ? selected.join(', ') : 'no profile'}; left to the other shards: ${others.length ? others.join(', ') : 'none'}.`);
+    if (!selected.length) { console.log(`Nothing to replay in shard ${shard.index}/${shard.count}: ${composed.length} composed profile(s) fill only the first ${composed.length} shard(s).`); return 0; }
+  }
   console.log(`Reference ${prepared.reference.revision.slice(0, 12)}; profiles: ${selected.join(', ')}.`);
   let failed = false;
   for (const profileId of selected) {
