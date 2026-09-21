@@ -10,7 +10,7 @@ mean that every assertion in it is modeled.
 [semantic-cases.json](./semantic-cases.json) maps cases to histories and vectors
 and states, on each Quint citation, the clause it checks;
 [feature-coverage.json](./feature-coverage.json) keeps native adaptations separate.
-All 240 reviewed behavioral cases now have checked Quint references and
+All reviewed behavioral cases now have checked Quint references and
 Quint-driven implementation evidence. This accounts for known cases, not every
 input or feature combination. [VALIDATION.md](./VALIDATION.md) describes the
 validation workflow and report requirements.

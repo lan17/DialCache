@@ -5,7 +5,7 @@ Measure named contract cases, exercised boundaries, and detected behavioral defe
 ## Evidence inventory
 
 [semantic-cases.json](./semantic-cases.json) refines the obligations in
-[CONTRACTS.md](./CONTRACTS.md) into named behavioral and wire cases. All 240
+[CONTRACTS.md](./CONTRACTS.md) into named behavioral and wire cases. All reviewed
 behavioral cases now cite checked Quint clauses and Quint-driven implementation
 evidence. The wire expansion adds Quint-derived artifacts alongside fixed
 vectors; native cases remain in [feature-coverage.json](./feature-coverage.json).

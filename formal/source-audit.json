@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "9393c663f9b710fa861490c485af6305e3ed179b9ccd54a52370e7e7ea69fa16",
+      "sha256": "8efeb741c004ee558f7d1d64b9cccc059577a25f9d0fbe62b9f9612206cb64d7",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1288,7 +1288,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "060a88bbae610ea41f0d927d72e0394cf58e8cf0c07fe6cd54c84eb2e10597dd",
+      "sha256": "9eed42f975c129b1b001b7189c3564dff79f25ae9a38f299853209a8f091e300",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1364,7 +1364,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "f333ae2b0f3c7bd581fda33315a21e026b0ea0ccd2b819ad34cc5c3c00f70bf0",
+      "sha256": "788ccd40ccc5f3e3462ea25fab7ba577d84da0f52a0f6d5a1d1a63b7a7a18a7f",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1487,7 +1487,7 @@
     },
     {
       "path": "formal/TEST-MAP.md",
-      "sha256": "5e900759ff92b754130a856e49b5e977b97a359bce6e725957cd40118fe167c7",
+      "sha256": "ae631913cf2665ef0971b56a40d400905268d35e91e92724ef6f4fe32b573b77",
       "entries": [
         {"line":1,"title":"Formal contract and implementation evidence map"},
         {"line":18,"title":"Behavioral map"},

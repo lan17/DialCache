@@ -217,7 +217,9 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
       if (result.status !== 0) throw new Error(`${label}: noncompiling mutant/baseline, not detection; see compile log`);
     };
     const run = (label, cohort, baseline) => {
-      const result = spawnSync(go, ['test', '-json', '-count=1', '-timeout=480s', '-run', `^(${cohorts[cohort].join('|')})$`, '.'], {
+      // Faults can make instance state process-global. Keep independent
+      // synctest histories isolated; separate mutation shards still parallelize.
+      const result = spawnSync(go, ['test', '-json', '-count=1', '-parallel=1', '-timeout=480s', '-run', `^(${cohorts[cohort].join('|')})$`, '.'], {
         cwd: moduleDirectory, env: { ...env, DIALCACHE_PROTOCOL_CORPUS: cohort === 'generated' ? 'generated' : 'fixed' }, encoding: 'utf8', timeout, maxBuffer: 128 * 1024 * 1024,
       });
       writeFileSync(resolve(output, `${label}-${cohort}.jsonl`), result.stdout ?? '');
