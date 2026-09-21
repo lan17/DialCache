@@ -80,7 +80,7 @@ module dialcache_policy_conformance {
   // and a 5 s stale-on-error maximum, the baseline every overlay resolves
   // against (formal/replay/features.mjs policy).
   pure val LAYOUT: Serving::Layout =
-    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false }
+    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false, policyProvider: true }
   pure val BASELINE: Ttls = { localMs: ONE_SECOND_MS, freshMs: ONE_SECOND_MS, retentionMs: DEFAULT_RETENTION_MS }
   // Input decoding: every caller is enabled and asks for one key.
   pure def call(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }
@@ -476,6 +476,16 @@ module dialcache_policy_conformance {
     .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
+
+  // A source that settles with the source error is not a local writer: the
+  // entry the earlier completed source published stays and serves the next call.
+  run independentFailureKeepsSettledLocalValueTest = init
+    .then(changePolicy(INDEPENDENT_OFFSET + NO_REMOTE))
+    .then(startCall(0)).then(releasePolicy)
+    .then(startCall(0)).then(releasePolicy)
+    .then(finishSource(0, VALUE_ONE)).then(finishSource(1, SOURCE_ERROR))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE) and s.o.loaders == 2)
 
   run independentRemotePublicationUsesLastCompletionTest = init
     .then(changePolicy(INDEPENDENT_OFFSET + NO_LOCAL))

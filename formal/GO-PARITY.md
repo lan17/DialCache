@@ -73,9 +73,10 @@ useful for a known failure or a narrow complementary example.
 Protocol vectors and native integration tests are appropriate evidence for
 byte encodings, host numeric limits, backend registration, and actual Redis
 execution. Acceptance does not require every fixed case to become a generated
-history. It does require reviewing the consequential portable branches and
-using Quint as their behavioral source of truth, rather than treating a large
-trace count as evidence that all obligations were exercised. When several
+history. It does require reviewing the consequential portable branches against the
+Quint contract, with TypeScript as the executable reference that contract
+formalizes, rather than treating a large trace count as evidence that all
+obligations were exercised. When several
 cases share a witness, review each rule separately: reachability alone does
 not establish that the observation distinguishes its incorrect implementation.
 
@@ -109,38 +110,46 @@ manufacture a separate model for every fixed test.
 
 ## Reading and updating the ledger
 
-`cases` records every current semantic case, its declared model links,
-generated witness requirements, and fixed or vector evidence. Empty model
-links mean that no scheduled invariant or regression is currently cited for
-that case; a precise transition definition may still express its behavior.
-Record that transition separately from an independently checked property.
-A matching profile name does not invent either connection, and a property
-checking one clause does not prove all clauses of a compound case. Evidence
-fields identify the checked local reports and corpus fingerprints. Refresh
-them after executable inputs change; a previous revision's pass must not
-silently satisfy a changed model or implementation.
+`cases` has one row per semantic case holding what a reviewer decides:
+its `group`, its known `gaps` and an `evidence` block naming the replay
+reports and any native Go tests that supplement the shared evidence. The
+case's rule, contracts, cited Quint checks, required witnesses, exported
+regressions and vectors are read from [semantic-cases.json](semantic-cases.json)
+when the ledger is checked and verified against the schedule in
+[execution.json](execution.json); the ledger stores no copy of them, so a
+citation is stated once and cannot drift from a mirror. A property checking
+one clause does not prove all clauses of a compound case, and a matching
+profile name does not connect a case to a check. Refresh the evidence paths
+after executable inputs change; a previous revision's pass must not silently
+satisfy a changed model or implementation.
 
-[`quint-case-audit.json`](quint-case-audit.json) records the reviewed scope of
-each cited scheduled invariant or regression, plus separate transition,
-helper, and predicate references. It explicitly distinguishes a checked
-safety clause from a complete case proof and records known limits of the
-properties. The ordinary metadata gates check reference kinds, scheduling,
-case membership, positive scenario/vector assignments, feature/native coverage,
-and nonempty scope notes without requiring Quint; it cannot
-automate the semantic judgment in those notes.
+Each Quint citation in [semantic-cases.json](semantic-cases.json) carries the
+reviewed scope of the cited scheduled invariant or regression, and a case's
+`definitions` cite the transition, helper or predicate that owns its rule with
+their own scopes. A scope distinguishes a checked safety clause from a
+complete case proof; the known limits of the properties are stated in
+[SEMANTIC-COVERAGE.md](SEMANTIC-COVERAGE.md). The ordinary metadata gates check
+reference kinds, scheduling, case membership, positive scenario/vector
+assignments, feature/native coverage, and nonempty scopes without requiring
+Quint; they cannot automate the semantic judgment in those scopes.
 
-`profiles` records the shared corpus for each executable profile. Scheduled
-trace counts are generation settings, not a claim that all traces differ or
-that the model's state space was exhausted. After a model or registry change,
-refresh the input hashes, case inventory, required witnesses, and reports
-together. Preserve the existing execution-manifest validation and scheduled
-invariant/regression checks.
+The profile schedule (each profile's model, planned trace count, exported
+regressions and witness sources) is read from [execution.json](execution.json)
+and [profiles.json](profiles.json); the checker requires the two to name the
+same profiles over the same models. Planned trace counts are generation
+settings, not a claim that all traces differ or that the model's state space
+was exhausted. After a model or registry change, refresh the input hashes,
+case inventory, required witnesses, and reports together.
 
-`sourceInventory` lists reviewed TypeScript production declarations.
-Each inherits its reviewed source-file mapping to named Go symbols, with hashes
-that reject stale mappings. These are navigation and review records, not
-independent equivalence claims. The linked source audit's test and
-documentation files also have explicit Go-applicability reviews. Native
+`sourceInventory` maps each TypeScript production file to reviewed Go
+bindings: the named Go symbols, a mapping rationale and the hashes of both
+sides, which reject a stale review. The file's declarations are scanned from
+`src/` at check time and counted in `inventory.sourceDeclarations`; they are
+navigation, not stored rows, and a mapping is a review record, not an
+equivalence claim. `reviewedTestAndDocumentationAudit` gives each test and
+documentation file in [source-audit.json](source-audit.json) an explicit
+Go-applicability review (native files, adaptations and rationale); the file
+hashes, entry counts and contract sets are the source audit's own. Native
 adaptations retain their rationale and evidence rather than being counted as
 identical language APIs.
 

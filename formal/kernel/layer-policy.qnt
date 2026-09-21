@@ -44,6 +44,17 @@ module layer_policy {
     },
     coalesce: resolved.coalesce
   }
+  // The TTLs of the layers a reply uses: a layer the reply leaves off has TTL
+  // 0, so after this a TTL is positive exactly when its layer is on. A
+  // traversal suspended at the remote layer (a held read) carries these
+  // instead of the resolution: `localMs > 0` says local participates,
+  // `freshMs` judges the frame at settlement, `retentionMs` is the refill
+  // retention and the recovery maximum.
+  pure def effectiveTtls(resolved: Resolution, ttls: Ttls): Ttls = {
+    localMs: if (resolved.layers.local) ttls.localMs else 0,
+    freshMs: if (resolved.layers.remote) ttls.freshMs else 0,
+    retentionMs: if (resolved.layers.remote) ttls.retentionMs else 0
+  }
   // Sharing across callers exists only where a shared layer (local or remote)
   // participates; a request-only call is never coalesced across scopes.
   pure def sharedLayers(layers: Layers): bool = layers.local or layers.remote

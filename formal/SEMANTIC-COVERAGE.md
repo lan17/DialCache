@@ -16,7 +16,7 @@ The checker reports these distinct categories:
 
 | Category | What is counted |
 | --- | --- |
-| Model | A cited invariant/regression scheduled in [execution.json](./execution.json) |
+| Model | A cited invariant scheduled in [execution.json](./execution.json) or a run declared by a scheduled model |
 | Portable | Fixed scenarios, witnesses, exported Quint regressions or wire vectors |
 | Generated witness | A required consequential history in [coverage-witnesses.json](./coverage-witnesses.json) |
 | Quint regression replay | A named public-action regression exported and replayed in both ports |
@@ -25,9 +25,27 @@ The checker reports these distinct categories:
 
 These categories overlap. Definitions/helpers explain rules but are not checked
 properties. A named case is not an independent proof, and a finite corpus is not
-the full input domain. [quint-case-audit.json](./quint-case-audit.json) records
-what each cited check actually establishes; metadata validation cannot replace
-semantic review of that scope.
+the full input domain. Each Quint citation in semantic-cases.json carries a
+reviewed `scope`: what that scheduled invariant or regression (`models`) or that
+transition, helper or predicate (`definitions`) establishes for the case. A
+scheduled check supports only its stated scope, not necessarily every clause of
+the case; a cited bounded model clause complements the fixed and generated
+consequences and does not prove every host input or scheduling combination;
+definitions describe transition semantics and are not independent invariants or
+extra coverage. No model state-space exhaustion or universal refinement is
+claimed. The checker verifies that every citation has a scope, that a cited
+check is scheduled and that a cited definition is an action, def or val of a
+scheduled model or library rather than a scheduled property; it cannot automate
+the semantic judgment in the scope text. Generated witness reachability and
+implementation replay are recorded separately: a citation alone does not
+establish that a witness was reached or that both implementations passed. Weak
+accounting checks such as policy `hitsSkipSource` (loaders <= callers), recovery
+`singleReadPerFlight` (reads <= callers) and age-sample counts are not treated
+as proofs of hit traversal, single execution or sample time. No general
+generated model claim is made for native key/byte/compression/numeric limits,
+the 60000 ms default source timeout, unbounded source mode, the one-hour
+tracked cap or arbitrary backend collector behavior; fixed, vector and native
+evidence and the explicit model bounds remain relevant.
 
 Previous model-only gaps now have replay: local read/write failure consequences
 use native injection seams, and marker-preservation histories observe actual
@@ -75,8 +93,8 @@ model checks and records an independent baseline and counterexample for each
 fault. Count challenges and distinct faults separately: a challenge is one
 (fault, model, invariant) measurement, while a distinct fault is one
 `(source, before, after)` mutation. The same shared-rule fault may be measured
-against several models when each entry carries a `measures` note, so the
-catalog currently reports 72 challenges over 68 distinct faults. Every scheduled
+against several models when each entry carries a `measures` note;
+`node formal/execution.mjs` reports both counts. Every scheduled
 model owns at least one challenge; a `challengeWaiver` on a model entry is a
 documented gap, not coverage. A detected challenge shows that the named
 invariant rejects that one deliberate change under the manifest bounds. Model
@@ -88,6 +106,14 @@ run; challenges not yet backfilled are listed in the manifest's
 `reproducerBacklog`, whose size `node formal/execution.mjs` reports beside the
 challenge counts. See the
 [authoring rules](./AUTHORING.md#challenging-every-model).
+Each challenge also carries a `nativeMutants` entry naming the TypeScript and
+Go mutants that inject the same wrong behavior into the ports, or an
+enumerated explanation of why no native line exists; the mutation lanes must
+detect every mapped mutant in their generated cohort. A mapped challenge
+establishes that the corpus would catch the mistake in a port; an explained
+one establishes only that the model rejects it. Unmapped challenges are listed
+in `nativeMutantBacklog`, which only shrinks. See
+[mapping every challenge to native mutants](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
 Boundary properties can challenge an eligibility helper by stating the
 inequality directly. Connection and composition properties may reuse that
 helper while checking independently captured inputs, ownership and history;
@@ -109,7 +135,7 @@ Witness classification lives in the language-neutral modules under [`formal/repl
 
 ## Behavioral mutation comparison
 
-[`semantic-mutations.json`](./semantic-mutations.json) defines 13 reviewed, single-site faults. `node formal/measure-semantics.mjs` applies each in an isolated copy, verifies that it compiles, and runs three cohorts against it:
+[`mutations.json`](./mutations.json) defines the reviewed fault catalog: each fault is described once, with a rationale naming the port lines it changes, and carries a TypeScript and a Go section of exact-anchor edits to `src/` and `go/`; `node formal/execution.mjs` and `make audit` check the catalog on every pull request, including that every anchor still matches the port text exactly once. `node formal/measure-semantics.mjs` applies each TypeScript section in an isolated copy, verifies that it compiles, and runs three cohorts against it:
 
 1. **Ordinary:** existing unit tests, excluding all formal tests.
 2. **Generated:** sampled and exported-regression replays, reachability gates, and Quint-derived primitive vectors.
@@ -145,7 +171,7 @@ measurement programs remain `measure-semantics.mjs` and
 `measure-go-semantics.mjs`; the Make targets supply the pinned prerequisite
 checks used by hosted full validation.
 
-Hosted runs shard each lane three ways with `MUTATION_SHARD=<index>/<count>`.
+Hosted runs shard each lane with `MUTATION_SHARD=<index>/<count>`, matching the workflow matrix; `test/formal-validation.test.ts` pins how many mutants a shard may hold within its timeout, so catalog growth fails the pull request until the matrix grows.
 A shard reruns the compile check, every unmodified baseline and the witness
 evaluation before its contiguous slice of the catalog, and writes an incomplete
 report under `shards/<index>-of-<count>/`. `make mutations-merge-ts` and
@@ -167,7 +193,7 @@ The runner clears inherited trace selectors, uses the complete generated directo
 
 Each catalog entry's `requiredDetections` is a regression gate. The local mutation target and full workflow fail if a required fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 
-To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with an equivalent fault catalog in `go-mutations.json`. Broader interaction histories and larger domains remain separate assurance work.
+To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with the Go section of every entry in `mutations.json`. A mutant whose fault leaves a goroutine blocked or a pointer nil makes the Go port's own synctest suite panic instead of failing an assertion, and one that settles a promise the TypeScript suite was not awaiting can leave no failed assertion behind; each runner records such an ordinary cohort as `crashed`, outside the detected and survived totals, as it does every cohort of a mutant that does not compile, and the generated cohort remains the required detection. Broader interaction histories and larger domains remain separate assurance work.
 
 ## Model properties and cross-language execution
 

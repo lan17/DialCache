@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { readExecution, root, validateExecution } from './execution.mjs';
+import { readExecution, root, scheduleExecution, validateExecution } from './execution.mjs';
 import { protocolCorpus } from './vector-artifacts.mjs';
 
 export const readJSON = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'));
@@ -20,7 +20,9 @@ const filesBelow = path => readdirSync(resolve(root, path), { withFileTypes: tru
 
 // IDs contain domain names and original case names, never native test names.
 // Adding a language requires a driver/report adapter, not a change to this inventory.
-export function conformanceInventory(execution = readExecution(), scenarios = readJSON('formal/behavioral-scenarios.json'), protocol = protocolCorpus(execution)) {
+// `execution` is the scheduled manifest (scheduleExecution), which names the
+// exported regressions.
+export function conformanceInventory(execution = scheduleExecution(), scenarios = readJSON('formal/behavioral-scenarios.json'), protocol = protocolCorpus(execution)) {
   const cases = [];
   for (const model of execution.models.filter(model => model.profile)) {
     const profile = model.profile;

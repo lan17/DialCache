@@ -487,17 +487,24 @@ func TestCoreParserAndObservationBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The negative controls edit the compact text of the history, so they read
+	// the same whatever spacing the committed encoding uses.
+	compact := new(bytes.Buffer)
+	if err := json.Compact(compact, raw); err != nil {
+		t.Fatal(err)
+	}
+	raw = compact.Bytes()
 	for name, malformed := range map[string][]byte{
 		"empty":               []byte(`{"states":[]}`),
-		"missing input":       bytes.Replace(raw, []byte(`"input": {`), []byte(`"missingInput": {`), 1),
-		"explicit arguments":  bytes.Replace(raw, []byte(`"#bigint": "-1"`), []byte(`"#bigint": "0"`), 1),
+		"missing input":       bytes.Replace(raw, []byte(`"input":{`), []byte(`"missingInput":{`), 1),
+		"explicit arguments":  bytes.Replace(raw, []byte(`"#bigint":"-1"`), []byte(`"#bigint":"0"`), 1),
 		"init only":           initOnly,
-		"unknown action":      bytes.Replace(raw, []byte(`"mbt::actionTaken": "outsideCall"`), []byte(`"mbt::actionTaken": "inventedAction"`), 1),
-		"missing init":        bytes.Replace(raw, []byte(`"mbt::actionTaken": "init"`), []byte(`"mbt::actionTaken": "localCall"`), 1),
-		"arguments":           bytes.Replace(raw, []byte(`"mbt::nondetPicks": {}`), []byte(`"mbt::nondetPicks": {"choice":1}`), 1),
-		"unsafe integer":      bytes.Replace(raw, []byte(`"#bigint": "1"`), []byte(`"#bigint": "9007199254740992"`), 1),
+		"unknown action":      bytes.Replace(raw, []byte(`"mbt::actionTaken":"outsideCall"`), []byte(`"mbt::actionTaken":"inventedAction"`), 1),
+		"missing init":        bytes.Replace(raw, []byte(`"mbt::actionTaken":"init"`), []byte(`"mbt::actionTaken":"localCall"`), 1),
+		"arguments":           bytes.Replace(raw, []byte(`"mbt::nondetPicks":{}`), []byte(`"mbt::nondetPicks":{"choice":1}`), 1),
+		"unsafe integer":      bytes.Replace(raw, []byte(`"#bigint":"1"`), []byte(`"#bigint":"9007199254740992"`), 1),
 		"missing observation": bytes.Replace(raw, []byte(`"sourceVersion"`), []byte(`"missingField"`), 1),
-		"duplicate action":    bytes.Replace(raw, []byte(`"mbt::actionTaken": "init"`), []byte(`"mbt::actionTaken": "init", "mbt::actionTaken": "init"`), 1),
+		"duplicate action":    bytes.Replace(raw, []byte(`"mbt::actionTaken":"init"`), []byte(`"mbt::actionTaken":"init","mbt::actionTaken":"init"`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if bytes.Equal(raw, malformed) {

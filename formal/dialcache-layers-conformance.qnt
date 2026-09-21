@@ -101,7 +101,7 @@ module dialcache_layers_conformance {
     keysPerScope: KEYS_PER_INSTANCE,
     persistentContexts: PERSISTENT_CONTEXTS,
     operationsPerEntity: OPERATIONS_PER_ENTITY,
-    probeSourceScope: false
+    probeSourceScope: false, policyProvider: true
   }
   // Every reply here carries the fixture's TTLs: 60 s local, fresh and retained.
   pure val TTLS: Ttls = { localMs: SERVING_TTL_MS, freshMs: SERVING_TTL_MS, retentionMs: SERVING_TTL_MS }
@@ -196,7 +196,7 @@ module dialcache_layers_conformance {
     seedRemote(choice / SOURCE_VALUE_COUNT, choice % SOURCE_VALUE_COUNT + VALUE_ONE)
   }
   action invalidateEntity(entity: int): bool = all {
-    s' = Serving::invalidate(s, entity),
+    s' = Serving::invalidate(s, entity, 0),
     input' = { name: "invalidate", choice: entity }
   }
   action invalidate = {

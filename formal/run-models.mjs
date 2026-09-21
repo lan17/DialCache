@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readExecution, root, validateExecution } from './execution.mjs';
+import { readExecution, root, scheduleExecution, validateExecution } from './execution.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 import { normalizeTraceFiles } from './replay-inputs.mjs';
 import { bindTrace } from './replay/bindings.mjs';
@@ -23,7 +23,7 @@ export function executionPlan(mode, manifest = readExecution(), seed = process.e
   const { settings, check, test } = manifest;
   const options = [`--backend=${settings.backend}`, `--n-threads=${settings.threads}`, `--seed=${seed}`];
   const commands = [];
-  for (const model of manifest.models) {
+  for (const model of scheduleExecution(manifest).models) {
     if (mode === 'check') {
       commands.push({ command: 'quint', args: ['typecheck', model.path] });
       commands.push({ command: 'quint', args: ['run', model.path, ...options,

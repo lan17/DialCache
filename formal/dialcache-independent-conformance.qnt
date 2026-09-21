@@ -1,6 +1,15 @@
 module dialcache_independent_conformance {
-  import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
+  import encodings.* from "./kernel/encodings"
+  import calls.* from "./kernel/calls"
+  import layer_policy.* from "./kernel/layer-policy"
+  import serving as Serving from "./kernel/serving"
+  import remote_io as RemoteIO from "./kernel/remote-io"
+  import recovery as Recovery from "./kernel/recovery"
+  import deadlines as Deadlines from "./kernel/deadlines"
+  import remote_frames as Remote from "./kernel/remote-frames"
+  import clock as Clock from "./kernel/clock"
+  import policy_gate as Gate from "./kernel/policy-gate"
   // Model boundary -----------------------------------------------------------
   // Six same-key callers with coalescing disabled exercise selected aspects of
   // C24/C56: each owns its read and source deadline. Read failure denies only
@@ -8,19 +17,19 @@ module dialcache_independent_conformance {
   // and original error (selected aspects of C36/C40-C46/C58).
   // See BEHAVIOR.md: "Generated feature profiles" and its independent input table.
   // No local/request storage, shadow work, or publication failures participate.
-  // `now` is elapsed time; `wall` is the application clock. Pending external
-  // effects remain in their historical lists after timeout, so late settlement
-  // can be observed without regaining ownership of a completed caller.
+  // Every rule is a kernel transition (formal/kernel): the held remote
+  // traversal (remote_io) with its recovery snapshots (recovery) under the
+  // budgeted held lifecycle (deadlines), over the layered shape. This module
+  // owns the bounded state, the fixture decoding (the read budget and recovery
+  // maximum a policy code resolves to, the frame a seed choice names, the
+  // loader and value a resolve code names), the input choices and the guards.
+  // `now` is elapsed time; the wall clock is `now` plus a fixed skew. An
+  // expired read stays held until its late reply drains and a loader stays
+  // pending until its late result drains, so late settlement can be observed
+  // without regaining ownership of a completed caller.
 
   // Trace encodings and fixture bounds ---------------------------------------
-  // Keep integer state/input fields stable; shared results come from the import.
-  pure val READ_PENDING = 1
-  pure val SOURCE_RUNNING = 2
-  pure val FRESH_DECODE = 3
-  pure val RECOVERY_DECODE = 4
-  pure val CALL_DONE = 5
-  pure val NO_SOURCE = -1
-  pure val NO_CANDIDATE = 0
+  // Keep integer input fields stable; shared results come from the import.
   pure val FRESH_AGE_MS = 1000
   pure val SOURCE_BUDGET_MS = 10
   pure val SHORT_READ_BUDGET_MS = 5
@@ -28,289 +37,150 @@ module dialcache_independent_conformance {
   pure val SHORT_RETENTION_MS = 2000
   pure val LONG_RETENTION_MS = 5000
   pure val FIXTURE_TTL_MS = 60000
+  pure val WALL_SKEW_MS = 100000
   pure val MAX_CALLS = 6
   pure val SOURCE_RESULT_COUNT = 2
+  // One key on one instance, no request scope, no local capacity, one
+  // operation per entity; the drivers never probe a source's scope.
+  pure val LAYOUT: Serving::Layout = {
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true
+  }
+  pure val CALL: Call = { instance: 0, key: 0, context: 0, enabled: true, keyFailed: false }
+  // Every reply enables the remote layer alone and never coalesces.
+  pure val REMOTE_ONLY: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: false }
 
-  // State: effect owners, captured admission values, and observed history.
-  type Call = {
-    source: int, phase: int, maxAge: int,
-    candidate: int, created: int, acquiredAt: int,
-    canRecover: bool, canWrite: bool, fence: int, error: int
-  }
-  type Read = { caller: int, pending: bool, active: bool }
-  type Source = {
-    caller: int, pending: bool, active: bool,
-    startedAt: int, settledAt: int, outcome: int
-  }
-  type Load = { caller: int, pending: bool, recovery: bool, value: int }
-  type Timer = { read: bool, index: int, at: int }
+  // State: the layered shape with its held remote effects, recovery
+  // snapshots and deadlines, plus the policy reply in force (`ttls`, whose
+  // retention is the recovery maximum a later caller is admitted with) and
+  // the read budget in force.
   type State = {
-    o: Observation,
-    io: { budgets: List[int], aborted: List[int], sourceErrors: List[int] },
-    now: int, wall: int,
-    frame: int, created: int, expires: int, watermark: int, readBudget: int, maxAge: int,
-    calls: List[Call], reads: List[Read], sources: List[Source], loads: List[Load], timers: List[Timer]
+    o: Observation, io: RemoteIO::IO, now: int, skew: int, remoteAvailable: bool, tracked: bool, capacity: int,
+    readFailed: bool, dumpFailed: bool, writeFailed: bool,
+    closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
+    localValues: List[int], localExpires: List[int], lru: List[List[int]],
+    remoteValues: List[int], created: List[int], expires: List[int], watermark: List[int],
+    sources: List[Serving::LayeredSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held],
+    reads: List[RemoteIO::HeldRead], loads: List[RemoteIO::HeldLoad], loaders: List[int], retained: List[Recovery::Snapshot],
+    sourceBudget: int, deadlines: List[Deadlines::Due], drained: List[bool],
+    ttls: Ttls, readBudget: int
   }
   var s: State
   var input: { name: str, choice: int }
 
-  // Initial fixture ----------------------------------------------------------
+  // Input decoding (reads no state) ------------------------------------------
+  // The TTLs a reply carries under the policy in force: no local TTL, 1 s
+  // freshness and the recovery maximum as retention. Wire choices 0/1 use the
+  // long retention; parity chooses the read budget. Seeds store fresh values
+  // and values just inside each admitted recovery age bound. A resolve code
+  // 1..12 pairs each loader ordinal with result VALUE_ONE/VALUE_TWO.
+  pure def ttlsFor(retentionMs: int): Ttls = { localMs: 0, freshMs: FRESH_AGE_MS, retentionMs: retentionMs }
+  pure def readBudgetOf(choice: int): int = if (choice % 2 == 0) SHORT_READ_BUDGET_MS else LONG_READ_BUDGET_MS
+  pure def retentionOf(choice: int): int = if (choice < 2) LONG_RETENTION_MS else SHORT_RETENTION_MS
+  pure def seedValue(choice: int): int = if (choice == 2 or choice == 4) VALUE_TWO else VALUE_ONE
+  pure def seedAge(choice: int): int =
+    if (choice == 0 or choice == 4) 0 else if (choice == 3) 4999 else if (choice == 5) 1999 else 1000
+  pure def resolvedSource(code: int): int = (code - 1) / SOURCE_RESULT_COUNT
+  pure def resolvedValue(code: int): int = (code - 1) % SOURCE_RESULT_COUNT + 1
+
+  // Initial fixture: value 1 stored at age 1,000 ms (stale, never fresh) with
+  // a 60 s physical TTL above the zero watermark.
   action init = all {
     input' = { name: "init", choice: -1 },
     s' = {
-      o: empty,
-      io: { budgets: List(), aborted: List(), sourceErrors: List() },
-      now: 0, wall: 100000,
-      frame: VALUE_ONE, created: 99000, expires: FIXTURE_TTL_MS, watermark: 0,
-      readBudget: SHORT_READ_BUDGET_MS, maxAge: LONG_RETENTION_MS,
-      calls: List(), reads: List(), sources: List(), loads: List(), timers: List()
+      o: empty, io: RemoteIO::NO_IO, now: 0, skew: WALL_SKEW_MS, remoteAvailable: true, tracked: true, capacity: 0,
+      readFailed: false, dumpFailed: false, writeFailed: false,
+      closed: List(), memo: List(), requestFlights: List(), processFlights: List(NO_OWNER),
+      localValues: List(NO_VALUE), localExpires: List(0), lru: List(List()),
+      remoteValues: List(VALUE_ONE), created: List(WALL_SKEW_MS - FRESH_AGE_MS), expires: List(FIXTURE_TTL_MS), watermark: List(0),
+      sources: List(), owners: List(), memoSlots: List(), held: List(),
+      reads: List(), loads: List(), loaders: List(), retained: List(),
+      sourceBudget: SOURCE_BUDGET_MS, deadlines: List(), drained: List(),
+      ttls: ttlsFor(LONG_RETENTION_MS), readBudget: SHORT_READ_BUDGET_MS
     }
   }
 
-  // Caller completion and owned effects -------------------------------------
-  pure def finished(x: State, caller: int, value: int): State = {
-    calls: x.calls.replaceAt(caller, { phase: CALL_DONE, ...x.calls.nth(caller) }),
-    io: {
-      sourceErrors: x.io.sourceErrors.replaceAt(caller,
-        if (value == SOURCE_ERROR) x.calls.nth(caller).source + 1 else 0),
-      ...x.io
-    },
-    o: { calls: x.o.calls.replaceAt(caller, value), ...x.o },
-    ...x
-  }
-  pure def startSource(x: State, caller: int): State = {
-    calls: x.calls.replaceAt(caller, { phase: SOURCE_RUNNING, source: x.sources.length(), ...x.calls.nth(caller) }),
-    sources: x.sources.append({ caller: caller, active: true, pending: true,
-      startedAt: x.now, settledAt: -1, outcome: CALL_PENDING }),
-    timers: x.timers.append({ read: false, index: x.sources.length(), at: x.now + SOURCE_BUDGET_MS }),
-    o: { loaders: x.o.loaders + 1, ...x.o },
-    ...x
-  }
-  pure def startLoad(x: State, caller: int, recovery: bool, value: int): State = {
-    calls: x.calls.replaceAt(caller, { phase: if (recovery) RECOVERY_DECODE else FRESH_DECODE, ...x.calls.nth(caller) }),
-    loads: x.loads.append({ caller: caller, pending: true, recovery: recovery, value: value }),
-    o: { loads: x.o.loads + 1, ...x.o },
-    ...x
-  }
-  pure def validCandidate(x: State, caller: int): bool = {
-    val call = x.calls.nth(caller)
-    call.candidate > NO_CANDIDATE and recoveryAgeAllowed(call.created, x.wall, call.maxAge)
-  }
-  pure def rejected(x: State, caller: int, error: int): State = {
-    val call = x.calls.nth(caller)
-    val classified = {
-      calls: x.calls.replaceAt(caller, { error: error, ...call }),
-      o: { classifications: x.o.classifications + (if (call.canRecover) 1 else 0), ...x.o },
-      ...x
-    }
-    if (not(call.canRecover)) finished(classified, caller, error)
-    else if (validCandidate(x, caller)) startLoad(classified, caller, true, call.candidate)
-    else finished({
-      o: { recovery: classified.o.recovery.append("miss"), ...classified.o },
-      ...classified
-    }, caller, error)
-  }
-
-  // Admission captures policy separately for each same-key caller. -----------
-  pure def begin(x: State): State = {
-    val caller = x.calls.length()
-    {
-      calls: x.calls.append({
-        source: NO_SOURCE, phase: READ_PENDING, maxAge: x.maxAge,
-        candidate: NO_CANDIDATE, created: 0, acquiredAt: 0,
-        canRecover: false, canWrite: false, fence: 0, error: SOURCE_ERROR
-      }),
-      reads: x.reads.append({ caller: caller, active: true, pending: true }),
-      timers: x.timers.append({ read: true, index: x.reads.length(), at: x.now + x.readBudget }),
-      io: { budgets: x.io.budgets.append(x.readBudget), sourceErrors: x.io.sourceErrors.append(0), ...x.io },
-      o: {
-        calls: x.o.calls.append(CALL_PENDING),
-        reads: x.o.reads + 1, policyCalls: x.o.policyCalls + 1,
-        ...x.o
-      },
-      ...x
-    }
-  }
+  // Admission: the read is dispatched under the budget in force and its
+  // flight carries the recovery maximum in force, both captured here. -------
   action beginCall = all {
-    s.calls.length() < MAX_CALLS,
+    s.o.calls.length() < MAX_CALLS,
     input' = { name: "beginCall", choice: -1 },
-    s' = begin(s)
-  }
-  pure def expireRead(x: State, index: int): State = {
-    val read = x.reads.nth(index)
-    startSource({
-      reads: x.reads.replaceAt(index, { active: false, ...read }),
-      io: { aborted: x.io.aborted.append(index), ...x.io },
-      ...x
-    }, read.caller)
-  }
-  pure def expireSource(x: State, index: int): State = {
-    val source = x.sources.nth(index)
-    rejected({
-      sources: x.sources.replaceAt(index, { active: false, settledAt: x.now, outcome: DEADLINE_ERROR, ...source }),
-      ...x
-    }, source.caller, DEADLINE_ERROR)
+    s' = Deadlines::begin(s, LAYOUT, CALL, REMOTE_ONLY, s.ttls, s.readBudget)
   }
 
-  // External settlement: abandoned effects cannot reclaim caller ownership. --
-  pure def readReply(x: State, index: int, failed: bool): State = {
-    val read = x.reads.nth(index)
-    val settled = {
-      reads: x.reads.replaceAt(index, { pending: false, active: false, ...read }),
-      ...x
-    }
-    val call = x.calls.nth(read.caller)
-    val readable = x.frame > 0 and x.now < x.expires and fenceAllows(x.created, x.watermark)
-    val fresh = readable and freshAgeAllowed(x.created, x.wall, FRESH_AGE_MS)
-    val stale = readable and x.created <= x.wall and
-      retainedAgeAllowed(x.created, x.wall, FRESH_AGE_MS, call.maxAge)
-    val observed = {
-      calls: settled.calls.replaceAt(read.caller, {
-        canWrite: not(failed), canRecover: not(failed) and not(fresh),
-        candidate: if (stale and not(failed)) x.frame else NO_CANDIDATE,
-        created: x.created, acquiredAt: x.wall,
-        fence: if (readable) 0 else x.watermark,
-        ...call
-      }),
-      ...settled
-    }
-    if (not(read.active)) settled
-    else if (failed or not(fresh)) startSource(observed, read.caller)
-    else startLoad(observed, read.caller, false, x.frame)
-  }
+  // External settlement by explicit effect index: the drivers release a held
+  // read or decode by its index and settle a loader by its ordinal. ---------
+  val heldReads = s.reads.indices().map(i => s.reads.nth(i).read)
+  val heldLoads = s.loads.indices().map(i => s.loads.nth(i).load)
   action readAt(index: int): bool = all {
-    input' = { name: "releaseRead", choice: index }, s' = readReply(s, index, false)
+    RemoteIO::holdsRead(s, index),
+    input' = { name: "releaseRead", choice: index },
+    s' = Deadlines::settleRead(s, LAYOUT, index, false, Recovery::ALLOW)
   }
   action releaseRead = {
-    nondet choice = s.reads.indices().filter(i => s.reads.nth(i).pending).oneOf()
+    nondet choice = heldReads.oneOf()
     readAt(choice)
   }
   action failReadAt(index: int): bool = all {
-    input' = { name: "failRead", choice: index }, s' = readReply(s, index, true)
+    RemoteIO::holdsRead(s, index),
+    input' = { name: "failRead", choice: index },
+    s' = Deadlines::settleRead(s, LAYOUT, index, true, Recovery::ALLOW)
   }
   action failRead = {
-    nondet choice = s.reads.indices().filter(i => s.reads.nth(i).pending).oneOf()
+    nondet choice = heldReads.oneOf()
     failReadAt(choice)
   }
-  pure def sourceReply(x: State, index: int, value: int): State = {
-    val source = x.sources.nth(index)
-    val call = x.calls.nth(source.caller)
-    val settled = {
-      sources: x.sources.replaceAt(index, { pending: false, active: false,
-        settledAt: if (source.active) x.now else source.settledAt,
-        outcome: if (source.active) value else source.outcome, ...source }),
-      ...x
-    }
-    val mayWrite = call.canWrite and fenceAllows(x.wall, call.fence)
-    if (not(source.active)) settled
-    else if (value == SOURCE_ERROR) rejected(settled, source.caller, SOURCE_ERROR)
-    else finished({
-      frame: if (mayWrite) value else x.frame,
-      created: if (mayWrite) x.wall else x.created,
-      expires: if (mayWrite) x.now + call.maxAge else x.expires,
-      o: {
-        writes: x.o.writes + (if (mayWrite) 1 else 0),
-        dumps: x.o.dumps + (if (mayWrite) 1 else 0),
-        writeTtls: if (mayWrite) x.o.writeTtls.append(call.maxAge) else x.o.writeTtls,
-        ...x.o
-      },
-      ...settled
-    }, source.caller, value)
-  }
   action resolveWith(code: int): bool = all {
+    resolvedSource(code) < s.loaders.length(),
+    Deadlines::pending(s, resolvedSource(code)),
     input' = { name: "resolveLoader", choice: code },
-    s' = sourceReply(s, (code - 1) / SOURCE_RESULT_COUNT, (code - 1) % SOURCE_RESULT_COUNT + 1)
+    s' = Deadlines::settleLoader(s, LAYOUT, resolvedSource(code), resolvedValue(code), false)
   }
   action resolveLoader = {
-    // Wire choice 1..12 pairs each source index with result VALUE_ONE/VALUE_TWO.
     nondet choice = 1.to(MAX_CALLS * SOURCE_RESULT_COUNT).filter(code =>
-      (code - 1) / SOURCE_RESULT_COUNT < s.sources.length() and
-      s.sources.nth((code - 1) / SOURCE_RESULT_COUNT).pending).oneOf()
+      resolvedSource(code) < s.loaders.length() and Deadlines::pending(s, resolvedSource(code))).oneOf()
     resolveWith(choice)
   }
   action rejectAt(index: int): bool = all {
-    input' = { name: "rejectLoader", choice: index }, s' = sourceReply(s, index, SOURCE_ERROR)
+    index < s.loaders.length(),
+    Deadlines::pending(s, index),
+    input' = { name: "rejectLoader", choice: index },
+    s' = Deadlines::settleLoader(s, LAYOUT, index, SOURCE_ERROR, false)
   }
   action rejectLoader = {
-    nondet choice = s.sources.indices().filter(i => s.sources.nth(i).pending).oneOf()
+    nondet choice = s.loaders.indices().filter(i => Deadlines::pending(s, i)).oneOf()
     rejectAt(choice)
   }
-  pure def loadReply(x: State, index: int, failed: bool): State = {
-    val load = x.loads.nth(index)
-    val call = x.calls.nth(load.caller)
-    val settled = { loads: x.loads.replaceAt(index, { pending: false, ...load }), ...x }
-    if (not(load.recovery)) {
-      if (failed) startSource({
-        calls: x.calls.replaceAt(load.caller, { canRecover: false, ...call }),
-        ...settled
-      }, load.caller)
-      else finished(settled, load.caller, load.value)
-    } else {
-      val valid = validCandidate(x, load.caller)
-      finished({
-        o: {
-          recovery: x.o.recovery.append(
-            if (failed) "deserialization_error" else if (valid) "served" else "miss"),
-          ...x.o
-        },
-        ...settled
-      }, load.caller, if (failed or not(valid)) call.error else load.value)
-    }
-  }
   action loadAt(index: int): bool = all {
-    input' = { name: "releaseLoad", choice: index }, s' = loadReply(s, index, false)
+    RemoteIO::holdsLoad(s, index),
+    input' = { name: "releaseLoad", choice: index },
+    s' = Deadlines::settleLoad(s, LAYOUT, index, false)
   }
   action releaseLoad = {
-    nondet choice = s.loads.indices().filter(i => s.loads.nth(i).pending).oneOf()
+    nondet choice = heldLoads.oneOf()
     loadAt(choice)
   }
   action failLoadAt(index: int): bool = all {
-    input' = { name: "failLoad", choice: index }, s' = loadReply(s, index, true)
+    RemoteIO::holdsLoad(s, index),
+    input' = { name: "failLoad", choice: index },
+    s' = Deadlines::settleLoad(s, LAYOUT, index, true)
   }
   action failLoad = {
-    nondet choice = s.loads.indices().filter(i => s.loads.nth(i).pending).oneOf()
+    nondet choice = heldLoads.oneOf()
     failLoadAt(choice)
   }
 
   // Environmental clocks, storage, and policy --------------------------------
-  pure def tick(x: State, ms: int): State = {
-    val target = x.now + ms
-    // At most one read deadline and one source deadline per admitted call.
-    // Visit only due deadline instants, including sources started by read expiry.
-    0.to(x.calls.length() * 2).fold(x, (elapsed, _) => {
-      val dueAt = elapsed.timers.foldl(target, (earliest, timer) => {
-        val timerActive = if (timer.read) elapsed.reads.nth(timer.index).active
-          else elapsed.sources.nth(timer.index).active
-        if (timerActive and timer.at > elapsed.now and timer.at < earliest) timer.at else earliest
-      })
-      val atDeadline = { now: dueAt, wall: elapsed.wall + dueAt - elapsed.now, ...elapsed }
-      atDeadline.timers.foldl(atDeadline, (delivered, timer) =>
-        if (timer.at != atDeadline.now) delivered
-        else if (timer.read and delivered.reads.nth(timer.index).active)
-          expireRead(delivered, timer.index)
-        else if (not(timer.read) and delivered.sources.nth(timer.index).active)
-          expireSource(delivered, timer.index)
-        else delivered)
-    })
-  }
   action advanceBy(ms: int): bool = all {
-    input' = { name: "advance", choice: ms }, s' = tick(s, ms)
+    input' = { name: "advance", choice: ms }, s' = Deadlines::advance(s, LAYOUT, ms)
   }
   action advance = {
     nondet choice = Set(1, 5, 10, 1000).oneOf()
     advanceBy(choice)
   }
-  // Fresh values and values just inside each admitted recovery age bound.
   action seedWith(choice: int): bool = all {
     (0.to(5)).contains(choice),
     input' = { name: "seed", choice: choice },
-    s' = {
-      frame: if (choice == 2 or choice == 4) VALUE_TWO else VALUE_ONE,
-      created: s.wall - (if (choice == 0 or choice == 4) 0
-      else if (choice == 3) 4999 else if (choice == 5) 1999 else 1000),
-      expires: s.now + FIXTURE_TTL_MS,
-      ...s
-    }
+    s' = Remote::seedAged(s, 0, seedValue(choice), seedAge(choice), FIXTURE_TTL_MS)
   }
   action seed = {
     nondet choice = 0.to(5).oneOf()
@@ -318,28 +188,17 @@ module dialcache_independent_conformance {
   }
   action invalidate = all {
     input' = { name: "invalidate", choice: -1 },
-    s' = {
-      watermark: s.wall,
-      o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o },
-      ...s
-    }
+    s' = Serving::invalidate(s, 0, 0)
   }
-
-  // Wire choices 0/1 use long retention; parity chooses the read budget.
   action policyWith(choice: int): bool = all {
     (0.to(3)).contains(choice),
     input' = { name: "policy", choice: choice },
-    s' = {
-      readBudget: if (choice % 2 == 0) SHORT_READ_BUDGET_MS else LONG_READ_BUDGET_MS,
-      maxAge: if (choice < 2) LONG_RETENTION_MS else SHORT_RETENTION_MS,
-      ...s
-    }
+    s' = { readBudget: readBudgetOf(choice), ttls: ttlsFor(retentionOf(choice)), ...s }
   }
   action policy = {
     nondet choice = 0.to(3).oneOf()
     policyWith(choice)
   }
-
 
   // Exploration schedule: preserve grouping and order for seeded sampling.
   action step = any {
@@ -347,59 +206,88 @@ module dialcache_independent_conformance {
     any { policy, seed }, any { advance, invalidate, failRead, failLoad }
   }
 
-  // Invariants: independent checks over ownership and observed history.
+  // Invariants: independent checks over ownership and observed history. -----
+  // Over the public channels, verbatim from the former text.
   val oneReadPerCall = s.o.reads == s.o.calls.length() and
     s.io.budgets.length() == s.o.reads and s.io.sourceErrors.length() == s.o.calls.length()
-  val effectsMatchOwners = s.o.reads == s.reads.length() and
-    s.o.loads == s.loads.length() and s.o.loaders == s.sources.length()
-  val completedCallsHaveNoActiveWork = s.calls.indices().forall(i => s.calls.nth(i).phase != CALL_DONE or
-    (s.reads.indices().forall(j => s.reads.nth(j).caller != i or not(s.reads.nth(j).active)) and
-      s.sources.indices().forall(j => s.sources.nth(j).caller != i or not(s.sources.nth(j).active))))
-  val retainedSnapshotsWereEligible = s.calls.indices().forall(i => {
-    val c = s.calls.nth(i)
-    c.candidate == NO_CANDIDATE or
-      (c.acquiredAt - c.created >= FRESH_AGE_MS and c.acquiredAt - c.created < c.maxAge)
-  })
   val abortsAreUnique = s.io.aborted.indices().forall(i =>
     s.io.aborted.indices().forall(j => i == j or s.io.aborted.nth(i) != s.io.aborted.nth(j)))
   val writesKeepCapturedRetention = s.o.writeTtls.indices().forall(i =>
     s.o.writeTtls.nth(i) == SHORT_RETENTION_MS or s.o.writeTtls.nth(i) == LONG_RETENTION_MS)
-
-  // Source timers retain the owner's start, even when another source expires.
-  val eachSourceKeepsItsFullBudget = s.sources.indices().forall(i => {
-    val source = s.sources.nth(i)
-    s.timers.select(timer => not(timer.read) and timer.index == i).length() == 1 and
-      s.timers.select(timer => not(timer.read) and timer.index == i).nth(0).at == source.startedAt + 10
+  // Over the library records: the drivers' loaders are the loader ordinals,
+  // and every held effect is one the drivers dispatched.
+  val effectsMatchOwners = s.o.loaders == s.loaders.length() and
+    s.reads.indices().forall(i => s.reads.nth(i).read < s.o.reads) and
+    s.loads.indices().forall(i => s.loads.nth(i).load < s.o.loads)
+  // A completed caller owns a flight whose result is recorded and on which no
+  // read or decode is still held (a read whose deadline was delivered owns no
+  // flight and is accepted).
+  val completedCallsHaveNoActiveWork = s.o.calls.indices().forall(c => s.o.calls.nth(c) == CALL_PENDING or {
+    val flight = s.owners.nth(c)
+    flight >= 0 and s.sources.nth(flight).result != CALL_PENDING and
+      s.reads.indices().forall(j => s.reads.nth(j).flight != flight) and
+      s.loads.indices().forall(j => s.loads.nth(j).flight != flight)
   })
-  val sourceSettlementsRespectOwnDeadline = s.sources.indices().forall(i => {
-    val source = s.sources.nth(i)
-    source.outcome == CALL_PENDING or
-      (if (source.outcome == DEADLINE_ERROR) source.settledAt >= source.startedAt + 10
-        else source.settledAt < source.startedAt + 10)
+  // A candidate is retained only from a frame stale by at least the freshness
+  // (its age only grows afterwards) and, at the read settlement that captured
+  // it, inside the maximum admitted for its caller: read index i is caller i
+  // in this profile (every caller dispatches exactly one read at admission),
+  // so the snapshot judged at a releaseRead step is that of the read's
+  // caller's flight.
+  val retainedSnapshotsWereEligible = s.retained.indices().forall(i => {
+    val snapshot = s.retained.nth(i)
+    val age = Clock::wallOf(s) - snapshot.created
+    snapshot.candidate == NO_VALUE or (age >= FRESH_AGE_MS and
+      (input.name != "releaseRead" or snapshot.flight != s.owners.nth(input.choice) or age < snapshot.maximum))
   })
+  // Every loader ordinal has exactly one source deadline while its work is
+  // undelivered and its flight's result is pending, none otherwise: a
+  // deadline belongs to its loader until that loader settles or expires. The
+  // instant of each deadline (its loader's own start plus the configured
+  // budget) is checked by the connection monitor's origins clause.
+  val eachSourceKeepsItsFullBudget = s.loaders.indices().forall(k =>
+    Deadlines::deadlinesOf(s, Deadlines::SOURCE, k).length() ==
+      (if (Deadlines::pending(s, k) and s.sources.nth(s.loaders.nth(k)).result == CALL_PENDING) 1 else 0))
+  // The former sourceSettlementsRespectOwnDeadline read a settlement instant
+  // the held shape does not carry. Its statement is carried in writing: a
+  // loader's outcome is DEADLINE_ERROR exactly when the fold delivered its
+  // deadline at an instant at or after it (deadlines::deliver) or arrival
+  // substituted it at a reached deadline (deadlines::arrival); any other
+  // outcome is applied only while the deadline is pending. The connection
+  // monitor's independentSourceOriginsMatchContract checks the deadline
+  // instant while pending and the acceptance instant at each resolve; the
+  // regressions staggeredSourcesExpireAtTheirOwnDeadlineTest and
+  // staggeredSourceStartsKeepIndependentBudgetsTest and the kernel fixture
+  // run readExpiryChainsIntoTheSameAdvanceTest pin the boundary.
 
   // Deterministic model regressions ------------------------------------------
+  // Three former regressions patched private state (the stored frame, its
+  // stamp, the policy maximum); each patch is now the input that produces it:
+  // seedWith(2) stores value 2 at age 1000 (the former frame swap kept the
+  // 1000 ms stamp), seedWith(0) stores value 1 at age 0 (the former
+  // created := wall), policyWith(2) sets the short maximum with the read
+  // budget unchanged (the former maxAge patch).
   run independentReadDeadlinesStartSeparateSourcesTest = init.then(beginCall).then(advanceBy(1)).then(beginCall)
     .then(advanceBy(1)).then(advanceBy(1)).then(advanceBy(1)).then(advanceBy(1))
     .expect(s.io.aborted == List(0) and s.o.loaders == 1)
     .then(advanceBy(1)).expect(s.io.aborted == List(0, 1) and s.o.loaders == 2)
   run independentRecoveryKeepsDistinctSnapshotsTest = init.then(beginCall).then(readAt(0))
-    .then(all { input' = input, s' = { frame: VALUE_TWO, ...s } }).then(beginCall).then(readAt(1))
+    .then(seedWith(2)).then(beginCall).then(readAt(1))
     .then(rejectAt(0)).then(rejectAt(1)).then(invalidate)
     .then(loadAt(1)).then(loadAt(0))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.reads == 2 and s.o.writes == 0)
   run timedOutReadCannotAffectAnotherCallTest = init.then(beginCall).then(advanceBy(5))
     .then(beginCall).then(readAt(1)).then(readAt(0))
     .expect(s.o.loads == 0 and s.o.loaders == 2 and s.io.aborted == List(0))
-  run acceptedFreshDecodeSurvivesOtherInvalidationTest = init.then(all { input' = input, s' = { created: s.wall, ...s } }).then(beginCall)
+  run acceptedFreshDecodeSurvivesOtherInvalidationTest = init.then(seedWith(0)).then(beginCall)
     .then(readAt(0)).then(invalidate).then(beginCall).then(readAt(1))
     .then(loadAt(0)).expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 1)
   run readFailureCannotBorrowAnotherCallsRefillTest = init.then(beginCall).then(beginCall)
     .then(failReadAt(0)).then(readAt(1))
     .then(resolveWith(4)).then(resolveWith(1))
-    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.writes == 1 and s.frame == VALUE_TWO)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.writes == 1 and s.remoteValues == List(VALUE_TWO))
   run recoveryPolicyIsCapturedPerCallerTest = init.then(beginCall).then(readAt(0))
-    .then(all { input' = input, s' = { maxAge: SHORT_RETENTION_MS, ...s } }).then(beginCall).then(readAt(1))
+    .then(policyWith(2)).then(beginCall).then(readAt(1))
     .then(rejectAt(0)).then(rejectAt(1)).then(advanceBy(1000))
     .then(loadAt(0)).then(loadAt(1))
     .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR) and s.io.sourceErrors == List(0, 2) and s.o.recovery == List("served", "miss"))
@@ -443,4 +331,40 @@ module dialcache_independent_conformance {
     .then(loadAt(1)).then(loadAt(0))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.recovery == List("served", "served")
       and s.o.reads == 2 and s.o.loaders == 2 and s.o.loads == 2 and s.o.dumps == 0 and s.o.writes == 0)
+
+  // A fresh hit retains nothing: when its decode fails, the loader it starts
+  // cannot recover, and a rejection completes with the source error and the
+  // loader's identity, unclassified.
+  run freshDecodeFailureCannotRecoverTest = init.then(seedWith(0)).then(beginCall).then(readAt(0))
+    .expect(s.o.loads == 1 and s.o.loaders == 0)
+    .then(failLoadAt(0)).expect(s.o.loaders == 1 and s.o.calls == List(CALL_PENDING))
+    .then(rejectAt(0))
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.classifications == 0 and s.o.recovery == List() and s.io.sourceErrors == List(1))
+  // The loader a failed fresh decode starts carries no fence (C58): the frame
+  // the read accepted had cleared the watermark, so a watermark raised since
+  // the read does not fence its refill. The loader's value replaces the frame
+  // with the reply's retention and the caller completes with it.
+  run freshDecodeFailureRefillsUnfencedUnderARaisedWatermarkTest = init.then(seedWith(0)).then(beginCall).then(readAt(0))
+    .then(invalidate).then(failLoadAt(0))
+    .expect(s.o.loaders == 1 and s.sources.nth(0).fence == NO_FENCE and s.watermark.nth(0) == Clock::wallOf(s))
+    .then(resolveWith(2))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.writes == 1 and s.o.writeTtls == List(LONG_RETENTION_MS)
+      and s.remoteValues == List(VALUE_TWO) and s.o.recovery == List())
+  // A visible frame the read declined as stale carries no fence (C58): the
+  // frame itself cleared the watermark, so its miss refills unfenced, and the
+  // refill is fresh for the next caller's read.
+  run visibleStaleMissCarriesNoFenceAndRefillsTest = init.then(invalidate)
+    .then(advanceBy(1000)).then(advanceBy(1000)).then(seedWith(1))
+    .then(beginCall).then(readAt(0)).expect(s.o.loaders == 1 and s.o.loads == 0 and s.sources.nth(0).fence == NO_FENCE)
+    .then(resolveWith(2))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.writes == 1 and s.o.writeTtls == List(LONG_RETENTION_MS))
+    .then(beginCall).then(readAt(1)).expect(s.o.loads == 1 and s.o.loaders == 1)
+  // A read left pending expires inside one long advance and starts its loader
+  // at the read's own due instant, so the loader's deadline, measured from
+  // there, is delivered inside the same advance: the caller completes with a
+  // deadline error, the read is aborted and its loader counted before the
+  // advance ends. Delivering at the advance's end instead would leave the
+  // caller pending with its loader due after the advance.
+  run readExpiryStartsItsLoaderAtTheReadsDueInstantTest = init.then(beginCall).then(advanceBy(1000))
+    .expect(s.o.calls == List(DEADLINE_ERROR) and s.io.aborted == List(0) and s.o.loaders == 1 and s.o.loads == 0 and s.now == 1000)
 }

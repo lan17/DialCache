@@ -17,7 +17,7 @@ module composition_wiring_passes {
     }
   }
 
-  action step = any { bumpWrapper }
+  action step = bumpWrapper
 
   val countWithinBound = s.count <= 30
 }

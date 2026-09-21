@@ -1,7 +1,6 @@
 package dialcache
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,33 +35,20 @@ func featurePaths(p string) ([]string, error) {
 	return []string{filepath.Join("..", "formal", p+"-smoke.itf.json")}, nil
 }
 
+// The exported regressions of a profile are the histories under
+// <corpus>/../regressions/<profile>/. Which runs a model exports is read from
+// its Quint text by formal/execution.mjs, and the gate over this package's
+// report (formal/check-go-replay.mjs) requires exactly those histories, so
+// this reader lists the directory rather than the manifest.
 func featureRegressionPaths(profile, directory string) ([]string, error) {
-	raw, err := os.ReadFile("../formal/execution.json")
+	paths, err := filepath.Glob(filepath.Join(directory, "..", "regressions", profile, "*.itf.json"))
 	if err != nil {
 		return nil, err
 	}
-	var manifest struct {
-		Models []struct {
-			Profile     string   `json:"profile"`
-			Regressions []string `json:"replayRegressions"`
-		} `json:"models"`
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("missing Quint regressions for %s", profile)
 	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return nil, err
-	}
-	paths := []string{}
-	for _, model := range manifest.Models {
-		if model.Profile != profile {
-			continue
-		}
-		for _, name := range model.Regressions {
-			path := filepath.Join(directory, "..", "regressions", profile, name+".itf.json")
-			if _, err := os.Stat(path); err != nil {
-				return nil, fmt.Errorf("missing Quint regression %s: %w", name, err)
-			}
-			paths = append(paths, path)
-		}
-	}
+	sort.Strings(paths)
 	return paths, nil
 }
 func TestFeatureConformance(t *testing.T) {

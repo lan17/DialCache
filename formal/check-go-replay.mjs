@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readExecution, root, validateExecution } from './execution.mjs';
+import { readExecution, root, scheduleExecution, validateExecution } from './execution.mjs';
 import { protocolCorpus } from './vector-artifacts.mjs';
 
 import { conformanceInventory } from './conformance.mjs';
@@ -43,8 +43,9 @@ export function buildGoReplayInventory({ execution, scenarios, protocol, package
 }
 
 export function loadGoReplayInventory() {
-  const execution = readExecution();
-  validateExecution(execution);
+  const manifest = readExecution();
+  validateExecution(manifest);
+  const execution = scheduleExecution(manifest);
   const read = path => readFileSync(root + path, 'utf8');
   const packageName = /^module\s+(\S+)\s*$/m.exec(read('go/go.mod'))?.[1];
   return buildGoReplayInventory({ execution, packageName,

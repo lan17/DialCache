@@ -33,8 +33,13 @@ The pull request lane's `differential` job runs `make differential` against the
 base branch whenever a Quint input changes: a composed profile that changes any
 driver-asserted observation of its previous corpus, or accepts an input the
 previous text refused, fails unless the manifest declares the change by bumping
-its `differential.behaviorVersion`. Its report is migration evidence, not a
-conformance completion report; the profile lanes still run.
+its `differential.behaviorVersion`. The job is a matrix of four shards,
+`differential (1)` to `differential (4)`: each checks the lint baseline and the
+kernel fixtures, then replays a round-robin quarter of the composed profiles
+sorted by name (`DIFFERENTIAL_SHARD=<index>/4`; one unsharded job overran its
+60-minute budget) and preserves its reports and replay logs as the
+`formal-differential-<index>` artifact. The reports are migration evidence, not
+a conformance completion report; the profile lanes still run.
 
 The evaluator ends with a per-profile witness report: required labels with at
 most three sampled hits and no regression, labels pinned by a regression but
@@ -92,37 +97,57 @@ units; a total invariant count is not a measure of specification strength.
 
 Every mutation must compile, its unmodified baseline must pass, and detection
 must come from a semantic assertion or invariant counterexample. A tool failure,
-missing witness, crash or timeout is a failed measurement. The selected fault
+missing witness, crash or timeout is a failed measurement. An unhandled
+rejection under a mutant is the mutant settling a promise the suite was not
+awaiting at that moment; the report records it beside the failed assertions,
+and on its own it is a failed measurement, never a detection. The selected fault
 catalogs and per-run reports define the denominator; do not infer a percentage
 of all possible defects from their scores.
 
-The model catalog in `execution.json` covers every scheduled model: currently 72
-challenges over 68 distinct faults, with no waivers. Its report distinguishes
-those two counts and marks a filtered `--only` run as partial; only the complete
-run is evidence. A challenge with a deterministic reproducer is additionally
+The model catalog in `execution.json` covers every scheduled model with no
+waivers; `node formal/execution.mjs` reports the challenge and distinct fault
+counts. Its report distinguishes those two counts and marks a filtered `--only`
+run as partial; only the complete run is evidence. A challenge with a deterministic reproducer is additionally
 replayed on the clean and mutated model and must fail only under the fault, at
 the expectation the manifest declares; the report records that outcome per
 challenge, and `node formal/execution.mjs` reports how many challenges still
 wait in `reproducerBacklog`.
 
-The weekly full workflow shards each mutation lane over three runners. The Go
-lane bounded the whole run: its 13 mutants replay the generated cohort in strict
-sequence, 25 minutes on a fast runner and 47 to 48 minutes on the slow class
-(runs 34669546872 and 34670045249; the TypeScript lane took 17). Each shard
-measures every unmodified baseline itself, so its evidence stands on the
-environment it ran in, then measures a contiguous third of the catalog. A merge
+Each challenge also maps to the native mutant that injects the same wrong
+behavior into both ports through its `nativeMutants` entry, or explains why no
+native line exists; `node formal/execution.mjs` checks the mapping against
+the mutant catalog (`formal/mutations.json`, one entry per fault with a
+TypeScript and a Go section), anchors every catalog edit in the port text, and
+reports the challenges still waiting in `nativeMutantBacklog`. The mutation lanes must detect every mapped mutant in
+their generated cohort, so a mapped challenge is evidence that the corpus
+would catch that mistake in a port, not only that the model would. See the
+[authoring rules](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
+
+The weekly full workflow shards each mutation lane over the workflow matrix;
+`test/formal-validation.test.ts` pins how many mutants a shard may hold within
+its timeout, so catalog growth fails the pull request until the matrix grows.
+The Go lane bounded the whole run
+when it had 13 mutants on three shards (25 minutes on a fast runner, 47 to 48
+minutes on the slow class, runs 34669546872 and 34670045249; the TypeScript lane
+took 17), and its cost grows with the catalog: about 1.6 minutes per Go mutant
+and one per TypeScript mutant on a fast runner, twice that on the slow class.
+Each shard measures every unmodified baseline itself, so its evidence stands
+on the environment it ran in, then measures a contiguous slice of the catalog. A merge
 job per language reads the shard reports and writes the complete report. It
 refuses a missing, duplicated or failed shard, shards whose source, catalog,
 corpus or witness fingerprints or baseline results differ, and coverage that is
 not the catalog exactly once in order. Only the merged report is complete
-evidence; a shard report is never `complete`. Shard budgets are 30 minutes
-(TypeScript) and 40 (Go): the baselines plus four or five mutants, doubled for a
-slow runner. The Go mutation runner still bounds each `go test` invocation at
-8 minutes to catch a hung mutant, not to pace a slow runner. Locally,
-`MUTATION_SHARD=1/3 make mutations-ts` (then `2/3` and `3/3`) reproduces one
-shard under `.formal-traces/semantic/shards/1-of-3/`, and
+evidence; a shard report is never `complete`. Each shard's budget is 40
+minutes: the baselines plus its slice of the catalog at the slow runner's
+per-mutant cost, plus one hung cohort's bound. The Go mutation runner still
+bounds each `go test` invocation at 8 minutes to catch a hung mutant, not to
+pace a slow runner. Locally, `MUTATION_SHARD=<index>/<count> make mutations-ts`
+for every index of the workflow matrix reproduces the shards under
+`.formal-traces/semantic/shards/<index>-of-<count>/`, and
 `make mutations-merge-ts` assembles the report that an unsharded
 `make mutations-ts` writes; the Go targets mirror this.
+`MUTATION_ONLY=M18 make mutations-ts` measures one mutant into a partial
+report for authoring; it is never complete evidence.
 
 The workflow's `formal-full` aggregate job retains a small `formal-summary` artifact for 90
 days: both completion and context reports, the Go replay summary, the model

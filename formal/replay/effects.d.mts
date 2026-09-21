@@ -2,11 +2,16 @@ import type { Fixture, Input, Observation } from "../../test/formal/behavior-dri
 export const actions: readonly string[];
 export const observedFields: readonly string[];
 export interface Event { event: string; location: string; detail: string; amount: number }
-export type State = Record<"now"|"wall"|"readStarted"|"decodeStarted"|"tracked"|"reply"|"replyAt"|"readBudget"|"baseReadBudget"|"phase"|"activeLoader"|"activeRead"|"deadline"|"refill"|"acceptedAt"|"acceptedWall"|"observerFailed"|"readAborts"|"observedFence"|"writeTimestamp"|"storedTimestamp"|"watermark"|"loaders"|"reads"|"writes"|"invalidations"|"loads"|"dumps"|"policyCalls",number>&{calls:number[];sources:number[];readStates:number[];readBudgets:number[];events:Event[]};
-export interface Step { action:string;choice?:number;state:State }
-export interface Trace { path:string;steps:Step[] }
-export function parseTrace(raw:unknown,path:string):Trace;
-export function fixtureFor(mode:number):Fixture;
-export function inputsFor(step:Pick<Step,"action"|"choice">,observed:Observation,environment:{wallMs:number}):Input[];
-export function project(observed:Observation):Record<string,unknown>;
-export function expectedObservations(trace:Trace):Record<string,unknown>[];
+export interface ReadContext { index: number; timeoutMs: number; aborted: boolean }
+// The observation the version-2 contract asserts at a step, parsed from the composed layout (s.o, s.io, s.events) or the retired one.
+export type Expected = Record<"loaders"|"reads"|"writes"|"invalidations"|"loads"|"dumps"|"policyCalls", number> & { calls: number[]; events: Event[]; writeTtls: number[]; readAborts: number[]; readContexts: ReadContext[] };
+export interface Step { action: string; choice: number; expected: Expected }
+export interface Trace { path: string; steps: Step[] }
+export function parseTrace(raw: unknown, path: string): Trace;
+export interface EffectsDescriptor { explicitInputs: true; parseTrace: typeof parseTrace; actions: Record<string, { choices?: number[] | "index" }> }
+export const effectsDescriptor: EffectsDescriptor;
+export function fixtureFor(mode: number): Fixture;
+// The choice is read only for the actions that record one (init, the reply, the budget policy, the observer fault, the loader and read settlements).
+export function inputsFor(step: { action: string; choice?: number }, observed: Observation, environment: { wallMs: number }): Input[];
+export function project(observed: Observation): Record<string, unknown>;
+export function expectedObservations(trace: Trace): Expected[];

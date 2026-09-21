@@ -60,20 +60,34 @@ module flights {
       ...state
     }, if (coalesce) slot else NO_OWNER, index)
   }
+  // A source no caller owns (a served hit's diagnostic source, `shadow`): it
+  // joins the sources under the next index and is registered nowhere, so
+  // `ownedBy` is empty for it and its settlement completes no caller.
+  pure def registerDetached(state: Registry[r, p], source: Source[p]): Registry[r, p] =
+    { sources: state.sources.append(source), ...state }
   // A closed scope forgets its request flights along with its memo row.
   pure def forgetScope(state: Registry[r, p], context: int, keysPerScope: int): Registry[r, p] = {
     requestFlights: state.requestFlights.indices().fold(state.requestFlights, (out, slot) =>
       if (slot / keysPerScope == context) out.replaceAt(slot, NO_OWNER) else out),
     ...state
   }
-  pure def settleSource(state: Registry[r, p], index: int, result: int): Registry[r, p] = {
-    sources: state.sources.replaceAt(index, { result: result, ...state.sources.nth(index) }),
+  // A source's outcome is recorded when its work settles or its deadline
+  // completes it; the registries forget the flight when it completes its
+  // callers: at once for a settlement, later for a flight that first recovers
+  // a retained value, which stays joinable until then.
+  pure def recordResult(state: Registry[r, p], index: int, result: int): Registry[r, p] =
+    { sources: state.sources.replaceAt(index, { result: result, ...state.sources.nth(index) }), ...state }
+  pure def forgetSource(state: Registry[r, p], index: int): Registry[r, p] = {
     processFlights: state.processFlights.foldl(List(), (out, owner) => out.append(if (owner == index) NO_OWNER else owner)),
     requestFlights: state.requestFlights.foldl(List(), (out, owner) => out.append(if (owner == index) NO_OWNER else owner)),
     ...state
   }
   pure def ownedBy(state: Registry[r, p], index: int): Set[int] =
     state.owners.indices().filter(call => state.owners.nth(call) == index)
+  // The newest source, for a profile whose drivers settle the latest loader
+  // rather than one named by index (the local-failure drivers resolve
+  // `loaders - 1`) and for an inline source settled by the call that started it.
+  pure def latest(state: Registry[r, p]): int = state.sources.length() - 1
 
   // Opt-in record: the identity of the last admitted caller, for a property
   // that no source completes a caller for another instance or key.

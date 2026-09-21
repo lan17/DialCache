@@ -162,6 +162,30 @@ export function classifyRuns(declarations) {
   return runs;
 }
 
+// The schedule a model's text states, read off its declarations rather than
+// listed in the manifest. Every run a model declares is a scheduled
+// regression, in declaration order. A profile model exports its public-only
+// runs as replay regressions, so what the ports replay is exactly what the
+// text lets them replay; its state-patching runs stay model-only.
+export function modelSchedule(model, bodies) {
+  const regressions = [...bodies].filter(([, { kind }]) => kind === 'run').map(([name]) => name);
+  return model.profile === undefined ? { regressions } : { regressions, replayRegressions: classifyRuns(bodies).publicOnly };
+}
+// Every Quint source no scheduled model claims is a helper library, in the
+// sorted order quintSources lists them.
+export function libraryPaths(manifest, files = quintSources()) {
+  const claimed = new Set(manifest.models.map(model => model.path));
+  return files.filter(path => !claimed.has(path));
+}
+// The manifest with its schedule: `libraries`, and each model's `regressions`
+// and (for a profile model) `replayRegressions`. Tools that run, export or
+// account for the schedule read it through here; the manifest carries only
+// what a person decides. Validate the manifest first (validateExecution).
+export function scheduleExecution(manifest = readExecution(), { readSource = read, scanSource = scanDeclarationBodies, files = quintSources() } = {}) {
+  return { ...manifest, libraries: libraryPaths(manifest, files),
+    models: manifest.models.map(model => ({ ...model, ...modelSchedule(model, scanSource(readSource(model.path))) })) };
+}
+
 // The checkpoint of a reproducer is the one top-level `.expect(...)` in the
 // cited run's chain whose condition is the declared `failure` text, compared
 // token by token so spacing does not matter. Returns the chain before that
@@ -169,8 +193,8 @@ export function classifyRuns(declarations) {
 // must still pass and the second must fail: the failure then belongs to the
 // declared expectation, not to a step the fault disables or a later check.
 const opens = ['{', '(', '['], shuts = ['}', ')', ']'];
-export function reproducerCheckpoint(source, run, failure) {
-  const declaration = scanDeclarationBodies(source).get(run);
+export function reproducerCheckpoint(source, run, failure, declarations = scanDeclarationBodies(source)) {
+  const declaration = declarations.get(run);
   if (declaration?.kind !== 'run') throw new Error(`${run} is not a run declaration`);
   const { body, spans } = declaration;
   const wanted = tokenize(typeof failure === 'string' ? failure : '').tokens;
@@ -226,7 +250,7 @@ export const contractIds = text => [...text.matchAll(/^\| ([CWEB]\d{2}) \|/gm)].
 // because no other profile executes that text.
 const reproducerKinds = ['exported-regression', 'model-run'];
 const reproducerFields = ['kind', 'run', 'model', 'failure', 'family', 'profiles', 'exclusions', 'scope'];
-function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, readSource }) {
+function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, source, scanned }) {
   const { id, reproducer } = challenge;
   if (!reproducer || typeof reproducer !== 'object' || Array.isArray(reproducer)) throw new Error(`${id}: invalid reproducer`);
   const unknown = Object.keys(reproducer).filter(key => !reproducerFields.includes(key));
@@ -240,7 +264,7 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
   }
   if (typeof run !== 'string' || !cited.regressions.includes(run)) throw new Error(`${id}: reproducer run is not a scheduled regression of ${cited.path}: ${run}`);
   if (!nonEmptyText(failure)) throw new Error(`${id}: reproducer failure must state the expect condition the fault breaks`);
-  try { reproducerCheckpoint(readSource(cited.path), run, failure); }
+  try { reproducerCheckpoint(source(cited.path), run, failure, scanned(cited.path)); }
   catch (error) { throw new Error(`${id}: ${error.message}`); }
   if (!isSlug(family)) throw new Error(`${id}: reproducer family must be a fault family slug`);
   const own = model.profile ?? model.path;
@@ -271,27 +295,185 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
   }
 }
 
+// Every challenge names the native mutant that injects its fault into both
+// ports, or explains why none exists. `mapped`: the mutant's TypeScript and Go
+// sections both require generated detection, so the weekly lanes fail if the
+// corpus stops detecting it in either port. `unobservable`: a port line
+// exists, but the port checks the same condition again at a later point, so
+// no public history distinguishes the fault; the text names the line and the
+// later check. `model-only`: the fault rewrites model bookkeeping no port line
+// carries; the text names the port code it examined. `crossContract` is the
+// one reason a mapped mutant may sit on a semantic case that does not list
+// the challenge's contract. The challenge text says why the mutant is the same
+// fault as the model's; the port-side account lives once on the catalog entry.
+export const nativeMutantKinds = ['mapped', 'unobservable', 'model-only'];
+const nativeMutantFields = ['kind', 'text', 'mutant', 'crossContract'];
+const nativeMutantTextLimits = { mapped: 500, unobservable: 900, 'model-only': 900 };
+
+// One catalog of native mutants, each entry a fault described once and
+// injected into both ports: `typescript` and `go` sections hold that port's
+// exact-anchor edits and required detections. One id grammar serves the
+// catalog, the measurers and --only.
+export const mutantCatalogPath = 'formal/mutations.json';
+export const mutantIdPattern = /^M\d{2,}$/;
+// Where a port's edits may point and which cohorts its detections may require.
+export const mutantPorts = {
+  typescript: { label: 'TypeScript', edit: /^src\/[\w/-]+\.ts$/, cohorts: ['ordinary', 'generated', 'portable'] },
+  go: { label: 'Go', edit: /^go\/[\w-]+\.go$/, cohorts: ['ordinary', 'generated', 'fixed', 'portable'] },
+};
+const mutantFields = ['id', 'case', 'description', 'rationale', 'typescript', 'go'];
+
+// The catalog's schema: ids, cases, descriptions, the rationale that carries
+// the port-side account, and both ports' sections with edits inside their
+// port and known cohorts. Anchors are checked separately (checkMutantAnchors),
+// so validating the manifest never depends on src/ or go/ text.
+export function readMutantCatalog(readText = read) {
+  const refuse = detail => { throw new Error(`Mutant catalog: ${detail}`); };
+  const caseContracts = new Map(JSON.parse(readText('formal/semantic-cases.json')).cases.map(entry => [entry.id, entry.contracts]));
+  const parsed = JSON.parse(readText(mutantCatalogPath));
+  if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.mutations) || !parsed.mutations.length) refuse(`expected the versioned catalog ${mutantCatalogPath}`);
+  const mutations = new Map();
+  for (const mutation of parsed.mutations) {
+    const { id } = mutation;
+    if (typeof id !== 'string' || !mutantIdPattern.test(id) || mutations.has(id)) refuse(`invalid or duplicate mutant id ${id}`);
+    const unknown = Object.keys(mutation).filter(key => !mutantFields.includes(key));
+    if (unknown.length) refuse(`${id} has unsupported field ${unknown.join(', ')}`);
+    if (!caseContracts.has(mutation.case)) refuse(`${id} cites unknown case ${mutation.case}`);
+    if (!nonEmptyText(mutation.description)) refuse(`${id} has no description`);
+    if (!nonEmptyText(mutation.rationale)) refuse(`${id} has no rationale naming the port lines it edits`);
+    for (const [port, { label, edit: editPath, cohorts }] of Object.entries(mutantPorts)) {
+      const section = mutation[port];
+      if (!section || typeof section !== 'object' || Array.isArray(section)) refuse(`${id} has no ${label} section`);
+      const extra = Object.keys(section).filter(key => !['edits', 'requiredDetections'].includes(key));
+      if (extra.length) refuse(`${id} ${label} section has unsupported field ${extra.join(', ')}`);
+      if (!Array.isArray(section.requiredDetections) || section.requiredDetections.some(cohort => !cohorts.includes(cohort))) refuse(`${id} requires an unknown ${label} cohort`);
+      if (!Array.isArray(section.edits) || !section.edits.length) refuse(`${id} has no ${label} edits`);
+      for (const edit of section.edits) {
+        if (typeof edit?.path !== 'string' || !editPath.test(edit.path) || edit.path.endsWith('_test.go')) refuse(`${id} edits ${edit?.path} outside the ${label} port`);
+        if (!nonEmptyText(edit.before) || typeof edit.after !== 'string' || edit.before === edit.after) refuse(`${id} has an empty or unchanged edit in ${edit.path}`);
+      }
+    }
+    mutations.set(id, mutation);
+  }
+  return { mutations, caseContracts };
+}
+
+// The port view of a catalog entry: what one measurer applies and gates.
+export function mutantsForPort(catalog, port) {
+  return [...catalog.mutations.values()].map(mutation => ({ id: mutation.id, case: mutation.case, description: mutation.description, ...mutation[port] }));
+}
+
+// Every anchor still matches the port text exactly once when the entry's
+// edits are applied in order, so a refactor that moves an anchored line fails
+// the audit, the pull request's test suite and the measurers, never the Quint
+// lanes. Returns the original text of every edited file, which the measurers
+// restore after each mutant. `readText` reads a repository-relative path, so
+// a measurement checks its workspace copy.
+export function checkMutantAnchors(catalog, readText = read) {
+  const sources = new Map();
+  const source = path => { if (!sources.has(path)) sources.set(path, readText(path)); return sources.get(path); };
+  for (const mutation of catalog.mutations.values()) {
+    for (const port of Object.keys(mutantPorts)) {
+      const texts = new Map();
+      for (const edit of mutation[port].edits) {
+        const current = texts.get(edit.path) ?? source(edit.path);
+        if (current.split(edit.before).length !== 2) throw new Error(`Mutant anchor drift: ${mutation.id}: anchor must match exactly once in ${edit.path}; review the ${mutantPorts[port].label} port or the catalog`);
+        texts.set(edit.path, current.replace(edit.before, () => edit.after));
+      }
+    }
+  }
+  return sources;
+}
+
+const portPath = /\b(?:src|go)\/[\w./-]+/;
+function validateNativeMutants(challenge, { catalog }) {
+  const { id, nativeMutants: native } = challenge;
+  if (!native || typeof native !== 'object' || Array.isArray(native)) throw new Error(`${id}: invalid nativeMutants`);
+  const unknown = Object.keys(native).filter(key => !nativeMutantFields.includes(key));
+  if (unknown.length) throw new Error(`${id}: unsupported nativeMutants field ${unknown.join(', ')}`);
+  const { kind, text, mutant, crossContract } = native;
+  if (!nativeMutantKinds.includes(kind)) throw new Error(`${id}: nativeMutants kind must be one of ${nativeMutantKinds.join(', ')}`);
+  if (!nonEmptyText(text)) throw new Error(`${id}: nativeMutants text must say why the mutant is the same fault or explain why none exists`);
+  // The text carries the why; the where lives on the catalog entry. A ceiling
+  // keeps the port-side account from creeping back into every citing challenge.
+  if (text.length > nativeMutantTextLimits[kind]) throw new Error(`${id}: nativeMutants text exceeds ${nativeMutantTextLimits[kind]} characters; the port-side account belongs in the mutant's rationale`);
+  if (kind !== 'mapped') {
+    if (mutant !== undefined || crossContract !== undefined) throw new Error(`${id}: ${kind} nativeMutants name no mutant`);
+    // An explanation names the port code it examined, so a reader can check it.
+    if (!portPath.test(text)) throw new Error(`${id}: ${kind} nativeMutants text must name the port file it examined`);
+    return;
+  }
+  if (typeof mutant !== 'string') throw new Error(`${id}: mapped nativeMutants need a mutant id`);
+  const entry = catalog.mutations.get(mutant);
+  if (!entry) throw new Error(`${id}: ${mutant} is not in the mutant catalog`);
+  if (!text.includes(mutant)) throw new Error(`${id}: nativeMutants text must name ${mutant}`);
+  if (!Object.keys(mutantPorts).every(port => entry[port].requiredDetections.includes('generated'))) throw new Error(`${id}: ${mutant} must require generated detection in both ports`);
+  const outside = !catalog.caseContracts.get(entry.case).includes(challenge.contract);
+  if (outside && !nonEmptyText(crossContract)) throw new Error(`${id}: ${mutant} is on case ${entry.case} which does not list ${challenge.contract}; add a crossContract reason`);
+  if (!outside && crossContract !== undefined) throw new Error(`${id}: crossContract note for in-contract mutant ${mutant}`);
+}
+
+// Challenges that predate the native-mutant requirement. The cutoff fault
+// lives only in the Lua invalidation script (src/internal/redis-scripts.ts,
+// go/redis_adapter.go), which no in-process cohort executes. The buffer-limit
+// fault has client-side lines in both ports (src/internal/duration.ts
+// assertSupportedFutureBufferMs, go/cache.go Invalidate), but no generated
+// history invalidates with the maximum buffer, so a mapped mutant would lack
+// its required detection; it closes when a profile exposes the buffer as an
+// input and an exported regression reaches the bound. The list may only
+// shrink: a new challenge maps to a native mutant or explains why none exists,
+// and listing it here instead is a reviewed change to this constant, never a
+// manifest edit.
+export const grandfatheredNativeMutantBacklog = Object.freeze([
+  'invalidation-transition-cutoff-moves-backwards',
+  'invalidation-transition-inclusive-buffer-limit',
+]);
+
+// Which challenges cite each mutant, in manifest order. The mutation reports
+// print it beside every measured mutant.
+export function challengesByMutant(manifest) {
+  const index = new Map();
+  for (const challenge of manifest.challenges) {
+    const mutant = challenge.nativeMutants?.mutant;
+    if (mutant === undefined) continue;
+    if (!index.has(mutant)) index.set(mutant, []);
+    index.get(mutant).push(challenge.id);
+  }
+  return index;
+}
+
+// A backlog is the exact set of challenges lacking one field, reported and
+// frozen: it cannot hide a challenge that has the field or never existed, and
+// only the grandfathered ids may sit in it, so it only shrinks.
+function validateBacklog(challenges, ids, { name, listed, present, grandfathered, missing, has, lacks, requirement }) {
+  if (!Array.isArray(listed)) throw new Error(missing);
+  const backlog = new Set(listed);
+  if (backlog.size !== listed.length) throw new Error(`Duplicate challenge ids in ${name}`);
+  for (const id of backlog) {
+    if (!ids.has(id)) throw new Error(`${name} names an unknown challenge: ${id}`);
+  }
+  const frozen = new Set(grandfathered);
+  for (const challenge of challenges) {
+    const inBacklog = backlog.has(challenge.id);
+    if (present(challenge) && inBacklog) throw new Error(`${challenge.id}: ${has} and is listed in ${name}`);
+    if (!present(challenge) && !inBacklog) throw new Error(`${challenge.id}: ${lacks} and is not listed in ${name}`);
+    if (inBacklog && !frozen.has(challenge.id)) throw new Error(`${challenge.id}: ${requirement}; ${name} only grandfathers the challenges that predate the requirement`);
+  }
+  return backlog.size;
+}
+
 // Challenges that predate the reproducer requirement. The backlog may only
 // shrink: a new challenge must carry a reproducer, and listing it here instead
 // is a reviewed change to this constant, never a manifest edit.
 export const grandfatheredReproducerBacklog = Object.freeze([
-  'source-deadline-epoch',
   'recovery-inclusive-maximum',
   'recovery-future-candidate',
-  'legacy-recovery-inclusive-maximum',
   'local-precise-grid',
   'source-inclusive-deadline',
   'fence-inclusive-timestamp',
   'profile-source-wrong-clock',
   'profile-source-wrong-owner',
-  'profile-recovery-wrong-snapshot',
-  'recovery-read-wrong-admission-policy',
-  'legacy-recovery-wrong-snapshot',
-  'independent-wrong-admission-policy',
   'independent-wrong-recovered-value',
-  'effects-source-wrong-clock',
-  'effects-wrong-acceptance-receipt',
-  'legacy-recovery-strands-followers',
   'independent-source-wrong-clock',
   'independent-source-wrong-owner',
   'tracked-read-inclusive-fence',
@@ -301,8 +483,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'runtime-policy-physical-ttl-ignores-recovery',
   'stale-recovery-inclusive-served-maximum',
   'stale-recovery-candidate-stamped-at-read',
-  'shadow-validation-fenced-fill-writes',
-  'shadow-validation-fill-before-source',
   'redis-protocol-inclusive-fence',
   'redis-protocol-untracked-fence',
   'frame-vectors-inclusive-fence',
@@ -314,39 +494,30 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'envelope-vectors-escape-misses-binary-marker',
   'conformance-local-hit-returns-source',
   'conformance-remote-miss-skips-publication',
-  'effects-fenced-source-publishes',
-  'effects-late-source-accepted',
   'scope-late-source-repopulates-closed-memo',
   'scope-source-error-memoized',
-  'admission-duplicate-key-admitted',
   'layers-process-flight-crosses-instance',
   'layers-late-memo-into-closed-scope',
   'independent-fresh-frame-retained',
-  'independent-deadline-settles-at-start',
-  'recovery-read-inclusive-maximum',
-  'recovery-read-recovery-warms-local',
-  'local-failure-write-fault-publishes',
-  'local-failure-source-error-published',
   'runtime-boundaries-inclusive-cohort',
   'runtime-boundaries-inherited-sharing-ignores-default',
-  'shadow-layers-inclusive-c0-freshness',
-  'shadow-layers-fill-uses-current-retention',
-  'local-clock-hit-renews-insertion',
   'source-budgets-outside-call-has-deadline',
   'source-budgets-settled-flight-stays-registered',
 ]);
 
 // Compiling semantic faults, checked against independent model obligations.
 // Every scheduled model carries at least one challenge or an explicit waiver.
-// Every challenge carries a reproducer or is listed in the reported backlog.
-function validateChallenges(manifest, { readSource, contracts, sources, profileIds, publicOnly, grandfathered = grandfatheredReproducerBacklog }) {
-  const { challenges, reproducerBacklog } = manifest;
+// Every challenge carries a reproducer or is listed in the reported backlog,
+// and maps to native mutants in both ports or is listed in that backlog.
+function validateChallenges(manifest, { source, scanned, contracts, sources, profileIds, publicOnly, catalog,
+  grandfathered = grandfatheredReproducerBacklog, grandfatheredNative = grandfatheredNativeMutantBacklog }) {
+  const { challenges, reproducerBacklog, nativeMutantBacklog } = manifest;
   if (!Array.isArray(challenges) || !challenges.length) throw new Error('Model property challenge catalog is missing');
-  if (!Array.isArray(reproducerBacklog)) throw new Error('Challenge reproducer backlog is missing');
   const models = new Map(manifest.models.map(model => [model.path, model]));
   const fields = ['id', 'contract', 'source', 'model', 'invariant', 'before', 'after'];
-  const optional = ['measures', 'reproducer'];
+  const optional = ['measures', 'reproducer', 'nativeMutants'];
   const ids = new Set(), faults = new Map(), challengedModels = new Set();
+  const kinds = { mapped: 0, unobservable: 0, 'model-only': 0 };
   let reproducers = 0;
   for (const challenge of challenges) {
     if (!challenge || typeof challenge !== 'object' || fields.some(key => typeof challenge[key] !== 'string' || !challenge[key])) {
@@ -362,35 +533,36 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
     if (!model) throw new Error(`${challenge.id}: challenged model is not scheduled: ${challenge.model}`);
     if (!model.invariants.includes(challenge.invariant)) throw new Error(`${challenge.id}: ${challenge.invariant} is not a scheduled invariant of ${challenge.model}`);
     if (challenge.before === challenge.after) throw new Error(`${challenge.id}: mutation must change the source`);
-    if (readSource(challenge.source).split(challenge.before).length !== 2) throw new Error(`${challenge.id}: mutation anchor must match exactly once in ${challenge.source}`);
+    if (source(challenge.source).split(challenge.before).length !== 2) throw new Error(`${challenge.id}: mutation anchor must match exactly once in ${challenge.source}`);
     const fault = JSON.stringify([challenge.source, challenge.before, challenge.after]);
     if (faults.has(fault) && !nonEmptyText(challenge.measures)) {
-      throw new Error(`${challenge.id}: repeats the fault of ${faults.get(fault)} without a measures note`);
+      throw new Error(`${challenge.id}: repeats the fault of ${faults.get(fault).id} without a measures note`);
     }
     if (challenge.measures !== undefined && (!nonEmptyText(challenge.measures) || !faults.has(fault))) {
       throw new Error(`${challenge.id}: a measures note is only for a repeated fault`);
     }
-    if (!faults.has(fault)) faults.set(fault, challenge.id);
     challengedModels.add(challenge.model);
     if (challenge.reproducer !== undefined) {
-      validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, readSource });
+      validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, source, scanned });
       reproducers++;
     }
+    if (challenge.nativeMutants !== undefined) {
+      validateNativeMutants(challenge, { catalog });
+      kinds[challenge.nativeMutants.kind]++;
+    }
+    // One fault, one native mapping: a repeated fault measured against another
+    // invariant names the same kind and mutant. The text and any crossContract
+    // reason speak for the challenge's own contract and may differ.
+    const native = challenge.nativeMutants === undefined ? null
+      : JSON.stringify([challenge.nativeMutants.kind, challenge.nativeMutants.mutant ?? null]);
+    if (faults.has(fault) && faults.get(fault).native !== native) throw new Error(`${challenge.id}: maps the fault of ${faults.get(fault).id} differently`);
+    if (!faults.has(fault)) faults.set(fault, { id: challenge.id, native });
   }
-  // The backlog is the exact set of challenges without a reproducer: it can be
-  // reported, and it cannot hide a challenge that has one or never existed.
-  const backlog = new Set(reproducerBacklog);
-  if (backlog.size !== reproducerBacklog.length) throw new Error('Duplicate challenge ids in reproducerBacklog');
-  for (const id of backlog) {
-    if (!ids.has(id)) throw new Error(`reproducerBacklog names an unknown challenge: ${id}`);
-  }
-  const grandfatheredIds = new Set(grandfathered);
-  for (const challenge of challenges) {
-    const listed = backlog.has(challenge.id);
-    if (challenge.reproducer !== undefined && listed) throw new Error(`${challenge.id}: has a reproducer and is listed in reproducerBacklog`);
-    if (challenge.reproducer === undefined && !listed) throw new Error(`${challenge.id}: has no reproducer and is not listed in reproducerBacklog`);
-    if (listed && !grandfatheredIds.has(challenge.id)) throw new Error(`${challenge.id}: new challenges must carry a reproducer; reproducerBacklog only grandfathers the challenges that predate the requirement`);
-  }
+  const reproducerBacklogSize = validateBacklog(challenges, ids, { name: 'reproducerBacklog', listed: reproducerBacklog, present: challenge => challenge.reproducer !== undefined,
+    grandfathered, missing: 'Challenge reproducer backlog is missing', has: 'has a reproducer', lacks: 'has no reproducer', requirement: 'new challenges must carry a reproducer' });
+  const nativeBacklogSize = validateBacklog(challenges, ids, { name: 'nativeMutantBacklog', listed: nativeMutantBacklog, present: challenge => challenge.nativeMutants !== undefined,
+    grandfathered: grandfatheredNative, missing: 'Challenge native-mutant backlog is missing', has: 'has nativeMutants', lacks: 'has no nativeMutants',
+    requirement: 'new challenges must map to a native mutant in both ports or explain why none exists' });
   const waived = [];
   for (const model of manifest.models) {
     if (model.challengeWaiver !== undefined) {
@@ -400,19 +572,30 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
       throw new Error(`${model.path}: scheduled invariants have no model property challenge and no challengeWaiver`);
     }
   }
+  // Catalog mutants no challenge cites are reported, not gated: the catalog
+  // may carry faults for rules the models do not challenge.
+  const cited = challengesByMutant(manifest);
+  const unmappedMutants = [...catalog.mutations.keys()].filter(id => !cited.has(id)).length;
   return { challenges: challenges.length, distinctFaults: faults.size, challengedModels: challengedModels.size, waivedModels: waived.length,
-    reproducers, reproducerBacklog: backlog.size };
+    reproducers, reproducerBacklog: reproducerBacklogSize,
+    nativeMutants: { mapped: kinds.mapped, unobservable: kinds.unobservable, modelOnly: kinds['model-only'], backlog: nativeBacklogSize },
+    unmappedMutants };
 }
 
 export function validateExecution(manifest = readExecution(), {
   readSource = read,
+  scanSource = scanDeclarationBodies,
   grandfathered = grandfatheredReproducerBacklog,
+  grandfatheredNative = grandfatheredNativeMutantBacklog,
+  catalog = readMutantCatalog(),
   files = quintSources(),
   profiles = JSON.parse(read('formal/profiles.json')).profiles,
   contracts = contractIds(read('formal/CONTRACTS.md')),
 } = {}) {
-  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.models) || !manifest.models.length ||
-      !Array.isArray(manifest.libraries)) throw new Error('Unsupported model execution manifest');
+  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.models) || !manifest.models.length) throw new Error('Unsupported model execution manifest');
+  // The schedule is read from the Quint text (modelSchedule, libraryPaths); a
+  // manifest that lists it again is a copy the text would contradict.
+  if (manifest.libraries !== undefined) throw new Error('libraries are read from the Quint sources: every source no scheduled model claims; delete the list');
   if (!Array.isArray(profiles) || !profiles.length || profiles.some(profile =>
     typeof profile.id !== 'string' || !/^[a-z][a-z-]*$/.test(profile.id)) ||
     new Set(profiles.map(profile => profile.id)).size !== profiles.length) throw new Error('Invalid execution profile IDs');
@@ -425,19 +608,30 @@ export function validateExecution(manifest = readExecution(), {
   if (check.outputDirectory !== '.formal-traces/verification') throw new Error('Unsupported verification output directory');
 
   // Scheduled models live at formal/; helper libraries live there or, for the
-  // kernel library's concern modules, at formal/kernel/. Kernel modules are
-  // never scheduled on their own: a composed profile executes them, and a
-  // fault in one is measured through the profiles that compose it.
-  const paths = [...manifest.models.map(model => model.path), ...manifest.libraries];
+  // kernel library's concern modules, at formal/kernel/, and are every Quint
+  // source no model claims. Kernel modules are never scheduled on their own:
+  // a composed profile executes them, and a fault in one is measured through
+  // the profiles that compose it.
+  const modelPaths = manifest.models.map(model => model.path);
   if (manifest.models.some(model => typeof model.path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(model.path)) ||
-      manifest.libraries.some(path => typeof path !== 'string' || !isQuintSourcePath(path)) ||
-      new Set(paths).size !== paths.length || !sameMembers(paths, files)) throw new Error('Model/library file inventory changed; review the execution schedule');
-  const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map();
+      new Set(modelPaths).size !== modelPaths.length || modelPaths.some(path => !files.includes(path))) throw new Error('Model/library file inventory changed; review the execution schedule');
+  const libraries = libraryPaths(manifest, files);
+  if (libraries.some(path => !isQuintSourcePath(path))) throw new Error('Model/library file inventory changed; review the execution schedule');
+  const paths = [...modelPaths, ...libraries];
+  // One pass reads and scans each source once: the model and library loops,
+  // the challenge anchors and every reproducer checkpoint share these memos,
+  // so a pass costs one scan per file rather than one per citation. They live
+  // in the pass, not the module, because callers hand in temporary sources; a
+  // caller validating many times may pass a `scanSource` memoized by text.
+  const texts = new Map(), scans = new Map();
+  const source = path => { if (!texts.has(path)) texts.set(path, readSource(path)); return texts.get(path); };
+  const scanned = path => { if (!scans.has(path)) scans.set(path, scanSource(source(path))); return scans.get(path); };
+  const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map(), schedules = new Map();
   let invariants = 0, regressions = 0, generatedTraces = 0;
   let exportedRegressionTraces = 0, generatedVectors = 0, vectorModels = 0;
   const vectorPaths = new Set();
   for (const model of manifest.models) {
-    const bodies = scanDeclarationBodies(readSource(model.path));
+    const bodies = scanned(model.path);
     const declarations = new Map([...bodies].map(([name, { kind }]) => [name, kind]));
     if (declarations.get('init') !== 'action' || declarations.get('step') !== 'action') throw new Error(`${model.path}: scheduled model needs init and step actions`);
     names(model.invariants, `${model.path} invariants`);
@@ -451,22 +645,30 @@ export function validateExecution(manifest = readExecution(), {
     for (const name of model.invariants) {
       if (declarations.get(name) !== 'val') throw new Error(`${model.path}: scheduled invariant is not a declared val: ${name}`);
     }
-    names(model.regressions, `${model.path} regressions`, true);
-    const declaredRuns = [...declarations].filter(([, kind]) => kind === 'run').map(([name]) => name);
-    if (model.regressions.some(name => !name.endsWith('Test')) || !sameMembers(model.regressions, declaredRuns)) {
-      throw new Error(`${model.path}: regression schedule must exactly name every run and retain the Test suffix`);
-    }
+    if (model.regressions !== undefined || model.replayRegressions !== undefined) throw new Error(`${model.path}: regressions and replayRegressions are read from the model's runs; delete the lists`);
+    const schedule = modelSchedule(model, bodies);
+    const unsuffixed = schedule.regressions.filter(name => !name.endsWith('Test'));
+    if (unsuffixed.length) throw new Error(`${model.path}: every run is a scheduled regression and must keep the Test suffix: ${unsuffixed.join(', ')}`);
+    schedules.set(model.path, schedule);
     invariants += model.invariants.length;
-    regressions += model.regressions.length;
+    regressions += schedule.regressions.length;
     if (model.propertyChallenge !== undefined) throw new Error(`${model.path}: property challenges live in the manifest challenges catalog`);
     // A composed profile's declared behavior: bumping behaviorVersion says its
     // observable behavior changed on purpose, so the corpus differential
     // reports that profile instead of comparing it against the reference.
+    // maxBytesPerStateRatio is the profile's own bound on trace growth for the
+    // differential, in place of the lane's default: a composition that must
+    // carry more state per trace than its predecessor declares it, with the
+    // reason recorded in the kernel README's record table.
     if (model.differential !== undefined) {
-      if (!model.differential || typeof model.differential !== 'object' || Array.isArray(model.differential) || model.generate === undefined ||
-          Object.keys(model.differential).join() !== 'behaviorVersion') throw new Error(`${model.path}: unsupported differential settings`);
-      const { behaviorVersion } = model.differential;
-      if (!Number.isSafeInteger(behaviorVersion) || behaviorVersion < 1) throw new Error(`${model.path}: differential.behaviorVersion must be a positive integer`);
+      const settings = model.differential, known = ['behaviorVersion', 'maxBytesPerStateRatio'];
+      if (!settings || typeof settings !== 'object' || Array.isArray(settings) || model.generate === undefined ||
+          !Object.keys(settings).length || Object.keys(settings).some(key => !known.includes(key))) throw new Error(`${model.path}: unsupported differential settings`);
+      const { behaviorVersion, maxBytesPerStateRatio } = settings;
+      if (behaviorVersion !== undefined && (!Number.isSafeInteger(behaviorVersion) || behaviorVersion < 1)) throw new Error(`${model.path}: differential.behaviorVersion must be a positive integer`);
+      if (maxBytesPerStateRatio !== undefined && (typeof maxBytesPerStateRatio !== 'number' || !Number.isFinite(maxBytesPerStateRatio) || maxBytesPerStateRatio < 1)) {
+        throw new Error(`${model.path}: differential.maxBytesPerStateRatio must be a finite number of at least 1`);
+      }
     }
     if (model.profile !== undefined || model.generate !== undefined) {
       const profile = profiles.find(profile => profile.id === model.profile);
@@ -483,22 +685,13 @@ export function validateExecution(manifest = readExecution(), {
       outputDirectories.add(generation.outputDirectory);
       generatedTraces += generation.traces;
     }
-    if (model.replayRegressions !== undefined) {
-      names(model.replayRegressions, `${model.path} replay regressions`);
-      exportedRegressionTraces += model.replayRegressions.length;
-      if (!model.profile || declarations.get('input') !== 'var' ||
-          model.replayRegressions.some(name => !model.regressions.includes(name))) throw new Error(`${model.path}: replay regressions need declared input and scheduled tests`);
-    }
     if (model.profile !== undefined) {
-      // Every deterministic history a driver could replay must be exported, and
-      // an exported history must never patch model state behind the driver.
-      const runs = classifyRuns(bodies);
-      publicOnly.set(model.path, runs.publicOnly);
-      const exported = new Set(model.replayRegressions ?? []);
-      const unexported = runs.publicOnly.filter(name => !exported.has(name));
-      const patched = runs.patching.filter(name => exported.has(name));
-      if (unexported.length) throw new Error(`${model.path}: public-only runs are not exported as replay regressions: ${unexported.join(', ')}`);
-      if (patched.length) throw new Error(`${model.path}: state-patching runs cannot be replay regressions: ${patched.join(', ')}`);
+      // A profile records every public command in `input`; its public-only
+      // runs are the histories both ports replay (modelSchedule), so a driver
+      // can replay every deterministic history and never sees a patched state.
+      if (declarations.get('input') !== 'var') throw new Error(`${model.path}: exported replay regressions need a declared input variable`);
+      exportedRegressionTraces += schedule.replayRegressions.length;
+      publicOnly.set(model.path, schedule.replayRegressions);
     }
     if (model.vectorExport !== undefined) {
       const vector = model.vectorExport;
@@ -507,7 +700,7 @@ export function validateExecution(manifest = readExecution(), {
         || !/^formal\/quint-[\w-]+-vectors\.json$/.test(vector.artifact)
         || !Array.isArray(vector.sources) || new Set(vector.sources).size !== vector.sources.length
         || !vector.sources.includes(model.path) || !vector.sources.includes(vector.generator)
-        || vector.sources.some(path => path !== model.path && path !== vector.generator && !manifest.libraries.includes(path))) {
+        || vector.sources.some(path => path !== model.path && path !== vector.generator && !libraries.includes(path))) {
         throw new Error(`${model.path}: invalid vector export boundary`);
       }
       positiveInteger(vector.cases, `${model.path} vector cases`);
@@ -518,27 +711,35 @@ export function validateExecution(manifest = readExecution(), {
       for (const path of vector.sources) read(path);
     }
   }
-  for (const path of manifest.libraries) {
-    const declarations = scanDeclarations(readSource(path));
-    if ([...declarations.values()].some(kind => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful model cannot be classified as a pure helper library`);
+  // A Quint source with actions, runs or state is a model: it runs only when
+  // the manifest schedules it, so it may not sit unscheduled among the libraries.
+  for (const path of libraries) {
+    if ([...scanned(path).values()].some(({ kind }) => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful Quint source must be a scheduled model; a helper library declares no actions, runs or state`);
   }
-  // A kernel module exists to be composed: one no scheduled model reaches is
-  // never typechecked or executed by any lane, so it may not stay listed.
+  // A library exists to be imported: one no scheduled model reaches, directly
+  // or through another library, is never typechecked or executed by any lane,
+  // so it may not stay in the tree. This is also the inventory tripwire: a
+  // stray or half-deleted stateless source at formal/ is refused here rather
+  // than admitted as a library by the directory listing.
   const reached = new Set(manifest.models.flatMap(model => importClosure(model.path)));
-  const orphans = manifest.libraries.filter(path => isKernelSource(path) && !reached.has(path));
-  if (orphans.length) throw new Error(`Kernel modules no scheduled model imports: ${orphans.join(', ')}; compose them or delete them`);
+  const orphans = libraries.filter(path => !reached.has(path));
+  if (orphans.length) throw new Error(`Quint libraries no scheduled model imports: ${orphans.join(', ')}; import them from a scheduled model or delete them`);
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
-  const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, grandfathered });
-  return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
+  const scheduled = { ...manifest, libraries, models: manifest.models.map(model => ({ ...model, ...schedules.get(model.path) })) };
+  const challenges = validateChallenges(scheduled, { source, scanned, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, grandfathered, grandfatheredNative });
+  return { models: manifest.models.length, libraries: libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
 }
 
-// Call after validateExecution: coverage links must name checks that run, not
-// merely declarations that happen to exist in a model or a comment.
+// Over a scheduled manifest (scheduleExecution) after validateExecution:
+// coverage links must name checks that run, not merely declarations that
+// happen to exist in a model or a comment.
 export function scheduledProperties(manifest) {
   return new Set(manifest.models.flatMap(model => [...model.invariants, ...model.regressions].map(name => `${model.path}:${name}`)));
 }
 
+// The audit entry point also anchors every catalog edit in the port text.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  console.log(JSON.stringify(validateExecution(process.argv.includes('--stdin')
-    ? JSON.parse(readFileSync(0, 'utf8')) : undefined), null, 2));
+  const summary = validateExecution(process.argv.includes('--stdin') ? JSON.parse(readFileSync(0, 'utf8')) : undefined);
+  const catalog = readMutantCatalog();
+  console.log(JSON.stringify({ ...summary, mutantAnchors: { mutants: catalog.mutations.size, files: checkMutantAnchors(catalog).size } }, null, 2));
 }

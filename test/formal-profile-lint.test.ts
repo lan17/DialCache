@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,7 +42,8 @@ const fixtureNames = [
   "kernel", "kernel-leaky", "library", "profile-clean", "profile-thick", "profile-nested-let", "profile-lambda-assign", "profile-shadow",
   "profile-witness-choice", "profile-witness-projection", "profile-witness-guard", "profile-witness-deep", "profile-witness-domain",
   "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick", "composition-nondet-inline",
-  "composition-action-argument", "composition-wiring-passes",
+  "composition-action-argument", "composition-wiring-passes", "composition-lambda-argument", "composition-named-operator-argument",
+  "composition-lambda-through-helper", "library-alias", "composition-alias-typed-operator-position", "composition-aliased-transition",
 ];
 // Quint's effect checker rejects an operator constant that reads a variable
 // (QNT201), so this route can only be shown on the parsed IR; the lint must
@@ -176,6 +177,59 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
       { definition: "bumpWrapper", detail: "igt over cache state in the value of the argument delta of bumpBy", chain: ["bumpWrapper"] },
       { definition: "bumpWrapper", detail: "ite over cache state in the value of the argument delta of bumpBy", chain: ["bumpWrapper"] },
       { definition: "scaleBy", detail: "imul over cache state in the value of s", chain: ["scaleWrapper", "scaleBy"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a higher-order kernel definition a profile instantiates with a lambda, whatever its body does", async () => {
+    const report = await lintModel(fixture("composition-lambda-argument"), { kernelModules: ["library"] });
+    expect(report.composition.publicActions).toEqual(["init", "bumpWrapper", "step"]);
+    // The lambda's body composes a library transition; the call to the fold itself is the violation.
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "higher-order library::repeat instantiated in the value of s", chain: ["bumpWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a higher-order kernel definition a profile instantiates with an operator passed by name", async () => {
+    const report = await lintModel(fixture("composition-named-operator-argument"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    // The operator's own body reads only its parameters, which the walk cannot
+    // taint; the judgment is the higher-order definition, not the argument.
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "higher-order library::repeat instantiated in the value of s", chain: ["bumpWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a higher-order kernel definition instantiated inside a profile helper, in the helper", async () => {
+    const report = await lintModel(fixture("composition-lambda-through-helper"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "repeatWith", detail: "higher-order library::repeat instantiated in the value of s", chain: ["bumpWrapper", "repeatWith"] },
+    ]);
+  }, quintTimeout);
+
+  it("judges a kernel definition whose operator parameter is typed through an alias, or a chain of aliases, as higher-order", async () => {
+    const report = await lintModel(fixture("composition-alias-typed-operator-position"), { kernelModules: ["library_alias"] });
+    expect(report.composition.libraryTransitions).toEqual(["library_alias::bump", "library_alias::repeatChained", "library_alias::repeatVia"]);
+    // Quint records `each: Step[r]` as the alias name, not as an operator type;
+    // the typedef it resolves to is the operator type, so every instantiation
+    // is reported, the one passing the kernel's own step included.
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "higher-order library_alias::repeatVia instantiated in the value of s", chain: ["bumpWrapper"] },
+      { definition: "chainedWrapper", detail: "higher-order library_alias::repeatChained instantiated in the value of s", chain: ["chainedWrapper"] },
+      { definition: "kernelStepWrapper", detail: "higher-order library_alias::repeatVia instantiated in the value of s", chain: ["kernelStepWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("judges a kernel definition applied through a profile alias as the kernel's application", async () => {
+    const report = await lintModel(fixture("composition-aliased-transition"), { kernelModules: ["library"] });
+    // `bumpAlias` and `repeatAlias` resolve to the kernel definitions: both
+    // transitions are recorded under the kernel's names, so aliasing cannot
+    // empty the list the composed-violations gate keys on, and the
+    // higher-order fold is reported at the wrapper that applies it.
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "repeatWrapper", detail: "higher-order library::repeat instantiated in the value of s", chain: ["repeatWrapper"] },
     ]);
   }, quintTimeout);
 
@@ -370,7 +424,7 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
   it("matches the committed baseline for every conformance profile", async () => {
     const { expected, actual, differences } = await checkBaseline();
     expect(differences).toEqual([]);
-    expect(actual.profiles.length).toBe(15);
+    expect(actual.profiles.length).toBe((JSON.parse(readFileSync(new URL("../formal/profiles.json", import.meta.url), "utf8")) as { profiles: unknown[] }).profiles.length);
     expect(expected.kernelModules).toEqual(kernelModulesOf());
     // A composed profile has no composition violation; every other count is
     // that profile's migration work list.

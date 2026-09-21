@@ -1,8 +1,11 @@
 # Executable DialCache specification
 
 Quint defines the portable contracts that TypeScript, Go and future ports must
-preserve. Native drivers execute external commands against the real libraries;
-generated expectations stay in the test coordinator.
+preserve. TypeScript is the executable reference those contracts formalize; a
+disagreement between the two is settled by a distinguishing regression and a
+recorded decision, not by editing the easier side. Native drivers execute
+external commands against the real libraries; generated expectations stay in
+the test coordinator.
 
 ## Start with your task
 
@@ -45,7 +48,7 @@ calling the helper they are meant to challenge.
 Read [cache-rules.qnt](./cache-rules.qnt) and
 [cache-contract.qnt](./cache-contract.qnt) for shared judgments and acquired
 ownership records. [SPEC.md](./SPEC.md#definition-ownership-and-executable-connections)
-maps them to the five checked profile connections.
+maps them to the four checked profile connections.
 [dialcache-rule-checks.qnt](./dialcache-rule-checks.qnt) supplies the finite
 symbolic boundary checks.
 
@@ -55,10 +58,8 @@ The verification models emphasize individual ownership or safety boundaries:
 | --- | --- |
 | [dialcache-core.qnt](./dialcache-core.qnt) | Enabled scopes, traversal and publication |
 | [dialcache-runtime-policy.qnt](./dialcache-runtime-policy.qnt) | Sparse overlays and captured policy |
-| [dialcache-flight-deadlines.qnt](./dialcache-flight-deadlines.qnt) | Flights, deadlines and abandoned sources |
 | [dialcache-tracked-invalidation.qnt](./dialcache-tracked-invalidation.qnt) | Acquired snapshots, watermarks and delayed writes |
 | [dialcache-stale-recovery.qnt](./dialcache-stale-recovery.qnt) | Retained bytes, age checks and recovery authority |
-| [dialcache-shadow-validation.qnt](./dialcache-shadow-validation.qnt) | Diagnostic C0/source/C1 work and fills |
 | [dialcache-redis-protocol.qnt](./dialcache-redis-protocol.qnt) | Frame/fence validation order |
 
 Conformance profiles expose external commands that both language drivers replay:
@@ -180,8 +181,9 @@ and their corresponding tests. Local-clock uses feature selectors with
 
 ## Evidence and scope
 
-[execution.json](./execution.json) schedules model properties, regressions,
-exports and bounds. [profiles.json](./profiles.json) declares the replay profiles.
+[execution.json](./execution.json) schedules model properties, exports and
+bounds; every run a scheduled model declares is one of its regressions.
+[profiles.json](./profiles.json) declares the replay profiles.
 [SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md) explains witness and mutation evidence.
 Query the inventories instead of copying changing totals between documents:
 

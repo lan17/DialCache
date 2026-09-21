@@ -1005,19 +1005,20 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "35f00c622fc42ab636fd915b15e61dbb5bd8bfdc89715e1c85fa359bbec4e1d1",
+      "sha256": "abbda4d86306771ce8c8bd4df66134acaac0eb66966accba70d3b3d544f19b8f",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
-        {"line":16,"title":"Reading a model"},
-        {"line":56,"title":"Writing conventions"},
-        {"line":150,"title":"Codifying the next behavior"},
-        {"line":183,"title":"Give reviewers focused context"},
-        {"line":198,"title":"Exporting a deterministic regression"},
-        {"line":234,"title":"Maintaining case and witness evidence"},
-        {"line":282,"title":"Reproducible committed fixtures"},
-        {"line":292,"title":"Refactoring and execution"},
-        {"line":317,"title":"Challenging every model"},
-        {"line":389,"title":"Exported runs are exactly the public-only runs"}
+        {"line":20,"title":"Reading a model"},
+        {"line":61,"title":"Writing conventions"},
+        {"line":159,"title":"Codifying the next behavior"},
+        {"line":208,"title":"Give reviewers focused context"},
+        {"line":223,"title":"Exporting a deterministic regression"},
+        {"line":261,"title":"Maintaining case and witness evidence"},
+        {"line":314,"title":"Reproducible committed fixtures"},
+        {"line":324,"title":"Refactoring and execution"},
+        {"line":352,"title":"Challenging every model"},
+        {"line":425,"title":"Mapping every challenge to native mutants"},
+        {"line":511,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1026,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "f62fdee1d5d8335383f99afedcd13c172aa6cb244159360c28457189aa771b08",
+      "sha256": "999ead7066aa1b178912530020bdef6f9aa10670a1dc1351feacde2c442d0527",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1153,7 +1154,7 @@
     },
     {
       "path": "formal/CONTRACTS.md",
-      "sha256": "c7add8b75ef29e5b8618b78263a4ff3dc326bd550d8f03d0407d17c968061350",
+      "sha256": "5dd880c3ca427206a3c28fd0e26c4f0ff202e37a053f0b10ea050c3a5869b267",
       "entries": [
         {"line":1,"title":"Portable contract inventory"},
         {"line":11,"title":"Where the boundary lies"},
@@ -1256,14 +1257,14 @@
     },
     {
       "path": "formal/FEATURE-COVERAGE.md",
-      "sha256": "b218c442c6202f08497c92fed024210e466b1ab28bf686c618c9fd7122b7ba37",
+      "sha256": "81312d747f7af78d518462f3b0ab7641c1aa101dcbdf478cb3f9105c0f48b1b3",
       "entries": [
         {"line":1,"title":"DialCache features and known behavioral corners"},
         {"line":16,"title":"What is accounted for"},
-        {"line":43,"title":"Feature map"},
-        {"line":63,"title":"How a corner earns evidence"},
-        {"line":112,"title":"Native adaptations are explicit contracts"},
-        {"line":150,"title":"Remaining finite limits"}
+        {"line":42,"title":"Feature map"},
+        {"line":62,"title":"How a corner earns evidence"},
+        {"line":111,"title":"Native adaptations are explicit contracts"},
+        {"line":149,"title":"Remaining finite limits"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1272,13 +1273,13 @@
     },
     {
       "path": "formal/GO-PARITY.md",
-      "sha256": "6710539770731259b721165c1fddf9974626d12274e6ebabe5c026d2898de648",
+      "sha256": "2db023f6fa8c8c7c654cb52a53499cd1041615be300eda4925b1ef7420db4e31",
       "entries": [
         {"line":1,"title":"Go parity acceptance"},
         {"line":52,"title":"Required evidence"},
-        {"line":110,"title":"Reading and updating the ledger"},
-        {"line":154,"title":"Native clock precision"},
-        {"line":187,"title":"Current configuration and observability bindings"}
+        {"line":111,"title":"Reading and updating the ledger"},
+        {"line":163,"title":"Native clock precision"},
+        {"line":196,"title":"Current configuration and observability bindings"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1287,18 +1288,18 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "ae7780bea1efc026232b3b48af92bce6f40df9591d6fc633c9c6130cea1ebd5f",
+      "sha256": "2807f483a12eabe71fa7ead0d19df2d1dcf9f106da86b69d03555956472c167e",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
         {"line":45,"title":"Shared coordinator protocol"},
-        {"line":84,"title":"Trace and observation contract"},
-        {"line":146,"title":"Observation contract"},
-        {"line":222,"title":"Generated fixtures and fast local tests"},
-        {"line":257,"title":"Complete corpus and reusable acceptance checks"},
-        {"line":365,"title":"Witness evidence"},
-        {"line":455,"title":"Current limitations for a third port"},
-        {"line":469,"title":"New-port acceptance"}
+        {"line":88,"title":"Trace and observation contract"},
+        {"line":189,"title":"Observation contract"},
+        {"line":287,"title":"Generated fixtures and fast local tests"},
+        {"line":322,"title":"Complete corpus and reusable acceptance checks"},
+        {"line":430,"title":"Witness evidence"},
+        {"line":520,"title":"Current limitations for a third port"},
+        {"line":542,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1346,14 +1347,14 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "0317648114092eae71371cff05fe40d049be4f66f87002074fa1b6fef46f53a1",
+      "sha256": "7edd8ccbb9d6dc4d3e528c085e6b4337b540f4e793f827b1a7867dc64f30c86a",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
-        {"line":7,"title":"Start with your task"},
-        {"line":23,"title":"How the specification connects to code"},
-        {"line":43,"title":"Models and composition profiles"},
-        {"line":94,"title":"Generating and replaying behavior"},
-        {"line":181,"title":"Evidence and scope"}
+        {"line":10,"title":"Start with your task"},
+        {"line":26,"title":"How the specification connects to code"},
+        {"line":46,"title":"Models and composition profiles"},
+        {"line":95,"title":"Generating and replaying behavior"},
+        {"line":182,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1362,16 +1363,16 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "36dfebb6bfe76998f42ae0880ba5f9a984e6c5cd4376c2aef55b189cf12cdc65",
+      "sha256": "1d026f63937685a63f9f7f90339aa1d88696046a56083dc16a82b19a64adb807",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
-        {"line":47,"title":"Model assurance"},
-        {"line":102,"title":"Generated boundary evidence"},
-        {"line":110,"title":"Behavioral mutation comparison"},
-        {"line":124,"title":"Recorded measurements"},
-        {"line":130,"title":"Reproduction and CI"},
-        {"line":172,"title":"Model properties and cross-language execution"}
+        {"line":65,"title":"Model assurance"},
+        {"line":128,"title":"Generated boundary evidence"},
+        {"line":136,"title":"Behavioral mutation comparison"},
+        {"line":150,"title":"Recorded measurements"},
+        {"line":156,"title":"Reproduction and CI"},
+        {"line":198,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1380,17 +1381,17 @@
     },
     {
       "path": "formal/SPEC.md",
-      "sha256": "33d5c3074a9b6009e84fddac3ee4c3fb4b64e950b8fe33242a680b6cacefa922",
+      "sha256": "04fab67afcdac644a24b622072c425a3ecca68e9689c61563e8c9144c6ab1f9a",
       "entries": [
         {"line":1,"title":"DialCache behavioral specification"},
-        {"line":15,"title":"Definition ownership and executable connections"},
-        {"line":53,"title":"Meaning of conformance"},
-        {"line":85,"title":"State and environmental inputs"},
-        {"line":110,"title":"Admission, policy, and traversal"},
-        {"line":159,"title":"Remote acquisition and publication"},
-        {"line":200,"title":"Time, source acceptance, and progress"},
-        {"line":230,"title":"Recovery, shadow work, and invalidation races"},
-        {"line":268,"title":"Assumptions, evidence, and claims"}
+        {"line":18,"title":"Definition ownership and executable connections"},
+        {"line":55,"title":"Meaning of conformance"},
+        {"line":87,"title":"State and environmental inputs"},
+        {"line":112,"title":"Admission, policy, and traversal"},
+        {"line":161,"title":"Remote acquisition and publication"},
+        {"line":202,"title":"Time, source acceptance, and progress"},
+        {"line":232,"title":"Recovery, shadow work, and invalidation races"},
+        {"line":270,"title":"Assumptions, evidence, and claims"}
       ],
       "review": {
         "kind": "contract-guide",
@@ -1485,7 +1486,7 @@
     },
     {
       "path": "formal/TEST-MAP.md",
-      "sha256": "b41628eb0cf5fe7c3a24334bf88e758c93b5c7fcd885e9dbf67a6959aaa8d3b5",
+      "sha256": "5e900759ff92b754130a856e49b5e977b97a359bce6e725957cd40118fe167c7",
       "entries": [
         {"line":1,"title":"Formal contract and implementation evidence map"},
         {"line":18,"title":"Behavioral map"},
@@ -1501,15 +1502,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "79d61df9534e7a1db8a1b4819076e7cc7a4e7aff43281756e9135d95f86e1308",
+      "sha256": "b7211947e99a84098ae07879c8be22862c00bcb83f91d0ef0f0ee3e4143bcf6c",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
-        {"line":67,"title":"Reading a completion report"},
-        {"line":85,"title":"Mutation evidence"},
-        {"line":146,"title":"Exploratory runs"},
-        {"line":194,"title":"A retained sampling regression"},
-        {"line":231,"title":"Historical results"}
+        {"line":72,"title":"Reading a completion report"},
+        {"line":90,"title":"Mutation evidence"},
+        {"line":171,"title":"Exploratory runs"},
+        {"line":219,"title":"A retained sampling regression"},
+        {"line":256,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1518,13 +1519,13 @@
     },
     {
       "path": "formal/WALKTHROUGH.md",
-      "sha256": "a2e81aaab41c65c8ba02aa0fb80c1cbf6e8ba442d00913a87ac82c5935cee242",
+      "sha256": "86ec1c60442e2dc1f6912d27a28924e42a32824e0a7c19fccbdb8d69d3b8a2e4",
       "entries": [
         {"line":1,"title":"Follow one behavior from Quint to both ports"},
         {"line":14,"title":"Read the named run first"},
         {"line":58,"title":"Follow input and evidence separately"},
         {"line":93,"title":"Find the rule's catalog entries"},
-        {"line":120,"title":"Run this example"}
+        {"line":119,"title":"Run this example"}
       ],
       "review": {
         "kind": "tooling-guide",

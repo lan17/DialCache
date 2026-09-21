@@ -11,9 +11,17 @@
 //   decoding. A comparison, branch, arithmetic or collection operator over
 //   cache state, or a non-library definition applied to cache state, is rule
 //   logic in the profile and is reported with the chain action -> helper ->
-//   ... -> the definition that computes it. profile-lint-baseline.json records
-//   each profile's count: a composed profile has zero and the other counts are
-//   the migration work list.
+//   ... -> the definition that computes it. A kernel definition that takes an
+//   operator (a parameter declared with an operator type, spelled inline or
+//   through a type alias resolved to its typedef; `deadlines::deliver` today)
+//   is instantiated only inside the kernel: its operator is rule logic the
+//   library would run where the walk cannot follow it, so a reference to such
+//   a definition from a profile's assigned value, as the callee (directly or
+//   through a `def x = <kernel name>` alias of the profile's, judged as the
+//   kernel's application) or by name, is reported whatever the argument is.
+//   profile-lint-baseline.json
+//   records each profile's count: a composed profile has zero and the other
+//   counts are the migration work list.
 // - Witness isolation: no definition reachable from a cache guard, a cache
 //   assignment, the profile's init or step, an input-choice domain (the
 //   expression of a `nondet ... .oneOf()`), an observation projection (the
@@ -23,7 +31,14 @@
 //   assignment to a witness variable is not walked.
 //
 // Quint IR facts the walk relies on (verified against Quint 0.32.0): a
-// parametrized definition is a `def` whose `expr` is a `lambda`; `x' = e` is an
+// parametrized definition is a `def` whose `expr` is a `lambda`; a declared
+// type is the declaration's `typeAnnotation`, an `oper` whose `args` are the
+// parameter types for a parametrized definition (every kernel definition
+// declares one, as does the constructor Quint synthesizes for a sum type's
+// variant); a parameter typed through a type alias is recorded as a `const`
+// type naming the alias (wrapped in an `app` whose `ctor` is that `const` when
+// the alias takes type parameters), and the table maps the `const`'s id to a
+// `typedef` entry whose `type` is the aliased type; `x' = e` is an
 // `app` with opcode `assign` and arguments `[name x, e]`; `nondet c = D.oneOf()`
 // is a `let` whose `opdef` has qualifier `nondet`; `import M(C = e) as K` is an
 // `instance` declaration with `overrides: [[{ name }, e]]`; `K::x` resolves to
@@ -116,7 +131,7 @@ export function indexModules(parsed, { main } = {}) {
   const labelOf = (module, name) => module === mainModule ? name : `${module}::${name}`;
   const register = (declaration, module, owner) => {
     declarations.set(declaration.id, { id: declaration.id, kind: declaration.kind, name: declaration.name,
-      qualifier: declaration.qualifier, module, owner, expr: declaration.expr });
+      qualifier: declaration.qualifier, module, owner, expr: declaration.expr, typeAnnotation: declaration.typeAnnotation });
   };
   for (const module of parsed.modules) {
     for (const declaration of module.declarations) {
@@ -277,6 +292,50 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
     const key = `${node.key}|${detail}`;
     if (!violations.has(key)) violations.set(key, { definition: node.label, detail, chain });
   };
+  // Whether a declared parameter type is an operator type: spelled inline, or
+  // a type alias (`type Step[r] = (Counter[r], int) => Counter[r]`, recorded as
+  // a `const` type name, applied to its arguments when the alias takes type
+  // parameters) whose typedef the lookup table resolves to one, following
+  // alias chains. An alias the table does not resolve is an error here, not a
+  // parameter silently taken for a value.
+  const isOperatorType = (type, declaration, seen = new Set()) => {
+    if (type.kind === 'oper') return true;
+    const alias = type.kind === 'const' ? type : type.kind === 'app' && type.ctor?.kind === 'const' ? type.ctor : undefined;
+    if (alias === undefined) return false;
+    const typedef = index.table[alias.id];
+    if (typedef?.kind !== 'typedef') {
+      throw new Error(`Kernel definition ${index.labelOf(declaration.module, declaration.name)} declares the parameter type ${alias.name}, which resolves to no type declaration; the composition rule judges higher-order definitions from declared parameter types`);
+    }
+    // An uninterpreted type or a cyclic alias names no operator.
+    if (typedef.type === undefined || seen.has(typedef.id)) return false;
+    return isOperatorType(typedef.type, declaration, seen.add(typedef.id));
+  };
+  // The kernel definitions that take an operator: a parameter declared with
+  // an operator type (kernel definitions declare their parameter types; a
+  // parametrized one without a declared type is an error here, not a
+  // definition silently taken for first-order). A profile may not instantiate
+  // one, whatever it passes: its operator is rule logic the library would run
+  // where the walk cannot follow it, so the kernel's own variants supply it.
+  const higherOrder = new Set();
+  for (const declaration of index.declarations.values()) {
+    if (!isKernel(declaration) || declaration.owner !== String(declaration.id)) continue;
+    const type = declaration.typeAnnotation;
+    if (declaration.kind === 'def' && declaration.expr?.kind === 'lambda' && type === undefined) {
+      throw new Error(`Kernel definition ${index.labelOf(declaration.module, declaration.name)} declares no type; the composition rule judges higher-order definitions from declared parameter types`);
+    }
+    if (type?.kind === 'oper' && type.args.some(argument => isOperatorType(argument, declaration))) higherOrder.add(declaration.id);
+  }
+  // The kernel definition a callee is, directly or through `def x = <name>`
+  // aliases and let-bound names (a `def` whose expr is a `name`); undefined
+  // when the chain ends outside the kernel. A kernel definition applied
+  // through a profile alias is judged and recorded as the kernel's application,
+  // so aliasing cannot empty a profile's recorded transitions.
+  const kernelCallee = (declaration, seen = new Set()) => {
+    if (isKernel(declaration)) return declaration;
+    if (declaration?.kind !== 'def' || declaration.expr?.kind !== 'name' || seen.has(declaration.id)) return undefined;
+    return kernelCallee(resolveTarget(index, declaration.expr), seen.add(declaration.id));
+  };
+  const higherOrderLabel = declaration => higherOrder.has(declaration.id) ? index.labelOf(declaration.module, declaration.name) : undefined;
   // Walks one expression; returns whether its value carries cache state.
   // `tainted` maps parameter and let names of the walked body to state taint.
   const walk = (expr, { node, chain, tainted, variable }) => {
@@ -292,7 +351,11 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
         if (declaration.qualifier === 'nondet') return false;
         if (declaration.owner === node.key && !tainted.has(expr.name)) return again(declaration.expr);
         if (declaration.owner === node.key) return tainted.get(expr.name) === true;
-        return isKernel(declaration) ? false : callProfile(declaration, [], { node, chain, variable });
+        if (isKernel(declaration)) {
+          if (higherOrderLabel(declaration)) report(node, chain, `higher-order ${higherOrderLabel(declaration)} named in the value of ${variable}`);
+          return false;
+        }
+        return callProfile(declaration, [], { node, chain, variable });
       }
       case 'lambda': {
         const inner = new Map(tainted);
@@ -311,8 +374,14 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
     const declaration = resolveTarget(index, expr);
     const stateful = expr.args.map(again);
     if (declaration) {
-      if (isKernel(declaration)) {
-        if (declaration.kind === 'def') transitions.add(index.labelOf(declaration.module, declaration.name));
+      // The kernel definition applied, named directly or through a profile
+      // alias: its transition is recorded, and one that takes an operator is
+      // reported whatever the argument.
+      const kernelDefinition = kernelCallee(declaration);
+      if (kernelDefinition) {
+        const label = index.labelOf(kernelDefinition.module, kernelDefinition.name);
+        if (kernelDefinition.kind === 'def') transitions.add(label);
+        if (higherOrderLabel(kernelDefinition)) report(node, chain, `higher-order ${label} instantiated in the value of ${variable}`);
         return true;
       }
       // A definition bound inside this body: its lambda parameters take the

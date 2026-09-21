@@ -160,6 +160,21 @@ describe("policy witnesses from inputs and public observations", () => {
       expect(witnesses("probe", states).has(`independent-${layer}-last-completion-probed`)).toBe(false);
     });
 
+  it.each([
+    ["remoteHitStartsFullLocalInsertionTtlTest", "remote-hit-local-ttl-outlives-remote-freshness"],
+    ["independentRemotePublicationUsesLastCompletionTest", "independent-remote-last-completion-probed"],
+  ])("%s needs the later probe that reads the warmed or last-written value", (name, witness) => {
+    const states = history(name);
+    states.pop();
+    expect(witnesses("probe", states).has(witness)).toBe(false);
+  });
+
+  it("overlapping sources under a coalescing overlay are not independent last writers", () => {
+    const states = history("independentRemotePublicationUsesLastCompletionTest");
+    rechoose(nth(states, "policy"), 3);
+    expect(witnesses("probe", states).has("independent-remote-last-completion-probed")).toBe(false);
+  });
+
   it("an overlapping source with an active remote layer is not an inactive-layers overlap", () => {
     const states = history("inactiveLayersStartIndependentSources");
     rechoose(nth(states, "policy"), 3);

@@ -20,40 +20,29 @@
       "redisWrites": true
     },
     "effects": {
-      "acceptedAt": true,
-      "acceptedWall": true,
-      "activeLoader": true,
-      "activeRead": true,
-      "baseReadBudget": true,
-      "calls": true,
-      "deadline": true,
-      "decodeStarted": true,
-      "dumps": true,
-      "events": true,
-      "invalidations": true,
-      "loaders": true,
-      "loads": true,
-      "now": true,
-      "observedFence": true,
-      "observerFailed": true,
-      "phase": true,
-      "policyCalls": true,
-      "readAborts": true,
-      "readBudget": true,
-      "readBudgets": true,
-      "readStarted": true,
-      "readStates": true,
-      "reads": true,
-      "refill": true,
-      "reply": true,
-      "replyAt": true,
-      "sources": true,
-      "storedTimestamp": true,
-      "tracked": true,
-      "wall": true,
-      "watermark": true,
-      "writeTimestamp": true,
-      "writes": true
+      "o": {
+        "calls": true,
+        "classifications": true,
+        "comparisons": true,
+        "dumps": true,
+        "invalidations": true,
+        "loaders": true,
+        "loads": true,
+        "maintenance": true,
+        "policyCalls": true,
+        "reads": true,
+        "recovery": true,
+        "shadow": true,
+        "sourceScopes": true,
+        "writeTtls": true,
+        "writes": true
+      },
+      "io": {
+        "aborted": true,
+        "budgets": true,
+        "sourceErrors": true
+      },
+      "events": true
     },
     "scope": {
       "o": {
@@ -208,166 +197,40 @@
         "sourceErrors": true
       }
     },
-    "recovery-read": {
-      "acceptedFresh": true,
-      "acceptedMaximum": true,
-      "activeSource": true,
-      "canRecover": true,
-      "canWrite": true,
-      "candidate": true,
-      "candidateCreated": true,
-      "closed": true,
-      "compression": true,
-      "created": true,
-      "expires": true,
-      "frame": true,
-      "freshMs": true,
+    "independent-shadow": {
+      "deadlines": true,
+      "drained": true,
       "io": {
         "aborted": true,
         "budgets": true,
         "sourceErrors": true
       },
-      "localExpires": true,
-      "localValue": true,
-      "localVersion": true,
-      "markerExpires": true,
-      "markers": true,
-      "maximumMs": true,
-      "memo": true,
-      "now": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "observedFence": true,
-      "phase": true,
-      "readReceipts": true,
-      "recoveryReceipts": true,
-      "scope": true,
-      "tracked": true,
-      "wall": true,
-      "watermark": true,
-      "writeFailed": true,
-      "writeReceipts": true
-    },
-    "local-failure": {
-      "acceptedRemote": true,
-      "failed": true,
-      "localBefore": true,
-      "localMiss": true,
-      "localValue": true,
-      "memo": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "pending": true,
-      "readFailed": true,
-      "receipts": true,
-      "remoteEnabled": true,
-      "remoteValue": true,
-      "scope": true
-    },
-    "shadow-layers": {
-      "calls": true,
-      "dumps": true,
-      "jobs": true,
-      "localExpires": true,
-      "localValues": true,
-      "localWriters": true,
-      "memo": true,
-      "now": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "policy": {
-        "choice": true,
-        "freshMs": true,
-        "local": true,
-        "request": true,
-        "retainedMs": true,
-        "serving": true,
-        "shadow": true
-      },
-      "remoteCreated": true,
-      "remoteExpires": true,
-      "remoteValues": true,
-      "sources": true,
-      "work": true,
-      "writes": true
-    },
-    "local-clock": {
-      "constructed": true,
-      "entries": true,
-      "fills": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "probes": true,
-      "ticks": true
-    },
-    "effects-13": {
-      "calls": true,
-      "reads": true,
       "loaders": true,
       "loads": true,
-      "dumps": true,
-      "writes": true,
-      "events": true
+      "now": true,
+      "o": {
+        "calls": true,
+        "classifications": true,
+        "comparisons": true,
+        "dumps": true,
+        "invalidations": true,
+        "loaders": true,
+        "loads": true,
+        "maintenance": true,
+        "policyCalls": true,
+        "reads": true,
+        "recovery": true,
+        "shadow": true,
+        "sourceScopes": true,
+        "writeTtls": true,
+        "writes": true
+      },
+      "owners": true,
+      "readBudget": true,
+      "reads": true,
+      "retained": true,
+      "sources": true,
+      "ttls": true
     },
     "layers": {
       "capacity": true,
@@ -405,174 +268,7 @@
       "tracked": true,
       "watermark": true
     },
-    "recovery": {
-      "acceptedMaxAge": true,
-      "candidate": true,
-      "candidateCreated": true,
-      "classifier": true,
-      "created": true,
-      "deadline": true,
-      "expires": true,
-      "frame": true,
-      "loadFailed": true,
-      "maxAge": true,
-      "now": true,
-      "phase": true,
-      "readFailed": true,
-      "wall": true,
-      "watermark": true,
-      "o": {
-        "calls": true,
-        "reads": true,
-        "loads": true,
-        "loaders": true,
-        "classifications": true,
-        "dumps": true,
-        "writes": true,
-        "recovery": true,
-        "shadow": true
-      },
-      "d": {
-        "ages": true
-      }
-    },
-    "shadow-16": {
-      "abandoned": true,
-      "c0": true,
-      "created": true,
-      "deadline": true,
-      "frame": true,
-      "loadFailed": true,
-      "now": true,
-      "phase": true,
-      "readFailed": true,
-      "wall": true,
-      "watermark": true,
-      "writeFailed": true,
-      "o": {
-        "calls": true,
-        "reads": true,
-        "loads": true,
-        "loaders": true,
-        "classifications": true,
-        "dumps": true,
-        "writes": true,
-        "recovery": true,
-        "shadow": true
-      },
-      "d": {
-        "ages": true
-      }
-    },
-    "recovery-17": {
-      "acceptedMaxAge": true,
-      "activeLoader": true,
-      "attached": true,
-      "canRecover": true,
-      "canWrite": true,
-      "candidate": true,
-      "candidateCreated": true,
-      "classifier": true,
-      "closed": true,
-      "created": true,
-      "d": {
-        "ages": true,
-        "coalesced": true,
-        "fallbackErrors": true,
-        "warnings": true
-      },
-      "deadline": true,
-      "expires": true,
-      "frame": true,
-      "instanceClassifier": true,
-      "loadFailed": true,
-      "maxAge": true,
-      "memo": true,
-      "now": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "observedFence": true,
-      "phase": true,
-      "readFailed": true,
-      "request": true,
-      "sourceError": true,
-      "sources": true,
-      "wall": true,
-      "watermark": true
-    },
-    "shadow-18": {
-      "abandoned": true,
-      "acceptedInvalidLog": true,
-      "acceptedLog": true,
-      "c0": true,
-      "c0Created": true,
-      "comparator": true,
-      "comparisonMs": true,
-      "created": true,
-      "d": {
-        "ages": true,
-        "coalesced": true,
-        "configErrors": true,
-        "fallbackErrors": true,
-        "warnings": true
-      },
-      "deadline": true,
-      "defaultLog": true,
-      "dumpFailed": true,
-      "fence": true,
-      "frame": true,
-      "hook": true,
-      "invalidLog": true,
-      "invalidShadow": true,
-      "loadFailed": true,
-      "log": true,
-      "mismatchAuthorizations": true,
-      "now": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "phase": true,
-      "readFailed": true,
-      "shadowActive": true,
-      "source": true,
-      "sourcePending": true,
-      "sourceValue": true,
-      "sourceWorkMs": true,
-      "wall": true,
-      "watermark": true,
-      "writeFailed": true,
-      "writeStamp": true
-    },
-    "recovery-read-19": {
+    "recovery-read": {
       "o": {
         "calls": true,
         "classifications": true,
@@ -1320,7 +1016,7 @@
             ["beginCall", 2],
             ["beginCall", 0]
           ],
-          "projection": "local-failure"
+          "projection": "observations"
         }
       ]
     },
@@ -1363,7 +1059,7 @@
             ["policy", 12],
             ["beginCall", 9]
           ],
-          "projection": "shadow-layers"
+          "projection": "observations"
         }
       ]
     },
@@ -1389,12 +1085,9 @@
             ["call", 1],
             ["call", 3]
           ],
-          "projection": "local-clock"
+          "projection": "observations"
         }
-      ],
-      "actionBindings": {
-        "call": "callCache"
-      }
+      ]
     },
     {
       "path": "formal/source-budgets-smoke.itf.json",
@@ -1425,32 +1118,32 @@
         {
           "id": "observerFailuresCannotPreventCacheHitTest",
           "regression": "observerFailuresCannotPreventCacheHitTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "observerFailuresCannotPreventPublicationTest",
           "regression": "observerFailuresCannotPreventPublicationTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "observerFailuresCannotReplaceSourceErrorTest",
           "regression": "observerFailuresCannotReplaceSourceErrorTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "writeStampAfterSerializationClearsInterveningFenceTest",
           "regression": "writeStampAfterSerializationClearsInterveningFenceTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "futureFrameReportsPositiveObservingOffsetTest",
           "regression": "futureFrameReportsPositiveObservingOffsetTest",
-          "projection": "effects-13"
+          "projection": "effects"
         },
         {
           "id": "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
           "regression": "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
-          "projection": "effects-13"
+          "projection": "effects"
         }
       ]
     },
@@ -1647,9 +1340,9 @@
             ["releaseLoad", -1]
           ],
           "startState": 0,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "fenced-read-does-not-retain",
@@ -1665,10 +1358,10 @@
             ["beginCall", 0],
             ["rejectLoader", 1]
           ],
-          "startState": 4,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "startState": 0,
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "future-read-preserves-source-error",
@@ -1683,10 +1376,10 @@
             ["beginCall", 7],
             ["advance", 4000]
           ],
-          "startState": 3,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "startState": 0,
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "classifier-error-keeps-error-without-decode",
@@ -1699,9 +1392,9 @@
             ["rejectLoader", 0]
           ],
           "startState": 0,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "maximum-age-read-preserves-source-error",
@@ -1732,10 +1425,10 @@
             ["joinCall", 0],
             ["rejectLoader", 3]
           ],
-          "startState": 18,
-          "projection": "recovery",
-          "integers": "native",
-          "choices": false
+          "startState": 0,
+          "projection": "scope",
+          "integers": "itf",
+          "choices": true
         },
         {
           "id": "fenced-c1-supersedes-without-repair",
@@ -1759,10 +1452,10 @@
             ["releaseLoad", -1],
             ["releaseRead", -1]
           ],
-          "startState": 7,
-          "projection": "shadow-16",
-          "integers": "native",
-          "choices": false
+          "startState": 0,
+          "projection": "shadow",
+          "integers": "itf",
+          "choices": true
         }
       ]
     },
@@ -1794,9 +1487,9 @@
             ["releaseLoad", -1]
           ],
           "startState": 0,
-          "projection": "recovery-17",
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "last-recovery-age-serves",
@@ -1822,10 +1515,10 @@
             ["joinCall", 0],
             ["releaseLoad", -1]
           ],
-          "startState": 7,
-          "projection": "recovery-17",
+          "startState": 0,
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "exact-maximum-after-decode-rejects",
@@ -1849,9 +1542,9 @@
             ["releaseLoad", -1]
           ],
           "startState": 0,
-          "projection": "recovery-17",
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "failed-fresh-decode-is-not-recovery",
@@ -1882,10 +1575,10 @@
             ["joinCall", 0],
             ["rejectLoader", 2]
           ],
-          "startState": 13,
-          "projection": "recovery-17",
+          "startState": 0,
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "classifier-error-keeps-error-without-decode",
@@ -1898,9 +1591,9 @@
             ["rejectLoader", 0]
           ],
           "startState": 0,
-          "projection": "recovery-17",
+          "projection": "scope",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "same-c1-bytes-confirm-mismatch",
@@ -1945,10 +1638,10 @@
             ["reencode", 8],
             ["releaseRead", -1]
           ],
-          "startState": 27,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "different-c1-bytes-supersede",
@@ -1995,10 +1688,10 @@
             ["seed", 3],
             ["releaseRead", -1]
           ],
-          "startState": 30,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "late-shadow-dump-cannot-dispatch-write",
@@ -2064,10 +1757,10 @@
             ["dumpFault", 1],
             ["releaseDump", -1]
           ],
-          "startState": 47,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "fill-write-error-preserves-caller",
@@ -2089,10 +1782,10 @@
             ["writeFault", 1],
             ["releaseWrite", -1]
           ],
-          "startState": 2,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         },
         {
           "id": "dark-read-error-still-allows-source-result",
@@ -2129,10 +1822,10 @@
             ["writeFault", 0],
             ["resolveLoader", 1]
           ],
-          "startState": 22,
-          "projection": "shadow-18",
+          "startState": 0,
+          "projection": "shadow",
           "integers": "itf",
-          "choices": false
+          "choices": true
         }
       ]
     },
@@ -2159,6 +1852,11 @@
         {
           "id": "sourceFailureKeepsPreviouslyAcceptedStorageTest",
           "regression": "sourceFailureKeepsPreviouslyAcceptedStorageTest",
+          "projection": "observations"
+        },
+        {
+          "id": "rejectedSourceDoesNotSeedLocalTest",
+          "regression": "rejectedSourceDoesNotSeedLocalTest",
           "projection": "observations"
         }
       ]
@@ -2188,122 +1886,122 @@
         {
           "id": "closedRequestCannotReceiveCompressedRecoveryTest",
           "regression": "closedRequestCannotReceiveCompressedRecoveryTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "compressedRecoveryMemoizesWithoutLocalPublicationTest",
           "regression": "compressedRecoveryMemoizesWithoutLocalPublicationTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "compressedRecoveryRechecksMaximumAfterDecodeTest",
           "regression": "compressedRecoveryRechecksMaximumAfterDecodeTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "corruptCompressedReadReportsRawFallbackTest",
           "regression": "corruptCompressedReadReportsRawFallbackTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "corruptCompressedRecoveryKeepsOriginalSourceErrorTest",
           "regression": "corruptCompressedRecoveryKeepsOriginalSourceErrorTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "failedInvalidationDoesNotCreateMarkerTest",
           "regression": "failedInvalidationDoesNotCreateMarkerTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "failedInvalidationPreservesExistingMarkerTest",
           "regression": "failedInvalidationPreservesExistingMarkerTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "freshCompressedReadReportsDecompressionTest",
           "regression": "freshCompressedReadReportsDecompressionTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "freshnessAfterHeldReadTest",
           "regression": "freshnessAfterHeldReadTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "heldReadJustBeforeFreshnessBoundaryStillHitsTest",
           "regression": "heldReadJustBeforeFreshnessBoundaryStillHitsTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "laterInvalidationDoesNotRewriteObservedMissFenceTest",
           "regression": "laterInvalidationDoesNotRewriteObservedMissFenceTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
           "regression": "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "ordinaryValueWorkDoesNotCreateMarkerTest",
           "regression": "ordinaryValueWorkDoesNotCreateMarkerTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "ordinaryValueWorkDoesNotExtendMarkerTest",
           "regression": "ordinaryValueWorkDoesNotExtendMarkerTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "physicalCapDoesNotClampLogicalRecoveryTest",
           "regression": "physicalCapDoesNotClampLogicalRecoveryTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "retainedCompressedRecoverySurvivesInvalidationTest",
           "regression": "retainedCompressedRecoverySurvivesInvalidationTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "retainedSnapshotSurvivesPhysicalExpiryTest",
           "regression": "retainedSnapshotSurvivesPhysicalExpiryTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "trackedEncodingFailureSuppressesRefillTest",
           "regression": "trackedEncodingFailureSuppressesRefillTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "trackedPhysicalRetentionExpiresAtCapTest",
           "regression": "trackedPhysicalRetentionExpiresAtCapTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "trackedSourceNeedsRemoteValidationBeforeLocalReuseTest",
           "regression": "trackedSourceNeedsRemoteValidationBeforeLocalReuseTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "unsafeTimestampSkipsSerializerAndAllowsRefillTest",
           "regression": "unsafeTimestampSkipsSerializerAndAllowsRefillTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "unsupportedVersionSkipsSerializerAndAllowsRefillTest",
           "regression": "unsupportedVersionSkipsSerializerAndAllowsRefillTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "untrackedCompressedRecoveryDoesNotWarmLocalTest",
           "regression": "untrackedCompressedRecoveryDoesNotWarmLocalTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "untrackedEncodingFailureStillPublishesLocalTest",
           "regression": "untrackedEncodingFailureStillPublishesLocalTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         }
       ]
     },
@@ -2564,6 +2262,11 @@
           "projection": "policy-observations"
         },
         {
+          "id": "independentFailureKeepsSettledLocalValueTest",
+          "regression": "independentFailureKeepsSettledLocalValueTest",
+          "projection": "policy-observations"
+        },
+        {
           "id": "independentRemotePublicationUsesLastCompletionTest",
           "regression": "independentRemotePublicationUsesLastCompletionTest",
           "projection": "policy-observations"
@@ -2723,6 +2426,295 @@
             ]
           ],
           "projection": "policy-observations"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/layers-witnesses.json",
+      "model": "formal/dialcache-layers-conformance.qnt",
+      "format": "named-map",
+      "recipes": [
+        {
+          "id": "trackedWithoutRemotePublishesReusableLocalTest",
+          "regression": "trackedWithoutRemotePublishesReusableLocalTest",
+          "projection": "observations"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/independent-witnesses.json",
+      "model": "formal/dialcache-independent-conformance.qnt",
+      "format": "named-map",
+      "recipes": [
+        {
+          "id": "staggeredSourceStartsKeepIndependentBudgetsTest",
+          "regression": "staggeredSourceStartsKeepIndependentBudgetsTest",
+          "projection": "independent"
+        },
+        {
+          "id": "staggeredSourcesExpireAtTheirOwnDeadlineTest",
+          "regression": "staggeredSourcesExpireAtTheirOwnDeadlineTest",
+          "projection": "independent"
+        },
+        {
+          "id": "independentReadDeadlinesStartSeparateSourcesTest",
+          "regression": "independentReadDeadlinesStartSeparateSourcesTest",
+          "projection": "independent"
+        },
+        {
+          "id": "timedOutReadCannotAffectAnotherCallTest",
+          "regression": "timedOutReadCannotAffectAnotherCallTest",
+          "projection": "independent"
+        },
+        {
+          "id": "readFailureCannotBorrowAnotherCallsRefillTest",
+          "regression": "readFailureCannotBorrowAnotherCallsRefillTest",
+          "projection": "independent"
+        },
+        {
+          "id": "independentRecoveryAtCapturedAgeBoundaryTest",
+          "regression": "independentRecoveryAtCapturedAgeBoundaryTest",
+          "projection": "independent"
+        },
+        {
+          "id": "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+          "regression": "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+          "projection": "independent"
+        },
+        {
+          "id": "acquiredFreshDecodeSurvivesInvalidation",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "seed",
+              0
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "releaseLoad",
+              0
+            ]
+          ],
+          "projection": "independent"
+        },
+        {
+          "id": "lateSourceDoesNotAffectOtherCall",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "rejectLoader",
+              0
+            ]
+          ],
+          "projection": "independent"
+        },
+        {
+          "id": "failedRecoveryKeepsSourceError",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "failLoad",
+              0
+            ]
+          ],
+          "projection": "independent"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/independent-shadow-witnesses.json",
+      "model": "formal/dialcache-independent-conformance.qnt",
+      "format": "named-map",
+      "recipes": [
+        {
+          "id": "shadowWalk",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "failRead",
+              1
+            ],
+            [
+              "advance",
+              5
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "releaseLoad",
+              0
+            ],
+            [
+              "advance",
+              5
+            ],
+            [
+              "releaseRead",
+              2
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "resolveLoader",
+              5
+            ],
+            [
+              "rejectLoader",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              3
+            ],
+            [
+              "resolveLoader",
+              8
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              4
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "advance",
+              1000
+            ],
+            [
+              "advance",
+              5
+            ],
+            [
+              "failLoad",
+              1
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              5
+            ],
+            [
+              "rejectLoader",
+              5
+            ],
+            [
+              "failLoad",
+              2
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "invalidate",
+              -1
+            ]
+          ],
+          "projection": "independent-shadow"
         }
       ]
     }

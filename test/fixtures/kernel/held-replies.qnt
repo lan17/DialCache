@@ -16,7 +16,7 @@ module held_replies {
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
   pure val LAYOUT: Serving::Layout =
-    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false }
+    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true }
   pure val ALL: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: true }
   pure val UNCOALESCED: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: false }
   pure val REQUEST_ONLY: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: true }

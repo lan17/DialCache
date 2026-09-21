@@ -25,8 +25,7 @@ Use these sources for current totals and execution requirements:
 
 | Inventory | Authoritative source |
 | --- | --- |
-| Behavioral/wire cases and evidence links | [semantic-cases.json](./semantic-cases.json) |
-| Checked clauses and explicit limits | [quint-case-audit.json](./quint-case-audit.json) |
+| Behavioral/wire cases, evidence links and the reviewed scope of each Quint citation | [semantic-cases.json](./semantic-cases.json) |
 | Native cases and feature families | [feature-coverage.json](./feature-coverage.json) |
 | Profiles and input encodings | [profiles.json](./profiles.json) |
 | Models, properties, sampled histories, exported regressions and wire artifacts | [execution.json](./execution.json) |
@@ -101,8 +100,8 @@ and [formal-witness-attribution.test.ts](../test/formal-witness-attribution.test
 exercise this distinction. They test evidence attribution, so they receive no
 positive behavioral-case or mutation-detection credit.
 
-Each Quint citation also has a reviewed scope in
-[quint-case-audit.json](./quint-case-audit.json). A cutoff-preservation regression
+Each Quint citation in [semantic-cases.json](./semantic-cases.json) also carries
+its reviewed scope. A cutoff-preservation regression
 does not establish Redis TTL preservation, and a generic source-deadline
 property does not establish separate budgets for two independent calls.
 Definitions describe behavior; only scheduled invariants/regressions count as

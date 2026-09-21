@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -137,13 +138,23 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 	// (which holds the witness classifiers) and the profile's witness sources.
 	expectedInputs := []string{"formal/profiles.json", "formal/coverage-witnesses.json", "formal/execution.json", "formal/dialcache-" + profile + "-conformance.qnt", "formal/conformance-observations.qnt"}
 	var execution struct {
-		Libraries []string `json:"libraries"`
+		Models []struct {
+			Path string `json:"path"`
+		} `json:"models"`
 	}
 	executionRaw, err := os.ReadFile(filepath.Join(root, "formal/execution.json"))
 	if err != nil {
 		return err
 	}
 	if err := json.Unmarshal(executionRaw, &execution); err != nil {
+		return err
+	}
+	claimed := map[string]bool{}
+	for _, model := range execution.Models {
+		claimed[model.Path] = true
+	}
+	libraries, err := quintLibraries(root, claimed)
+	if err != nil {
 		return err
 	}
 	var definitions struct {
@@ -163,7 +174,7 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 	if err != nil {
 		return err
 	}
-	additional := append([]string{}, execution.Libraries...)
+	additional := append([]string{}, libraries...)
 	additional = append(additional, sharedSources...)
 	for _, definition := range definitions.Profiles {
 		if definition.ID == profile {
@@ -221,6 +232,32 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 		return fmt.Errorf("unaccounted replay traces")
 	}
 	return nil
+}
+
+// quintLibraries lists every Quint source under formal/ and formal/kernel/
+// that no scheduled model claims, sorted, as formal/execution.mjs derives the
+// libraries the witness evidence binds.
+func quintLibraries(root string, claimed map[string]bool) ([]string, error) {
+	libraries := []string{}
+	for _, folder := range []string{"formal", "formal/kernel"} {
+		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(folder)))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".qnt") {
+				continue
+			}
+			if path := folder + "/" + entry.Name(); !claimed[path] {
+				libraries = append(libraries, path)
+			}
+		}
+	}
+	sort.Strings(libraries)
+	return libraries, nil
 }
 
 // A history's kind follows the corpus layout the shared evaluator classifies
@@ -343,7 +380,7 @@ func TestWitnessEvidenceBindsSharedReplaySources(t *testing.T) {
 	}
 	write("formal/profiles.json", `{"profiles":[{"id":"effects"}],"replaySources":["formal/replay/coordinator.mjs","formal/replay/mapping.mjs"]}`)
 	write("formal/coverage-witnesses.json", `{"effects":["observed"]}`)
-	write("formal/execution.json", `{"libraries":[]}`)
+	write("formal/execution.json", `{"models":[{"path":"formal/dialcache-effects-conformance.qnt"}]}`)
 	write("trace.itf.json", "controlled trace")
 	evidence := witnessEvidence{SchemaVersion: 2, Profile: "effects", Traces: 1, Required: []string{"observed"}, Seen: []string{"observed"},
 		Labels: map[string]witnessLabel{"observed": {Sampled: 1, Traces: []witnessTrace{{Name: "trace.itf.json", Kind: "sampled", Checkpoints: []int{1}}}}}}

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { checkSourceAudit } from './check-source-audit.mjs';
 import { checkFeatureCoverage } from './check-feature-coverage.mjs';
-import { readExecution, scanDeclarations, scheduledProperties, validateExecution } from './execution.mjs';
+import { checkMutantAnchors, readExecution, readMutantCatalog, scanDeclarations, scheduleExecution, scheduledProperties, validateExecution } from './execution.mjs';
 import { protocolCorpus, readVectorArtifact } from './vector-artifacts.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -38,54 +38,49 @@ export function checkProfiles(registry = parse('formal/profiles.json')) {
   return { specificationVersion: registry.specificationVersion, profiles: expected.length };
 }
 
-export function checkQuintCaseAudit(audit = parse('formal/quint-case-audit.json'),
-  catalog = parse('formal/semantic-cases.json'), manifest = readExecution()) {
-  if (audit.schemaVersion !== 1 || typeof audit.scope !== 'string' || !audit.scope.trim() ||
-      !Array.isArray(audit.checks) || !Array.isArray(audit.definitions) ||
-      !Array.isArray(audit.limitations) || !audit.limitations.length ||
-      audit.limitations.some(item => typeof item !== 'string' || !item.trim())) {
-    throw new Error('Invalid Quint case applicability audit');
-  }
-  const cases = new Map(catalog.cases.map(c => [c.id, c]));
-  const expected = new Map(manifest.models.flatMap(model => [
-    ...model.invariants.map(name => [`${model.path}:${name}`, 'invariant']),
-    ...model.regressions.map(name => [`${model.path}:${name}`, 'regression']),
-  ]));
-  // A case cites the definition that owns its rule: a scheduled model's, or a
-  // library's (a kernel module's once the rule has moved there).
+// Every Quint citation of a case carries its reviewed scope: what that check or
+// definition establishes for the case. `models` cite scheduled invariants and
+// regressions (their scheduling is checked per case above); `definitions` cite
+// the transition, helper or predicate that owns the rule, in a scheduled model
+// or a library (a kernel module's once the rule moved there). A definition's
+// kind is read from its declaration (action, def or val) and it may not be a
+// scheduled property itself. The checker verifies the shape, not the judgment
+// in the scope text.
+export function checkCitationScopes(catalog = parse('formal/semantic-cases.json'), manifest = scheduleExecution()) {
+  const properties = scheduledProperties(manifest);
   const models = new Set([...manifest.models.map(model => model.path), ...manifest.libraries]);
-  const checked = new Set(), defined = new Set(), declarations = new Map();
-  for (const [entries, seen, isCheck] of [[audit.checks, checked, true], [audit.definitions, defined, false]]) {
-    for (const entry of entries) {
-      const c = cases.get(entry.case), key = `${entry.case}/${entry.reference}`;
-      if (!c || typeof entry.reference !== 'string' || typeof entry.scope !== 'string' ||
-          !entry.scope.trim() || seen.has(key)) throw new Error(`Invalid/duplicate Quint case audit entry: ${key}`);
-      seen.add(key);
-      if (isCheck) {
-        if (!c.models.includes(entry.reference) || expected.get(entry.reference) !== entry.kind) {
-          throw new Error(`Quint case audit check is not a cited scheduled ${entry.kind}: ${key}`);
+  const declarations = new Map();
+  const kinds = { action: 'transition', def: 'helper', val: 'predicate' };
+  let scopedChecks = 0, definitions = 0, casesWithDefinitions = 0;
+  for (const c of catalog.cases) {
+    for (const [field, entries] of [['models', c.models], ['definitions', c.definitions ?? []]]) {
+      if (!Array.isArray(entries)) throw new Error(`${c.id}: invalid ${field} citations`);
+      const refs = new Set();
+      for (const entry of entries) {
+        const key = `${c.id}/${entry?.ref}`;
+        if (typeof entry?.ref !== 'string' || typeof entry.scope !== 'string' || !entry.scope.trim() || refs.has(entry.ref)) {
+          throw new Error(`Invalid/duplicate Quint citation or missing scope: ${key}`);
         }
-      } else {
-        const parts = entry.reference.split(':'), [path, name] = parts;
+        refs.add(entry.ref);
+        if (field === 'models') { scopedChecks++; continue; }
+        const parts = entry.ref.split(':'), [path, name] = parts;
         if (parts.length !== 2 || !models.has(path)) throw new Error(`Unknown Quint definition model: ${key}`);
         if (!declarations.has(path)) declarations.set(path, scanDeclarations(read(path)));
-        const kinds = { transition: 'action', helper: 'def', predicate: 'val' };
-        if (!Object.hasOwn(kinds, entry.kind) || declarations.get(path).get(name) !== kinds[entry.kind] ||
-            expected.has(entry.reference)) throw new Error(`Quint case definition is not a transition/helper/predicate: ${key}`);
+        if (!Object.hasOwn(kinds, declarations.get(path).get(name)) || properties.has(entry.ref)) {
+          throw new Error(`Quint case definition is not a transition/helper/predicate: ${key}`);
+        }
+        definitions++;
       }
     }
+    if (c.definitions?.length) casesWithDefinitions++;
   }
-  for (const c of catalog.cases) for (const reference of c.models) {
-    if (!checked.has(`${c.id}/${reference}`)) throw new Error(`Missing Quint case applicability scope: ${c.id}/${reference}`);
-  }
-  return { scopedChecks: checked.size, definitions: defined.size,
-    casesWithDefinitions: new Set(audit.definitions.map(entry => entry.case)).size };
+  return { scopedChecks, definitions, casesWithDefinitions };
 }
 
 export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.json')) {
   const profiles = checkProfiles();
-  const manifest = readExecution();
-  const execution = validateExecution(manifest);
+  const execution = validateExecution(readExecution());
+  const manifest = scheduleExecution();
   const scheduled = scheduledProperties(manifest);
   const vectorArtifacts = new Map(manifest.models.filter(model => model.vectorExport)
     .map(model => [model.vectorExport.artifact, { model, value: readVectorArtifact(model) }]));
@@ -104,7 +99,8 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
     for (const key of ['scenarios', 'generated', 'models', 'vectors']) if (!Array.isArray(c[key])) throw new Error(`${c.id}: missing evidence list ${key}`);
     for (const name of c.scenarios) if (!scenarios.has(name)) throw new Error(`${c.id}: unknown scenario ${name}`);
     for (const g of c.generated) if (!witnesses[g.profile]?.includes(g.witness)) throw new Error(`${c.id}: unknown required witness ${g.profile}/${g.witness}`);
-    for (const model of c.models) {
+    const cited = c.models.map(entry => entry?.ref);
+    for (const model of cited) {
       if (!scheduled.has(model)) throw new Error(`${c.id}: model property is not scheduled for execution: ${model}`);
     }
     if (c.quintReplays !== undefined) {
@@ -113,7 +109,7 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
         const parts = typeof reference === 'string' ? reference.split('/') : [];
         const model = manifest.models.find(model => model.profile === parts[0]);
         if (parts.length !== 2 || !model?.replayRegressions?.includes(parts[1]) ||
-            !c.models.includes(`${model.path}:${parts[1]}`)) throw new Error(`${c.id}: Quint replay needs a cited scheduled exported regression: ${reference}`);
+            !cited.includes(`${model.path}:${parts[1]}`)) throw new Error(`${c.id}: Quint replay needs a cited scheduled exported regression: ${reference}`);
       }
     }
     if (c.generatedVectors !== undefined) {
@@ -126,7 +122,7 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
         const key = `${reference.artifact}/${group}/${reference.name}`;
         if (!source || !Array.isArray(rows) || !rows.length || references.has(key)
           || (reference.name !== '*' && !rows.some(row => row.name === reference.name))
-          || !c.models.some(ref => ref.startsWith(`${source.model.path}:`))) throw new Error(`${c.id}: generated vector needs a cited model and exported case: ${key}`);
+          || !cited.some(ref => ref.startsWith(`${source.model.path}:`))) throw new Error(`${c.id}: generated vector needs a cited model and exported case: ${key}`);
         references.add(key);
       }
     }
@@ -174,16 +170,12 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
       }
     }
   }
-  const applicability = checkQuintCaseAudit(undefined, catalog, manifest);
+  const citations = checkCitationScopes(catalog, manifest);
   const featureCoverage = checkFeatureCoverage(undefined, catalog);
-  const mutations = parse('formal/semantic-mutations.json');
-  if (mutations.schemaVersion !== 1 || !Array.isArray(mutations.mutations) || !mutations.mutations.length) throw new Error('Invalid mutation catalog');
-  const mutationIds = new Set();
-  for (const m of mutations.mutations) {
-    if (!/^M\d+$/.test(m.id) || mutationIds.has(m.id) || !ids.has(m.case)) throw new Error(`Invalid mutation case/ID: ${m.id}`);
-    mutationIds.add(m.id);
-    if (!Array.isArray(m.requiredDetections) || m.requiredDetections.some(c => !['ordinary', 'generated', 'portable'].includes(c))) throw new Error(`${m.id}: unknown mutation cohort`);
-  }
+  // validateExecution validated the mutant catalog's schema above; the audit
+  // also anchors every edit in the port text.
+  const mutantCatalog = readMutantCatalog();
+  checkMutantAnchors(mutantCatalog);
   const behavioral = catalog.cases.filter(c => !c.vectors.length);
   const portable = c => c.scenarios.length || c.generated.length || c.vectors.length || c.quintReplays?.length || c.generatedVectors?.length;
   const count = cases => ({ total: cases.length, model: cases.filter(c => c.models.length).length,
@@ -193,13 +185,12 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
     quintDriven: cases.filter(c => c.generated.length || c.quintReplays?.length || c.generatedVectors?.length).length,
     modelOnly: cases.filter(c => c.models.length && !portable(c)).map(c => c.id),
     uncovered: cases.filter(c => !c.models.length && !portable(c)).map(c => c.id) });
-  return { profiles, execution, sourceAccounting, applicability, featureCoverage, contracts: parents.size, cases: count(catalog.cases), behavioral: count(behavioral),
-    protocol: count(catalog.cases.filter(c => c.vectors.length)), mutations: mutations.mutations.length };
+  return { profiles, execution, sourceAccounting, citations, featureCoverage, contracts: parents.size, cases: count(catalog.cases), behavioral: count(behavioral),
+    protocol: count(catalog.cases.filter(c => c.vectors.length)), mutations: mutantCatalog.mutations.size };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(JSON.stringify(process.argv.includes('--profiles-stdin')
     ? checkProfiles(JSON.parse(readFileSync(0, 'utf8')))
-    : process.argv.includes('--audit-stdin') ? checkQuintCaseAudit(JSON.parse(readFileSync(0, 'utf8')))
     : checkSemanticCoverage(process.argv.includes('--stdin') ? JSON.parse(readFileSync(0, 'utf8')) : undefined), null, 2));
 }

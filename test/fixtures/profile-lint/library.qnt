@@ -5,4 +5,9 @@ module library {
 
   pure def bump(state: Counter[r], delta: int): Counter[r] = { count: state.count + delta, ...state }
   pure def reset(state: Counter[r]): Counter[r] = { count: 0, ...state }
+  // A fold whose step is an operator argument: only the library's own variants
+  // may instantiate it; a profile that does is reported whatever it passes
+  // (composition-lambda-argument, composition-named-operator-argument).
+  pure def repeat(state: Counter[r], times: int, each: (Counter[r], int) => Counter[r]): Counter[r] =
+    1.to(times).fold(state, (current, step) => each(current, step))
 }

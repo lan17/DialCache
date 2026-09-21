@@ -3,8 +3,12 @@
 The Quint files should let a reader understand a behavior without translating
 the TypeScript implementation. Readability is part of the specification's
 acceptance criteria. Executable checks then challenge that written behavior.
-Quint is the behavioral source of truth for both TypeScript and Go. The prose
-explains it; implementation tests must not become an independent, drifting
+TypeScript is the executable reference these models formalize; Quint is the
+independently reviewed contract that TypeScript, Go and later ports are held
+to. When the two disagree, neither side is edited to match the other quietly:
+the change lands with a regression that distinguishes the two behaviors and a
+comment recording the decision about which one is intended. The prose explains
+the contract; implementation tests must not become an independent, drifting
 definition of the same portable rule.
 
 For a first contribution, start with the [worked walkthrough](./WALKTHROUGH.md).
@@ -48,7 +52,8 @@ Named predicates make the conditions readable; they do not perform cache work.
 Finally, read the invariants and `run ...Test` examples. An invariant states a
 property of explored states. A regression gives a concrete sequence and its
 expected observations. A `val` declaration can also be a helper; `execution.json`
-identifies the properties that are actually scheduled for checking. Some
+identifies the properties that are actually scheduled for checking, and every
+`run ...Test` a scheduled model declares is one of its regressions. Some
 regressions deliberately corrupt state to show that
 a property rejects the fault. They are tests of the property, not allowed system
 transitions. Passing bounded exploration is not a proof over every execution.
@@ -117,10 +122,14 @@ A rewrite lands only when `node formal/differential.mjs <profile>` replays the
 profile's whole reference corpus and exported regressions through the new text,
 and the new text's corpus through the old, with step-by-step agreement on every
 driver-asserted channel; an intended change of behavior is declared by bumping
-the model's `differential.behaviorVersion` in the manifest instead. Compare the
-same recorded inputs before attributing a change in observations to the
-rewrite. Reusing a random seed does not preserve an input history when a
-model's choice structure changes.
+the model's `differential.behaviorVersion` in the manifest instead. Trace bytes
+per state may grow at most 1.2 times over the reference; a composition that
+must carry more state declares its own bound as
+`differential.maxBytesPerStateRatio` beside `behaviorVersion`, with the reason
+recorded in the kernel README's record table. Compare the same recorded inputs
+before attributing a change in observations to the rewrite. Reusing a random
+seed does not preserve an input history when a model's choice structure
+changes.
 
 Connection models advance the imported profile and save its preceding context
 in the same `all` action. Views such as `acquired` and `observedSources` combine
@@ -162,13 +171,29 @@ For each new rule or interaction:
    plausible wrong implementation of the rule; require an invariant violation,
    not merely a compiler error or failed bookkeeping check. Use symbolic checking
    for tractable finite modules and sample larger compositions. Schedule every
-   property and regression in `execution.json`.
+   property in `execution.json`; every run the model declares is a regression
+   without being listed. Give the challenge a
+   `nativeMutants` entry that maps it to a TypeScript mutant and a Go mutant
+   injecting the same wrong behavior into `src/` and `go/`, or an enumerated
+   explanation of why no native line embodies the rule (see
+   [Mapping every challenge to native mutants](#mapping-every-challenge-to-native-mutants)).
 4. **Exercise both implementations.** Require a generated witness or exported
    Quint regression that exposes the rule's consequence, and replay the same
    history in TypeScript and Go. Fixed scenarios preserve narrow regressions;
    protocol vectors and native
    tests cover wire and language boundaries. The driver supplies only external inputs and asserts actual public
    results/effects. Expected model state must never drive the implementation.
+   The generated cohort of each mutation lane must detect both native mutants:
+   list `generated` in their `requiredDetections`. A mutant the corpus does not
+   detect is a coverage gap; close it with an exported regression or a witness
+   before the challenge counts as mapped. A new profile or held effect kind
+   stays inside the settlement receipt ([PORTING.md](./PORTING.md)) by
+   extending the ledger's kinds and gate names in
+   [replay/settlement.mjs](./replay/settlement.mjs), the `held` members of
+   `$defs/settlementReceipt`, both drivers' held computation and the receipt
+   table; a hold fault must precede every effect-starting command of its step.
+   A new rule text belongs in the same module's exported violation pattern,
+   which both mutation runners import.
 5. **Account for the evidence.** Link the case, property, scenario, and required
    witness in the existing catalogs. Preserve explicit gaps and update profile
    claims only after the corresponding language driver passes.
@@ -215,9 +240,11 @@ choice. A parameterized public action can serve both random exploration and a
 named regression. The regression must invoke those actions; an arbitrary
 assignment to private model state is not an executable input.
 
-List exportable runs in the model's `replayRegressions` in `execution.json`.
-Generation exports them under `regressions/<profile>/` alongside the sampled
-corpus. Quint's deterministic test export omits MBT action metadata.
+Every public-only run of a profile model is exported; `execution.mjs` reads
+the model's runs and classifies each one (see [Exported runs are exactly the
+public-only runs](#exported-runs-are-exactly-the-public-only-runs)), so nothing
+is listed. Generation exports them under `regressions/<profile>/` alongside the
+sampled corpus. Quint's deterministic test export omits MBT action metadata.
 `replay-inputs.mjs` adds compatibility annotations derived only from the explicit
 input record to scheduled exports; it never infers commands from expected state.
 The coordinator also accepts raw regression exports directly. `input` remains
@@ -234,8 +261,10 @@ distinct evidence categories.
 ## Maintaining case and witness evidence
 
 Use [FEATURE-COVERAGE.md](./FEATURE-COVERAGE.md) to place each new rule in its
-feature family. Update `semantic-cases.json` and `quint-case-audit.json` with
-precise contract, provenance and checked-scope references. Every positive fixed
+feature family. Update `semantic-cases.json` with precise contract and
+provenance references and a reviewed `scope` on every Quint citation, in
+`models` for a scheduled check and in `definitions` for the transition, helper
+or predicate that owns the rule. Every positive fixed
 scenario and every protocol/invalidation vector must be assigned to at least
 one semantic case. An unmapped fixture is an accounting failure, even if its
 test passes. Reuse a case for repeated evidence of the same rule; splitting
@@ -262,6 +291,9 @@ record and public observations; [kernel/README.md](./kernel/README.md) lists the
 classifiers still reading private predictions. Their inputs never name a
 TypeScript or Go file: `node formal/witnesses.mjs evaluate` runs them for every
 port. Declare a new module in the profile's `witnessSources` in `profiles.json`.
+A classifier that shadows the model from public channels binds that shadow to
+the private predictions through [replay/witnesses/fidelity.mjs](./replay/witnesses/fidelity.mjs)
+rather than restating the comparison.
 
 Add discriminating negative controls when introducing or changing witness
 classification. Preserve the matching fixture or phase, then remove or alter
@@ -291,11 +323,14 @@ driver, fixture and completion contracts.
 
 ## Refactoring and execution
 
-[`execution.json`](./execution.json) is the execution schedule: invariant and
-regression names, model order, exploration settings, and generated trace paths
-and bounds. [`profiles.json`](./profiles.json) records versioned conformance
-claims. Keep these purposes distinct; checking and generation consume the same
-execution settings rather than maintaining separate invariant lists.
+[`execution.json`](./execution.json) is the execution schedule: invariant
+names, model order, exploration settings, and generated trace paths and
+bounds. The regressions are the runs each model declares and the libraries are
+the Quint sources no model claims; `execution.mjs` reads both from the text
+(`scheduleExecution`) and refuses a manifest that lists them. [`profiles.json`](./profiles.json)
+records versioned conformance claims. Keep these purposes distinct; checking
+and generation consume the same execution settings rather than maintaining
+separate invariant lists.
 
 Preserve public action names, choice encodings, state/observation fields, and
 `...Test` suffixes during cleanup. Preserve the order and nesting of `any` and
@@ -346,9 +381,9 @@ deterministic `run`, its `kind`, the `failure` the fault produces (the
 condition of one top-level `.expect(...)` in that run, copied from the model),
 the fault `family` slug it belongs to, the `profiles` where the fault is
 observable, and `exclusions` mapping other known profiles to the reason they
-cannot exercise it. Two kinds exist. An `exported-regression` cites a run in a
-profile model's `replayRegressions`, so it is public-only and both ports replay
-it: use this kind for every portable behavior fault. The run normally belongs
+cannot exercise it. Two kinds exist. An `exported-regression` cites a
+public-only run of a profile model, so both ports replay it: use this kind for
+every portable behavior fault. The run normally belongs
 to the challenged model; when the fault sits in a shared library, the
 reproducer may instead name another profile `model` whose exported run reaches
 it, which is how a verification model's shared-rule challenge gets a portable
@@ -385,15 +420,103 @@ only shrinks: the ids that may appear in it are frozen in
 `grandfatheredReproducerBacklog` in `formal/execution.mjs`, so a new challenge
 cannot opt out by listing itself. Adding to that constant is a reviewed code
 change; removing an id once its challenge has a reproducer is the normal path.
+The native-mutant backlog below follows the same rule.
+
+### Mapping every challenge to native mutants
+
+A model challenge shows that a named property rejects one deliberate change to
+the specification. It says nothing about the ports until the same wrong
+behavior is injected into `src/` and `go/` and the generated corpus, replayed
+through each port, fails. Each challenge therefore carries a `nativeMutants`
+entry in `execution.json`:
+
+```json
+"nativeMutants": {
+  "kind": "mapped",
+  "mutant": "M18",
+  "text": "M18 is the native twin of local_storage.localEntryLiveAt losing its strict bound: a local entry is served at its exact insertion expiry in both ports."
+}
+```
+
+The text says why the mutant is the same fault as the model's and stays under
+500 characters; the port-side account (which lines change, what the wrong
+behavior is, any asymmetry between the ports) lives once on the catalog entry
+as its `rationale`, beside the anchors it describes, so a port refactor
+updates one place and the challenges never quote code.
+
+`kind` is one of:
+
+- `mapped`: `mutant` names an entry of `formal/mutations.json` whose
+  TypeScript and Go sections both list `generated` in their
+  `requiredDetections`, so the weekly mutation lanes fail if the corpus stops
+  detecting it in either port. `text` names the mutant and the model
+  definition. `crossContract` is a sentence, required and allowed only when
+  the mutant's semantic case does not list the challenge's contract, saying
+  why it is the same fault.
+- `unobservable`: a port line exists, but the port checks the same condition
+  again at a later point the model does not have, so no public history can
+  distinguish the fault. `text` names the line and the later check; no
+  catalog entry is kept for it.
+- `model-only`: the fault changes model bookkeeping that no implementation
+  line embodies (a connection monitor reconstructing owners or clocks, an
+  invariant helper). `text` names the model construct and the port code that
+  makes the fault inexpressible.
+
+Search both ports for the line before writing an explanation; an explanation
+where a native line exists is a review failure, and an explanation must name
+the port file it examined. A mutant maps to a challenge when it produces the
+same wrong behavior at the same boundary, not when it edits similar text;
+several challenges may share one mutant, and a port section may need two
+edits when the port implements the rule at two sites.
+
+The catalog is one file, `formal/mutations.json`: each entry has an `id`,
+its semantic `case`, a one-sentence `description`, the `rationale`, and a
+`typescript` and a `go` section, each with `edits: [{ path, before, after }]`
+(applied in order, every `before` matching the port text exactly once) and
+`requiredDetections`. Every validation of the manifest checks the catalog's
+schema: every entry has a description, a rationale, a known case, and in each
+section known cohorts and a non-empty list of edits inside its port (`src/` or
+`go/`, never a Go test file). The anchors themselves are checked by
+`node formal/execution.mjs`, `make audit`, the test suite and both mutation
+runners (`checkMutantAnchors`), so a refactor that moves an anchored line
+fails the pull request rather than the weekly lane, while the Quint
+generation lanes never read port text. The challenge rules: the kind is one
+of the three, `text` is non-empty, within its length ceiling and names the
+mutant or a port file, `mutant` is present exactly for `mapped`,
+`crossContract` exactly when the case lacks the contract; two challenges that
+repeat one `(source, before, after)` fault map it the same way; and every
+challenge has a `nativeMutants` entry or is listed in the top-level
+`nativeMutantBacklog`, never both. The backlog is frozen in
+`grandfatheredNativeMutantBacklog` in `formal/execution.mjs` and only shrinks.
+The summary also counts catalog mutants no challenge cites.
+
+Each port's own unit suite is informational for a mutant: when a fault
+leaves a goroutine blocked or a pointer nil, a synctest bubble panics instead
+of failing an assertion, and when a fault settles a promise the TypeScript
+suite was not awaiting with no assertion failing, the runner records that
+`ordinary` cohort as `crashed` (neither detected nor survived) and measures
+the replay cohorts as usual; a mutant that does not compile is recorded with
+every cohort crashed, so the gate names it while the rest of the shard is
+measured; a settlement violation under a mutant ([PORTING.md](./PORTING.md))
+is recorded the same way, naming the first violating history and rule. New
+mutants therefore require `generated` and `portable`; require
+`ordinary` only where a unit test pins the fault on purpose. To measure one
+mutant while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
+`MUTATION_ONLY=M18 make mutations-go`, one partial run per port at a time
+(they share `partial/`); the partial report under
+`.formal-traces/semantic/partial/` (and `go-semantic/partial/`) is never
+complete evidence. Then run the full lanes, or let the weekly workflow run
+them.
 
 ### Exported runs are exactly the public-only runs
 
 A profile run is public-only when every transition it takes records a command
 in `input`. A run that assigns `s'` inline, keeps `input' = input` across a
 state assignment, or reaches such a fixture through a helper action is
-state-patching. `execution.mjs` classifies each run from the declaration bodies
-and requires the `replayRegressions` list to equal the public-only runs
-exactly, naming any unexported public run or exported patching run. Generation
+state-patching. `execution.mjs` classifies each run from the declaration bodies:
+the public-only runs are the model's exported replay regressions and the
+state-patching runs stay model-only, with nothing listed in the manifest (a
+`replayRegressions` list is refused). Generation
 then binds every history it produces, sampled and exported alike, to the driver
 contract, so a choice outside an action's declared domain fails
 `run-models.mjs generate` rather than a later native replay.
