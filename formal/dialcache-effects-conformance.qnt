@@ -488,7 +488,9 @@ module dialcache_effects_conformance {
   // projections. This is the serving remote location; shadow locations are a
   // separate interaction, not implied by this assertion.
   run futureFrameReportsPositiveObservingOffsetTest = tenMillisecondFixture
-    .then(seedRemote).then(rollbackWall).then(beginCall).then(readAt(0)).then(rejectAt(0))
+    .then(seedRemote).then(rollbackWall).then(beginCall).then(readAt(0))
+    .expect(s.o.loads == 0 and s.o.loaders == 1)
+    .then(rejectAt(0))
     .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 0 and s.o.loaders == 1
       and s.events.select(e => e.event == "futureOffset") ==
         List({ event: "futureOffset", location: "remote", detail: "", amount: 1000 }))

@@ -622,7 +622,9 @@ module dialcache_shadow_conformance {
     .then(seedAt(1)).then(rollbackWall).then(beginCall).then(releaseRead)
     .expect(s.o.loads == 0 and s.o.dumps == 0
       and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 1000 }))
-    .then(resolveAt(VALUE_TWO)).then(releaseDump).then(releaseWrite)
+    .then(resolveAt(VALUE_TWO))
+    .expect(s.o.loads == 0 and s.o.dumps == 1)
+    .then(releaseDump).then(releaseWrite)
     .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List("filled")
       and s.o.loads == 0 and s.o.writes == 1
       and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 1000 }))
