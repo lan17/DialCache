@@ -99,20 +99,18 @@ model owns at least one challenge; a `challengeWaiver` on a model entry is a
 documented gap, not coverage. A detected challenge shows that the named
 invariant rejects that one deliberate change under the manifest bounds. Model
 receipts preserve the timestamp, captured policy and owner at acceptance.
-A challenge with a `reproducer` is also pinned to one deterministic history
+Every challenge is pinned by its `reproducer` to one deterministic history
 that passes clean and fails under the fault at a declared expectation, either
 an exported public regression both ports replay or a documented model-only
-run; challenges not yet backfilled are listed in the manifest's
-`reproducerBacklog`, whose size `node formal/execution.mjs` reports beside the
-challenge counts. See the
+run. Missing reproducers fail validation. See the
 [authoring rules](./AUTHORING.md#challenging-every-model).
 Each challenge also carries a `nativeMutants` entry naming the TypeScript and
 Go mutants that inject the same wrong behavior into the ports, or an
 enumerated explanation of why no native line exists; the mutation lanes must
 detect every mapped mutant in their generated cohort. A mapped challenge
 establishes that the corpus would catch the mistake in a port; an explained
-one establishes only that the model rejects it. Unmapped challenges are listed
-in `nativeMutantBacklog`, which only shrinks. See
+one establishes only that the model rejects it. A missing mapping or
+explanation fails validation. See
 [mapping every challenge to native mutants](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
 Ownership receipts, failed-read state, closed-scope memo cleanup and initial
 recovery retention have exact model checkpoints. The closed-scope and recovery

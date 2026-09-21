@@ -25,12 +25,16 @@ export function quintSources(directory = root) {
 // A model's import closure: its own text and every Quint source it reaches
 // through relative imports, in dependency order. What a model's behavior
 // depends on, so tools that hash, compare or classify a model walk it here.
-export function importClosure(path, directory = root) {
+export function importClosure(path, directory = root, {
+  readSource = source => existsSync(resolve(directory, source)) ? readFileSync(resolve(directory, source), 'utf8') : undefined,
+} = {}) {
   const closure = [];
   const visit = source => {
-    if (closure.includes(source) || !existsSync(resolve(directory, source))) return;
+    if (closure.includes(source)) return;
+    const text = readSource(source);
+    if (text === undefined) return;
     closure.push(source);
-    for (const [, target] of readFileSync(resolve(directory, source), 'utf8').matchAll(/from\s+"(\.\.?\/[^"]+)"/g)) {
+    for (const [, target] of text.matchAll(/from\s+"(\.\.?\/[^"]+)"/g)) {
       visit(posix.normalize(posix.join(posix.dirname(source), `${target}.qnt`)));
     }
   };
@@ -425,12 +429,11 @@ export const contractIds = text => [...text.matchAll(/^\| ([CWEB]\d{2}) \|/gm)].
 // condition the fault breaks. `profiles` names where the fault is observable:
 // the challenged model's own profile, or its path for a model without one,
 // and the cited run's profile. `exclusions` explains why a known profile that
-// is not listed cannot exercise the fault. A shared-library fault must list or
-// exclude every profile; a fault in one model's own file needs no exclusions,
-// because no other profile executes that text.
+// imports the source but is not listed cannot exercise the fault. Profiles
+// outside that import closure are structurally excluded without catalog prose.
 const reproducerKinds = ['exported-regression', 'model-run'];
 const reproducerFields = ['kind', 'run', 'model', 'failure', 'family', 'profiles', 'exclusions', 'scope'];
-function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, source, scanned }) {
+function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, source, scanned, closures }) {
   const { id, reproducer } = challenge;
   if (!reproducer || typeof reproducer !== 'object' || Array.isArray(reproducer)) throw new Error(`${id}: invalid reproducer`);
   const unknown = Object.keys(reproducer).filter(key => !reproducerFields.includes(key));
@@ -463,8 +466,18 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
     }
   }
   if (shared) {
-    const unaccounted = [...profileIds].filter(profile => !profiles.includes(profile) && !Object.hasOwn(exclusions, profile));
-    if (unaccounted.length) throw new Error(`${id}: a shared-library fault must list or exclude every profile; missing ${unaccounted.join(', ')}`);
+    const unaccounted = [];
+    for (const profileModel of models.values()) {
+      if (!profileModel.profile) continue;
+      const reaches = closures.get(profileModel.path).includes(challenge.source);
+      if (profiles.includes(profileModel.profile) && !reaches) {
+        throw new Error(`${id}/${profileModel.profile}: listed profile does not import ${challenge.source}`);
+      }
+      if (reaches && !profiles.includes(profileModel.profile) && !Object.hasOwn(exclusions, profileModel.profile)) {
+        unaccounted.push(profileModel.profile);
+      }
+    }
+    if (unaccounted.length) throw new Error(`${id}: a shared-library fault must list or exclude every importing profile; missing ${unaccounted.join(', ')}`);
   }
   const exported = cited.replayRegressions?.includes(run) ?? false;
   if (kind === 'exported-regression') {
@@ -599,11 +612,6 @@ function validateNativeMutants(challenge, { catalog, models, publicOnly, source,
   });
 }
 
-// Every challenge now maps to native mutants or explains why none exists.
-// Keep the empty grandfather list explicit so a manifest edit cannot reopen
-// the former native-mapping backlog.
-export const grandfatheredNativeMutantBacklog = Object.freeze([]);
-
 // Which challenges cite each mutant, in manifest order. The mutation reports
 // print it beside every measured mutant.
 export function challengesByMutant(manifest) {
@@ -617,38 +625,16 @@ export function challengesByMutant(manifest) {
   return index;
 }
 
-// A backlog is the exact set of challenges lacking one field, reported and
-// frozen: it cannot hide a challenge that has the field or never existed, and
-// only the grandfathered ids may sit in it, so it only shrinks.
-function validateBacklog(challenges, ids, { name, listed, present, grandfathered, missing, has, lacks, requirement }) {
-  if (!Array.isArray(listed)) throw new Error(missing);
-  const backlog = new Set(listed);
-  if (backlog.size !== listed.length) throw new Error(`Duplicate challenge ids in ${name}`);
-  for (const id of backlog) {
-    if (!ids.has(id)) throw new Error(`${name} names an unknown challenge: ${id}`);
-  }
-  const frozen = new Set(grandfathered);
-  for (const challenge of challenges) {
-    const inBacklog = backlog.has(challenge.id);
-    if (present(challenge) && inBacklog) throw new Error(`${challenge.id}: ${has} and is listed in ${name}`);
-    if (!present(challenge) && !inBacklog) throw new Error(`${challenge.id}: ${lacks} and is not listed in ${name}`);
-    if (inBacklog && !frozen.has(challenge.id)) throw new Error(`${challenge.id}: ${requirement}; ${name} only grandfathers the challenges that predate the requirement`);
-  }
-  return backlog.size;
-}
-
-// Every challenge has a deterministic reproducer. The empty grandfather list
-// makes removal of that evidence fail even if the manifest lists a backlog.
-export const grandfatheredReproducerBacklog = Object.freeze([]);
-
 // Compiling semantic faults, checked against independent model obligations.
 // Every scheduled model carries at least one challenge or an explicit waiver.
-// Every challenge carries a reproducer or is listed in the reported backlog,
-// and maps to native mutants in both ports or is listed in that backlog.
-function validateChallenges(manifest, { source, scanned, contracts, sources, profileIds, publicOnly, catalog,
-  grandfathered = grandfatheredReproducerBacklog, grandfatheredNative = grandfatheredNativeMutantBacklog }) {
-  const { challenges, reproducerBacklog, nativeMutantBacklog } = manifest;
+// Every challenge carries a reproducer and a native mapping or explanation.
+function validateChallenges(manifest, { source, scanned, contracts, sources, profileIds, publicOnly, catalog, closures }) {
+  const { challenges } = manifest;
   if (!Array.isArray(challenges) || !challenges.length) throw new Error('Model property challenge catalog is missing');
+  // Closed migration fields remain empty for manifest/report compatibility.
+  for (const name of ['reproducerBacklog', 'nativeMutantBacklog']) {
+    if (!Array.isArray(manifest[name]) || manifest[name].length) throw new Error(`${name} must remain empty`);
+  }
   const models = new Map(manifest.models.map(model => [model.path, model]));
   const fields = ['id', 'contract', 'source', 'model', 'invariant', 'before', 'after'];
   const optional = ['measures', 'reproducer', 'nativeMutants'];
@@ -679,28 +665,20 @@ function validateChallenges(manifest, { source, scanned, contracts, sources, pro
       throw new Error(`${challenge.id}: a measures note is only for a repeated fault`);
     }
     challengedModels.add(challenge.model);
-    if (challenge.reproducer !== undefined) {
-      validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, source, scanned });
-      reproducers++;
-    }
-    if (challenge.nativeMutants !== undefined) {
-      const evidence = validateNativeMutants(challenge, { catalog, models, publicOnly, source, scanned });
-      if (evidence) boundary[evidence.origin ?? evidence.state]++;
-      kinds[challenge.nativeMutants.kind]++;
-    }
+    if (challenge.reproducer === undefined) throw new Error(`${challenge.id}: must carry a reproducer`);
+    validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, source, scanned, closures });
+    reproducers++;
+    if (challenge.nativeMutants === undefined) throw new Error(`${challenge.id}: must map to a native mutant in both ports or explain why none exists`);
+    const evidence = validateNativeMutants(challenge, { catalog, models, publicOnly, source, scanned });
+    if (evidence) boundary[evidence.origin ?? evidence.state]++;
+    kinds[challenge.nativeMutants.kind]++;
     // One fault, one native mapping: a repeated fault measured against another
     // invariant names the same kind and mutant. The text and any crossContract
     // reason speak for the challenge's own contract and may differ.
-    const native = challenge.nativeMutants === undefined ? null
-      : JSON.stringify([challenge.nativeMutants.kind, challenge.nativeMutants.mutant ?? null]);
+    const native = JSON.stringify([challenge.nativeMutants.kind, challenge.nativeMutants.mutant ?? null]);
     if (faults.has(fault) && faults.get(fault).native !== native) throw new Error(`${challenge.id}: maps the fault of ${faults.get(fault).id} differently`);
     if (!faults.has(fault)) faults.set(fault, { id: challenge.id, native });
   }
-  const reproducerBacklogSize = validateBacklog(challenges, ids, { name: 'reproducerBacklog', listed: reproducerBacklog, present: challenge => challenge.reproducer !== undefined,
-    grandfathered, missing: 'Challenge reproducer backlog is missing', has: 'has a reproducer', lacks: 'has no reproducer', requirement: 'new challenges must carry a reproducer' });
-  const nativeBacklogSize = validateBacklog(challenges, ids, { name: 'nativeMutantBacklog', listed: nativeMutantBacklog, present: challenge => challenge.nativeMutants !== undefined,
-    grandfathered: grandfatheredNative, missing: 'Challenge native-mutant backlog is missing', has: 'has nativeMutants', lacks: 'has no nativeMutants',
-    requirement: 'new challenges must map to a native mutant in both ports or explain why none exists' });
   const waived = [];
   for (const model of manifest.models) {
     if (model.challengeWaiver !== undefined) {
@@ -715,16 +693,14 @@ function validateChallenges(manifest, { source, scanned, contracts, sources, pro
   const cited = challengesByMutant(manifest);
   const unmappedMutants = [...catalog.mutations.keys()].filter(id => !cited.has(id)).length;
   return { challenges: challenges.length, distinctFaults: faults.size, challengedModels: challengedModels.size, waivedModels: waived.length,
-    reproducers, reproducerBacklog: reproducerBacklogSize,
-    nativeMutants: { mapped: kinds.mapped, unobservable: kinds.unobservable, modelOnly: kinds['model-only'], backlog: nativeBacklogSize },
+    reproducers, reproducerBacklog: 0,
+    nativeMutants: { mapped: kinds.mapped, unobservable: kinds.unobservable, modelOnly: kinds['model-only'], backlog: 0 },
     boundaryEvidence: boundary, unmappedMutants };
 }
 
 export function validateExecution(manifest = readExecution(), {
   readSource = read,
   scanSource = scanDeclarationBodies,
-  grandfathered = grandfatheredReproducerBacklog,
-  grandfatheredNative = grandfatheredNativeMutantBacklog,
   catalog = readMutantCatalog(),
   files = quintSources(),
   profiles = JSON.parse(read('formal/profiles.json')).profiles,
@@ -859,12 +835,13 @@ export function validateExecution(manifest = readExecution(), {
   // so it may not stay in the tree. This is also the inventory tripwire: a
   // stray or half-deleted stateless source at formal/ is refused here rather
   // than admitted as a library by the directory listing.
-  const reached = new Set(manifest.models.flatMap(model => importClosure(model.path)));
+  const closures = new Map(manifest.models.map(model => [model.path, importClosure(model.path, root, { readSource: source })]));
+  const reached = new Set([...closures.values()].flat());
   const orphans = libraries.filter(path => !reached.has(path));
   if (orphans.length) throw new Error(`Quint libraries no scheduled model imports: ${orphans.join(', ')}; import them from a scheduled model or delete them`);
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
   const scheduled = { ...manifest, libraries, models: manifest.models.map(model => ({ ...model, ...schedules.get(model.path) })) };
-  const challenges = validateChallenges(scheduled, { source, scanned, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, grandfathered, grandfatheredNative });
+  const challenges = validateChallenges(scheduled, { source, scanned, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, catalog, closures });
   return { models: manifest.models.length, libraries: libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
 }
 

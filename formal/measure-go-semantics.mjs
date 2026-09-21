@@ -6,7 +6,7 @@ import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { boundaryEvidence, checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
-import { assessBoundary, classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, parseAssertionDivergences, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { assessBoundary, classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 import { boundaryBaselines, boundaryTrace, mutationBoundaries, runBoundaryReplay } from './boundary-replay.mjs';
 import { settlementViolationPattern } from './replay/settlement.mjs';
 
@@ -122,7 +122,6 @@ export function evaluateGoTestEvents(lines, exitCode) {
   if (exitCode !== (failed ? 1 : 0) || packages[0] !== (failed ? 'fail' : 'pass')) throw new Error('Go exit code and assertion results disagree');
   return { state: failed ? 'detected' : 'survived', passed: leaves.length - failed, failed,
     failingTests: failedLeaves, assertionKinds, assertionEvidence: Object.fromEntries(failedLeaves.map(name => [name, outputs.get(name)])),
-    divergences: failedLeaves.flatMap(name => parseAssertionDivergences(outputs.get(name), name)),
     executedTests: leaves };
 }
 

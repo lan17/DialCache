@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "e2dfb3a88674961fc47f10ee48062bf58a46ddcfbd65d8657f59cd8d9abef042",
+      "sha256": "a6db6620cffc19ca004b94084d2b3ae9b782dcdfa02862889c5c4a03a0d15ce9",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":20,"title":"Reading a model"},
@@ -1017,8 +1017,8 @@
         {"line":327,"title":"Reproducible committed fixtures"},
         {"line":337,"title":"Refactoring and execution"},
         {"line":365,"title":"Challenging every model"},
-        {"line":451,"title":"Mapping every challenge to native mutants"},
-        {"line":584,"title":"Exported runs are exactly the public-only runs"}
+        {"line":446,"title":"Mapping every challenge to native mutants"},
+        {"line":577,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1364,16 +1364,16 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "96693505907a84258f46ae275c19d1558e90b763d027132008e4876f880562c7",
+      "sha256": "f333ae2b0f3c7bd581fda33315a21e026b0ea0ccd2b819ad34cc5c3c00f70bf0",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
         {"line":65,"title":"Model assurance"},
-        {"line":133,"title":"Generated boundary evidence"},
-        {"line":141,"title":"Behavioral mutation comparison"},
-        {"line":155,"title":"Recorded measurements"},
-        {"line":161,"title":"Reproduction and CI"},
-        {"line":221,"title":"Model properties and cross-language execution"}
+        {"line":131,"title":"Generated boundary evidence"},
+        {"line":139,"title":"Behavioral mutation comparison"},
+        {"line":153,"title":"Recorded measurements"},
+        {"line":159,"title":"Reproduction and CI"},
+        {"line":219,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1503,15 +1503,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "95d0bed8778f631ad612acfc13bd4c2ff1f6ae811383c72a9131c812d1cb05ae",
+      "sha256": "793cb5ac736f8cc09f400ce666d57a20c52d308f905728d01cc3f0f14f9f5e97",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":72,"title":"Reading a completion report"},
         {"line":90,"title":"Mutation evidence"},
-        {"line":203,"title":"Exploratory runs"},
-        {"line":251,"title":"A retained sampling regression"},
-        {"line":288,"title":"Historical results"}
+        {"line":201,"title":"Exploratory runs"},
+        {"line":249,"title":"A retained sampling regression"},
+        {"line":286,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

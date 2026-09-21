@@ -1,6 +1,5 @@
 import { writeFileSync } from 'node:fs';
 import { settlementViolationPattern } from './replay/settlement.mjs';
-import { parseAssertionDivergences } from './mutation-reports.mjs';
 
 // A successful process alone is insufficient: an unmatched selector or an
 // entirely skipped cohort can exit successfully without executing assertions.
@@ -29,9 +28,8 @@ export function evaluateSemanticTestReport(data, execution, exitCode, label = 'c
     if (violation !== undefined) error.settlementViolation = violation.split('\n')[0].replace(/^Error: /, '');
     throw error;
   }
-  const divergences = failed.flatMap(test => test.failureMessages.flatMap(message => parseAssertionDivergences(message, test.fullName)));
   return { state: failed.length ? 'detected' : 'survived', passed, failed: failed.length,
-    failingTests: failed.map(test => test.fullName), ...(divergences.length ? { divergences } : {}), ...(unhandledErrors.length ? { unhandledErrors } : {}) };
+    failingTests: failed.map(test => test.fullName), ...(unhandledErrors.length ? { unhandledErrors } : {}) };
 }
 
 // Vitest's JSON reporter omits unhandled and suite-collection errors. Preserve

@@ -410,10 +410,11 @@ retention or memo state. Keep its `nativeMutants` classification `model-only`
 or `unobservable` when those checks have no native consequence; exporting the
 history alone does not establish a native fault mapping. `profiles` must
 include the challenged model's own profile id, or its path for a model without
-a profile, and the cited run's profile. For a fault in a shared library every
-known profile must appear in `profiles` or in `exclusions`; a fault in one
-model's own file needs no exclusions, because no other profile executes that
-text.
+a profile, and the cited run's profile. For a fault in a shared library, every
+profile that imports the changed source must appear in `profiles` or in
+`exclusions`. Profiles outside that import closure are excluded structurally;
+do not repeat those relationships as catalog prose. A fault in one model's own
+file needs no exclusions, because no other profile executes that text.
 
 `check-model-properties.mjs` runs the cited history on the same copy of the
 sources as the invariant measurement, together with two probes it appends to
@@ -430,23 +431,17 @@ failure, not a survivor to record. The report entry gains
 
 For a reproduced library fault, the checker also measures the profile
 partition: a profile that does not import the changed source is `structural`,
-every listed profile must detect the mutant through a declared run or a
-scheduled invariant, and every reaching exclusion must keep all its runs
+derived from its imports without a catalog entry. Listing a non-importing
+profile as a detector fails validation. Every listed profile must detect the
+mutant through a declared run or a scheduled invariant, and every reaching exclusion must keep all its runs
 passing (`holds`). A filtered `--only` run also checks the reaching exclusions'
 scheduled invariants at the normal exploration bounds. The report records
 these results in `partition`; a changed exclusion or a listed profile that
 stops detecting the fault fails the check, so dated prose is not its evidence.
 
-Existing challenges are backfilled as their models are touched. Until then each
-one is listed by id in the manifest's top-level `reproducerBacklog`;
-`node formal/execution.mjs` rejects a challenge that is neither listed nor
-reproduced, a listed id that does not exist or already has a reproducer, and
-reports the backlog size. The backlog is a reported gap, not a gate, and it
-only shrinks: the ids that may appear in it are frozen in
-`grandfatheredReproducerBacklog` in `formal/execution.mjs`, so a new challenge
-cannot opt out by listing itself. Adding to that constant is a reviewed code
-change; removing an id once its challenge has a reproducer is the normal path.
-The native-mutant backlog below follows the same rule.
+Every challenge must carry a reproducer. The historical `reproducerBacklog`
+and `nativeMutantBacklog` fields remain empty for report compatibility;
+validation rejects a missing reproducer or any attempt to reopen either backlog.
 
 ### Mapping every challenge to native mutants
 
@@ -511,9 +506,7 @@ of the three, `text` is non-empty, within its length ceiling and names the
 mutant or a port file, `mutant` is present exactly for `mapped`,
 `crossContract` exactly when the case lacks the contract; two challenges that
 repeat one `(source, before, after)` fault map it the same way; and every
-challenge has a `nativeMutants` entry or is listed in the top-level
-`nativeMutantBacklog`, never both. The backlog is frozen in
-`grandfatheredNativeMutantBacklog` in `formal/execution.mjs` and only shrinks.
+challenge has a `nativeMutants` entry.
 The summary also counts catalog mutants no challenge cites.
 
 Each port's own unit suite is informational for a mutant: when a fault

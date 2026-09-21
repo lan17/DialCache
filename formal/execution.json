@@ -648,14 +648,13 @@
           "recovery-read",
           "shadow-layers",
           "shadow",
-          "dark-layers"
+          "dark-layers",
+          "effects"
         ],
         "exclusions": {
           "scope": "The request-only projection has no frames and no clock, so no age judgment is evaluated.",
           "source-budgets": "The local projection has no remote frames; local expiry is localEntryLiveAt, not ageBeforeCeiling.",
           "layers": "Frames are seeded at age 0 under a 60 s freshness and the clock moves 1 ms per tick, so no history reaches an age boundary.",
-          "core": "No scheduled history reaches an exact age boundary: every regression passes under the mutant.",
-          "effects": "Frames are stamped at the wall clock and read within 600 ms under a 60 s freshness, and classifier NONE retains no snapshot, so no age judgment meets a boundary.",
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "local-failure": "Composes the remote freshness judgment (ageBeforeCeiling), but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets a ceiling (re-measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated (re-measured 2026-09-20 over the composed text).",
@@ -694,7 +693,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
           "scope": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "layers": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
@@ -731,14 +729,13 @@
           "recovery-read",
           "shadow-layers",
           "shadow",
-          "dark-layers"
+          "dark-layers",
+          "effects"
         ],
         "exclusions": {
           "scope": "The request-only projection has no frames and no clock, so no age judgment is evaluated.",
           "source-budgets": "The local projection has no remote frames; local expiry is localEntryLiveAt, not ageBeforeCeiling.",
           "layers": "Frames are seeded at age 0 under a 60 s freshness and the clock moves 1 ms per tick, so no history reaches an age boundary.",
-          "core": "No scheduled history reaches an exact age boundary: every regression passes under the mutant.",
-          "effects": "Frames are stamped at the wall clock and read within 600 ms under a 60 s freshness, and classifier NONE retains no snapshot, so no age judgment meets a boundary.",
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "local-failure": "Composes the remote freshness judgment (ageBeforeCeiling), but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets a ceiling (re-measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated (re-measured 2026-09-20 over the composed text).",
@@ -769,11 +766,9 @@
           "policy",
           "source-budgets",
           "recovery-read",
-          "shadow-layers",
-          "local-clock"
+          "shadow-layers"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "effects": "The local layer is off (capacity 0 and no local TTL), so the mutated local lookup never serves an entry.",
           "recovery": "The local layer is off: capacity 0 and no local TTL, so local expiry is never judged.",
           "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read.",
@@ -784,7 +779,8 @@
           "layers": "Composes local storage, but its 60 s entries never reach their insertion expiry within the bound of 1 ms ticks.",
           "runtime-boundaries": "Composes local storage, but no input advances the clock, so no entry reaches its expiry.",
           "dark-layers": "The named dark-job histories and invariants do not distinguish inclusive local expiry. The sampled local-expiry witness drives native replay, but this profile supplies no model-side assertion for that exact local boundary.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "local-clock": "The fractional profile supplies its lookup through local_grid using raw insertion ticks and localEntryLiveOnGrid; it does not execute the mutated local_storage.localValue lookup. All named histories and scheduled invariants pass under this fault. Its own precise-grid and hit-renewal faults remain separately checked."
         }
       },
       "nativeMutants": {
@@ -817,7 +813,6 @@
           "local-clock"
         ],
         "exclusions": {
-          "core": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
           "effects": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
           "recovery": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
           "policy": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
@@ -869,7 +864,6 @@
           "shadow-read-deadlines"
         ],
         "exclusions": {
-          "core": "This profile does not import cache-rules.qnt and has no timed source or read operation.",
           "scope": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
           "layers": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
           "local-failure": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
@@ -906,7 +900,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/cache-rules.qnt; the mutation is outside its executable closure.",
           "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
@@ -961,13 +954,6 @@
           "shadow-read-deadlines"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "policy": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "layers": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "recovery-read": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
           "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
         }
       }
@@ -1008,9 +994,7 @@
           "dark-layers",
           "shadow-read-deadlines"
         ],
-        "exclusions": {
-          "core": "This profile does not import formal/kernel/flights.qnt; the ownership-registry mutation is outside its executable closure."
-        },
+        "exclusions": {},
         "scope": "Two outside callers start distinct sources. The connection monitor captures each caller from the external admission count and rejects an owners-table rewrite at the second source. This checks model bookkeeping only: native callers await their own source promise or goroutine result, with no owners table to mutate."
       }
     },
@@ -1035,16 +1019,10 @@
           "recovery"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
           "effects": "Classifier NONE: no snapshot is retained, so the mutated candidate retention is never executed.",
           "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
           "admission": "Passes Recovery::NONE at every read settlement, so no snapshot is retained and no recovery decode is held; the mutated text is never executed.",
-          "local-failure": "Composes the layered traversal without the recovery module (no stale-on-error snapshot is retained), so the mutated candidate retention is never executed.",
           "shadow-layers": "Composes recovery on the atomic path, but its guard excludes every stale candidate, so no snapshot holds a candidate and neither its stamp nor its maximum is ever consulted.",
-          "local-clock": "Composes the local projection without the recovery module, so the mutated candidate retention is never executed.",
-          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot.",
@@ -1079,15 +1057,9 @@
           "effects"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
           "shadow": "Composes remote_io, but every reply leaves the remote layer off, so the caller never dispatches a read; the job's read is the shadow module's.",
           "admission": "Composes the held read dispatch, but every read serves a hit (the three keys always hold a frame fresh for the 60 s TTL inside the 600 ms bound) and Recovery::NONE retains no snapshot, so the retention the held read carries reaches only a served job's fill authority, which a served job never writes.",
-          "local-failure": "Composes the layered release with inline remote reads (serving.release), never remote_io's held read dispatch or decode, so the mutated text is never executed.",
           "shadow-layers": "Composes the atomic release (remote_writes), never remote_io's held read dispatch or decode, so the mutated text is never executed.",
-          "local-clock": "Composes the local projection with no remote layer, so remote_io is never executed.",
-          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read.",
@@ -1122,15 +1094,9 @@
           "effects"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
           "shadow": "Composes remote_io, but every reply leaves the remote layer off, so the caller never dispatches a read; the job's read is the shadow module's.",
           "admission": "Composes the held read dispatch, but every read serves a hit (the three keys always hold a frame fresh for the 60 s TTL inside the 600 ms bound) and Recovery::NONE retains no snapshot, so the retention the held read carries reaches only a served job's fill authority, which a served job never writes.",
-          "local-failure": "Composes the layered release with inline remote reads (serving.release), never remote_io's held read dispatch or decode, so the mutated text is never executed.",
           "shadow-layers": "Composes the atomic release (remote_writes), never remote_io's held read dispatch or decode, so the mutated text is never executed.",
-          "local-clock": "Composes the local projection with no remote layer, so remote_io is never executed.",
-          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read.",
@@ -1176,17 +1142,11 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
           "effects": "Every held read settles with Recovery::NONE, so no caller retains a recovery candidate and the changed recovery-decode completion arm is unreachable.",
-          "policy": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
           "shadow": "Every reply disables caller remote serving; held C0 decodes belong to shadow jobs, and no caller retains a recovery candidate.",
           "scope": "Uses the request-only serving lifecycle, with no caller remote read or held recovery decode; it never executes RemoteIO::settleLoad.",
           "admission": "Every caller read settles with Recovery::NONE, so held caller decodes can serve fresh hits but never execute the changed recovery-completion arm.",
-          "layers": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
-          "local-failure": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
-          "runtime-boundaries": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
           "shadow-layers": "Uses the atomic caller traversal and RemoteWrites settlement, never RemoteIO::settleLoad; its guard also excludes ordinary stale caller recovery.",
-          "local-clock": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
           "source-budgets": "Uses the budgeted local projection, with no remote layer or held caller decode; it never executes RemoteIO::settleLoad.",
           "dark-layers": "Every reply disables caller remote serving; held C0 decodes belong to shadow jobs, and no caller retains a recovery candidate.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
@@ -1209,24 +1169,7 @@
         "profiles": [
           "effects"
         ],
-        "exclusions": {
-          "core": "Does not import metrics; the mutated text is never executed.",
-          "recovery": "Does not import metrics; the mutated text is never executed.",
-          "policy": "Does not import metrics; the mutated text is never executed.",
-          "shadow": "Does not import metrics; the mutated text is never executed.",
-          "scope": "Does not import metrics; the mutated text is never executed.",
-          "admission": "Does not import metrics; the mutated text is never executed.",
-          "layers": "Does not import metrics; the mutated text is never executed.",
-          "independent": "Does not import metrics; the mutated text is never executed.",
-          "recovery-read": "Does not import metrics; the mutated text is never executed.",
-          "local-failure": "Does not import metrics; the mutated text is never executed.",
-          "runtime-boundaries": "Does not import metrics; the mutated text is never executed.",
-          "shadow-layers": "Does not import metrics; the mutated text is never executed.",
-          "local-clock": "Does not import metrics; the mutated text is never executed.",
-          "source-budgets": "Does not import metrics; the mutated text is never executed.",
-          "dark-layers": "Dark-layers does not import formal/kernel/metrics.qnt; the mutation is outside its executable closure.",
-          "shadow-read-deadlines": "Does not import formal/kernel/metrics.qnt; the mutation is outside its executable closure."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",
@@ -1269,7 +1212,6 @@
           "independent": "Coalescing is off in every reply: every flight has one owner, so completing the first owner completes them all.",
           "recovery-read": "One execution at a time: no follower ever joins a flight, so every flight has one owner.",
           "shadow-layers": "Coalescing is off in every reply: every flight has one owner.",
-          "core": "Does not import the kernel library, so the mutated completion is never executed; its own completion rule is stated in its own text.",
           "shadow": "Coalescing is off and one caller runs at a time: every flight has one owner.",
           "local-failure": "Composes serving.complete through local_faults.settle, but admits one source at a time (no call begins while a source is pending), so every flight has one owner and the mutant's minimum-owner fold finishes the same call.",
           "local-clock": "Composes serving.complete through serving.callLocal, whose inline source settles in the step that starts it, so no flight ever gains a second owner and the mutant's minimum-owner fold finishes the same call.",
@@ -1322,13 +1264,6 @@
           "shadow-read-deadlines"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "policy": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "layers": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "recovery-read": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
           "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
         }
       }
@@ -1370,9 +1305,7 @@
           "dark-layers",
           "shadow-read-deadlines"
         ],
-        "exclusions": {
-          "core": "This profile does not import formal/kernel/flights.qnt; the ownership-registry mutation is outside its executable closure."
-        },
+        "exclusions": {},
         "scope": "Two independent held reads start distinct loaders. The unchanged connection property rejects the second loader having no caller in the mutated ownership registry. Both ports return each independent source into its own caller without such a registry; this reproducer checks the model monitor, not a native wrong-key fault."
       }
     },
@@ -1404,7 +1337,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/cache-rules.qnt; the mutation is outside its executable closure.",
           "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
@@ -1443,7 +1375,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "effects": "Frames are stamped at the wall clock and read within 600 ms under a 60 s freshness, so no read meets the freshness boundary.",
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "local-failure": "Composes the remote freshness judgment, but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets the fresh boundary.",
@@ -1480,19 +1411,7 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "effects": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "scope": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "recovery": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "policy": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "admission": "Every reply enables the remote layer, so no dark C0 read is made and the mutated acquisition is never applied.",
-          "layers": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "independent": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "recovery-read": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "local-failure": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "runtime-boundaries": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "local-clock": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
@@ -1558,7 +1477,6 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "This standalone profile does not import the shared source publication judgment.",
           "effects": "The local layer is disabled and has zero capacity, so no source can warm local storage.",
           "recovery": "The local layer is disabled and has zero capacity, so no source can warm local storage.",
           "policy": "All calls are untracked, for which the correct and faulty source publication judgments both permit local writes.",
@@ -1607,7 +1525,6 @@
           "runtime-boundaries"
         ],
         "exclusions": {
-          "core": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
           "effects": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
           "recovery": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
           "policy": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
@@ -1657,7 +1574,6 @@
           "policy"
         ],
         "exclusions": {
-          "core": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
           "effects": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
           "recovery": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
           "shadow": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
@@ -1702,7 +1618,6 @@
           "independent"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated retained-candidate judgment is never executed; its own snapshot capture is stated in its own text.",
           "effects": "Classifier NONE: no snapshot is retained, so the mutated retained-candidate judgment is never executed.",
           "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
@@ -1752,17 +1667,11 @@
           "independent"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated retained-candidate judgment is never executed; its own snapshot capture is stated in its own text.",
           "effects": "Classifier NONE: no snapshot is retained, so the mutated retained-candidate judgment is never executed.",
-          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "admission": "Passes Recovery::NONE at every read settlement, so no snapshot is retained and no recovery decode is held; the mutated text is never executed.",
-          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "local-failure": "Composes the layered traversal without the recovery module (no stale-on-error snapshot is retained), so the mutated retained-candidate judgment is never executed.",
-          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "shadow-layers": "Composes recovery on the atomic path, but its guard excludes every stale candidate, so no snapshot holds a candidate and neither its stamp nor its maximum is ever consulted.",
-          "local-clock": "Composes the local projection without the recovery module, so the mutated retained-candidate judgment is never executed.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot.",
           "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes preserving the original frame timestamp in a retained recovery candidate in this bounded read-deadline profile; the imported rule alone does not establish detection."
@@ -1794,19 +1703,8 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "scope": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "recovery": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "policy": "Does not compose remote_writes, so the mutated dispatch is never executed.",
           "admission": "Composes the held shadow lifecycle for served jobs, which always carry a C0 and never fill, so no dump is ever held and the mutated dispatch is never executed.",
-          "layers": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "independent": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "recovery-read": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "local-failure": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "runtime-boundaries": "Does not compose remote_writes, so the mutated dispatch is never executed.",
           "shadow-layers": "Composes remote_writes::dispatch but never raises a watermark (no invalidate input), so every fence is NO_FENCE and the recheck never refuses a write.",
-          "local-clock": "Does not compose remote_writes, so the mutated dispatch is never executed.",
-          "source-budgets": "Does not compose remote_writes, so the mutated dispatch is never executed.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
@@ -1835,20 +1733,8 @@
           "shadow-read-deadlines"
         ],
         "exclusions": {
-          "core": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "effects": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "scope": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "recovery": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "policy": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
           "admission": "Composes the held shadow lifecycle for served jobs only, whose C0 is the payload the hit served: no job ever holds a C0 read, so the acquisition arm the fault mutates is never executed.",
-          "layers": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "independent": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "recovery-read": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "local-failure": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "runtime-boundaries": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "shadow-layers": "Composes the atomic lifecycle: the dark C0 read is made at the release and the job waits in the registry until remote_writes::settle, so the held read settlement the fault mutates is never executed.",
-          "local-clock": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated C0 read settlement is never executed."
+          "shadow-layers": "Composes the atomic lifecycle: the dark C0 read is made at the release and the job waits in the registry until remote_writes::settle, so the held read settlement the fault mutates is never executed."
         }
       }
     },
@@ -1894,7 +1780,6 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
           "effects": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
           "recovery": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
           "policy": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
@@ -1944,7 +1829,6 @@
           "local-failure"
         ],
         "exclusions": {
-          "core": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
           "effects": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
           "recovery": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
           "policy": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
@@ -2150,23 +2034,7 @@
           "runtime-boundaries",
           "shadow-layers"
         ],
-        "exclusions": {
-          "core": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "effects": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "recovery": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "policy": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "shadow": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "scope": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "admission": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "independent": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "recovery-read": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "local-failure": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "local-clock": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "source-budgets": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "shadow-read-deadlines": "Does not import formal/cohort-boundaries.qnt; the fault is outside this profile executable closure."
-        }
+        "exclusions": {}
       }
     },
     {
@@ -2329,7 +2197,6 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated refill authority is never executed; its own fence check is stated in its own text.",
           "policy": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock.",
           "shadow": "Every reply leaves the remote layer off, so no caller source refills; the dark fill judges its fence through refillAllowed, which the mutant leaves intact.",
           "scope": "The request-only projection never refills the remote layer, so refills is never judged.",
@@ -2369,18 +2236,11 @@
           "shadow"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated arrival is never executed; its own deadline rule is stated in its own text.",
           "recovery": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained.",
-          "policy": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
           "scope": "Composes the request-only projection, which registers no deadline (deadlines reaches its closure through diagnostics alone), so arrival never runs.",
           "admission": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained.",
-          "layers": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
           "independent": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained.",
-          "recovery-read": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
-          "local-failure": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
-          "runtime-boundaries": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
           "shadow-layers": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained.",
-          "local-clock": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
           "source-budgets": "Its late settlements are delivered deadlines: arrival never finds a reached deadline undelivered.",
           "dark-layers": "Elapsed-time advances deliver source deadlines before later settlements; this profile has no clock jump without timer delivery to expose the arrival-time check independently.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
@@ -2416,7 +2276,6 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/request-memo.qnt; the memo-write closure mutation is outside its executable closure.",
           "effects": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
           "policy": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
           "shadow": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
@@ -2457,7 +2316,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/serving.qnt; the mutation is outside its executable closure.",
           "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
@@ -2492,7 +2350,6 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "effects": "No request scope (persistentContexts 0), so request_memo.closeScope never runs.",
           "recovery": "Closes a scope only through closeScope while the other scope's memo is empty in every scheduled history, so clearing every row clears exactly the closing scope's.",
           "policy": "Has no request scopes (persistentContexts 0 and no closeScope input), so the memo fold the fault mutates is never executed.",
@@ -2533,19 +2390,7 @@
           "shadow-layers"
         ],
         "exclusions": {
-          "core": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "effects": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "recovery": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "policy": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
           "shadow": "Composes the shadow module, but admits one job at a time (a call begins only after the previous job drained), so busy is judged against an empty registry and the mutated judgment never changes an admission.",
-          "scope": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "layers": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "independent": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "recovery-read": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "local-failure": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "runtime-boundaries": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "local-clock": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
           "dark-layers": "One job fills the instance capacity of one, so the unchanged full-capacity check still drops a duplicate even when the duplicate test is removed.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
@@ -2576,19 +2421,7 @@
           "shadow-read-deadlines"
         ],
         "exclusions": {
-          "core": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "effects": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "recovery": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "policy": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "shadow": "Composes the shadow module, but admits one job at a time (a call begins only after the previous job drained), so full is judged against an empty registry and the mutated comparison never changes an admission.",
-          "scope": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "layers": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "independent": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "recovery-read": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "local-failure": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "runtime-boundaries": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "local-clock": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated admission judgment is never executed."
+          "shadow": "Composes the shadow module, but admits one job at a time (a call begins only after the previous job drained), so full is judged against an empty registry and the mutated comparison never changes an admission."
         }
       },
       "nativeMutants": {
@@ -2622,7 +2455,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/serving.qnt; the mutation is outside its executable closure.",
           "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
@@ -2665,7 +2497,6 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/request-memo.qnt; the memo-write closure mutation is outside its executable closure.",
           "effects": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
           "policy": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
           "shadow": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
@@ -2702,19 +2533,13 @@
           "independent"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
           "effects": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
           "recovery": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
-          "policy": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
           "shadow": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
           "scope": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
           "admission": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
-          "layers": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
           "recovery-read": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
-          "local-failure": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
-          "runtime-boundaries": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
           "shadow-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
-          "local-clock": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
           "source-budgets": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
           "dark-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
           "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it."
@@ -2740,19 +2565,12 @@
           "independent"
         ],
         "exclusions": {
-          "core": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
           "effects": "Every deadline is a multiple of the 10 ms step from the origin, so the earliest due instant and the advance's target coincide.",
           "recovery": "Its one source deadline is 10 ms and every scheduled history that reaches it advances by exactly 10 ms or by 1000 ms with the candidate still inside its maximum, so delivering at the target yields the same channels.",
-          "policy": "Does not compose the deadlines module: its sources have no budget.",
           "shadow": "Composes deadlines' delivery for a source deadline and a job budget registered at one instant, whose expiries read no clock, so delivering at the target instead of each due instant yields the same channels.",
           "scope": "Does not compose the deadlines module: its sources have no budget.",
           "admission": "Composes deadlines' delivery for job budgets only: a job's expiry reads no clock and every budget is the same 10 ms, so registration order is due order and delivering at the target instead of each due instant yields the same labels in the same order.",
-          "layers": "Does not compose the deadlines module: its sources have no budget.",
-          "recovery-read": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
-          "local-failure": "Does not compose the deadlines module: its sources have no budget and no deadline is ever delivered.",
-          "runtime-boundaries": "Does not compose the deadlines module: its sources have no budget.",
           "shadow-layers": "Composes deadlines' delivery for job budgets whose expiry reads no clock and whose registration order is job order, so delivering at the target instead of each due instant yields the same labels in the same order.",
-          "local-clock": "Does not compose the deadlines module: its sources have no budget and no deadline is ever delivered.",
           "source-budgets": "Composes the budgeted local lifecycle, whose deliveries inside one advance complete the same sources with the same deadline error whichever instants the fold visits, and no delivery there starts further bounded work; only its private settledAt history sees the instant.",
           "dark-layers": "No recovery decode or source-duration observation samples the delivery instant inside an advance. Named runs and scheduled invariants still see the same final errors and retired jobs.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
@@ -2784,16 +2602,10 @@
           "recovery"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
           "effects": "Classifier NONE: no snapshot is retained and no recovery decode is held, so the mutated recovery age check is never executed.",
           "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
           "admission": "Passes Recovery::NONE at every read settlement, so no snapshot is retained and no recovery decode is held; the mutated text is never executed.",
-          "local-failure": "Composes the layered traversal without the recovery module (no stale-on-error snapshot is retained), so the mutated recovery age check is never executed.",
           "shadow-layers": "Composes recovery on the atomic path, but its guard excludes every stale candidate, so no snapshot holds a candidate and neither its stamp nor its maximum is ever consulted.",
-          "local-clock": "Composes the local projection without the recovery module, so the mutated recovery age check is never executed.",
-          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "No caller recovery candidate is retained while remote serving is off; the recovery maximum is never judged.",
@@ -2825,18 +2637,12 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
           "effects": "Classifier NONE: no snapshot is retained and no recovery decode is held, so the mutated recovery-decode settlement is never executed.",
           "recovery": "Local capacity is 0: Local::putLocal stores nothing, so the mutated warm changes no channel.",
           "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
           "admission": "Passes Recovery::NONE at every read settlement, so no snapshot is retained and no recovery decode is held; the mutated text is never executed.",
           "independent": "Composes the held remote lifecycle with a local capacity of 0 and replies that leave the local layer off, so the mutated warm stores nothing.",
-          "local-failure": "Composes the layered release with inline remote reads (serving.release), never remote_io's held read dispatch or decode, so the mutated recovery-decode settlement is never executed.",
           "shadow-layers": "Composes the atomic release (remote_writes), never remote_io's held read dispatch or decode, so the mutated text is never executed.",
-          "local-clock": "Composes the local projection with no remote layer, so remote_io is never executed.",
-          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
-          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "No caller enters recovery or releases a recovery decode; dark jobs decode their own C0 and never use the challenged recovery publication arm.",
@@ -2866,7 +2672,6 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
           "effects": "The 60 s retention is below the tracked cap, so the mutated cap never binds.",
           "recovery": "Every retention (2000, 5000) is under the tracked cap, so capped and raw retention coincide.",
           "shadow": "Every retention (60 s) is under the tracked cap, so capped and raw retention coincide.",
@@ -2910,24 +2715,7 @@
         "profiles": [
           "local-failure"
         ],
-        "exclusions": {
-          "core": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
-          "effects": "Does not compose local_faults, so the mutated definition is never executed.",
-          "recovery": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "policy": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read.",
-          "scope": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "admission": "Does not compose the local fault switch (local_faults).",
-          "layers": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "independent": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "recovery-read": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "runtime-boundaries": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "shadow-layers": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "local-clock": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "source-budgets": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "dark-layers": "Dark-layers does not import formal/kernel/local-faults.qnt; the mutation is outside its executable closure.",
-          "shadow-read-deadlines": "Does not import formal/kernel/local-faults.qnt; the mutation is outside its executable closure."
-        }
+        "exclusions": {}
       }
     },
     {
@@ -2954,7 +2742,6 @@
           "source-budgets"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
           "effects": "No local TTL: warm with localMs 0 stores nothing whatever the value, so the mutated local publication is never observable.",
           "recovery": "Composes serving.publish only through remote_io.settleLoader, which publishes a settled value only when it is already accepted and classifies a rejected one without publishing, so the removed acceptance gate never decides.",
           "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read.",
@@ -2999,24 +2786,7 @@
         "profiles": [
           "runtime-boundaries"
         ],
-        "exclusions": {
-          "core": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "effects": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "recovery": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "policy": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "shadow": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "scope": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "admission": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "independent": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "recovery-read": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "local-failure": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "shadow-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "local-clock": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "source-budgets": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "shadow-read-deadlines": "Does not import formal/kernel/runtime-policy.qnt; the fault is outside this profile executable closure."
-        }
+        "exclusions": {}
       }
     },
     {
@@ -3047,24 +2817,7 @@
         "profiles": [
           "runtime-boundaries"
         ],
-        "exclusions": {
-          "core": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "effects": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "recovery": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "policy": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "shadow": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "scope": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "admission": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "independent": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "recovery-read": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "local-failure": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "shadow-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "local-clock": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "source-budgets": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "shadow-read-deadlines": "Does not import formal/kernel/runtime-policy.qnt; the fault is outside this profile executable closure."
-        }
+        "exclusions": {}
       }
     },
     {
@@ -3088,19 +2841,7 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "effects": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "recovery": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "policy": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "scope": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "admission": "Every reply enables the remote layer, so no dark C0 read is made and the mutated acquisition is never applied.",
-          "layers": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "independent": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "recovery-read": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "local-failure": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "runtime-boundaries": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "local-clock": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
@@ -3130,19 +2871,7 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "effects": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "recovery": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "policy": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "scope": "Does not compose the shadow module, so the mutated fill dump is never executed.",
           "admission": "Served jobs always carry a C0 and never fill, so the mutated fill is never reached.",
-          "layers": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "independent": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "recovery-read": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "local-failure": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "runtime-boundaries": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "local-clock": "Does not compose the shadow module, so the mutated fill dump is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated fill dump is never executed.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
@@ -3169,7 +2898,6 @@
           "local-clock"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
           "effects": "Does not compose the fractional clock, so the mutated definition is never executed.",
           "recovery": "Never composes the fractional clock (clock.advanceTicks): its clock moves through diagnostics.advance and clock.shiftWall on the whole-millisecond grid, so the mutated projection is never executed.",
           "policy": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
@@ -3219,7 +2947,6 @@
           "recovery-read"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
           "effects": "The local layer is off (capacity 0 and no local TTL), so the mutated promotion never runs.",
           "recovery": "The local layer is off: capacity 0 and no local TTL, so no local entry is ever written or hit and the mutated renewal is never executed.",
           "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read.",
@@ -3265,20 +2992,13 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
           "effects": "All calls are enabled with valid keys and no closable request scope; sources start at release or read/decode settlement, never from bypass admission.",
           "recovery": "Call and join guards admit only enabled callers in open scopes. Closing a scope after admission cannot start a bypass source, so the changed admission budget never registers a deadline.",
-          "policy": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
           "shadow": "All calls are enabled with valid keys and no closable request scope; the caller source starts at participating release, not bypass admission.",
           "scope": "Uses Diagnostics::admitRequest and the request-only serving lifecycle, with no budgeted source lifecycle; it never calls the changed admission-budget rule.",
           "admission": "Uses Shadow::beginHeld through RemoteIO::begin without a source budget; only shadow jobs register deadlines, so caller admission never uses the changed rule.",
-          "layers": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
           "independent": "All calls are enabled with valid keys and no closable request scope; source loaders start after read/decode settlement, not from bypass admission.",
-          "recovery-read": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
-          "local-failure": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
-          "runtime-boundaries": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
           "shadow-layers": "Uses Shadow::begin with the atomic serving lifecycle and no source budget; only shadow jobs are timed, so caller admission never uses the changed rule.",
-          "local-clock": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
@@ -3322,7 +3042,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "The core model does not import the flights library.",
           "scope": "Only request flights are registered; processFlights stays empty, so removing process-flight cleanup changes no state.",
           "shadow": "This single-execution projection cannot admit a second source after its one source/job lifetime; its scheduled properties do not observe the settled process registry.",
           "independent": "Every caller has coalesce false and registers no process flight, so processFlights remains empty.",
@@ -3356,7 +3075,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
           "scope": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "layers": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
@@ -3439,14 +3157,7 @@
           "shadow-read-deadlines"
         ],
         "exclusions": {
-          "core": "does not compose the deadlines module: its sources have no budget",
-          "policy": "does not compose the deadlines module: its sources have no budget",
-          "scope": "does not compose the deadlines module: its sources have no budget",
-          "layers": "does not compose the deadlines module: its sources have no budget",
-          "recovery-read": "does not compose the deadlines module: its sources have no budget",
-          "local-failure": "does not compose the deadlines module: its sources have no budget",
-          "runtime-boundaries": "does not compose the deadlines module: its sources have no budget",
-          "local-clock": "does not compose the deadlines module: its sources have no budget"
+          "scope": "does not compose the deadlines module: its sources have no budget"
         },
         "model": "formal/dialcache-effects-conformance.qnt"
       },
@@ -3476,7 +3187,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "effects": "No request memo: the memo value is always absent, so the two traversal orders coincide.",
           "recovery": "No scheduled history admits a caller into a scope holding a memo while another scope's flight is pending, so the reordered arms decide alike.",
           "shadow": "Every reply leaves every layer off and coalescing off: decide's join and serve arms are never taken.",
@@ -3517,7 +3227,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
           "effects": "Every reply coalesces, so the dropped conjunct is always true.",
           "recovery": "Coalescing is on in every reply, so the conjunct the fault removes is always true and no history observes it.",
           "shadow": "Every reply leaves every layer off and coalescing off: decide's join and serve arms are never taken.",
@@ -3558,7 +3267,6 @@
           "runtime-boundaries"
         ],
         "exclusions": {
-          "core": "Does not import local_storage: the core profile states its local behavior in its own model.",
           "effects": "The fixture gives every source a zero local TTL, so the mutated local put has no observable effect.",
           "recovery": "The fixture has zero local capacity, so putLocal stores nothing before or after this fault.",
           "shadow": "Every reply leaves the local layer off and local capacity is zero, so no local entry is published.",
@@ -3599,7 +3307,6 @@
           "local-failure"
         ],
         "exclusions": {
-          "core": "Does not import the kernel library: the core profile states its local behavior in its own model.",
           "effects": "No local TTL is configured, and rejected held sources complete without calling publishLocal.",
           "recovery": "The held lifecycle handles rejection without calling publishLocal, and local capacity is zero.",
           "shadow": "Every reply leaves the local layer off and local capacity is zero, so no accepted local entry can be lost.",
@@ -3646,7 +3353,6 @@
           "layers"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/serving.qnt; the mutation is outside its executable closure.",
           "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
@@ -3702,13 +3408,6 @@
           "shadow-read-deadlines"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "policy": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "layers": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "recovery-read": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
           "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
         }
       }
@@ -3752,13 +3451,6 @@
           "shadow-read-deadlines"
         ],
         "exclusions": {
-          "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "policy": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "layers": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "recovery-read": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
           "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
         }
       }
@@ -3783,20 +3475,7 @@
           "dark-layers",
           "shadow-read-deadlines"
         ],
-        "exclusions": {
-          "core": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "effects": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "recovery": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "policy": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "scope": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "layers": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "independent": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "recovery-read": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "local-failure": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "runtime-boundaries": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "local-clock": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
-          "source-budgets": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",
@@ -3820,24 +3499,7 @@
         "profiles": [
           "effects"
         ],
-        "exclusions": {
-          "core": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "scope": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "recovery": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "policy": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "shadow": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "admission": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "layers": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "independent": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "recovery-read": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "local-failure": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "runtime-boundaries": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "shadow-layers": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "local-clock": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "source-budgets": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "dark-layers": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "shadow-read-deadlines": "Does not import formal/kernel/metrics.qnt; the fault is outside this profile executable closure."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",
@@ -3869,7 +3531,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "effects": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "scope": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "recovery": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
@@ -3917,7 +3578,6 @@
           "dark-layers"
         ],
         "exclusions": {
-          "core": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "effects": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "scope": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "recovery": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
@@ -3964,24 +3624,7 @@
         "profiles": [
           "shadow-read-deadlines"
         ],
-        "exclusions": {
-          "core": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "effects": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "recovery": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "policy": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "shadow": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "scope": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "admission": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "independent": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "recovery-read": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "local-failure": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "runtime-boundaries": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "shadow-layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "local-clock": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "source-budgets": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "dark-layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",
@@ -4005,24 +3648,7 @@
         "profiles": [
           "shadow-read-deadlines"
         ],
-        "exclusions": {
-          "core": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "effects": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "recovery": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "policy": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "shadow": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "scope": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "admission": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "independent": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "recovery-read": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "local-failure": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "runtime-boundaries": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "shadow-layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "local-clock": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "source-budgets": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure.",
-          "dark-layers": "Does not compose shadow-reads; the separate bounded shadow-read lifecycle is outside its executable closure."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",

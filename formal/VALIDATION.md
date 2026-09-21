@@ -109,12 +109,11 @@ reopening them. A mapped fault cannot replace its portable evidence with a
 model run that exports no vector.
 
 Read the evidence with `node formal/mutation-reports.mjs boundary --report
-<report.json>`. Optional `--cohorts <directory>` reads historical assertion
-diagnostics, which show only the first mismatch and cannot establish that a
-later checkpoint was reached. Diagnostics with incompatible raw and projected
-record shapes are not credited. Ungated inspection can read historical reports;
-it does not validate the current checkout. `--gate` additionally requires a
-complete report whose catalog, measured source inputs, recorded configuration
+<report.json>`. Raw native assertion reports remain available for diagnosis;
+without a completed boundary recording, inspection reports `unreached` and
+does not reconstruct evidence from assertion text. Ungated inspection can read
+historical reports; it does not validate the current checkout. `--gate`
+additionally requires a complete report whose catalog, measured source inputs, recorded configuration
 and exact corpus fingerprints match the checkout. Keep the measured corpus
 artifact when checking a downloaded report; regenerating it may change its
 bytes. Missing fingerprints fail the gated command, as does any exported
@@ -139,18 +138,17 @@ of all possible defects from their scores.
 The model catalog in `execution.json` covers every scheduled model with no
 waivers; `node formal/execution.mjs` reports the challenge and distinct fault
 counts. Its report distinguishes those two counts and marks a filtered `--only`
-run as partial; only the complete run is evidence. A challenge with a deterministic reproducer is additionally
+run as partial; only the complete run is evidence. Every challenge's deterministic reproducer is additionally
 replayed on the clean and mutated model and must fail only under the fault, at
 the expectation the manifest declares; the report records that outcome per
-challenge, and `node formal/execution.mjs` reports how many challenges still
-wait in `reproducerBacklog`.
+challenge. Missing reproducers fail validation.
 
 Each challenge also maps to the native mutant that injects the same wrong
 behavior into both ports through its `nativeMutants` entry, or explains why no
 native line exists; `node formal/execution.mjs` checks the mapping against
 the mutant catalog (`formal/mutations.json`, one entry per fault with a
 TypeScript and a Go section), anchors every catalog edit in the port text, and
-reports the challenges still waiting in `nativeMutantBacklog`. The mutation lanes must detect every mapped mutant in
+rejects a missing mapping or explanation. The mutation lanes must detect every mapped mutant in
 their generated cohort, so a mapped challenge is evidence that the corpus
 would catch that mistake in a port, not only that the model would. See the
 [authoring rules](./AUTHORING.md#mapping-every-challenge-to-native-mutants).

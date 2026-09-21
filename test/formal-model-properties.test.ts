@@ -232,13 +232,13 @@ describe("shared-library challenge partitions", () => {
   const challenge: Challenge = { id: "shared-boundary", contract: "C01", source: "formal/kernel/shared.qnt", model: "formal/listed.qnt",
     invariant: "obligation", before: "true", after: "false", reproducer: {
       kind: "exported-regression", run: "behaviorTest", model: "formal/cited.qnt", failure: "s.o.calls == List(1)", family: "shared-boundary",
-      profiles: ["listed", "cited"], exclusions: { excluded: "Imports the rule but never exercises its boundary.", structural: "Does not import the library." },
+      profiles: ["listed", "cited"], exclusions: { excluded: "Imports the rule but never exercises its boundary." },
     } };
   const plan: PartitionPlan = models.map(model => ({ model, mode: model.profile === "excluded" ? "excluded" : model.profile === "structural" ? "structural" : "listed" }));
   const proven = new Set(["formal/cited.qnt"]);
   const pass = async () => ({ status: "passed", failed: [] });
 
-  it("computes structural exclusions from actual transitive imports", () => {
+  it("infers structural exclusions and requires decisions when imports reach the fault", () => {
     const directory = mkdtempSync(resolve(tmpdir(), "dialcache-partition-test-"));
     try {
       mkdirSync(resolve(directory, "formal/kernel"), { recursive: true });
@@ -248,6 +248,18 @@ describe("shared-library challenge partitions", () => {
       const inventory = { models, libraries: [challenge.source, "formal/bridge.qnt"] };
       expect(challengePartitionPlan(challenge, inventory, directory)).toEqual(plan);
       expect(() => challengePartitionPlan({ ...challenge, reproducer: { ...challenge.reproducer!, profiles: ["listed", "cited", "structural"] } }, inventory, directory)).toThrow(/listed profile does not import/);
+      expect(() => challengePartitionPlan({ ...challenge, reproducer: { ...challenge.reproducer!, exclusions: {} } }, inventory, directory))
+        .toThrow(/shared-boundary\/excluded: profile is neither listed nor excluded/);
+      // An unrelated profile adds a structural result without editing every
+      // challenge. If it later imports the source, its exclusion needs review.
+      const added = { ...models[3]!, path: "formal/added.qnt", profile: "added" };
+      writeFileSync(resolve(directory, added.path), "module added { pure val unrelated = true }");
+      const expanded = { ...inventory, models: [...models, added] };
+      expect(challengePartitionPlan(challenge, expanded, directory)).toEqual([...plan, { model: added, mode: "structural" }]);
+      writeFileSync(resolve(directory, added.path), 'module added { import bridge.* from "./bridge" }');
+      expect(() => challengePartitionPlan(challenge, expanded, directory)).toThrow(/shared-boundary\/added: profile is neither listed nor excluded/);
+      const reviewed = { ...challenge, reproducer: { ...challenge.reproducer!, exclusions: { ...challenge.reproducer!.exclusions, added: "Imports the rule without reaching its boundary." } } };
+      expect(challengePartitionPlan(reviewed, expanded, directory)).toEqual([...plan, { model: added, mode: "excluded" }]);
       expect(challengePartitionPlan({ ...challenge, source: "formal/listed.qnt" }, inventory, directory)).toEqual([]);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });

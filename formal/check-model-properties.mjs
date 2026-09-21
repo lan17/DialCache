@@ -96,7 +96,7 @@ export function challengePartitionPlan(challenge, manifest, directory = root, cl
   return manifest.models.filter(model => model.profile).map(model => {
     const reaches = (closures?.get(model.path) ?? importClosure(model.path, directory)).includes(challenge.source);
     if (listed.has(model.profile) && !reaches) throw new Error(`${challenge.id}/${model.profile}: listed profile does not import ${challenge.source}`);
-    if (!listed.has(model.profile) && !Object.hasOwn(challenge.reproducer.exclusions, model.profile)) {
+    if (reaches && !listed.has(model.profile) && !Object.hasOwn(challenge.reproducer.exclusions, model.profile)) {
       throw new Error(`${challenge.id}/${model.profile}: profile is neither listed nor excluded`);
     }
     return { model, mode: listed.has(model.profile) ? 'listed' : reaches ? 'excluded' : 'structural' };

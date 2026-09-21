@@ -8,9 +8,8 @@ import { afterEach, describe, expect, it } from "vitest";
 type Evidence = { challenge: string; mutant: string; history: string; step: number; fields: string[] };
 type Recording = { path: string; completed: boolean; lastStep: number; divergences: Array<{ step: number; paths: string[] }>; error?: string };
 type Verdict = { state: string; matched?: string[]; reason?: string; divergences?: unknown[] };
-const { assessBoundary, parseAssertionDivergences, boundaryReview, validateBoundaryReportFreshness, fingerprintFiles, sha256, languages } = await import(new URL("../formal/mutation-reports.mjs", import.meta.url).href) as {
+const { assessBoundary, boundaryReview, validateBoundaryReportFreshness, fingerprintFiles, sha256, languages } = await import(new URL("../formal/mutation-reports.mjs", import.meta.url).href) as {
   assessBoundary(evidence: Evidence | { challenge: string; mutant: string; state: string }, recording?: Recording): Verdict;
-  parseAssertionDivergences(text: string, name?: string): unknown[];
   boundaryReview(report: unknown, evidence: unknown[], options?: { requireEntries?: boolean }): Verdict[];
   validateBoundaryReportFreshness(report: unknown, options?: { directory?: string }): void;
   fingerprintFiles(directory: string, paths: string[]): { files: number; sha256: string };
@@ -175,19 +174,21 @@ describe("native boundary evidence", () => {
     for (const state of ["vector", "unreproduced"]) expect(assessBoundary({ challenge: "gap", mutant: "M06", state }).state).toBe(state);
   });
 
-  it("parses comparable legacy observations without treating raw-driver layouts as differences", () => {
-    const prefix = "/tmp/regressions/shadow-layers/capturedTest.itf.json step 7 action releaseWrite";
-    expect(parseAssertionDivergences(`${prefix}\nexpected: {"o":{"writeTtls":[120000]}}\nactual: {"o":{"writeTtls":[180000]}}`)).toEqual([
-      { history: evidence.history, step: 7, action: "releaseWrite", paths: ["o.writeTtls.0"] },
-    ]);
-    expect(parseAssertionDivergences(`${prefix}\nexpected: {"o":{"calls":[1]}}\nactual: {"calls":[1],"events":[]}`)).toEqual([]);
-    expect(parseAssertionDivergences(`${prefix}\nexpected: invalid\nactual: {}`)).toEqual([]);
-    expect(parseAssertionDivergences(`${prefix}\nexpected: true\nactual: false`)).toEqual([]);
-  });
-
-  it("does not turn first-mismatch artifacts into a complete recording", () => {
-    const reviewed = boundaryReview({ mutations: [{ id: "M29", cohorts: { generated: { divergences: [{ history: evidence.history, step: 7, paths: ["o.writeTtls.0"] }] } } }] }, [evidence]);
-    expect(reviewed).toEqual([expect.objectContaining({ state: "unreached", reason: expect.stringContaining("historical first-mismatch") })]);
+  it("requires a completed recording even when legacy assertions claim the target mismatch", () => {
+    const message = `/tmp/regressions/${evidence.history}.itf.json step 7 action releaseWrite\n` +
+      'expected: {"o":{"writeTtls":[120000]}}\nactual: {"o":{"writeTtls":[180000]}}';
+    for (const generated of [
+      { assertionEvidence: { failure: message } },
+      { divergences: [{ history: evidence.history, step: 7, paths: ["o.writeTtls.0"] }] },
+    ]) {
+      const report = { mutations: [{ id: "M29", cohorts: { generated } }] };
+      const original = structuredClone(report);
+      for (const requireEntries of [false, true]) {
+        expect(boundaryReview(report, [evidence], { requireEntries }))
+          .toEqual([expect.objectContaining({ state: "unreached", divergences: [] })]);
+      }
+      expect(report).toEqual(original);
+    }
   });
 
   it("requires an explicit entry for coverage limitations when gating a report", () => {

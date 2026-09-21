@@ -1,36 +1,14 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boundaryEvidence, challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
-import { countingPaths, diffPaths } from './replay/divergence.mjs';
+import { countingPaths } from './replay/divergence.mjs';
 import { assessVectorBoundary } from './vector-evidence.mjs';
 
 // Preserve profile/run identity when workspaces and artifact roots differ.
 export function historyFromPath(path) {
   return /(?:^|\/)regressions\/([a-z-]+\/[^/]+)\.itf\.json$/.exec(String(path))?.[1];
-}
-
-// First-mismatch diagnostics are useful for inspection, but cannot establish
-// that a later checkpoint was reached. Older TS diagnostics printed the raw
-// driver beside a projected model record; refuse those incompatible shapes
-// instead of manufacturing divergences from their different layouts.
-export function parseAssertionDivergences(text, testName = '') {
-  if (typeof text !== 'string') return [];
-  const context = /([^\s]+\.itf\.json) step (\d+) action ([\w-]+)/.exec(text);
-  if (!context) return [];
-  const pair = /expected: ([^\n]+)\n\s*actual: ([^\n]+)/.exec(text);
-  if (!pair) return [];
-  let expected, actual;
-  try { expected = JSON.parse(pair[1]); actual = JSON.parse(pair[2]); } catch { return []; }
-  const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-  if (!record(expected) || !record(actual)) return [];
-  if (!text.includes('comparison: projected-v1') &&
-      Object.keys(expected).sort().join() !== Object.keys(actual).sort().join()) return [];
-  const paths = diffPaths(expected, actual);
-  if (!paths.length) return [];
-  return [{ history: historyFromPath(context[1]) ?? context[1] ?? testName,
-    step: Number(context[2]), action: context[3], paths }];
 }
 
 // Boundary recordings are separate from the ordinary detection cohorts. A
@@ -353,14 +331,13 @@ function currentBoundaries(report, entries, directory = root) {
   return boundaryReview(report, evidence, { requireEntries: true });
 }
 
-// A historical report has only first-mismatch evidence. Preserve it for the
-// reader, but do not upgrade it to a complete recording or a boundary verdict.
-export function boundaryReview(report, evidence, { cohortsDirectory, requireEntries = false } = {}) {
+// Boundary evidence comes only from explicit recordings. Raw assertion logs
+// remain diagnostic artifacts and cannot establish a completed history.
+export function boundaryReview(report, evidence, { requireEntries = false } = {}) {
   if (!Array.isArray(report.mutations)) throw new Error('Boundary report has no mutation results');
   const goReport = typeof report.go === 'string', typescriptReport = report.configurationSha256 !== undefined;
   const reportPort = goReport === typescriptReport ? undefined : goReport ? 'go' : 'typescript';
   if (new Set(report.mutations.map(mutation => mutation.id)).size !== report.mutations.length) throw new Error('Boundary report repeats a mutant');
-  const legacyByMutant = new Map();
   for (const mutation of report.mutations) {
     if (mutation.boundary && new Set(mutation.boundary.map(entry => entry.challenge)).size !== mutation.boundary.length) {
       throw new Error(`Boundary report repeats a challenge for ${mutation.id}`);
@@ -394,24 +371,7 @@ export function boundaryReview(report, evidence, { cohortsDirectory, requireEntr
         divergences: recorded.divergences, ...(recorded.reason ? { error: recorded.reason } : {}) });
     }
     if (entry.state) return { ...entry, via: 'legacy' };
-    if (legacyByMutant.has(mutation.id)) return { ...entry, via: 'legacy', state: 'unreached',
-      reason: 'No complete boundary recording; historical first-mismatch diagnostics are inspection evidence only',
-      divergences: legacyByMutant.get(mutation.id).filter(item => item.history === entry.history) };
-    let legacy = mutation.cohorts.generated?.divergences ?? Object.entries(mutation.cohorts.generated?.assertionEvidence ?? {})
-      .flatMap(([name, message]) => parseAssertionDivergences(message, name));
-    if (cohortsDirectory) {
-      const path = resolve(cohortsDirectory, `${mutation.id}-generated.json`);
-      if (existsSync(path)) {
-        const data = JSON.parse(readFileSync(path, 'utf8'));
-        legacy = data.testResults
-          ? data.testResults.flatMap(file => file.assertionResults).filter(test => test.status === 'failed')
-            .flatMap(test => test.failureMessages.flatMap(message => parseAssertionDivergences(message, test.fullName)))
-          : Object.entries(data.assertionEvidence ?? {}).flatMap(([name, message]) => parseAssertionDivergences(message, name));
-      }
-    }
-    legacyByMutant.set(mutation.id, legacy);
-    return { ...entry, via: 'legacy', state: 'unreached', reason: 'No complete boundary recording; historical first-mismatch diagnostics are inspection evidence only',
-      divergences: legacy.filter(item => item.history === entry.history) };
+    return { ...entry, via: 'legacy', state: 'unreached', reason: 'No complete boundary recording', divergences: [] };
   });
 }
 
@@ -422,14 +382,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     for (let i = 0; i < args.length; i++) {
       const name = args[i];
       if (name === '--gate') options.gate = true;
-      else if (['--report', '--cohorts'].includes(name) && args[i + 1] && !args[i + 1].startsWith('--')) options[name.slice(2)] = args[++i];
+      else if (name === '--report' && args[i + 1] && !args[i + 1].startsWith('--')) options.report = args[++i];
       else throw new Error(`Unknown or incomplete option: ${name}`);
     }
-    if (command !== 'boundary' || !options.report) throw new Error('Usage: node formal/mutation-reports.mjs boundary --report <report.json> [--cohorts <directory>] [--gate]');
+    if (command !== 'boundary' || !options.report) throw new Error('Usage: node formal/mutation-reports.mjs boundary --report <report.json> [--gate]');
     const { boundaryEvidence } = await import('./execution.mjs');
     const report = JSON.parse(readFileSync(options.report, 'utf8'));
     if (options.gate) validateBoundaryReportFreshness(report);
-    const entries = boundaryReview(report, boundaryEvidence(), { cohortsDirectory: options.cohorts, requireEntries: options.gate === true });
+    const entries = boundaryReview(report, boundaryEvidence(), { requireEntries: options.gate === true });
     console.log(JSON.stringify({ sourceReport: resolve(options.report), entries }, null, 2));
     if (options.gate && (report.complete !== true || entries.some(entry => !['confirmed', 'vector', 'unreproduced'].includes(entry.state)))) process.exitCode = 1;
   } catch (error) { console.error(error.message); process.exitCode = 1; }
