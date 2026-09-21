@@ -401,7 +401,7 @@ to the challenged model; when the fault sits in a shared library, the
 reproducer may instead name another profile `model` whose exported run reaches
 it, which is how a verification model's shared-rule challenge gets a portable
 reproducer. A `model-run` cites a run that only the model executes and must
-carry a `scope` stating why the fault has no native counterpart: a vector model
+carry a `scope` explaining its evidence boundary: a vector model
 whose cases reach the codecs through an exported artifact, or instrumentation
 such as a receipt that no driver observes. A run that is exported must be cited
 as an `exported-regression`; `scope` is rejected on that kind. `profiles` must
@@ -541,7 +541,7 @@ The coordinator records every differing observation in a separate replay:
 consequence fields count at the checkpoint, while cumulative counters count
 only when their divergence first appears there relative to the previous step.
 Each mapping reports `confirmed`, `side-effect-only`, `not-divergent`,
-`unreached`, `vector`, or `unreproduced`; incomplete or failed replays never earn
+`unreached`, or `unreproduced`; incomplete or failed replays never earn
 boundary credit. Both ports must replay every selected history cleanly and
 confirm its boundary under the mutant; the mutation gate names a failure as
 `<mutant>/boundary:<challenge>`, independently of cohort detections. A new
@@ -552,6 +552,27 @@ decision when a later command would require an operation the fault removes.
 The Go recorder also continues through typed semantic property assertions,
 after validating the complete monitor input; those diagnostics alone earn no
 boundary credit, and malformed driver or monitor records still terminate it.
+
+For a mapped vector model-run, supply `nativeMutants.evidence.vector` with
+`artifact`, `group`, `rows` keyed by `typescript` and `go`, `fields`, and a
+`relation` explaining how those exact generated inputs exercise the named
+model regression. Use the same row in both bindings unless native codec sizes
+require different inputs for the same semantic boundary. In that case, add
+deterministic model checks for both inputs and explain their relationship.
+The artifact must be owned by the scheduled vector model, and each named row
+must exist exactly once. Expected fields are read from that artifact.
+A verification model may cite another vector model through `reproducer.model`
+only when both execute the challenged shared-library rule. Retain the original
+verification invariant, name both models in the reproducer's coverage, and
+measure the shared fault's coverage across the behavioral profiles as usual.
+
+The native vector workers receive only an operation and its external inputs.
+They return actual keys, frame classifications, decoded bytes or compression
+outcomes; known API rejection is a typed result, while process or output errors
+fail the run. The mutation gate requires a clean baseline from the same binding
+and row, verifies artifact and input fingerprints, and recomputes the mismatch
+from the recorded native value. A failure elsewhere in the vector cohort does
+not satisfy this boundary.
 
 ### Exported runs are exactly the public-only runs
 

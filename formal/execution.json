@@ -1460,7 +1460,33 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M06",
-        "text": "M06 makes the tracked decode fence inclusive in both ports, the fault dialcache-frame-vectors.qnt decode inlines as a strict timestamp-below-fence test. The exported quint-frame-vectors trackedDecodeVectors are the very rows that detect M06 in both ports."
+        "text": "M06 makes the tracked decode fence inclusive in both ports, the fault dialcache-frame-vectors.qnt decode inlines as a strict timestamp-below-fence test. The exported quint-frame-vectors trackedDecodeVectors are the very rows that detect M06 in both ports.",
+        "evidence": {
+          "vector": {
+            "artifact": "formal/quint-frame-vectors.json",
+            "group": "trackedDecodeVectors",
+            "rows": {
+              "typescript": "Quint frame 546 decode",
+              "go": "Quint frame 546 decode"
+            },
+            "fields": [
+              "kind",
+              "reason"
+            ],
+            "relation": "The named run executes requestFor(546), the exact generated tracked frame row: createdAtMs and watermark are both one. Its miss classification must precede serving the frame."
+          }
+        }
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "frameAtWatermarkIsDeclinedTest",
+        "failure": "result.kind == \"miss\" and result.reason == \"watermark_fenced\" and result.fence == 1",
+        "family": "frame-fence-equality",
+        "profiles": [
+          "formal/dialcache-frame-vectors.qnt"
+        ],
+        "exclusions": {},
+        "scope": "A deterministic protocol transform exports language-neutral vector inputs rather than an asynchronous driver history. Exact generated rows have their own native input/output recording and clean baseline in both ports. The named run executes requestFor(546), the exact generated tracked frame row: createdAtMs and watermark are both one. Its miss classification must precede serving the frame."
       }
     },
     {
@@ -1492,7 +1518,32 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M50",
-        "text": "M50 is the native twin of dialcache-key-protocol.qnt validKey dropping its untracked disjunct: both ports reject braces in keyType and id for untracked keys as well as tracked ones. quint-key-vectors 050, 052, 062, 064, 411 and 413 (untracked keys with braces expected valid) are the expected evidence in both ports."
+        "text": "M50 is the native twin of dialcache-key-protocol.qnt validKey dropping its untracked disjunct: both ports reject braces in keyType and id for untracked keys as well as tracked ones. quint-key-vectors 050, 052, 062, 064, 411 and 413 (untracked keys with braces expected valid) are the expected evidence in both ports.",
+        "evidence": {
+          "vector": {
+            "artifact": "formal/quint-key-vectors.json",
+            "group": "keyVectors",
+            "rows": {
+              "typescript": "Quint key 050: opening brace",
+              "go": "Quint key 050: opening brace"
+            },
+            "fields": [
+              "kind"
+            ],
+            "relation": "The named run executes inputFor(50), the exact generated untracked identity with an opening brace as keyType. Both bindings must construct that identity successfully."
+          }
+        }
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "untrackedTypeBraceRemainsValidTest",
+        "failure": "s.key.valid",
+        "family": "untracked-brace-acceptance",
+        "profiles": [
+          "formal/dialcache-key-protocol.qnt"
+        ],
+        "exclusions": {},
+        "scope": "A deterministic protocol transform exports language-neutral vector inputs rather than an asynchronous driver history. Exact generated rows have their own native input/output recording and clean baseline in both ports. The named run executes inputFor(50), the exact generated untracked identity with an opening brace as keyType. Both bindings must construct that identity successfully."
       }
     },
     {
@@ -1520,7 +1571,33 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M55",
-        "text": "M55 is the native twin of dialcache-envelope-vectors.qnt selectWrite treating a size tie as smaller: both ports store a compressed payload whose marked size ties the escaped raw size. The compressionWriteVectors tie rows, which record per-binding codec sizes, are the expected evidence in both ports."
+        "text": "M55 is the native twin of dialcache-envelope-vectors.qnt selectWrite treating a size tie as smaller: both ports store a compressed payload whose marked size ties the escaped raw size. The compressionWriteVectors tie rows, which record per-binding codec sizes, are the expected evidence in both ports.",
+        "evidence": {
+          "vector": {
+            "artifact": "formal/quint-envelope-vectors.json",
+            "group": "compressionWriteVectors",
+            "rows": {
+              "typescript": "Quint envelope 192 write text-size-boundary",
+              "go": "Quint envelope 219 write escaped-size-boundary"
+            },
+            "fields": [
+              "outcome",
+              "marker"
+            ],
+            "relation": "The primary run executes requestFor(192), the TypeScript native codec tie; the independently scheduled goCompressionTieKeepsRawRepresentationTest executes requestFor(219), the Go native codec tie. Both require strict shrink against escaped raw size; codec sizes differ legitimately."
+          }
+        }
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "compressionTieKeepsRawRepresentationTest",
+        "failure": "result.typescript.outcome == \"not_smaller\" and result.typescript.storedBytes == 18",
+        "family": "compression-strict-shrink",
+        "profiles": [
+          "formal/dialcache-envelope-vectors.qnt"
+        ],
+        "exclusions": {},
+        "scope": "A deterministic protocol transform exports language-neutral vector inputs rather than an asynchronous driver history. Exact generated rows have their own native input/output recording and clean baseline in both ports. The primary run executes requestFor(192), the TypeScript native codec tie; the independently scheduled goCompressionTieKeepsRawRepresentationTest executes requestFor(219), the Go native codec tie. Both require strict shrink against escaped raw size; codec sizes differ legitimately."
       }
     },
     {
@@ -1534,7 +1611,32 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M53",
-        "text": "M53 is the native twin of dialcache-envelope-vectors.qnt readEnvelope lowering the escapable marker range to exclude the binary-zstd marker: both ports leave the escape prefix in place before an escaped binary-zstd marker. Envelope vectors 008, 003 and 013 are the expected evidence in both ports."
+        "text": "M53 is the native twin of dialcache-envelope-vectors.qnt readEnvelope lowering the escapable marker range to exclude the binary-zstd marker: both ports leave the escape prefix in place before an escaped binary-zstd marker. Envelope vectors 008, 003 and 013 are the expected evidence in both ports.",
+        "evidence": {
+          "vector": {
+            "artifact": "formal/quint-envelope-vectors.json",
+            "group": "envelopeVectors",
+            "rows": {
+              "typescript": "Quint envelope 008 envelope",
+              "go": "Quint envelope 008 envelope"
+            },
+            "fields": [
+              "decodedHex"
+            ],
+            "relation": "The named run executes requestFor(8), the exact generated byte sequence 0002. Decoding strips precisely one escape prefix and returns the literal binary marker byte02."
+          }
+        }
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "escapedBinaryMarkerRemainsLiteralTest",
+        "failure": "result.read.bytes == List(2)",
+        "family": "escaped-binary-marker",
+        "profiles": [
+          "formal/dialcache-envelope-vectors.qnt"
+        ],
+        "exclusions": {},
+        "scope": "A deterministic protocol transform exports language-neutral vector inputs rather than an asynchronous driver history. Exact generated rows have their own native input/output recording and clean baseline in both ports. The named run executes requestFor(8), the exact generated byte sequence 0002. Decoding strips precisely one escape prefix and returns the literal binary marker byte02."
       }
     },
     {
@@ -2472,18 +2574,32 @@
       "reproducer": {
         "kind": "model-run",
         "run": "unknownLegacyZeroPrefixRemainsUntouchedTest",
-        "failure": "result.read.bytes == List(0, 3, 255)",
+        "failure": "result.read.bytes == List(0,3)",
         "family": "escape-prefix-over-consumed",
         "profiles": [
           "formal/dialcache-envelope-vectors.qnt"
         ],
         "exclusions": {},
-        "scope": "Envelope handling is a deterministic transform with no replayed input history: the vector model exports its cases to quint-envelope-vectors.json and both codecs are checked against that artifact, not through a driver profile. The run pins the unknown zero-prefix payload (bytes 0, 3, 255) that the fault would unescape."
+        "scope": "A deterministic protocol transform exports language-neutral vector inputs rather than an asynchronous driver history. Exact generated rows have their own native input/output recording and clean baseline in both ports. The named run executes requestFor(9), the exact generated byte sequence0003. Because03 is not an envelope marker, both native readers preserve both bytes."
       },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M54",
-        "text": "M54 is the native twin of dialcache-envelope-vectors.qnt readEnvelope dropping its marker guard: both ports strip a leading zero byte even when the next byte is not an envelope marker. M53 shares the anchor with a different edit and stays a distinct entry; envelope vectors 009 (0003 stays 0003) and 010 are the expected evidence in both ports."
+        "text": "M54 is the native twin of dialcache-envelope-vectors.qnt readEnvelope dropping its marker guard: both ports strip a leading zero byte even when the next byte is not an envelope marker. M53 shares the anchor with a different edit and stays a distinct entry; envelope vectors 009 (0003 stays 0003) and 010 are the expected evidence in both ports.",
+        "evidence": {
+          "vector": {
+            "artifact": "formal/quint-envelope-vectors.json",
+            "group": "envelopeVectors",
+            "rows": {
+              "typescript": "Quint envelope 009 envelope",
+              "go": "Quint envelope 009 envelope"
+            },
+            "fields": [
+              "decodedHex"
+            ],
+            "relation": "The named run executes requestFor(9), the exact generated byte sequence0003. Because03 is not an envelope marker, both native readers preserve both bytes."
+          }
+        }
       }
     },
     {
@@ -2931,13 +3047,9 @@
     "stale-recovery-candidate-stamped-at-read",
     "redis-protocol-inclusive-fence",
     "redis-protocol-untracked-fence",
-    "frame-vectors-inclusive-fence",
     "invalidation-transition-cutoff-moves-backwards",
     "invalidation-transition-inclusive-buffer-limit",
-    "key-protocol-untracked-brace-rejection",
     "cohort-inclusive-threshold",
-    "envelope-vectors-tie-compresses",
-    "envelope-vectors-escape-misses-binary-marker",
     "scope-late-source-repopulates-closed-memo",
     "layers-late-memo-into-closed-scope",
     "independent-fresh-frame-retained",

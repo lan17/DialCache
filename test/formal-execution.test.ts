@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 type Reproducer = { kind: string; run: string; model?: string; failure: string; family: string; profiles: string[]; exclusions: Record<string, string>; scope?: string };
 type WrittenEvidence = { history: string; step: number; fields: string[] };
-type BoundaryEvidence = { challenge: string; mutant: string; history?: string; step?: number; fields?: string[]; origin?: "derived" | "written"; state?: "vector" | "unreproduced" };
+type BoundaryEvidence = { challenge: string; mutant: string; history?: string; step?: number; fields?: string[]; origin?: "derived" | "written" | "vector"; vector?: { samples: Record<string, {expected: Record<string, unknown>}> }; state?: "vector" | "unreproduced" };
 type NativeMutants = { kind: string; text: string; mutant?: string; crossContract?: string; evidence?: WrittenEvidence };
 type Challenge = { id: string; contract: string; source: string; model: string; invariant: string; before: string; after: string; measures?: string; reproducer?: Reproducer; nativeMutants?: NativeMutants };
 type Manifest = {
@@ -343,10 +343,10 @@ describe("formal execution schedule", () => {
     const current = manifest();
     const withReproducer = current.challenges.filter(challenge => challenge.reproducer);
     expect(withReproducer.map(challenge => challenge.id)).toEqual([
-      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "fence-inclusive-timestamp", "profile-source-wrong-clock", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "independent-wrong-recovered-value", "effects-wrong-acceptance-receipt", "recovery-strands-followers", "tracked-read-inclusive-fence", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "shadow-fenced-fill-writes", "shadow-fill-before-source", "conformance-local-hit-returns-source", "conformance-remote-miss-skips-publication", "effects-fenced-source-publishes", "effects-late-source-accepted", "scope-source-error-memoized", "scope-nested-close-evicts-outer-memo", "admission-duplicate-key-admitted", "admission-capacity-off-by-one", "layers-process-flight-crosses-instance", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "local-failure-write-fault-publishes", "local-failure-source-error-published", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "local-clock-hit-renews-insertion", "source-budgets-outside-call-has-deadline", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry", "dark-layers-process-flight-crosses-instance", "dark-layers-budget-starts-at-clock-origin", "admission-budget-starts-at-clock-origin", "dark-layers-timeout-releases-held-capacity", "effects-stale-frame-reply-unclassified",
+      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "fence-inclusive-timestamp", "profile-source-wrong-clock", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "independent-wrong-recovered-value", "effects-wrong-acceptance-receipt", "recovery-strands-followers", "tracked-read-inclusive-fence", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "shadow-fenced-fill-writes", "shadow-fill-before-source", "frame-vectors-inclusive-fence", "key-protocol-untracked-brace-rejection", "envelope-vectors-tie-compresses", "envelope-vectors-escape-misses-binary-marker", "conformance-local-hit-returns-source", "conformance-remote-miss-skips-publication", "effects-fenced-source-publishes", "effects-late-source-accepted", "scope-source-error-memoized", "scope-nested-close-evicts-outer-memo", "admission-duplicate-key-admitted", "admission-capacity-off-by-one", "layers-process-flight-crosses-instance", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "local-failure-write-fault-publishes", "local-failure-source-error-published", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "local-clock-hit-renews-insertion", "source-budgets-outside-call-has-deadline", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry", "dark-layers-process-flight-crosses-instance", "dark-layers-budget-starts-at-clock-origin", "admission-budget-starts-at-clock-origin", "dark-layers-timeout-releases-held-capacity", "effects-stale-frame-reply-unclassified",
     ]);
     expect(withReproducer.map(challenge => challenge.reproducer!.kind)).toEqual([
-      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
+      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "model-run", "model-run", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
     ]);
     // The shared-rule fault of a verification model is pinned by a profile's exported regression.
     expect(withReproducer.find(challenge => challenge.id === "stale-recovery-future-candidate")!.reproducer).toMatchObject({
@@ -593,7 +593,7 @@ describe("formal execution schedule", () => {
     // model's own file may not name one, whatever its reproducer kind.
     const budgetsRun = { model: "formal/dialcache-source-budgets-conformance.qnt", run: "defaultSourceBudgetExpiresAtSixtySecondsTest", failure: "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2" };
     expect(() => validate(modelRun(r => { Object.assign(r, budgetsRun); })))
-      .toThrow(/reproducer model must name another profile model and is allowed only for an exported-regression of a shared-library fault: formal\/dialcache-source-budgets-conformance\.qnt/);
+      .toThrow(/reproducer model must name another profile model or vector model reached by a shared-library fault.*: formal\/dialcache-source-budgets-conformance\.qnt/);
     expect(() => validate(shared(r => { r.model = "formal/dialcache-stale-recovery.qnt"; }))).toThrow(/reproducer model must name another profile model/);
     expect(() => validate(shared(r => { r.model = "formal/dialcache-core.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/dialcache-core\.qnt/);
     expect(() => validate(shared(r => { r.model = "formal/invented.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/invented\.qnt/);
@@ -827,8 +827,8 @@ describe("native boundary evidence", () => {
     expect(entries.map(entry => entry.challenge)).toEqual(current.challenges.filter(challenge => challenge.nativeMutants?.kind === "mapped").map(challenge => challenge.id));
     expect(validate(current).boundaryEvidence).toEqual(Object.fromEntries(["derived", "written", "unreproduced", "vector"].map(kind =>
       [kind, entries.filter(entry => (entry.origin ?? entry.state) === kind).length])));
-    expect(entries.find(entry => entry.challenge === "envelope-strips-unknown-zero-prefix")).toMatchObject({ state: "vector" });
-    expect(entries.find(entry => entry.challenge === "frame-vectors-inclusive-fence")).toMatchObject({ state: "unreproduced" });
+    expect(entries.find(entry => entry.challenge === "envelope-strips-unknown-zero-prefix")).toMatchObject({ origin: "vector", step: 0 });
+    expect(entries.find(entry => entry.challenge === "frame-vectors-inclusive-fence")).toMatchObject({ origin: "vector", step: 0 });
     expect(entries.find(entry => entry.challenge === "scope-source-error-memoized")).toMatchObject({
       history: "dark-layers/rejectedDarkSourceSeedsNoLayerTest", step: 5, origin: "derived",
     });
@@ -928,6 +928,12 @@ describe("native boundary evidence", () => {
     };
     const registry = JSON.parse(readFileSync(root + "formal/profiles.json", "utf8")) as { profiles: Array<{ id: string; smoke: string }> };
     for (const entry of boundaryEvidence().filter(item => item.history !== undefined)) {
+      if (entry.vector) {
+        for (const sample of Object.values(entry.vector.samples)) for (const field of entry.fields!) {
+          expect(Object.hasOwn(sample.expected, field), `${entry.challenge}: ${field}`).toBe(true);
+        }
+        continue;
+      }
       const profile = entry.history!.split("/")[0]!, path = registry.profiles.find(item => item.id === profile)!.smoke;
       const raw = JSON.parse(readFileSync(root + path, "utf8")) as unknown;
       const descriptor = features.profiles[profile];

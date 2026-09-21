@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boundaryEvidence, challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
 import { countingPaths, diffPaths } from './replay/divergence.mjs';
+import { assessVectorBoundary } from './vector-evidence.mjs';
 
 // Preserve profile/run identity when workspaces and artifact roots differ.
 export function historyFromPath(path) {
@@ -37,6 +38,7 @@ export function parseAssertionDivergences(text, testName = '') {
 // earlier. Counters already wrong at the previous step cannot impersonate a
 // consequence at this checkpoint.
 export function assessBoundary(evidence, recording) {
+  if (evidence.vector) return assessVectorBoundary(evidence, recording);
   const result = { ...evidence, via: 'coordinator' };
   if (['vector', 'unreproduced'].includes(evidence.state)) return result;
   result.completed = recording?.completed === true;
@@ -355,6 +357,8 @@ function currentBoundaries(report, entries, directory = root) {
 // reader, but do not upgrade it to a complete recording or a boundary verdict.
 export function boundaryReview(report, evidence, { cohortsDirectory, requireEntries = false } = {}) {
   if (!Array.isArray(report.mutations)) throw new Error('Boundary report has no mutation results');
+  const goReport = typeof report.go === 'string', typescriptReport = report.configurationSha256 !== undefined;
+  const reportPort = goReport === typescriptReport ? undefined : goReport ? 'go' : 'typescript';
   if (new Set(report.mutations.map(mutation => mutation.id)).size !== report.mutations.length) throw new Error('Boundary report repeats a mutant');
   const legacyByMutant = new Map();
   for (const mutation of report.mutations) {
@@ -368,10 +372,20 @@ export function boundaryReview(report, evidence, { cohortsDirectory, requireEntr
     const recorded = mutation.boundary?.find(item => item.challenge === entry.challenge);
     if (!recorded && requireEntries) return { ...entry, state: 'unreached', reason: 'No per-challenge boundary result was recorded', divergences: [] };
     if (recorded) {
-      const same = ['mutant', 'history', 'step', 'fields', 'origin'].every(key => JSON.stringify(recorded[key]) === JSON.stringify(entry[key]));
+      const same = ['mutant', 'history', 'step', 'fields', 'origin', 'vector'].every(key => JSON.stringify(recorded[key]) === JSON.stringify(entry[key]));
       if (!same || (entry.state && recorded.state !== entry.state)) return { ...entry, state: 'unreached', reason: 'Recorded boundary differs from the current evidence declaration', divergences: recorded.divergences ?? [] };
       if (entry.state) return { ...entry, via: 'coordinator' };
       const baseline = report.boundaryBaselines?.[entry.history];
+      if (entry.vector) {
+        if (!reportPort || recorded.vectorResult?.port !== reportPort || baseline?.vectorResult?.port !== reportPort)
+          return { ...entry, state: 'unreached', reason: 'Vector records do not match the report language', divergences: [] };
+        if (assessVectorBoundary(entry, baseline).state !== 'not-divergent') return { ...entry, state: 'unreached',
+          reason: 'No clean completed baseline for this vector', divergences: [] };
+        if (recorded.vectorResult?.port !== baseline.vectorResult.port) return { ...entry, state: 'unreached',
+          reason: 'Vector baseline and mutation use different bindings', divergences: [] };
+        return assessVectorBoundary(entry, { completed: recorded.completed, lastStep: recorded.lastStep, vectorResult: recorded.vectorResult,
+          ...(recorded.reason ? { error: recorded.reason } : {}) });
+      }
       if (baseline?.history !== entry.history || baseline.completed !== true || baseline.error !== undefined ||
           !Array.isArray(baseline.divergences) || baseline.divergences.length || !Number.isSafeInteger(baseline.lastStep) || baseline.lastStep < entry.step) {
         return { ...entry, state: 'unreached', reason: 'No clean completed baseline for this boundary', divergences: recorded.divergences ?? [] };

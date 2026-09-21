@@ -201,8 +201,15 @@ boundary requires a complete mutant replay and a clean replay of the same
 history; driver failures, settlement violations and missing recordings remain
 `unreached`. Every mapped exported reproducer must be confirmed by the mutation
 gate in both ports; an entire cohort detecting the mutant cannot replace that
-evidence. `vector` and `unreproduced` mappings remain visible beside the
-confirmed boundaries and cohort detection results.
+evidence. A mapped vector reproducer has the same requirement at its selected
+generated row: record the actual native result after a clean run of that row,
+then confirm a mismatch in the declared public fields. The coordinator alone
+reads the expectations; native workers receive only the operation and inputs.
+Reports retain row identity, binding, artifact and input fingerprints, and the
+actual result so the gate can recompute the comparison. Different native codec
+sizes may require different declared rows for the same strict-shrink rule.
+Missing, malformed or stale results earn no credit. `unreproduced` mappings
+remain explicit gaps beside these measured boundaries and cohort detections.
 
 To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with the Go section of every entry in `mutations.json`. A mutant whose fault leaves a goroutine blocked or a pointer nil makes the Go port's own synctest suite panic instead of failing an assertion, and one that settles a promise the TypeScript suite was not awaiting can leave no failed assertion behind; each runner records such an ordinary cohort as `crashed`, outside the detected and survived totals, as it does every cohort of a mutant that does not compile, and the generated cohort remains the required detection. Broader interaction histories and larger domains remain separate assurance work.
 

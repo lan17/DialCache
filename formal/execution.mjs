@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveVectorEvidence } from './vector-evidence.mjs';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
 // The kernel library's concern modules live in one directory; every tool that
@@ -337,9 +338,14 @@ export function evidenceOf(challenge, models, publicOnly, { readSource = read, s
   if (!model) throw new Error(`${challenge.id}: boundary evidence model is not scheduled`);
   const reproducer = challenge.reproducer;
   const written = native.evidence;
+  if (model.vectorExport && reproducer?.kind === 'model-run') {
+    if (!written || Object.keys(written).join() !== 'vector') throw new Error(`${challenge.id}: vector reproducer requires exact native vector evidence`);
+    const vector = resolveVectorEvidence(written.vector, model, readSource);
+    return { ...base, history: `vector/${reproducer.run}`, step: 0, fields: [...vector.fields], origin: 'vector', vector };
+  }
   if (reproducer?.kind !== 'exported-regression') {
     if (written !== undefined) throw new Error(`${challenge.id}: written boundary evidence requires an exported-regression reproducer`);
-    return { ...base, state: model.vectorExport && reproducer?.kind === 'model-run' ? 'vector' : 'unreproduced' };
+    return { ...base, state: 'unreproduced' };
   }
   if (!model.profile || !publicOnly.get(model.path)?.includes(reproducer.run)) throw new Error(`${challenge.id}: boundary evidence requires an exported public-only history`);
   const history = `${model.profile}/${reproducer.run}`;
@@ -430,8 +436,10 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
   if (!reproducerKinds.includes(kind)) throw new Error(`${id}: reproducer kind must be one of ${reproducerKinds.join(', ')}`);
   const shared = libraries.includes(challenge.source);
   const cited = reproducer.model === undefined ? model : models.get(reproducer.model);
-  if (reproducer.model !== undefined && (!cited?.profile || kind !== 'exported-regression' || !shared || cited === model)) {
-    throw new Error(`${id}: reproducer model must name another profile model and is allowed only for an exported-regression of a shared-library fault: ${reproducer.model}`);
+  const sharedProfile = cited?.profile && kind === 'exported-regression';
+  const sharedVector = cited?.vectorExport && kind === 'model-run';
+  if (reproducer.model !== undefined && (!(sharedProfile || sharedVector) || !shared || cited === model)) {
+    throw new Error(`${id}: reproducer model must name another profile model or vector model reached by a shared-library fault, with the corresponding reproducer kind: ${reproducer.model}`);
   }
   if (typeof run !== 'string' || !cited.regressions.includes(run)) throw new Error(`${id}: reproducer run is not a scheduled regression of ${cited.path}: ${run}`);
   if (!nonEmptyText(failure)) throw new Error(`${id}: reproducer failure must state the expect condition the fault breaks`);
@@ -439,9 +447,10 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
   catch (error) { throw new Error(`${id}: ${error.message}`); }
   if (!isSlug(family)) throw new Error(`${id}: reproducer family must be a fault family slug`);
   const own = model.profile ?? model.path;
-  const required = [...new Set([own, ...(cited.profile ? [cited.profile] : [])])];
+  const citedIdentity = cited.profile ?? (reproducer.model && sharedVector ? cited.path : own);
+  const required = [...new Set([own, citedIdentity])];
   if (!Array.isArray(profiles) || !profiles.length || new Set(profiles).size !== profiles.length ||
-      required.some(name => !profiles.includes(name)) || profiles.some(profile => profile !== own && !profileIds.has(profile))) {
+      required.some(name => !profiles.includes(name)) || profiles.some(profile => !required.includes(profile) && !profileIds.has(profile))) {
     throw new Error(`${id}: reproducer profiles must name known profiles and include ${required.join(' and ')}`);
   }
   if (!exclusions || typeof exclusions !== 'object' || Array.isArray(exclusions)) throw new Error(`${id}: reproducer exclusions must map profiles to reasons`);
@@ -655,13 +664,9 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'stale-recovery-candidate-stamped-at-read',
   'redis-protocol-inclusive-fence',
   'redis-protocol-untracked-fence',
-  'frame-vectors-inclusive-fence',
   'invalidation-transition-cutoff-moves-backwards',
   'invalidation-transition-inclusive-buffer-limit',
-  'key-protocol-untracked-brace-rejection',
   'cohort-inclusive-threshold',
-  'envelope-vectors-tie-compresses',
-  'envelope-vectors-escape-misses-binary-marker',
   'scope-late-source-repopulates-closed-memo',
   'layers-late-memo-into-closed-scope',
   'independent-fresh-frame-retained',

@@ -189,6 +189,9 @@ module dialcache_frame_vectors {
   run payloadUnpairedSurrogateUsesReplacementTest = init
     .then(execute({ command: "encode", units: List(55296,65), ...DEFAULT }))
     .expect(result.bytes == List(1,0,0,0,0,0,0,0,1,0,239,191,189,65))
+  run frameAtWatermarkIsDeclinedTest = init
+    .then(execute(requestFor(546)))
+    .expect(result.kind == "miss" and result.reason == "watermark_fenced" and result.fence == 1)
   run trackedFencePrecedesEncodingErrorTest = init
     .then(execute({ command: "decode", tracked: true, watermarkPresent: true,
       watermark: List(49), bytes: framed(1,255,List(65)), ...DEFAULT }))

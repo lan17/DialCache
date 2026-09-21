@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "45dd4dece1fcf7d3ffb0625ee44f5fbe99b33ba2253de8046357e131ae5553f9",
+      "sha256": "c7814926c0c0ab7afb561724af04635daa7a743589c4c34a1d24ff38073d19f5",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":20,"title":"Reading a model"},
@@ -1018,7 +1018,7 @@
         {"line":337,"title":"Refactoring and execution"},
         {"line":365,"title":"Challenging every model"},
         {"line":447,"title":"Mapping every challenge to native mutants"},
-        {"line":556,"title":"Exported runs are exactly the public-only runs"}
+        {"line":577,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1363,7 +1363,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "54325520aec89faeab7f2eb4463134220a8637420441a9e883d37b1e79663455",
+      "sha256": "69320e8517b67f42626b9fc81b538f2d5b70a4dfa12c6f092fe1fb00c5f9430e",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1372,7 +1372,7 @@
         {"line":136,"title":"Behavioral mutation comparison"},
         {"line":150,"title":"Recorded measurements"},
         {"line":156,"title":"Reproduction and CI"},
-        {"line":209,"title":"Model properties and cross-language execution"}
+        {"line":216,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",

@@ -344,6 +344,8 @@ module dialcache_key_protocol {
     .expect(s.key.logical == List(117,114,110,58,105,100,58,37,70,48,37,57,70,37,57,56,37,56,48,35,71,101,116))
   run malformedUtf16RejectsInsteadOfReplacementTest = init
     .then(execute(inputFor(17 * 12 + 4))).expect(not(s.key.valid))
+  run untrackedTypeBraceRemainsValidTest = init
+    .then(execute(inputFor(50))).expect(s.key.valid)
   run bracesDependOnEntityTrackingTest = init
     .then(execute(inputFor(4 * 12 + 4))).expect(s.key.valid)
     .then(execute(inputFor(4 * 12 + 5))).expect(not(s.key.valid))

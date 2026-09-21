@@ -1,6 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import { boundaryEvidence } from './execution.mjs';
+import { runVectorBoundary } from './run-vector-boundary.mjs';
 
 // A boundary is always an exported regression. Keep the original profile
 // directory: Go's single-file selector uses it to choose the driver.
@@ -75,6 +78,13 @@ export function readBoundaryRecording(file, history, path, result) {
 // several challenges, so callers run each history once and assess it against
 // each challenge's own checkpoint afterward.
 export function runBoundaryReplay({ port, history, label, output, root, workspace, env, go = 'go' }) {
+  if (history.startsWith('vector/')) {
+    const evidence = boundaryEvidence().filter(entry => entry.history === history);
+    if (!evidence.length || evidence.some(entry => !entry.vector || !isDeepStrictEqual(entry.vector.samples, evidence[0].vector.samples)
+      || entry.vector.artifact !== evidence[0].vector.artifact || entry.vector.artifactSha256 !== evidence[0].vector.artifactSha256))
+      throw new Error(`Vector boundary must select identical native inputs across its citations: ${history}`);
+    return runVectorBoundary({ evidence: evidence[0], port, history, label, output, root, workspace, env, go });
+  }
   const { profile, path } = boundaryTrace(history, resolve(root, '.formal-traces'));
   const prefix = resolve(output, 'boundary', label, history);
   const file = `${prefix}.jsonl`;
