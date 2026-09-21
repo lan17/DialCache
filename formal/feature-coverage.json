@@ -620,25 +620,25 @@
           "test": "reuses a stable use case without registering it and still rejects the reserved name",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Asserts that the TypeScript binding reuses a stable use case without registering it and still rejects the reserved name.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         },
         {
           "test": "validates and snapshots defaultConfig independently for each invocation",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Asserts that the TypeScript binding validates and snapshots defaultConfig independently for each invocation.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         },
         {
           "test": "reads and writes Redis values with the per-invocation serializer",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Asserts that the TypeScript binding reads and writes Redis values with the per-invocation serializer.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         },
         {
           "test": "uses captured values from each invocation and requires them in the direct key",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Inline operations use each invocation value and explicit key arguments; distinct captured inputs stay separated by their direct cache keys.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         }
       ],
       "go": [
@@ -686,7 +686,7 @@
           "test": "reuses a stable use case without registering it and still rejects the reserved name",
           "path": "test/dialcache-get-or-load.test.ts",
           "scope": "Asserts that the TypeScript binding reuses a stable use case without registering it and still rejects the reserved name.",
-          "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d"
+          "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67"
         },
         {
           "test": "fails open when an explicit cacheKey selector throws",

@@ -416,7 +416,7 @@
     },
     {
       "path": "test/dialcache-get-or-load.test.ts",
-      "sha256": "48608eca552ac6d6a01b3c9b314be7e922919e6357c56349a2addc06dc2c043d",
+      "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67",
       "entries": [
         {"line":69,"title":"reuses a stable use case without registering it and still rejects the reserved name","contracts":["B01"]},
         {"line":111,"title":"uses captured values from each invocation and requires them in the direct key","contracts":["C11","E04"]},
@@ -424,10 +424,10 @@
         {"line":180,"title":"is true pass-through outside an enabled scope","contracts":["C01"]},
         {"line":203,"title":"validates and snapshots defaultConfig independently for each invocation","contracts":["C18","B01"]},
         {"line":243,"title":"reads and writes Redis values with the per-invocation serializer","contracts":["W06","B03"]},
-        {"line":281,"title":"preserves tracked invalidation behavior","contracts":["C31","C32"]},
-        {"line":310,"title":"fails open without attempting a Redis write after a read failure","contracts":["C28"]},
-        {"line":338,"title":"propagates loader errors, records them as fallback failures, and clears the flight","contracts":["C15","C58"]},
-        {"line":372,"title":"applies the per-invocation fallback deadline inside enabled scopes","contracts":["C23","B01"]}
+        {"line":282,"title":"preserves tracked invalidation behavior","contracts":["C31","C32"]},
+        {"line":311,"title":"fails open without attempting a Redis write after a read failure","contracts":["C28"]},
+        {"line":339,"title":"propagates loader errors, records them as fallback failures, and clears the flight","contracts":["C15","C58"]},
+        {"line":373,"title":"applies the per-invocation fallback deadline inside enabled scopes","contracts":["C23","B01"]}
       ]
     },
     {
