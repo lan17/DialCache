@@ -86,6 +86,34 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     });
   });
 
+  it("excludes only opt-in Go workers from complete replay and exploration", async () => {
+    const { loadGoReplayInventory } = await import(new URL("../formal/check-go-replay.mjs", import.meta.url).href) as {
+      loadGoReplayInventory(): { required: Array<{ name: string }> };
+    };
+    const { explorationPlan } = await import(new URL("../formal/explore.mjs", import.meta.url).href) as {
+      explorationPlan(directory: string, seed: string): Step[];
+    };
+    const goTest = (step: Step) => step.command === "go" && step.args?.includes("test");
+    const replay = validationPlan("formal-go", { directory }).find(goTest)!;
+    expect(replay.args).toContain("-skip");
+    const skipped = new RegExp(replay.args![replay.args!.indexOf("-skip") + 1]!);
+    for (const worker of ["TestGeneratedInvalidationVectors", "TestVectorBoundaryDriver"]) {
+      expect(skipped.test(worker), worker).toBe(true);
+      expect(skipped.test(`${worker}Required`), worker).toBe(false);
+      expect(skipped.test(`Other${worker}`), worker).toBe(false);
+    }
+    // Check the real inventory so adding a required corpus root cannot
+    // silently inherit a worker exclusion.
+    const requiredRoots = [...new Set(loadGoReplayInventory().required.map(entry => entry.name.split("/")[0]!))];
+    expect(requiredRoots.filter(name => skipped.test(name))).toEqual([]);
+    expect(explorationPlan(directory, "0x1").find(goTest)!.args)
+      .toEqual(replay.args);
+    for (const target of ["check-go", "smoke"]) {
+      expect(validationPlan(target, { directory }).find(goTest)!.args, target)
+        .not.toContain("-skip");
+    }
+  });
+
   it("stops at a failing child and preserves its partial native report without running later steps", async () => {
     const steps: Step[] = [
       { label: "first", command: process.execPath, args: [child, "first"] },

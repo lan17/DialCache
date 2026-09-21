@@ -142,8 +142,12 @@ export function validationPlan(target, { directory = root, environment = process
   // The complete replay outlives Go's default 10-minute test timeout on a slow
   // runner (run 34667733523 was killed at 10m0s); bound it explicitly, under
   // the go-parity job budget. The smoke run keeps the default.
+  // Opt-in native workers need inputs from the mutation/vector coordinator.
+  // Exclude exactly those roots from the full corpus command so the completed
+  // report can keep rejecting every actual skip, including required cases.
   const nativeGo = full => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
-    'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m'] : []), './...'),
+    'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m',
+      '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver)$'] : []), './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   const node22 = floorExecutable(environment, runnerNode, nodeVersion) ?? '<NODE22_BIN>';
   const selection = mutationSelectionArguments(target, environment);
