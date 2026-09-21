@@ -1,16 +1,16 @@
-//! The no-settle control: a driver that reports the observation held before
-//! the settlement drain must fail the observation assertions of every
-//! behavior-driver-backed smoke history. It proves the replays depend on the
-//! `causally-ready-v1` settlement.
+//! The no-settle control: skipping the driver drain must fail the settlement
+//! contract of every behavior smoke history before observation comparison.
 
 mod formal;
 
 use formal::driver::{install_panic_hook, Driver};
 use formal::inventory::repo_path;
 use formal::transport::Coordinator;
-use serde_json::Value;
+use serde_json::{json, Value};
 
-const BEHAVIOR_SMOKE: [&str; 13] = [
+const BEHAVIOR_SMOKE: [&str; 15] = [
+    "dark-layers",
+    "shadow-read-deadlines",
     "effects",
     "admission",
     "independent",
@@ -42,8 +42,16 @@ fn replay(coordinator: &mut Coordinator, profile: &str, skip_settle: bool) -> Re
         let cell = std::cell::RefCell::new(&mut driver);
         let mut apply = |input: &Value| cell.borrow_mut().apply(input);
         let mut observation = || cell.borrow().observation();
-        let mut wall = || cell.borrow().wall_ms();
-        coordinator.execute(&prepared, &mut apply, &mut observation, &mut wall, &mut [])
+        let mut wall = || cell.borrow().observation_wall_ms();
+        let mut receipt = || cell.borrow().receipt();
+        coordinator.execute(
+            &prepared,
+            &mut apply,
+            &mut observation,
+            &mut wall,
+            Some(&mut receipt),
+            &mut [],
+        )
     };
     driver.close();
     result
@@ -63,9 +71,37 @@ fn unsettled_observations_fail_every_behavior_smoke_history() {
         );
         let message = unsettled.unwrap_err();
         assert!(
-            message.contains("expected:") && message.contains("actual:"),
-            "{profile}: control failed without comparison evidence: {message}"
+            message.contains("Settlement violation:")
+                && !message.contains("expected:")
+                && !message.contains("actual:"),
+            "{profile}: control did not fail its own settlement contract: {message}"
         );
     }
     coordinator.finish().expect("coordinator exit");
+}
+
+#[test]
+fn receipt_detects_runnable_work_without_observation_changes() {
+    let mut driver = Driver::new(json!({}));
+    let before = driver.observation();
+    let clock = driver.observation_wall_ms();
+    let finished = std::rc::Rc::new(std::cell::Cell::new(false));
+    let flag = finished.clone();
+    driver.exec.spawn(async move { flag.set(true) });
+    driver.skip_settle = true;
+    driver
+        .apply(&json!({"op":"faults", "value":{}}))
+        .expect("command");
+    assert!(finished.get(), "verification drain must run ready work");
+    assert_eq!(driver.observation(), before, "work has no observed effects");
+    assert_eq!(
+        driver.observation_wall_ms(),
+        clock,
+        "draining must consume no time"
+    );
+    assert!(
+        driver.receipt()["runnable"].as_u64().unwrap() > 0,
+        "the receipt must detect actual polls even when observations and timers do not change"
+    );
+    driver.close();
 }

@@ -53,7 +53,7 @@ pub use engine::{
     ScopeGuard,
 };
 pub use error::{BoxError, ConfigError, Error, FallbackTimeout, RemoteReadTimeout, SharedError};
-pub use identity::{normalize_args, ArgValue, Identity, IdentityError, Keys};
+pub use identity::{normalize_args, ArgValue, Identity, IdentityError, IntoKeyId, Keys};
 pub use local::{LocalEntry, LocalRead, LocalStore, LruLocalStore, StoredValue};
 pub use metrics::MetricKind;
 pub use observe::{Event, Labels, LogEvent, LogLevel, Logger, Observer, ShadowMismatchDetails};
@@ -74,4 +74,4 @@ pub use runtime::Runtime;
 #[cfg(feature = "tokio")]
 pub use runtime::TokioRuntime;
 pub use scope::Scope;
-pub use use_case::{IntoKeyId, KeySpec, UseCase, UseCaseBuilder};
+pub use use_case::{KeySpec, UseCase, UseCaseBuilder};

@@ -631,22 +631,39 @@ describe("Rust mutation language", () => {
     expect(fingerprintFiles(directory, ["rust/Cargo.toml"]).files).toBe(1);
   });
 
-  it("merges Rust shards with the same four-cohort strictness as Go and renders the Rust report", () => {
-    const catalogSha256 = sha256(readRepo("formal/mutations.json"));
-    const inputs = { files: 3, sha256: "dd".repeat(32) };
-    const single = { ...goSingleReport(catalogSha256, inputs), cargo: "cargo 1.98.1 (797e8a9bc 2026-08-05)" } as Report;
-    delete (single as Record<string, unknown>).go;
-    const merged = mergeShardReports(languages.rust, goShardReports(single, 3), { catalog: goCatalog, catalogSha256, inputs });
-    gateDetections(languages.rust, merged, goCatalog.mutations);
+  it("merges the separate Rust catalog without claiming shared model-boundary evidence", () => {
+    const catalogBytes = readRepo("formal/rust-mutations.json");
+    const catalog = JSON.parse(catalogBytes.toString()) as Catalog;
+    for (const path of languages.rust.inputs) mkdirSync(join(directory, path), { recursive: true });
+    writeFileSync(join(directory, languages.rust.catalog), catalogBytes);
+    const catalogSha256 = sha256(catalogBytes);
+    const inputs = fingerprintFiles(directory, languages.rust.inputs, { exclude: languages.rust.exclude });
+    const mutations = catalog.mutations.map(entry => {
+      const { boundary: _boundary, ...result } = goMutation(entry);
+      return result;
+    });
+    const single = { schemaVersion: 1, complete: true, startedAt: "2026-09-21T00:00:00.000Z", elapsedSeconds: 1,
+      cargo: "cargo 1.98.1", catalogSha256, inputs, baselines: goBaselines(), mutations,
+      scope: { catalog: "rust-native", modelBoundaryEvidence: false, unmappedSharedMutations: ["M14"] } } as Report;
+    const shards = goShardReports(single, 3);
+    for (const report of shards) {
+      const path = join(directory, languages.rust.output, "shards", `${report.shard!.index}-of-3`);
+      mkdirSync(path, { recursive: true });
+      writeFileSync(join(path, "report.json"), JSON.stringify(report));
+    }
+    const merged = mergeMutationReports("rust", { directory });
     expect(merged.complete).toBe(true);
-    expect(merged.detection).toEqual(goDetection(single.mutations));
+    expect(merged.detection).toEqual(goDetection(mutations));
     expect(merged.requiredDetectionRegressions).toEqual([]);
-    expect(languages.rust.output).toBe(".formal-traces/rust-semantic");
-    expect(languages.rust.catalog).toBe("formal/rust-mutations.json");
-    const markdown = languages.rust.markdown(merged);
+    expect(merged.scope).toEqual(single.scope);
+    const markdown = readFileSync(join(directory, languages.rust.output, "report.md"), "utf8");
     expect(markdown).toContain("# Rust semantic mutation measurement");
     expect(markdown).toContain("| M01 | C45.maximum-age-exclusive | survived | detected | detected | detected |");
+    expect(markdown).toContain("model-challenge boundary coverage is not measured");
     expect(markdown).toContain("Merged from 3 shards");
+    shards[0]!.mutations[0]!.cohorts.generated!.state = "survived";
+    writeFileSync(join(directory, languages.rust.output, "shards/1-of-3/report.json"), JSON.stringify(shards[0]));
+    expect(() => mergeMutationReports("rust", { directory })).toThrow(/M01\/generated/);
   });
 });
 

@@ -13,7 +13,7 @@ use parking_lot::Mutex;
 use crate::clock::Clock;
 use crate::error::{BoxError, ConfigError, Error};
 use crate::flight::{start_pending, Flight, Settled, ValueResult};
-use crate::identity::Identity;
+use crate::identity::{Identity, IntoKeyId};
 use crate::limits::{
     DEFAULT_LOCAL_CAPACITY, DEFAULT_REMOTE_READ_TIMEOUT_MS, DEFAULT_SHADOW_MAX_IN_FLIGHT,
     MAX_DEADLINE_MS, MAX_SAFE_INTEGER, MAX_SUPPORTED_DURATION_MS, WATERMARK_USE_CASE,
@@ -27,7 +27,6 @@ use crate::remote::{InvalidateRequest, Remote};
 use crate::runtime::Runtime;
 use crate::scope::{Owner, Scope};
 use crate::shadow::ShadowFlight;
-use crate::use_case::IntoKeyId;
 
 /// Resolves a sparse runtime policy overlay once per enabled call.
 pub type PolicyProvider = Arc<

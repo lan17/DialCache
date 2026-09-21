@@ -24,23 +24,53 @@ while the cache is built.
 
 ```rust
 use std::sync::Arc;
-use dialcache::{DialCache, KeySpec, Policy};
+use dialcache::{BoxError, DialCache, KeySpec, Policy};
 
-let cache = DialCache::builder()
-    .remote(dialcache::redis::RedisAdapter::new(connection)) // feature "redis"
-    .build()?;
+#[tokio::main]
+async fn main() -> Result<(), BoxError> {
+    let cache = DialCache::builder().namespace("my-app").build()?;
+    let display_name = cache
+        .use_case::<u64, String>("user", "displayName")
+        .policy(Policy::default().request_local(true).local_ttl_sec(30))
+        .key(|id: &u64| KeySpec::new(id))
+        .source(|_scope, id| async move {
+            // Replace this with your database or API call.
+            Ok(format!("User {id}"))
+        })
+        .register()?;
 
-let display_name = cache
-    .use_case::<u64, String>("user", "displayName")
-    .policy(Policy::default().local_ttl_sec(1).remote_ttl_sec(60))
-    .tracked(true)
-    .key(|id: &u64| KeySpec::new(id))
-    .source(|_scope, id: u64| async move { Ok(load_display_name(id).await?) })
-    .register()?;
-
-let request = cache.enable_guard();
-let name: Arc<String> = display_name.get(request.scope(), 42).await?;
+    let request = cache.enable_guard();
+    let name: Arc<String> = display_name.get(request.scope(), 42).await?;
+    println!("Hello, {name}!");
+    Ok(())
+}
 ```
+
+A policy enables no cache layers by default. The example opts into request
+caching and a 30-second process-local cache; register the use case once at
+startup and create a scope for each request. `Arc<T>` shares one cached value
+without requiring `T: Clone`.
+
+Run the complete [basic example](./examples/basic.rs), which demonstrates a
+structured value, an asynchronous source and reuse across two request scopes:
+
+```sh
+cd rust
+cargo run --example basic
+```
+
+The [Redis example](./examples/redis.rs) configures application-owned connection
+and command timeouts, enables tracked Redis caching and demonstrates
+invalidation. With a Redis server running:
+
+```sh
+REDIS_URL=redis://127.0.0.1/ cargo run --features redis --example redis
+```
+
+The examples use the crate's existing dependencies. Applications also need
+`tokio` with `macros`, `rt-multi-thread` and `time` enabled; structured JSON
+values use `serde` with its `derive` feature. The Redis example additionally
+needs the `redis` crate with `tokio-comp`, and DialCache's `redis` feature.
 
 Caching is disabled by default. `DialCache::enable` (closure form) or
 `DialCache::enable_guard` (RAII form) opens the outermost enabled scope and
@@ -68,8 +98,8 @@ failure. A source deadline returns `Error::FallbackTimeout` and does not cancel
 the source. Dropping the future returned by `get` never cancels the execution:
 sources, publications and other callers keep their contracts.
 
-`KeySpec::new` and `DialCache::invalidate` accept strings, integers and floats,
-including shared references such as `&u64`. Their `IntoKeyId` conversion
+`Identity::new`, `KeySpec::new` and `DialCache::invalidate` accept strings,
+integers and floats, including shared references such as `&u64`. Their `IntoKeyId` conversion
 preserves string IDs and exact decimal integers; floats use JavaScript number
 spelling, including negative zero and exponents (`f32` is promoted to `f64`).
 For custom displayable IDs, pass

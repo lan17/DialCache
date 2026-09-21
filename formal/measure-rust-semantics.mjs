@@ -5,7 +5,8 @@ import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { causalPropertyAssertion } from './measure-go-semantics.mjs';
-import { fingerprintFiles, gateDetections, languages, partitionMutations, shardDirectory, shardFromArguments } from './mutation-reports.mjs';
+import { mutantCatalogPath, mutantsForPort, readMutantCatalog } from './execution.mjs';
+import { fingerprintFiles, gateDetections, languages, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 
 // The Rust counterpart of measure-go-semantics.mjs: apply each catalogued
 // fault to an isolated copy of the crate, require it to compile, and run three
@@ -100,20 +101,45 @@ function union(generated, fixed) {
     failed: generated.failed + fixed.failed, failingTests: [...generated.failingTests, ...fixed.failingTests], components: ['generated', 'fixed'] };
 }
 
+// This native catalog is a deliberately smaller set than the current shared
+// TypeScript/Go catalog. Record the gap instead of claiming complete coverage
+// of its model-challenge boundary recordings.
+export function rustMutationScope(catalog, typescript) {
+  if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.mutations) || catalog.mutations.length < 13) throw new Error('expected versioned Rust fault catalog with its 13 baseline faults');
+  const ids = new Set(), counterparts = new Set();
+  for (const mutation of catalog.mutations) {
+    if (!/^M\d+$/.test(mutation.id) || ids.has(mutation.id) || counterparts.has(mutation.typescriptMutation)) throw new Error('invalid/duplicate Rust mutation or counterpart ID');
+    ids.add(mutation.id); counterparts.add(mutation.typescriptMutation);
+    const counterpart = typescript.find(item => item.id === mutation.typescriptMutation);
+    if (!counterpart || counterpart.case !== mutation.case) throw new Error(`invalid TypeScript counterpart ${mutation.id}`);
+  }
+  return { catalog: 'rust-native', modelBoundaryEvidence: false,
+    mappedMutations: [...counterparts],
+    unmappedSharedMutations: typescript.filter(item => !counterparts.has(item.id)).map(item => item.id) };
+}
+
+// Concurrent shards must never execute a sibling shard's mutated binaries.
+// Keep the Cargo build cache separate by the same selection used for reports.
+export function rustTargetDirectory(directory, selection) {
+  return selectionDirectory(resolve(directory, 'rust/target/semantic'), selection);
+}
+
 export function measureRustSemantics({ shard = { index: 1, count: 1 }, only } = {}) {
   const language = languages.rust;
   const reportRoot = resolve(root, language.output);
-  const output = shardDirectory(reportRoot, shard);
+  const selection = { shard, only };
+  const output = selectionDirectory(reportRoot, selection);
   const started = Date.now();
   mkdirSync(reportRoot, { recursive: true });
   const report = { schemaVersion: 1, complete: false, ...(shard.count > 1 ? { shard: { index: shard.index, count: shard.count } } : {}), startedAt: new Date(started).toISOString(), baselines: {}, mutations: [] };
   const save = () => { report.elapsedSeconds = Math.round((Date.now() - started) / 1000); writeFileSync(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n'); };
   if (output !== reportRoot) {
-    writeFileSync(resolve(reportRoot, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: report.startedAt }, null, 2) + '\n');
+    if (only === undefined) writeFileSync(resolve(reportRoot, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: report.startedAt }, null, 2) + '\n');
     rmSync(output, { recursive: true, force: true });
     mkdirSync(output, { recursive: true });
   }
-  save(); rmSync(resolve(reportRoot, 'report.md'), { force: true });
+  save();
+  if (only === undefined) rmSync(resolve(reportRoot, 'report.md'), { force: true });
   const workspace = mkdtempSync(resolve(tmpdir(), 'dialcache-rust-semantic-'));
   const cargo = process.env.CARGO_BIN ?? 'cargo';
   // Bounds a hung mutant, not a slow runner: one release build of the crate
@@ -131,14 +157,13 @@ export function measureRustSemantics({ shard = { index: 1, count: 1 }, only } = 
     const crate = resolve(workspace, 'rust');
     const catalogPath = resolve(workspace, language.catalog);
     const catalog = json(catalogPath);
-    const typescript = json(resolve(workspace, 'formal/semantic-mutations.json'));
-    if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.mutations) || catalog.mutations.length < 13) throw new Error('expected versioned Rust fault catalog with all 13 TypeScript counterparts');
+    const typescript = mutantsForPort(readMutantCatalog(path => readFileSync(resolve(workspace, path), 'utf8')), 'typescript');
+    report.scope = rustMutationScope(catalog, typescript);
+    report.sharedCatalogSha256 = hash(readFileSync(resolve(workspace, mutantCatalogPath)));
     const originals = new Map(), ids = new Set();
     for (const mutation of catalog.mutations) {
       if (!/^M\d+$/.test(mutation.id) || ids.has(mutation.id)) throw new Error('invalid/duplicate mutation ID');
       ids.add(mutation.id);
-      const counterpart = typescript.mutations.find(item => item.id === mutation.typescriptMutation);
-      if (!counterpart || counterpart.case !== mutation.case) throw new Error(`invalid TypeScript counterpart ${mutation.id}`);
       if (!Array.isArray(mutation.edits) || !mutation.edits.length || !mutation.requiredDetections?.every(name => ['ordinary', 'generated', 'fixed', 'portable'].includes(name))) throw new Error(`invalid mutation ${mutation.id}`);
       for (const edit of mutation.edits) {
         if (!/^rust\/src\/[\w/-]+\.rs$/.test(edit.path) || !edit.before || edit.before === edit.after) throw new Error(`invalid production edit ${mutation.id}`);
@@ -147,9 +172,7 @@ export function measureRustSemantics({ shard = { index: 1, count: 1 }, only } = 
         originals.set(edit.path, original);
       }
     }
-    for (const counterpart of typescript.mutations) if (!catalog.mutations.some(m => m.typescriptMutation === counterpart.id)) throw new Error(`missing TypeScript counterpart ${counterpart.id}`);
-    const selected = only ? catalog.mutations.filter(m => only.includes(m.id)) : partitionMutations(catalog.mutations, shard);
-    if (only && selected.length !== only.length) throw new Error(`--only names unknown mutations: ${only.filter(id => !selected.some(m => m.id === id)).join(', ')}`);
+    const selected = selectMutations(catalog.mutations, selection);
     if (shard.count > 1) report.shard = { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) };
     // Ordinary tests: the library's unit tests and every integration binary
     // that is not harness infrastructure, discovered from the crate so a new
@@ -174,7 +197,7 @@ export function measureRustSemantics({ shard = { index: 1, count: 1 }, only } = 
     // Dependencies build once and are shared by every mutant and run through
     // the checkout's cache directory; the crate copy itself lives at another
     // path, so cargo rebuilds exactly the crate and its tests per mutant.
-    env.CARGO_TARGET_DIR = process.env.DIALCACHE_RUST_TARGET_DIR ?? resolve(root, 'rust/target/semantic');
+    env.CARGO_TARGET_DIR = process.env.DIALCACHE_RUST_TARGET_DIR ?? rustTargetDirectory(root, selection);
     env.CARGO_TERM_COLOR = 'never';
     report.revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
     report.cargo = spawnSync(cargo, ['--version'], { cwd: crate, encoding: 'utf8' }).stdout?.trim();
@@ -265,9 +288,6 @@ export function measureRustSemantics({ shard = { index: 1, count: 1 }, only } = 
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const only = process.argv.slice(2).filter(argument => argument.startsWith('--only=')).flatMap(argument => argument.slice('--only='.length).split(',').filter(Boolean));
-    const shard = shardFromArguments(process.argv.slice(2).filter(argument => !argument.startsWith('--only=')));
-    if (only.length && shard.count > 1) throw new Error('--only cannot be combined with --shard');
-    measureRustSemantics({ shard, only: only.length ? only : undefined });
+    measureRustSemantics(selectionFromArguments(process.argv.slice(2)));
   } catch (error) { console.error(error); process.exitCode = 1; }
 }

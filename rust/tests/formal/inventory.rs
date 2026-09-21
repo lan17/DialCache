@@ -235,11 +235,14 @@ pub fn glob_itf(directory: &Path) -> Result<Vec<PathBuf>, String> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(format!("{}: {error}", directory.display())),
     };
-    let mut names: Vec<String> = entries
-        .filter_map(Result::ok)
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
-        .filter(|name| name.ends_with(".itf.json"))
-        .collect();
+    let mut names = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("{}: {error}", directory.display()))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.ends_with(".itf.json") {
+            names.push(name);
+        }
+    }
     names.sort();
     Ok(names.into_iter().map(|name| directory.join(name)).collect())
 }
@@ -256,54 +259,17 @@ fn parent_of(directory: &Path) -> PathBuf {
     parent
 }
 
-/// Scheduled Quint regressions of `profile`, expected at
-/// `<directory>/../regressions/<profile>/<name>.itf.json`.
+/// Exported Quint regressions of `profile`, read from
+/// `<directory>/../regressions/<profile>/`. The shared inventory derives which
+/// runs export from the Quint source and the full-report gate requires exactly
+/// those histories; the native driver only discovers their generated files.
 pub fn regression_paths(profile: &str, directory: &Path) -> Result<Vec<PathBuf>, String> {
     let regressions = parent_of(directory).join("regressions").join(profile);
-    let mut paths = Vec::new();
-    for name in replay_regressions(profile)? {
-        let path = regressions.join(format!("{name}.itf.json"));
-        if let Err(error) = std::fs::metadata(&path) {
-            return Err(format!(
-                "missing Quint regression {name}: {}: {error}",
-                path.display()
-            ));
-        }
-        paths.push(path);
+    let paths = glob_itf(&regressions)?;
+    if paths.is_empty() {
+        return Err(format!("missing Quint regressions for {profile}"));
     }
     Ok(paths)
-}
-
-/// `replayRegressions` of the `formal/execution.json` model bound to `profile`.
-pub fn replay_regressions(profile: &str) -> Result<Vec<String>, String> {
-    let manifest = read_json("formal/execution.json")?;
-    let mut names = Vec::new();
-    for model in manifest
-        .get("models")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        if model.get("profile").and_then(Value::as_str) != Some(profile) {
-            continue;
-        }
-        for name in model
-            .get("replayRegressions")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            match name.as_str() {
-                Some(name) => names.push(name.to_string()),
-                None => {
-                    return Err(
-                        "malformed replayRegressions entry in formal/execution.json".to_string()
-                    )
-                }
-            }
-        }
-    }
-    Ok(names)
 }
 
 fn read_json(relative: &str) -> Result<Value, String> {
@@ -385,14 +351,14 @@ pub fn percent_encode_component(text: &str) -> String {
 
 /// Behavior profile versions this port implements, from
 /// `go/behavior_registry_test.go`.
-pub const BEHAVIOR_PROFILE_VERSIONS: [(&str, i64); 14] = [
+pub const BEHAVIOR_PROFILE_VERSIONS: [(&str, i64); 16] = [
     ("recovery-read", 1),
     ("local-failure", 1),
     ("runtime-boundaries", 1),
     ("shadow-layers", 1),
     ("local-clock", 1),
     ("source-budgets", 1),
-    ("effects", 2),
+    ("effects", 3),
     ("scope", 2),
     ("policy", 3),
     ("layers", 2),
@@ -400,6 +366,8 @@ pub const BEHAVIOR_PROFILE_VERSIONS: [(&str, i64); 14] = [
     ("independent", 2),
     ("shadow", 3),
     ("admission", 1),
+    ("dark-layers", 2),
+    ("shadow-read-deadlines", 1),
 ];
 
 /// The version this port implements of a behavior profile, if it knows it.

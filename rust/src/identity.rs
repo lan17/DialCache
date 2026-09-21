@@ -4,10 +4,77 @@
 //! escaping, tracked entity hash tags, ordered argument pairs, the frame key
 //! suffix, and FNV-1a cohorts over UTF-16 code units.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt::Write as _;
 
 use crate::limits::FRAME_KEY_SUFFIX;
+
+/// Converts an entity identifier to the text used in a cache key.
+///
+/// Strings are preserved, integers use exact decimal notation, and floats use
+/// JavaScript `String(number)` spelling (`f32` is promoted to `f64`). Shared
+/// references to these types are also accepted. For other displayable IDs,
+/// pass `id.to_string()` or implement this trait with the desired spelling.
+pub trait IntoKeyId {
+    /// Consume the identifier and return its canonical text.
+    fn into_key_id(self) -> String;
+}
+
+impl IntoKeyId for String {
+    fn into_key_id(self) -> String {
+        self
+    }
+}
+
+impl IntoKeyId for &str {
+    fn into_key_id(self) -> String {
+        self.to_owned()
+    }
+}
+
+impl IntoKeyId for Box<str> {
+    fn into_key_id(self) -> String {
+        self.into_string()
+    }
+}
+
+impl IntoKeyId for Cow<'_, str> {
+    fn into_key_id(self) -> String {
+        self.into_owned()
+    }
+}
+
+impl IntoKeyId for char {
+    fn into_key_id(self) -> String {
+        self.to_string()
+    }
+}
+
+impl<T: IntoKeyId + Clone> IntoKeyId for &T {
+    fn into_key_id(self) -> String {
+        self.clone().into_key_id()
+    }
+}
+
+macro_rules! integer_key_id {
+    ($($t:ty),*) => { $(impl IntoKeyId for $t {
+        fn into_key_id(self) -> String { self.to_string() }
+    })* };
+}
+integer_key_id!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+
+impl IntoKeyId for f64 {
+    fn into_key_id(self) -> String {
+        js_number_to_string(self)
+    }
+}
+
+impl IntoKeyId for f32 {
+    fn into_key_id(self) -> String {
+        js_number_to_string(f64::from(self))
+    }
+}
 
 /// A normalized logical identity. Ordered arguments retain caller order;
 /// use [`normalize_args`] to build them from a host-language record.
@@ -36,15 +103,17 @@ pub struct Identity {
 
 impl Identity {
     /// An untracked identity with an empty namespace and no arguments.
+    /// IDs use the same [`IntoKeyId`] conversion as [`crate::KeySpec::new`]
+    /// and [`crate::DialCache::invalidate`].
     pub fn new(
         key_type: impl Into<String>,
-        id: impl Into<String>,
+        id: impl IntoKeyId,
         use_case: impl Into<String>,
     ) -> Self {
         Identity {
             namespace: String::new(),
             key_type: key_type.into(),
-            id: id.into(),
+            id: id.into_key_id(),
             use_case: use_case.into(),
             tracked: false,
             args: Vec::new(),

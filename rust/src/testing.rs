@@ -247,6 +247,7 @@ impl Runtime for StepRuntime {
 pub struct TestExecutor {
     pool: LocalPool,
     local: LocalSpawner,
+    polls: Arc<AtomicU64>,
     /// The virtual clock to share with every instance under test.
     pub clock: Arc<VirtualClock>,
     /// The runtime handle to pass to every instance under test.
@@ -272,9 +273,25 @@ impl TestExecutor {
         TestExecutor {
             pool,
             local,
+            polls: Arc::new(AtomicU64::new(0)),
             clock,
             runtime,
         }
+    }
+
+    /// Actual task polls performed by this executor. A zero-time verification
+    /// drain must leave this count unchanged when every task is already blocked.
+    pub fn poll_count(&self) -> u64 {
+        self.polls.load(Ordering::Relaxed)
+    }
+
+    fn tracked<F: Future>(&self, future: F) -> impl Future<Output = F::Output> + use<F> {
+        let polls = self.polls.clone();
+        let mut future = Box::pin(future);
+        futures::future::poll_fn(move |cx| {
+            polls.fetch_add(1, Ordering::Relaxed);
+            future.as_mut().poll(cx)
+        })
     }
 
     /// Run a future to completion on the pool, draining detached work as it
@@ -285,10 +302,10 @@ impl TestExecutor {
             std::rc::Rc::new(std::cell::RefCell::new(None));
         let sink = slot.clone();
         self.local
-            .spawn_local(async move {
+            .spawn_local(self.tracked(async move {
                 let result = future.await;
                 *sink.borrow_mut() = Some(result);
-            })
+            }))
             .expect("pool accepts tasks");
         self.drain();
         let result = slot.borrow_mut().take();
@@ -297,14 +314,18 @@ impl TestExecutor {
 
     /// Spawn driver-owned work onto the pool.
     pub fn spawn(&self, task: impl Future<Output = ()> + 'static) {
-        self.local.spawn_local(task).expect("pool accepts tasks");
+        self.local
+            .spawn_local(self.tracked(task))
+            .expect("pool accepts tasks");
     }
 
     fn move_immediate(&mut self) -> bool {
         let tasks = std::mem::take(&mut self.runtime.queues.lock().immediate);
         let moved = !tasks.is_empty();
         for task in tasks {
-            self.local.spawn_local(task).expect("pool accepts tasks");
+            self.local
+                .spawn_local(self.tracked(task))
+                .expect("pool accepts tasks");
         }
         moved
     }
@@ -313,7 +334,9 @@ impl TestExecutor {
         let tasks = std::mem::take(&mut self.runtime.queues.lock().deferred);
         let moved = !tasks.is_empty();
         for task in tasks {
-            self.local.spawn_local(task).expect("pool accepts tasks");
+            self.local
+                .spawn_local(self.tracked(task))
+                .expect("pool accepts tasks");
         }
         moved
     }

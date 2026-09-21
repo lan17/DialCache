@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "17cd061cde252e466ba94fced8615d3bc7d2a6b88cced14fe62c3572dc86c173",
+      "sha256": "73fd3028635e25c046ff3af486f58ea18b2754038b60c58e12c7d9cc2624bfa5",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01"]},
         {"line":24,"title":"Install","contracts":["B01"]},
@@ -1288,7 +1288,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "9eed42f975c129b1b001b7189c3564dff79f25ae9a38f299853209a8f091e300",
+      "sha256": "e25af32085f0e845e98ec32c1f988accc451f0913050b483456069a086d2430f",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1297,9 +1297,9 @@
         {"line":196,"title":"Observation contract"},
         {"line":294,"title":"Generated fixtures and fast local tests"},
         {"line":329,"title":"Complete corpus and reusable acceptance checks"},
-        {"line":437,"title":"Witness evidence"},
-        {"line":527,"title":"Current limitations for a third port"},
-        {"line":549,"title":"New-port acceptance"}
+        {"line":442,"title":"Witness evidence"},
+        {"line":532,"title":"Current limitations for a further port"},
+        {"line":554,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1347,15 +1347,15 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "acb61cc27f29cb9b3f8996fef1d72ae301ebff65ff0793515c62778cc657a6a0",
+      "sha256": "da2c12a96c6a63bf11098dd28a0512e334adf5362834828b35e846bc1dbd1a52",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
         {"line":26,"title":"How the specification connects to code"},
         {"line":46,"title":"Models and composition profiles"},
         {"line":99,"title":"Generating and replaying behavior"},
-        {"line":193,"title":"Shared verification and replay rules"},
-        {"line":209,"title":"Evidence and scope"}
+        {"line":194,"title":"Shared verification and replay rules"},
+        {"line":210,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1364,7 +1364,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "788ccd40ccc5f3e3462ea25fab7ba577d84da0f52a0f6d5a1d1a63b7a7a18a7f",
+      "sha256": "cdaf28072d154b3503be5939ef7828073832ff8044546019fa4c35b988781810",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1373,7 +1373,7 @@
         {"line":139,"title":"Behavioral mutation comparison"},
         {"line":153,"title":"Recorded measurements"},
         {"line":159,"title":"Reproduction and CI"},
-        {"line":219,"title":"Model properties and cross-language execution"}
+        {"line":234,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1503,15 +1503,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "7747e7e1668b8b9557306cf7724182c0995b84b0044c3434501ae0a9e37d3f21",
+      "sha256": "2feaf2ec97a22b0d4da5eb8c79302cbb4e12416e86762be90b5ab2ff632ee952",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
-        {"line":76,"title":"Reading a completion report"},
-        {"line":94,"title":"Mutation evidence"},
-        {"line":205,"title":"Exploratory runs"},
-        {"line":256,"title":"A retained sampling regression"},
-        {"line":293,"title":"Historical results"}
+        {"line":77,"title":"Reading a completion report"},
+        {"line":96,"title":"Mutation evidence"},
+        {"line":210,"title":"Exploratory runs"},
+        {"line":261,"title":"A retained sampling regression"},
+        {"line":298,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1535,7 +1535,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "6d6a8f5ac238772a100ac606199889c3a043562e5c718fbb0af85a4cc84166ad",
+      "sha256": "6f5e6f576990718ae212092a42dc1a3d3f62d2d88e8999ed06d21ac9a0dde98c",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
         {"line":19,"title":"Use"},

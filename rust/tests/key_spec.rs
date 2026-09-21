@@ -1,15 +1,16 @@
-//! Native entity-ID conversion at the registered-use-case API boundary.
+//! Entity-ID conversion shared by registered use cases, inline calls and invalidation.
 
 // Borrowed input support is part of the public contract exercised below.
 #![allow(clippy::needless_borrows_for_generic_args)]
 
+use std::borrow::Cow;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use dialcache::testing::{TestExecutor, WALL_EPOCH_MS};
 use dialcache::{
-    BoxError, DialCache, IntoKeyId, InvalidateRequest, KeySpec, MissReason, Policy, ReadContext,
-    ReadRequest, ReadResult, Remote, WriteRequest,
+    BoxError, DialCache, Identity, IntoKeyId, InvalidateRequest, KeySpec, MissReason, Operation,
+    Policy, ReadContext, ReadRequest, ReadResult, Remote, WriteRequest,
 };
 use futures::future::BoxFuture;
 use parking_lot::Mutex;
@@ -28,6 +29,8 @@ fn floating_ids_use_javascript_spelling_for_owned_and_borrowed_inputs() {
         assert_eq!(KeySpec::new(value).id, expected);
         assert_eq!(KeySpec::new(&value).id, expected);
         assert_eq!(KeySpec::from(value).id, expected);
+        assert_eq!(Identity::new("thing", value, "byId").id, expected);
+        assert_eq!(Identity::new("thing", &value, "byId").id, expected);
     }
 }
 
@@ -37,6 +40,8 @@ fn single_precision_ids_are_promoted_to_javascript_numbers() {
         assert_eq!(KeySpec::new(value).id, expected);
         assert_eq!(KeySpec::new(&value).id, expected);
         assert_eq!(KeySpec::from(value).id, expected);
+        assert_eq!(Identity::new("thing", value, "byId").id, expected);
+        assert_eq!(Identity::new("thing", &value, "byId").id, expected);
     }
 }
 
@@ -60,6 +65,35 @@ fn string_and_integer_ids_keep_their_text_and_support_references() {
         "127.0.0.1"
     );
     assert_eq!(42_u64.into_key_id(), "42");
+    assert_eq!(Identity::new("thing", text.as_str(), "byId").id, text);
+    assert_eq!(Identity::new("thing", &borrowed_text, "byId").id, text);
+    assert_eq!(Identity::new("thing", &text, "byId").id, text);
+    assert_eq!(Identity::new("thing", text.clone(), "byId").id, text);
+    assert_eq!(
+        Identity::new("thing", text.into_boxed_str(), "byId").id,
+        "001e+21"
+    );
+    assert_eq!(Identity::new("thing", Cow::Borrowed("-0"), "byId").id, "-0");
+    assert_eq!(
+        Identity::new("thing", Cow::<'_, str>::Owned("1e+21".to_owned()), "byId").id,
+        "1e+21"
+    );
+    assert_eq!(Identity::new("thing", 'é', "byId").id, "é");
+}
+
+#[test]
+fn direct_identities_preserve_every_primitive_integer_domain() {
+    macro_rules! check {
+        ($($kind:ty),*) => { $(
+            for value in [0 as $kind, <$kind>::MIN, <$kind>::MAX] {
+                let expected = value.to_string();
+                assert_eq!(Identity::new("thing", value, "byId").id, expected);
+                assert_eq!(Identity::new("thing", &value, "byId").id, expected);
+                assert_eq!(KeySpec::new(value).id, expected);
+            }
+        )* };
+    }
+    check!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
 }
 
 #[test]
@@ -82,13 +116,20 @@ fn registered_float_ids_share_the_javascript_zero_identity() {
         })
         .register()
         .unwrap();
-    let (negative, positive) = executor.block_on(async move {
+    let (negative, positive, inline) = executor.block_on(async move {
         let request = cache.enable_guard();
         let negative = lookup.get(request.scope(), -0.0).await.unwrap();
         let positive = lookup.get(request.scope(), 0.0).await.unwrap();
-        (negative, positive)
+        let operation = Operation::<usize>::new(Identity::new("thing", -0.0, "FloatId"))
+            .policy(Policy::default().local_ttl_sec(60));
+        let inline = cache
+            .get_or_load(request.scope(), operation, |_| async { Ok(999) })
+            .await
+            .unwrap();
+        (negative, positive, inline)
     });
     assert_eq!((*negative, *positive), (1, 1));
+    assert!(Arc::ptr_eq(&negative, &inline));
     assert_eq!(sources.load(Ordering::SeqCst), 1);
 }
 
@@ -139,16 +180,32 @@ where
         .source(|_, _| async { Ok(7) })
         .register()
         .unwrap();
+    let direct = Identity::new("thing", &id, "TrackedId")
+        .namespace("numeric")
+        .tracked(true);
+    let keys = direct.keys().unwrap();
+    assert_eq!(direct.id, KeySpec::new(&id).id);
     executor.block_on(async move {
         let request = cache.enable_guard();
         assert_eq!(*lookup.get(request.scope(), id.clone()).await.unwrap(), 7);
+        let operation = Operation::<u64>::new(direct).policy(Policy::default().remote_ttl_sec(60));
+        assert_eq!(
+            *cache
+                .get_or_load(request.scope(), operation, |_| async { Ok(8) })
+                .await
+                .unwrap(),
+            8
+        );
         cache.invalidate("thing", &id, 17).await.unwrap();
         cache.invalidate("thing", id, 17).await.unwrap();
     });
 
     let expected = format!("{{numeric:thing:{escaped_id}}}#watermark");
     let reads = remote.reads.lock();
-    assert_eq!(reads.len(), 1);
+    assert_eq!(reads.len(), 2);
+    assert_eq!(reads[0], reads[1]);
+    assert_eq!(reads[0].value_key, keys.value);
+    assert_eq!(reads[0].watermark_key, keys.watermark);
     assert_eq!(reads[0].watermark_key.as_deref(), Some(expected.as_str()));
     let invalidations = remote.invalidations.lock();
     assert_eq!(invalidations.len(), 2);

@@ -50,3 +50,11 @@ harness = false
 name = "redis_integration"
 path = "tests/redis_integration.rs"
 required-features = ["redis"]
+
+[[example]]
+name = "basic"
+required-features = ["tokio"]
+
+[[example]]
+name = "redis"
+required-features = ["redis", "tokio"]

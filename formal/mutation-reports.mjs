@@ -270,6 +270,8 @@ function goMarkdown(report, directory = root) {
 function rustMarkdown(report) {
   return ['# Rust semantic mutation measurement', '', `Completed in ${report.elapsedSeconds}s. Counts measure this named fault catalog and exact corpus, not universal equivalence.`, '',
     ...shardsMarkdown(report),
+    'Scope: Rust native mutation catalog only. Shared TypeScript/Go model-challenge boundary coverage is not measured by this report.', '',
+    ...(report.scope ? [`Shared catalog mutants without a Rust binding: ${report.scope.unmappedSharedMutations.join(', ') || 'none'}.`, ''] : []),
     '| Mutation | Contract case | Ordinary | Quint generated | Fixed supplement | Full portable |', '| --- | --- | --- | --- | --- | --- |',
     ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.fixed.state} | ${m.cohorts.portable.state} |`), '',
     'Ordinary is the crate\'s unit and native tests; generated is the conformance harness over the complete corpus and witness evidence; fixed is the harness over the fixed scenarios and checked-in vectors. Full JSON records snapshot/corpus/witness fingerprints, cohort selections, actual passing/failing counts and assertion diagnostics. Compilation errors, crashes, timeouts, missing reports and incomplete runs cannot count as detections.', ''].join('\n');
@@ -293,7 +295,7 @@ export const languages = {
     detection: mutations => goDetection(mutations), markdown: goMarkdown, recordsRegressions: true },
   // The crate's unit tests read go/redis_adapter.go (script byte equality), so
   // the Go source is an input of the ordinary cohort as well.
-  rust: { name: 'Rust', output: '.formal-traces/rust-semantic', catalog: 'formal/rust-mutations.json', inputs: ['formal', 'rust', 'test', 'src', 'go'], exclude: ['rust/target'],
+  rust: { name: 'Rust', boundaryEvidence: false, output: '.formal-traces/rust-semantic', catalog: 'formal/rust-mutations.json', inputs: ['formal', 'rust', 'test', 'src', 'go'], exclude: ['rust/target'],
     detection: mutations => goDetection(mutations), markdown: rustMarkdown, recordsRegressions: true },
 };
 
@@ -334,7 +336,8 @@ export function gateDetections(language, report, entries, { directory = root, su
   // Recompute verdicts from the current declarations and completed recordings.
   // An omitted mapping, a stale pin or a claimed confirmation without a clean
   // baseline must fail just as a measured non-detection does.
-  const regressions = requiredDetectionRegressions(entries, report.mutations, currentBoundaries(report, entries, directory));
+  const boundaries = language.boundaryEvidence === false ? [] : currentBoundaries(report, entries, directory);
+  const regressions = requiredDetectionRegressions(entries, report.mutations, boundaries);
   if (summarize) report.detection = language.detection(report.mutations, directory);
   if (language.recordsRegressions) report.requiredDetectionRegressions = regressions;
   if (regressions.length) throw new Error(`Lost required detections: ${regressions.join(', ')}`);

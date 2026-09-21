@@ -32,22 +32,6 @@ use formal::scenarios;
 use formal::transport::{Coordinator, Prepared};
 use serde_json::{Map, Value};
 
-const FEATURE_PROFILES: [&str; 13] = [
-    "admission",
-    "independent",
-    "layers",
-    "local-failure",
-    "policy",
-    "recovery",
-    "recovery-read",
-    "runtime-boundaries",
-    "scope",
-    "shadow",
-    "shadow-layers",
-    "source-budgets",
-    "runtime-boundaries-placeholder",
-];
-
 struct Run {
     selection: Selection,
     report: Report,
@@ -90,6 +74,13 @@ fn run() -> Result<bool, String> {
                 .map(str::to_string)
                 .collect();
             profile_actions.insert(name.clone(), actions);
+        }
+    }
+    if let Some(selected) = &selection.feature_profile {
+        if !profile_actions.contains_key(selected)
+            || matches!(selected.as_str(), "core" | "effects")
+        {
+            return Err(format!("unknown selected feature profile: {selected}"));
         }
     }
     let mut run = Run {
@@ -169,8 +160,14 @@ impl Run {
         let mut apply = |input: &Value| cell.borrow_mut().apply(input);
         let mut observation = || cell.borrow().observation();
         let mut wall = || cell.borrow().wall_ms();
-        self.coordinator
-            .execute(&prepared, &mut apply, &mut observation, &mut wall, &mut [])
+        self.coordinator.execute(
+            &prepared,
+            &mut apply,
+            &mut observation,
+            &mut wall,
+            None,
+            &mut [],
+        )
     }
 
     fn core(&mut self) -> Result<(), String> {
@@ -198,7 +195,8 @@ impl Run {
             let cell = std::cell::RefCell::new(driver_ref);
             let mut apply = |input: &Value| cell.borrow_mut().apply(input);
             let mut observation = || cell.borrow().observation();
-            let mut wall = || cell.borrow().wall_ms();
+            let mut wall = || cell.borrow().observation_wall_ms();
+            let mut receipt = || cell.borrow().receipt();
             let mut monitor = || cell.borrow().assert_effects_history();
             let mut monitors: Vec<&mut dyn FnMut() -> Result<(), String>> = Vec::new();
             if effects_monitor {
@@ -209,6 +207,7 @@ impl Run {
                 &mut apply,
                 &mut observation,
                 &mut wall,
+                Some(&mut receipt),
                 &mut monitors,
             )
         };
@@ -285,6 +284,7 @@ impl Run {
                     &mut apply,
                     &mut observation,
                     &mut wall,
+                    None,
                     &mut [],
                 )
             })();
@@ -398,11 +398,6 @@ impl Run {
             .case(id, &outcome, started, formal::report::now_ms())?;
         Ok(())
     }
-}
-
-#[allow(dead_code)]
-fn _profiles() -> &'static [&'static str] {
-    &FEATURE_PROFILES
 }
 
 #[allow(dead_code)]

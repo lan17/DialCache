@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 
 const moduleUrl = new URL("../formal/measure-rust-semantics.mjs", import.meta.url).href;
 type Cohort = { state: string; passed: number; failed: number; failingTests: string[]; executedTests: string[]; assertionKinds: Record<string, string>; assertionEvidence: Record<string, string> };
-const { evaluateCargoTestOutput, evaluateRustReport, infrastructureTestFile } = await import(moduleUrl) as {
+const { evaluateCargoTestOutput, evaluateRustReport, infrastructureTestFile, rustMutationScope, rustTargetDirectory } = await import(moduleUrl) as {
   evaluateCargoTestOutput(output: string, exitCode: number, expectedBinaries?: number): Cohort;
   evaluateRustReport(text: string, exitCode: number, stderr?: string): Cohort;
   infrastructureTestFile: RegExp;
+  rustMutationScope(catalog: unknown, typescript: unknown[]): { catalog: string; modelBoundaryEvidence: boolean; mappedMutations: string[]; unmappedSharedMutations: string[] };
+  rustTargetDirectory(directory: string, selection: { shard: { index: number; count: number }; only?: string[] }): string;
 };
 
 // libtest output as `cargo test --release --no-fail-fast --lib --test tokio_runtime` prints it.
@@ -129,17 +131,23 @@ describe("Rust fault catalog", () => {
   const readRepo = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
   type Entry = { id: string; case: string; description: string; typescriptMutation: string; edits: { path: string; before: string; after: string }[]; requiredDetections: string[]; typescriptRequiredDetections: string[] };
   const catalog = JSON.parse(readRepo("formal/rust-mutations.json")) as { schemaVersion: number; mutations: Entry[] };
-  const typescript = JSON.parse(readRepo("formal/semantic-mutations.json")) as { mutations: { id: string; case: string; description: string; requiredDetections: string[] }[] };
+  const typescript = JSON.parse(readRepo("formal/mutations.json")) as { mutations: { id: string; case: string; description: string; typescript: { requiredDetections: string[] } }[] };
 
-  it("names every TypeScript fault once with the same case and description", () => {
+  it("maps each scoped Rust fault once into the current shared catalog", () => {
     expect(catalog.schemaVersion).toBe(1);
-    expect(catalog.mutations.map(m => m.id)).toEqual(typescript.mutations.map(m => m.id));
+    const scope = rustMutationScope(catalog, typescript.mutations);
+    expect(scope).toMatchObject({ catalog: "rust-native", modelBoundaryEvidence: false });
+    expect(scope.mappedMutations).toEqual(catalog.mutations.map(m => m.typescriptMutation));
+    expect([...scope.mappedMutations, ...scope.unmappedSharedMutations].sort()).toEqual(typescript.mutations.map(m => m.id).sort());
+    expect(scope.unmappedSharedMutations).toContain("M14");
+    expect(() => rustMutationScope({ ...catalog, mutations: [...catalog.mutations, catalog.mutations[0]] }, typescript.mutations)).toThrow(/duplicate/);
+    expect(() => rustMutationScope(catalog, typescript.mutations.slice(1))).toThrow(/counterpart/);
     for (const entry of catalog.mutations) {
       const counterpart = typescript.mutations.find(m => m.id === entry.typescriptMutation)!;
       expect(counterpart, entry.id).toBeDefined();
       expect(entry.case, entry.id).toBe(counterpart.case);
       expect(entry.description, entry.id).toBe(counterpart.description);
-      expect(entry.typescriptRequiredDetections, entry.id).toEqual(counterpart.requiredDetections);
+      expect(entry.typescriptRequiredDetections, entry.id).toEqual(counterpart.typescript.requiredDetections);
       expect(entry.requiredDetections, entry.id).toEqual(expect.arrayContaining(["generated", "portable"]));
       expect(entry.requiredDetections.every(cohort => ["generated", "fixed", "portable"].includes(cohort)), entry.id).toBe(true);
     }
@@ -154,5 +162,17 @@ describe("Rust fault catalog", () => {
         expect(readRepo(edit.path).split(edit.before).length, `${entry.id} ${edit.path}`).toBe(2);
       }
     }
+  });
+});
+
+
+describe("Rust mutation build isolation", () => {
+  it("gives concurrent shards and partial runs separate Cargo target directories", () => {
+    const first = rustTargetDirectory("/repo", { shard: { index: 1, count: 6 } });
+    const second = rustTargetDirectory("/repo", { shard: { index: 2, count: 6 } });
+    const full = rustTargetDirectory("/repo", { shard: { index: 1, count: 1 } });
+    const partial = rustTargetDirectory("/repo", { shard: { index: 1, count: 1 }, only: ["M01"] });
+    expect(new Set([first, second, full, partial]).size).toBe(4);
+    expect(first).toBe("/repo/rust/target/semantic/shards/1-of-6");
   });
 });

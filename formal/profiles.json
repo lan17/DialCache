@@ -364,7 +364,9 @@
         "runtime-boundaries",
         "shadow-layers",
         "local-clock",
-        "source-budgets"
+        "source-budgets",
+        "dark-layers",
+        "shadow-read-deadlines"
       ],
       "limits": "Same generated histories and portable scenarios as TypeScript and Go and all protocol vectors, replayed by the Rust conformance harness against the shared witness evidence. Claims require current corpus and witness fingerprints; finite evidence does not prove every possible schedule. Native Redis integration is not yet part of the claim."
     }

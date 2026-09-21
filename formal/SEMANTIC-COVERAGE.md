@@ -183,8 +183,10 @@ runner requires complete reports and assertion evidence; an infrastructure
 failure is a failed measurement. Rust results establish detection for this
 catalog only; the TypeScript/Go model-to-mutant boundary mappings in
 `mutations.json` do not confer Rust coverage. Each mutant builds in release
-mode in an isolated crate copy. Concurrent local shards need separate
-`DIALCACHE_RUST_TARGET_DIR` build directories to avoid sharing mutant binaries.
+mode in an isolated crate copy. Cargo build directories are isolated by shard
+selection automatically; partial runs use a separate directory. A direct runner
+invocation can override the directory with `DIALCACHE_RUST_TARGET_DIR`, but
+concurrent shards must use distinct override paths to avoid sharing mutant binaries.
 
 Hosted runs shard each lane with `MUTATION_SHARD=<index>/<count>`, matching the workflow matrix; `test/formal-validation.test.ts` pins how many mutants a shard may hold within its timeout, so catalog growth fails the pull request until the matrix grows.
 A shard reruns the compile check, every unmodified baseline and the witness

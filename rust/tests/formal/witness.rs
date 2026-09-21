@@ -10,7 +10,7 @@
 use super::inventory::trace_kind;
 use super::json::strict_parse;
 use serde::{Deserialize, Deserializer};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Hex SHA-256 of a file's bytes.
@@ -200,7 +200,20 @@ pub fn check_witness_evidence(
     let execution = read_strict(&root.join("formal/execution.json"))?;
     let definitions = read_strict(&root.join("formal/profiles.json"))?;
     let shared = shared_replay_sources(root)?;
-    let mut additional: Vec<String> = strings_at(&execution, "libraries")?;
+    let claimed: HashSet<String> = execution
+        .get("models")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|model| {
+            model
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .ok_or_else(|| "execution model must name its path".to_string())
+        })
+        .collect::<Result<_, _>>()?;
+    let mut additional = quint_libraries(root, &claimed)?;
     additional.extend(shared);
     for definition in definitions
         .get("profiles")
@@ -246,6 +259,38 @@ pub fn check_witness_evidence(
         return Err("unaccounted replay traces".to_string());
     }
     Ok(())
+}
+
+/// Every Quint source in `formal/` and `formal/kernel/` not claimed by a
+/// scheduled model, sorted as `formal/execution.mjs` derives library inputs.
+pub fn quint_libraries(root: &Path, claimed: &HashSet<String>) -> Result<Vec<String>, String> {
+    let mut libraries = Vec::new();
+    for folder in ["formal", "formal/kernel"] {
+        let directory = root.join(folder);
+        let entries = match std::fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(format!("{}: {error}", directory.display())),
+        };
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("{}: {error}", directory.display()))?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if entry
+                .file_type()
+                .map_err(|error| format!("{}: {error}", entry.path().display()))?
+                .is_dir()
+                || !name.ends_with(".qnt")
+            {
+                continue;
+            }
+            let path = format!("{folder}/{name}");
+            if !claimed.contains(&path) {
+                libraries.push(path);
+            }
+        }
+    }
+    libraries.sort();
+    Ok(libraries)
 }
 
 fn strings_at(value: &serde_json::Value, key: &str) -> Result<Vec<String>, String> {

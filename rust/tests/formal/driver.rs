@@ -135,7 +135,6 @@ pub struct Shared {
     fallback_failed: bool,
     pub discard_writes: bool,
     pub discard_invalidations: bool,
-    unsettled: Option<Map<String, Value>>,
 }
 
 impl Shared {
@@ -277,8 +276,11 @@ pub struct Driver {
     fixture: Value,
     instances: HashMap<String, DialCache>,
     scopes: HashMap<String, ScopeHandle>,
-    /// Harness control only: report the observation held before the
-    /// settlement drain. Conformance replays never set it.
+    reported: Value,
+    settlement_receipt: Value,
+    reported_wall_ms: i64,
+    /// Harness control only: skip the first settlement drain and let the
+    /// verification drain attest to the work it finds still runnable.
     pub skip_settle: bool,
 }
 
@@ -329,7 +331,6 @@ impl Driver {
             fallback_failed: false,
             discard_writes: false,
             discard_invalidations: false,
-            unsettled: None,
         };
         let mut driver = Driver {
             exec,
@@ -338,9 +339,13 @@ impl Driver {
             fixture,
             instances: HashMap::new(),
             scopes: HashMap::new(),
+            reported: Value::Null,
+            settlement_receipt: Value::Null,
+            reported_wall_ms: WALL_EPOCH_MS,
             skip_settle: false,
         };
         driver.instance("default");
+        driver.settle();
         driver
     }
 
@@ -627,6 +632,23 @@ impl Driver {
                 fields.insert("ttlMs".to_string(), Value::from(ttl));
                 self.shared.lock().record("marker", fields);
             }
+            "inspectCoalescing" => {
+                let instance = input
+                    .get("instance")
+                    .and_then(Value::as_str)
+                    .unwrap_or("default");
+                let state = self.instance(instance).coalescing_state().process;
+                let fields = json!({
+                    "instance": instance,
+                    "activeLeaders": state.active_leaders,
+                    "activeFollowers": state.active_followers,
+                    "oldestLeaderAgeMs": state.oldest_leader_age_ms,
+                });
+                self.shared.lock().record(
+                    "coalescingState",
+                    fields.as_object().expect("fields").clone(),
+                );
+            }
             "adapterReply" => {
                 let mut s = self.shared.lock();
                 if s.reply.is_some() {
@@ -680,15 +702,58 @@ impl Driver {
             }
             other => return Err(format!("unknown behavior input {other}: {input}")),
         }
-        if self.skip_settle {
-            let mut s = self.shared.lock();
-            let snapshot = s.observed.clone();
-            s.unsettled = Some(snapshot);
-        }
-        // Drain ready work while unresolved external gates remain held: the
-        // causally-ready-v1 settlement step.
-        self.exec.drain();
+        self.settle();
         self.assert_publication_causality()
+    }
+
+    /// Attest to a single instant, then verify it with a second zero-time drain.
+    /// Counts come from actual executor polls and external gates, never predictions.
+    fn settle(&mut self) {
+        if !self.skip_settle {
+            self.exec.drain();
+        }
+        let shared = self.shared.lock();
+        self.reported = Value::Object(shared.observed.clone());
+        let mut held = Map::new();
+        held.insert(
+            "loaders".to_string(),
+            json!(shared
+                .loaders
+                .iter()
+                .filter(|gate| !gate.is_settled())
+                .count()),
+        );
+        for (kind, field) in [
+            ("read", "reads"),
+            ("write", "writes"),
+            ("dump", "dumps"),
+            ("load", "loads"),
+            ("policy", "policies"),
+        ] {
+            held.insert(
+                field.to_string(),
+                json!(shared.effects.get(kind).map_or(0, HashMap::len)),
+            );
+        }
+        held.insert(
+            "scopes".to_string(),
+            json!(self
+                .scopes
+                .values()
+                .filter(|scope| !scope.gate.is_settled())
+                .count()),
+        );
+        drop(shared);
+        let elapsed = self.elapsed_ms();
+        self.reported_wall_ms = self.wall_ms();
+        let polls = self.exec.poll_count();
+        let timers = self.clock.pending_timers();
+        self.exec.drain();
+        let changed = self.reported != Value::Object(self.shared.lock().observed.clone());
+        let runnable = self.exec.poll_count() - polls
+            + u64::from(changed)
+            + timers.abs_diff(self.clock.pending_timers()) as u64;
+        self.settlement_receipt = json!({"elapsedMs": elapsed, "runnable": runnable, "held": held});
     }
 
     fn begin(&mut self, input: &Value) -> Result<(), String> {
@@ -933,15 +998,17 @@ impl Driver {
         Ok(())
     }
 
-    /// The complete current observation.
+    /// The reported observation at the instant its receipt describes.
     pub fn observation(&self) -> Value {
-        let s = self.shared.lock();
-        if self.skip_settle {
-            if let Some(unsettled) = &s.unsettled {
-                return Value::Object(unsettled.clone());
-            }
-        }
-        Value::Object(s.observed.clone())
+        self.reported.clone()
+    }
+
+    pub fn receipt(&self) -> Value {
+        self.settlement_receipt.clone()
+    }
+
+    pub fn observation_wall_ms(&self) -> i64 {
+        self.reported_wall_ms
     }
 
     /// Release every driver-owned gate so no work leaks into the next history.

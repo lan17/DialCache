@@ -348,6 +348,7 @@ fn prepared_control() -> Prepared {
         session: "1".to_string(),
         steps: 2,
         observation: "coreObservation".to_string(),
+        receipt: None,
         fixture: Value::Object(Map::new()),
         setup: Vec::new(),
         actions: vec!["init".to_string(), "outsideCall".to_string()],
@@ -396,7 +397,7 @@ fn coordinator_answers_repeated_profile_requests() {
             .cloned()
             .expect("profiles object");
     }
-    assert_eq!(profiles.len(), 15, "profiles: {}", sorted_keys(&profiles));
+    assert_eq!(profiles.len(), 17, "profiles: {}", sorted_keys(&profiles));
     for name in [
         "core",
         "effects",
@@ -543,6 +544,7 @@ fn coordinator_rejects_premature_completion_and_empty_commands() {
             },
             &mut healthy_core_observation,
             &mut || 0,
+            None,
             &mut [],
         );
         assert!(
@@ -670,6 +672,7 @@ fn transport_validates_observations_locally() {
             },
             &mut || with(&healthy_core_observation(), "redisReads", json!("many")),
             &mut || 0,
+            None,
             &mut [],
         )
         .expect_err("malformed observation accepted");
@@ -683,7 +686,7 @@ fn transport_validates_observations_locally() {
         .expect("an observe request reached the coordinator");
 
     // prepare rejects an unknown observation definition.
-    let program = "require('readline').createInterface({input:process.stdin}).on('line', line => { const request=JSON.parse(line); process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result:{session:'1',settlement:'causally-ready-v1',observation:'observedEvent',fixture:{},setup:[],actions:['init','outsideCall'],steps:2}})+'\\n'); });";
+    let program = "require('readline').createInterface({input:process.stdin}).on('line', line => { const request=JSON.parse(line); process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result:{session:'1',settlement:'causally-ready-v1',observation:'observedEvent',receipt:null,fixture:{},setup:[],actions:['init','outsideCall'],steps:2}})+'\\n'); });";
     let mut coordinator =
         Coordinator::start(node(program), Duration::from_secs(1), false).expect("start");
     let error = coordinator
@@ -699,6 +702,90 @@ fn transport_validates_observations_locally() {
 fn carries_comparison_markers(text: &str) -> bool {
     text.find("expected:")
         .is_some_and(|at| text[at..].contains("actual:"))
+}
+
+#[test]
+fn transport_validates_settlement_receipts_before_sending() {
+    let receipt = json!({"elapsedMs": 0, "runnable": 0, "held": {
+        "loaders": 0, "reads": 0, "writes": 0, "dumps": 0,
+        "loads": 0, "policies": 0, "scopes": 0
+    }});
+    let schema = Schema::load().expect("schema");
+    assert!(schema.matches_definition(&receipt, "settlementReceipt"));
+    let mut bad_held = receipt.clone();
+    bad_held["held"]["reads"] = json!(-1);
+    let malformed = [
+        without(&receipt, "held"),
+        with(&receipt, "runnable", json!(0.5)),
+        with(&receipt, "elapsedMs", json!("0")),
+        with(&receipt, "extra", json!(0)),
+        bad_held,
+    ];
+    // The process rejects any observe request; a malformed receipt must be
+    // attributed to the driver before it spends a coordinator round trip.
+    let program = "require('readline').createInterface({input:process.stdin}).on('line', line => { const r=JSON.parse(line); if (r.op === 'observe') process.exit(3); process.stdout.write(JSON.stringify({version:1,id:r.id,ok:true,result:{discarded:true}})+'\\n'); });";
+    let mut coordinator =
+        Coordinator::start(node(program), Duration::from_secs(1), false).expect("start");
+    let mut prepared = prepared_control();
+    prepared.observation = "behaviorObservation".to_string();
+    prepared.receipt = Some("settlementReceipt".to_string());
+    for malformed in malformed {
+        let error = coordinator
+            .execute(
+                &prepared,
+                &mut |_| Ok(()),
+                &mut || empty_behavior_observation(true),
+                &mut || 0,
+                Some(&mut || malformed.clone()),
+                &mut [],
+            )
+            .expect_err("malformed receipt accepted");
+        assert!(
+            error.contains("malformed settlementReceipt receipt"),
+            "{error}"
+        );
+        assert!(!carries_comparison_markers(&error), "{error}");
+    }
+    let missing = coordinator
+        .execute(
+            &prepared,
+            &mut |_| Ok(()),
+            &mut || empty_behavior_observation(true),
+            &mut || 0,
+            None,
+            &mut [],
+        )
+        .expect_err("missing receipt callback accepted");
+    assert!(
+        missing.contains("omitted its settlement receipt"),
+        "{missing}"
+    );
+    coordinator
+        .finish()
+        .expect("an observe request reached the coordinator");
+
+    // prepare must reject invalid receipt definitions and prevent a core
+    // session from attaching a behavior driver's receipt.
+    for (observation, value) in [
+        ("behaviorObservation", Value::Null),
+        ("behaviorObservation", json!("coreObservation")),
+        ("coreObservation", json!("settlementReceipt")),
+    ] {
+        let result = json!({"session":"1", "settlement":SETTLEMENT,
+            "observation":observation, "receipt":value, "fixture":{},
+            "setup":[], "actions":["init","outsideCall"], "steps":2});
+        let program = format!("require('readline').createInterface({{input:process.stdin}}).on('line', line => {{ const r=JSON.parse(line); process.stdout.write(JSON.stringify({{version:1,id:r.id,ok:true,result:{result}}})+'\\n'); }});");
+        let mut coordinator =
+            Coordinator::start(node(&program), Duration::from_secs(1), false).expect("start");
+        let error = coordinator
+            .prepare("core", Path::new("control.itf.json"), None)
+            .expect_err("invalid receipt definition accepted");
+        assert!(
+            error.contains("malformed replay receipt definition"),
+            "{error}"
+        );
+        coordinator.finish().expect("clean exit");
+    }
 }
 
 #[test]
@@ -893,8 +980,8 @@ fn missing_scheduled_regressions_fail_corpus_selection() {
         regression_paths("effects", &corpus.0).expect_err("missing scheduled histories accepted");
     assert!(error.contains("missing Quint regression"), "{error}");
     assert!(regression_paths("not-a-profile", &corpus.0)
-        .expect("no regressions")
-        .is_empty());
+        .expect_err("unknown profile without exports accepted")
+        .contains("missing Quint regression"));
 }
 
 #[test]
@@ -1058,7 +1145,10 @@ fn witness_evidence_binds_shared_replay_sources() {
         "formal/coverage-witnesses.json",
         r#"{"effects":["observed"]}"#,
     );
-    root.write("formal/execution.json", r#"{"libraries":[]}"#);
+    root.write(
+        "formal/execution.json",
+        r#"{"models":[{"path":"formal/dialcache-effects-conformance.qnt"}]}"#,
+    );
     root.write("trace.itf.json", "controlled trace");
     let trace = root.0.join("trace.itf.json");
     let cite = |name: &str, kind: &str, checkpoints: Vec<i64>| Trace {
@@ -1207,6 +1297,36 @@ fn witness_evidence_binds_shared_replay_sources() {
     write(&evidence);
     check().expect("restored evidence rejected");
 
+    // Library membership is discovered from actual Quint sources, so adding
+    // a kernel library must invalidate the old evidence even without a
+    // manifest edit; updating its digest then makes subsequent drift visible.
+    root.write("formal/kernel/new-library.qnt", "new reviewed library");
+    let error = check().expect_err("new kernel library omitted from evidence");
+    assert!(
+        error.contains("incomplete witness definition fingerprints"),
+        "{error}"
+    );
+    let mut with_library = evidence.clone();
+    with_library.inputs.insert(
+        5,
+        Digest {
+            path: "formal/kernel/new-library.qnt".to_string(),
+            name: String::new(),
+            sha256: file_sha256(&root.0.join("formal/kernel/new-library.qnt")).expect("hash"),
+        },
+    );
+    write(&with_library);
+    check().expect("new library fingerprint rejected");
+    root.write("formal/kernel/new-library.qnt", "changed library");
+    let error = check().expect_err("stale kernel library digest accepted");
+    assert!(
+        error.contains("stale witness definition formal/kernel/new-library.qnt"),
+        "{error}"
+    );
+    std::fs::remove_file(root.0.join("formal/kernel/new-library.qnt")).expect("remove library");
+    write(&evidence);
+    check().expect("restored library inventory rejected");
+
     root.write("formal/replay/mapping.mjs", "changed input mapping");
     let error = check().expect_err("changed shared mapping accepted");
     assert!(
@@ -1241,6 +1361,7 @@ fn observe_requests_reach_the_coordinator_comparison() {
             },
             &mut healthy_core_observation,
             &mut || 1_788_868_800_000,
+            None,
             &mut [],
         )
         .expect_err("a zero observation matched the smoke history");

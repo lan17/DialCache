@@ -10,7 +10,7 @@ type Step = { label: string; command?: string; args?: string[]; cwd?: string; en
 type Record_ = Record<string, unknown>;
 
 const { checkRustReplay } = await import(new URL("../formal/check-rust-replay.mjs", import.meta.url).href) as {
-  checkRustReplay(report: string, inventory: Entry[]): Summary;
+  checkRustReplay(report: string, inventory?: Entry[]): Summary;
 };
 const { parseRustReport, adaptReport, nativeBinding } = await import(new URL("../formal/conformance-adapters.mjs", import.meta.url).href) as {
   parseRustReport(text: string, inventory: Entry[]): { startedAt: number; finishedAt: number; results: Array<{ id: string; status: string }> };
@@ -56,6 +56,20 @@ describe("Rust replay report gate", () => {
     expect(summary.generated.core).toBeGreaterThan(0);
     expect(summary.quintRegressions.core).toBe(inventory.filter(entry => entry.category === "regression" && entry.profile === "core").length);
     for (const profile of Object.keys(summary.generated)) expect(summary.quintRegressions, profile).toHaveProperty(profile);
+  });
+
+  it("requires new profiles and source-derived exported regressions through the default inventory", () => {
+    for (const profile of ["dark-layers", "shadow-read-deadlines"]) {
+      for (const category of ["sampled", "regression", "witness"]) {
+        expect(inventory.some(entry => entry.profile === profile && entry.category === category), `${profile}/${category}`).toBe(true);
+      }
+      const oldCases = inventory.filter(entry => entry.profile !== profile);
+      const oldReport = encode([start(), ...oldCases.map(entry => caseRecord(entry.id)), finish(oldCases.length)]);
+      expect(() => checkRustReplay(oldReport)).toThrow(`Missing passed Rust replay case: sampled/${profile}/0`);
+    }
+    const historiesOnly = inventory.filter(entry => entry.category !== "regression");
+    const missingRegressions = encode([start(), ...historiesOnly.map(entry => caseRecord(entry.id)), finish(historiesOnly.length)]);
+    expect(() => checkRustReplay(missingRegressions)).toThrow(/Missing passed Rust replay case: regression\//);
   });
 
   it("rejects a missing, duplicate or failed case", () => {

@@ -56,6 +56,8 @@ pub struct Prepared {
     pub steps: i64,
     /// `$defs` definition every observation of this session must satisfy.
     pub observation: String,
+    /// Receipt definition for a behavior session; absent for core/local-clock.
+    pub receipt: Option<String>,
     /// Initialization fixture for the native driver (an object).
     pub fixture: Value,
     /// Commands to apply before the first observation.
@@ -269,7 +271,8 @@ impl Coordinator {
         let result = self.call(request)?;
         let result = result.as_object().ok_or("malformed replay preparation")?;
         let session = result.get("session").and_then(Value::as_str).unwrap_or("");
-        if sorted_keys(result) != "actions,fixture,observation,session,settlement,setup,steps"
+        if sorted_keys(result)
+            != "actions,fixture,observation,receipt,session,settlement,setup,steps"
             || result.get("settlement").and_then(Value::as_str) != Some(SETTLEMENT)
             || session.is_empty()
             || !safe_index(result.get("steps"), 2)
@@ -287,6 +290,17 @@ impl Coordinator {
                 "malformed replay observation definition {definition:?}"
             ));
         }
+        let receipt = match result.get("receipt") {
+            Some(Value::Null) if definition != "behaviorObservation" => None,
+            Some(Value::String(name))
+                if name == "settlementReceipt"
+                    && definition == "behaviorObservation"
+                    && self.schema.definition(name).is_some() =>
+            {
+                Some(name.clone())
+            }
+            _ => return Err("malformed replay receipt definition".to_string()),
+        };
         let fixture = match result.get("fixture") {
             Some(fixture @ Value::Object(_)) => fixture.clone(),
             _ => return Err("malformed replay fixture".to_string()),
@@ -312,6 +326,7 @@ impl Coordinator {
             session: session.to_string(),
             steps,
             observation: definition.to_string(),
+            receipt,
             fixture,
             setup,
             actions: names,
@@ -328,9 +343,10 @@ impl Coordinator {
         apply: &mut dyn FnMut(&Value) -> Result<(), String>,
         observation: &mut dyn FnMut() -> Value,
         wall_ms: &mut dyn FnMut() -> i64,
+        receipt: Option<&mut dyn FnMut() -> Value>,
         monitors: &mut [&mut dyn FnMut() -> Result<(), String>],
     ) -> Result<(), String> {
-        let outcome = self.run(prepared, apply, observation, wall_ms, monitors);
+        let outcome = self.run(prepared, apply, observation, wall_ms, receipt, monitors);
         if outcome.is_err() {
             let mut request = Map::new();
             request.insert("op".to_string(), Value::from("discard"));
@@ -349,8 +365,17 @@ impl Coordinator {
         apply: &mut dyn FnMut(&Value) -> Result<(), String>,
         observation: &mut dyn FnMut() -> Value,
         wall_ms: &mut dyn FnMut() -> i64,
+        mut receipt: Option<&mut dyn FnMut() -> Value>,
         monitors: &mut [&mut dyn FnMut() -> Result<(), String>],
     ) -> Result<(), String> {
+        if prepared.receipt.is_some() != receipt.is_some() {
+            return Err(if prepared.receipt.is_some() {
+                "driver omitted its settlement receipt callback"
+            } else {
+                "driver supplied an unexpected settlement receipt callback"
+            }
+            .to_string());
+        }
         for input in &prepared.setup {
             apply(input)?;
         }
@@ -376,6 +401,17 @@ impl Coordinator {
             request.insert("settlement".to_string(), Value::from(SETTLEMENT));
             request.insert("observed".to_string(), observed);
             request.insert("environment".to_string(), Value::Object(environment));
+            if let Some(callback) = receipt.as_mut() {
+                let value = callback();
+                let definition = prepared
+                    .receipt
+                    .as_deref()
+                    .expect("validated receipt callback");
+                if !self.schema.matches_definition(&value, definition) {
+                    return Err(format!("driver produced a malformed {definition} receipt"));
+                }
+                request.insert("receipt".to_string(), value);
+            }
             let result = self.call(request)?;
             let result = result.as_object().ok_or("malformed next replay command")?;
             let next = index + 1;
