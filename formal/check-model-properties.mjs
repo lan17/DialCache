@@ -149,6 +149,29 @@ export function selectChallenges(manifest, only) {
   return selected;
 }
 
+// Challenge workspaces are independent. Keep their original errors and the
+// partial evidence in catalog order, but finish the other measurements before
+// failing the campaign so one stale partition cannot hide the next one.
+export async function runChallengeMeasurements(report, measure, { concurrency = resolveConcurrency(), save = () => {} } = {}) {
+  report.complete = false;
+  const results = await runPool(report.challenges.map((entry, index) => async () => {
+    try {
+      await measure(entry, index);
+    } catch (error) {
+      entry.error = String(error);
+      return { entry, error };
+    } finally { save(); }
+  }), { concurrency });
+  const failures = results.filter(result => result !== undefined);
+  if (failures.length) {
+    throw new AggregateError(failures.map(failure => failure.error),
+      `Model property measurements failed for ${failures.length} challenge(s):\n${failures.map(({ entry }) => `${entry.id}: ${entry.error}`).join('\n')}`);
+  }
+  report.complete = !report.partial;
+  try { save(); }
+  catch (error) { report.complete = false; throw error; }
+}
+
 export async function measureModelProperties({ only, concurrency = resolveConcurrency() } = {}) {
   const output = resolve(root, '.formal-traces/model-properties');
   const manifest = readExecution();
@@ -333,11 +356,10 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
         ...(challenge.reproducer === undefined ? {} : { reproducer: { ...challenge.reproducer, baseline: 'pending', mutant: 'pending' } }) });
     }
     save();
-    await runPool(challenges.map((challenge, index) => () => measure(challenge, report.challenges[index])), { concurrency });
-    report.complete = only === undefined;
-    save();
+    await runChallengeMeasurements(report, (entry, index) => measure(challenges[index], entry), { concurrency, save });
     return report;
   } catch (error) {
+    report.complete = false;
     report.error = String(error);
     save();
     throw error;

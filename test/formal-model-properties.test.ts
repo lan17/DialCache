@@ -10,7 +10,9 @@ type PartitionPlan = Array<{ model: ProfileModel; mode: string }>;
 type Inconclusive = { run: string; code: string; message: string };
 type ProfileResult = { status: string; failed?: string[]; inconclusive?: Inconclusive[] };
 type ProfileCheck = (model: ProfileModel, label: string) => Promise<ProfileResult>;
-const { validatePropertyResult, validateReproducerResult, validateProfileTests, challengePartitionPlan, checkChallengePartition, probeNames, selectChallenges } = await import(new URL("../formal/check-model-properties.mjs", import.meta.url).href) as {
+type MeasurementEntry = { id: string; baseline: string; mutant: string; error?: string };
+type MeasurementReport = { complete: boolean; partial: boolean; challenges: MeasurementEntry[] };
+const { validatePropertyResult, validateReproducerResult, validateProfileTests, challengePartitionPlan, checkChallengePartition, probeNames, selectChallenges, runChallengeMeasurements } = await import(new URL("../formal/check-model-properties.mjs", import.meta.url).href) as {
   validatePropertyResult(result: unknown, exitCode: number, expectation: string): void;
   validateReproducerResult(output: unknown, exitCode: number | null, run: unknown, expectation: string): { status: string; code?: string };
   probeNames(run: string): { before: string; through: string };
@@ -21,6 +23,9 @@ const { validatePropertyResult, validateReproducerResult, validateProfileTests, 
     tests: ProfileCheck; invariants: ProfileCheck; proven?: Set<string>; checkExclusions?: boolean;
     onInconclusive?: (profile: string, histories: Inconclusive[]) => void;
   }): Promise<Record<string, string>>;
+  runChallengeMeasurements(report: MeasurementReport, measure: (entry: MeasurementEntry, index: number) => Promise<void>, options: {
+    concurrency: number; save: () => void;
+  }): Promise<void>;
 };
 const { reproducerCheckpoint } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
   reproducerCheckpoint(source: string, run: string, failure: string): { before: string; through: string };
@@ -138,6 +143,85 @@ describe("model property challenge evidence", () => {
       expect(challenge.after, challenge.id).not.toBe(challenge.before);
       expect(model, challenge.id).toMatch(new RegExp(`\\bval ${challenge.invariant}\\b`));
     }
+  });
+});
+
+describe("independent model challenge measurements", () => {
+  const measurementReport = (partial = false): MeasurementReport => ({ complete: false, partial,
+    challenges: ["first", "second", "later"].map(id => ({ id, baseline: "pending", mutant: "pending" })),
+  });
+
+  it("collects independent failures and completes later work before rejecting the campaign", async () => {
+    const measured = measurementReport();
+    const stalePartition = new Error("exclusion no longer holds: first/dark-layers");
+    const evaluatorFailure = new Error("Quint execution failed: SIGTERM");
+    const finished: string[] = [];
+    const saved: MeasurementReport[] = [];
+    const failure = await runChallengeMeasurements(measured, async entry => {
+      try {
+        entry.baseline = "passed";
+        if (entry.id === "first") throw stalePartition;
+        if (entry.id === "second") throw evaluatorFailure;
+        entry.mutant = "detected";
+      } finally { finished.push(entry.id); }
+    }, { concurrency: 1, save: () => saved.push(structuredClone(measured)) }).catch((error: unknown) => error);
+    expect(finished).toEqual(["first", "second", "later"]);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([stalePartition, evaluatorFailure]);
+    expect((failure as Error).message).toContain("first: Error: exclusion no longer holds");
+    expect((failure as Error).message).toContain("second: Error: Quint execution failed: SIGTERM");
+    expect(measured.challenges).toEqual([
+      { id: "first", baseline: "passed", mutant: "pending", error: String(stalePartition) },
+      { id: "second", baseline: "passed", mutant: "pending", error: String(evaluatorFailure) },
+      { id: "later", baseline: "passed", mutant: "detected" },
+    ]);
+    expect(measured.complete).toBe(false);
+    expect(saved).toHaveLength(3);
+    expect(saved.every(snapshot => !snapshot.complete)).toBe(true);
+    expect(saved.at(-1)).toEqual(measured);
+  });
+
+  it("reports concurrent failures in catalog order after all work settles", async () => {
+    const measured = measurementReport();
+    const first = new Error("first challenge failed");
+    const second = new Error("second challenge failed");
+    let releaseFirst!: () => void;
+    const secondFinished = new Promise<void>(resolve => { releaseFirst = resolve; });
+    const finished: string[] = [];
+    const failure = await runChallengeMeasurements(measured, async entry => {
+      if (entry.id === "first") {
+        await secondFinished;
+        finished.push(entry.id);
+        throw first;
+      }
+      finished.push(entry.id);
+      if (entry.id === "second") {
+        releaseFirst();
+        throw second;
+      }
+      entry.mutant = "detected";
+    }, { concurrency: 2, save: () => {} }).catch((error: unknown) => error);
+    expect(finished[0]).toBe("second");
+    expect(finished).toContain("later");
+    expect((failure as AggregateError).errors).toEqual([first, second]);
+    expect(measured.complete).toBe(false);
+  });
+
+  it("completes only successful full campaigns and propagates report failures", async () => {
+    for (const partial of [false, true]) {
+      const measured = measurementReport(partial);
+      const save = vi.fn();
+      await runChallengeMeasurements(measured, async entry => { entry.baseline = "passed"; entry.mutant = "detected"; }, { concurrency: 2, save });
+      expect(measured.complete).toBe(!partial);
+      expect(measured.challenges.every(entry => entry.error === undefined)).toBe(true);
+      expect(save).toHaveBeenCalledTimes(4);
+    }
+    const measured = measurementReport();
+    const writeFailure = new Error("cannot save report");
+    await expect(runChallengeMeasurements(measured, async () => {}, { concurrency: 1, save: () => { throw writeFailure; } })).rejects.toBe(writeFailure);
+    expect(measured.complete).toBe(false);
+    await expect(runChallengeMeasurements(measured, async () => {}, { concurrency: 1, save: () => { if (measured.complete) throw writeFailure; } })).rejects.toBe(writeFailure);
+    expect(measured.complete).toBe(false);
   });
 });
 

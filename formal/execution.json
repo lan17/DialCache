@@ -1640,7 +1640,6 @@
         "family": "nested-close-evicts-outer-memo",
         "profiles": [
           "scope",
-          "layers",
           "recovery-read"
         ],
         "exclusions": {
@@ -1656,7 +1655,8 @@
           "shadow-layers": "Composes the request memo but has no closeScope input.",
           "local-clock": "Composes the local projection with no request scope (persistentContexts 0) and no closeScope input.",
           "source-budgets": "Composes the local projection with no request scope: no input opens or closes a scope and every reply disables the request layer, so request_memo.closeScope is never executed.",
-          "dark-layers": "The three persistent scopes are peers, with no nested scope relationship; closing one does not exercise the outer-memo eviction boundary."
+          "dark-layers": "The fault can clear peer request memos, but named histories never probe a previously populated peer memo after closing another scope. memoHoldsAcceptedValues permits empty rows; named runs and bounded invariant checks pass.",
+          "layers": "Closing a scope can clear another open scope under this fault, but no scheduled layers regression closes a scope or probes another memo afterward. Scheduled invariants constrain closed rows and accepted ownership, not preservation of open memo rows; named runs and the bounded invariant check pass."
         }
       },
       "nativeMutants": {
