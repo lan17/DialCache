@@ -111,3 +111,39 @@ describe("exact generated vector evidence", () => {
     expect(() => validateExecution(changed)).toThrow(/shared-library fault/);
   });
 });
+
+
+describe("real Redis vector evidence", () => {
+  const challenge = manifest.challenges.find((item: {id: string}) => item.id === "invalidation-transition-cutoff-moves-backwards");
+  const model = manifest.models.find((item: {path: string}) => item.path === challenge.model);
+  const vector = resolveVectorEvidence(challenge.nativeMutants.evidence.vector, model, read);
+  const evidence = { vector, history: `vector/${challenge.reproducer.run}`, fields: ["content", "ttlMs"] };
+  const sample = vector.samples.typescript;
+  const result = (actual: Record<string, unknown>) => ({ completed: true, lastStep: 0, vectorResult: {
+    port: "typescript", history: evidence.history, row: sample.row, artifactSha256: vector.artifactSha256,
+    inputSha256: sample.inputSha256, actual,
+  } });
+  it("keeps expected state out of the native Redis request", () => {
+    expect(sample.request).toEqual({ operation: "invalidation", input: {
+      existing: {kind: "string", value: "10000000", ttlMs: 100}, futureBufferMs: "0", invalidatedAtMs: "1000",
+    } });
+    expect(assessVectorBoundary(evidence, result(sample.expected)).state).toBe("not-divergent");
+    expect(assessVectorBoundary(evidence, result({...sample.expected, content: "1000"}))).toMatchObject({state: "confirmed", divergences: [{paths: ["content"]}]});
+  });
+  it("uses only recorded server elapsed time to bound positive TTL drift", () => {
+    const ttl = sample.expected.ttlMs as number;
+    const assess = (ttlMs: number, elapsedMs: number) => assessVectorBoundary(evidence, result({...sample.expected, ttlMs, elapsedMs})).state;
+    expect(assess(ttl - 3, 3)).toBe("not-divergent");
+    expect(assess(ttl - 4, 3)).toBe("confirmed");
+    expect(assess(ttl + 1, 3)).toBe("confirmed");
+    expect(assess(ttl, -1)).toBe("unreached");
+    expect(assess(-1, 100)).toBe("confirmed");
+  });
+  it("rejects unknown Lua replies, malformed state and missing time", () => {
+    for (const actual of [ {...sample.expected, outcome: "unexpected_reply"}, {...sample.expected, elapsedMs: undefined},
+      {...sample.expected, content: ["not a string"]}, {...sample.expected, ttlMs: -3} ]) {
+      expect(validVectorResult("invalidation", actual)).toBe(false);
+      expect(assessVectorBoundary(evidence, result(actual)).state).toBe("unreached");
+    }
+  });
+});

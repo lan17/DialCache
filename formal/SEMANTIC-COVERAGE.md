@@ -226,3 +226,12 @@ implementation mutation detection.
 Every effects replay also runs `assertEffectsHistory` over actual external source starts/settlements and public fallback/write observations. Its C23/C25/C26 checks cover source-relative budget/duration, strict deadline acceptance, and a preceding accepted success before publication. It consumes no expected model phases and permits pending prefixes. An additional causal monitor in both drivers ties writes to their actual invocation/source callback and rejects publication after that source settled too late; negative tests distinguish property failures from malformed monitor inputs. This is a bounded connection for selected properties, not full model refinement or liveness proof.
 
 The Go driver executes the same generated corpus through its own cache implementation. Its value-domain and API adaptations appear in [`go/README.md`](../go/README.md). `measure-go-semantics.mjs` independently measures the Go fault catalog; TypeScript mutation results are never credited to Go. The Go race detector covers only exercised schedules.
+
+
+Generated invalidation vectors also run inside both standard native mutation
+campaigns. Every shard provisions its own real Redis 6.2 server through Docker;
+the whole generated set shares a native connection. The exact cutoff and maximum
+buffer challenges additionally record their selected input-only vector operation.
+Their outcomes come from each port's production Lua. Server elapsed time bounds
+positive TTL drift; rejected input must preserve the prior state. Infrastructure
+errors and unexpected Lua replies are never assertion-based detections.

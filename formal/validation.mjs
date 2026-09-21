@@ -31,9 +31,9 @@ export const targetDescriptions = {
   differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions (DIFFERENTIAL_SHARD=<index>/<count> replays one round-robin shard of the composed profiles, as the hosted lane does with four)',
   explore: 'Explore a new recorded seed and replay both ports in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
-  mutations: 'Measure TypeScript and Go semantic mutations over the generated corpus and shared witness evidence',
-  'mutations-ts': 'Measure TypeScript semantic mutations over the generated corpus (MUTATION_SHARD=<index>/<count> measures one shard; MUTATION_ONLY=<id>,<id> measures the named mutants into a partial report)',
-  'mutations-go': 'Measure Go semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard; MUTATION_ONLY=<id>,<id> measures the named mutants into a partial report)',
+  mutations: 'Measure TypeScript and Go semantic mutations over generated histories, real Redis vectors and shared witnesses (Docker)',
+  'mutations-ts': 'Measure TypeScript semantic mutations over generated histories and real Redis vectors; requires Docker (MUTATION_SHARD=<index>/<count> measures one shard; MUTATION_ONLY=<id>,<id> measures the named mutants into a partial report)',
+  'mutations-go': 'Measure Go semantic mutations over generated histories, real Redis vectors and shared witnesses; requires Docker (MUTATION_SHARD=<index>/<count> measures one shard; MUTATION_ONLY=<id>,<id> measures the named mutants into a partial report)',
   'mutations-merge-ts': 'Merge TypeScript mutation shards into the complete report; refuses inconsistent or missing shards',
   'mutations-merge-go': 'Merge Go mutation shards into the complete report; refuses inconsistent or missing shards',
   integration: 'Run real TypeScript and Go Redis/Valkey/Cluster integration checks',
@@ -224,7 +224,7 @@ export function checkPrerequisites(target, { directory = root, environment = pro
     try { probe('tar', ['--version'], { directory, environment }); }
     catch (error) { throw new Error(`Symbolic checking requires tar to unpack the pinned Apalache archive. ${error.message}`); }
   }
-  if (targets.some(name => name.startsWith('integration-'))) probe('docker', ['info', '--format', '{{.ServerVersion}}'], { directory, environment });
+  if (targets.some(name => name.startsWith('integration-') || ['mutations-ts', 'mutations-go'].includes(name))) probe('docker', ['info', '--format', '{{.ServerVersion}}'], { directory, environment });
   if (targets.includes('package-floor')) {
     const executable = floorExecutable(environment, runnerNode, nodeVersion);
     if (!executable || !isAbsolute(executable)) throw new Error('Node 22.15.0 is required for package-floor. Set NODE22_BIN=/absolute/path/to/node22/bin/node (or run make package-floor under exact Node 22.15.0). No runtime is downloaded automatically.');

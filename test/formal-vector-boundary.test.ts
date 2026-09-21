@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { invalidationClient, recordInvalidation, type InvalidationInput } from "./invalidation-native-driver.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import { it } from "vitest";
 import { DialCacheKey } from "../src/index.js";
@@ -7,6 +9,7 @@ import { compressPayload, decompressPayload } from "../src/internal/compression.
 
 const requestPath = process.env.DIALCACHE_VECTOR_REQUEST;
 type Request =
+  | { operation: "invalidation"; input: InvalidationInput }
   | { operation: "key"; input: ConstructorParameters<typeof DialCacheKey>[0] }
   | { operation: "trackedDecode"; input: { frameHex: string | null; watermarkUtf8: string | null } }
   | { operation: "envelope"; input: { inputHex: string } }
@@ -14,13 +17,21 @@ type Request =
 
 // This worker receives only the operation and its external inputs. Expected
 // values and the generated corpus remain in the parent coordinator.
-it.runIf(requestPath !== undefined)("records one native vector result", () => {
+it.runIf(requestPath !== undefined)("records one native vector result", async () => {
   const out = process.env.DIALCACHE_VECTOR_OUT;
   if (!out) throw new Error("DIALCACHE_VECTOR_OUT is required");
   const request = JSON.parse(readFileSync(requestPath!, "utf8")) as Request;
   if (Object.keys(request).sort().join() !== "input,operation") throw new Error("Invalid vector request");
   let actual: unknown;
   switch (request.operation) {
+    case "invalidation": {
+      const client = invalidationClient();
+      client.on("error", () => {});
+      const key = `{formal-boundary-${randomUUID()}}#watermark`;
+      try { await client.connect(); actual = await recordInvalidation(client, key, request.input); }
+      finally { if (client.isOpen) { await client.del(key); await client.quit(); } }
+      break;
+    }
     case "key": {
       try {
         const key = new DialCacheKey(request.input);

@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "c7814926c0c0ab7afb561724af04635daa7a743589c4c34a1d24ff38073d19f5",
+      "sha256": "49c30eb7ce4557cdcbc63388cb585c1b9c7c3283170a2f8d88181d084c67e8f4",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":20,"title":"Reading a model"},
@@ -1018,7 +1018,7 @@
         {"line":337,"title":"Refactoring and execution"},
         {"line":365,"title":"Challenging every model"},
         {"line":447,"title":"Mapping every challenge to native mutants"},
-        {"line":577,"title":"Exported runs are exactly the public-only runs"}
+        {"line":580,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1347,14 +1347,14 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "3f8700c2d4753720b3ff77b3eb09a6458d91ccb65e05c1d6ff666d6e36d7584b",
+      "sha256": "6865366fd19f88bd225eaa684fd00fa9ca34a2d3d9adbd565456681feae2c589",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
         {"line":26,"title":"How the specification connects to code"},
         {"line":46,"title":"Models and composition profiles"},
         {"line":99,"title":"Generating and replaying behavior"},
-        {"line":186,"title":"Evidence and scope"}
+        {"line":188,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1363,7 +1363,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "69320e8517b67f42626b9fc81b538f2d5b70a4dfa12c6f092fe1fb00c5f9430e",
+      "sha256": "15b2ce2142ea46438c9ebe46efef41dce3736fdc2eef0a0a81983f134bd0a217",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},

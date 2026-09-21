@@ -568,7 +568,10 @@ measure the shared fault's coverage across the behavioral profiles as usual.
 
 The native vector workers receive only an operation and its external inputs.
 They return actual keys, frame classifications, decoded bytes or compression
-outcomes; known API rejection is a typed result, while process or output errors
+outcomes. Invalidation workers execute the production Lua against a private
+Redis server and report its response, stored state and measured elapsed server
+time. The coordinator bounds TTL drift only by that measurement. Transport,
+malformed reply and unexpected Lua errors earn no detection credit; known API rejection is a typed result, while process or output errors
 fail the run. The mutation gate requires a clean baseline from the same binding
 and row, verifies artifact and input fingerprints, and recomputes the mismatch
 from the recorded native value. A failure elsewhere in the vector cohort does

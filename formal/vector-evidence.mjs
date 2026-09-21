@@ -11,6 +11,7 @@ const readOutcomes = new Set(['passthrough', 'decompressed', 'fallback_raw', 're
 const writeOutcomes = new Set(['compressed', 'below_threshold', 'not_smaller', 'write_over_limit']);
 const missReasons = new Set(['value_absent', 'expired', 'watermark_fenced', 'unclassified']);
 const fieldsByGroup = {
+  vectors: ['outcome', 'kind', 'content', 'ttlMs'],
   keyVectors: ['kind', 'logicalKey', 'valueKey', 'watermarkKey'],
   trackedDecodeVectors: ['kind', 'reason', 'observedWatermarkMs', 'createdAtMs', 'payloadType', 'payloadHex', 'payloadUtf8'],
   envelopeVectors: ['decodedHex', 'outcome'],
@@ -21,6 +22,11 @@ const fieldsByGroup = {
 // public output. Only the input crosses into either native process.
 function sample(group, row, port) {
   switch (group) {
+    case 'vectors': return { operation: 'invalidation',
+      input: { existing: row.existing, futureBufferMs: row.futureBufferMs, invalidatedAtMs: row.invalidatedAtMs },
+      expected: { outcome: row.expected.error ? 'rejected' : 'success', kind: row.expected.state.kind,
+        content: row.expected.state.kind === 'string' ? row.expected.state.value : row.expected.state.kind === 'list' ? row.expected.state.values : [],
+        ttlMs: row.expected.state.ttlMs, elapsedMs: 0 } };
     case 'keyVectors': return { operation: 'key', input: row.input,
       expected: { kind: 'key', logicalKey: row.logicalKey, valueKey: row.valueKey, watermarkKey: row.watermarkKey } };
     case 'trackedDecodeVectors': return { operation: 'trackedDecode',
@@ -36,6 +42,11 @@ function sample(group, row, port) {
 
 export function validVectorResult(operation, value) {
   if (!object(value)) return false;
+  if (operation === 'invalidation') return exact(value, ['outcome', 'kind', 'content', 'ttlMs', 'elapsedMs'])
+    && ['success', 'rejected'].includes(value.outcome) && ['absent', 'string', 'list'].includes(value.kind)
+    && (value.kind === 'string' ? typeof value.content === 'string' : Array.isArray(value.content)
+      && value.content.every(item => typeof item === 'string') && (value.kind === 'list' ? value.content.length > 0 : value.content.length === 0))
+    && Number.isSafeInteger(value.ttlMs) && value.ttlMs >= -2 && natural(value.elapsedMs);
   if (operation === 'key') return value.kind === 'key_error' ? exact(value, ['kind']) :
     exact(value, ['kind', 'logicalKey', 'valueKey', 'watermarkKey']) && value.kind === 'key'
       && typeof value.logicalKey === 'string' && typeof value.valueKey === 'string'
@@ -87,7 +98,15 @@ export function assessVectorBoundary(evidence, recording) {
     || result.artifactSha256 !== evidence.vector.artifactSha256 || result.inputSha256 !== selected.inputSha256)
     return fail('Vector identity or source fingerprint differs from the declaration');
   if (!validVectorResult(selected.request.operation, result.actual)) return fail('Malformed native vector result');
-  const paths = diffPaths(selected.expected, result.actual);
+  const expected = { ...selected.expected }, actual = { ...result.actual };
+  if (selected.request.operation === 'invalidation') {
+    // Redis 6.2 advances TTL time even inside an atomic Lua execution. Only
+    // measured server elapsed time may explain a smaller positive TTL.
+    delete expected.elapsedMs; delete actual.elapsedMs;
+    if (expected.ttlMs >= 0 && actual.ttlMs >= Math.max(0, expected.ttlMs - result.actual.elapsedMs)
+      && actual.ttlMs <= expected.ttlMs) actual.ttlMs = expected.ttlMs;
+  }
+  const paths = diffPaths(expected, actual);
   const matched = countingPaths(evidence.fields, paths, []);
   return { ...base, state: matched.length ? 'confirmed' : paths.length ? 'side-effect-only' : 'not-divergent',
     divergences: paths.length ? [{ step: 0, action: selected.request.operation, paths }] : [], ...(matched.length ? { matched } : {}) };

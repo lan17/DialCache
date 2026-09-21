@@ -179,6 +179,7 @@ jobs:
         with:
           name: formal-traces
           path: .formal-traces
+      # The runner provisions a private Docker Redis server for generated invalidation vectors.
       - name: Measure one shard of TypeScript assertion-based fault detection
         run: make mutations-ts
       # The shard directory alone: the merge job downloads every shard into
@@ -282,6 +283,7 @@ jobs:
         with:
           name: formal-traces
           path: .formal-traces
+      # The runner provisions a private Docker Redis server for generated invalidation vectors.
       - name: Measure one shard of Go assertion-based fault detection
         run: make mutations-go
       - name: Preserve this shard's Go mutation evidence

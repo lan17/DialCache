@@ -2004,6 +2004,70 @@
           "portable"
         ]
       }
+    },
+    {
+      "id": "M63",
+      "case": "C38.marker-transition",
+      "description": "Move an invalidation cutoff backwards when an older request arrives",
+      "rationale": "Both ports change their production invalidation Lua at the same boundary: use only the new proposal instead of the maximum of the stored and proposed cutoff. The generated Redis cohort and exact vector boundary execute each changed script against a private real Redis server.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "src/internal/redis-scripts.ts",
+            "before": "local watermark = math.max(current_watermark, proposed_watermark)",
+            "after": "local watermark = proposed_watermark"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/redis_adapter.go",
+            "before": "local watermark = math.max(current_watermark, proposed_watermark)",
+            "after": "local watermark = proposed_watermark"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M64",
+      "case": "C39.numeric-limits",
+      "description": "Reject the maximum supported invalidation buffer",
+      "rationale": "Both ports change their production invalidation Lua at the same boundary: reject equality at the 31536000000ms maximum buffer. Client prevalidation remains unchanged; generated decimal inputs exercise the Lua itself. The generated Redis cohort and exact vector boundary execute each changed script against a private real Redis server.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "src/internal/redis-scripts.ts",
+            "before": "future_buffer_ms > ${MAX_SUPPORTED_DURATION_MS}",
+            "after": "future_buffer_ms >= ${MAX_SUPPORTED_DURATION_MS}"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/redis_adapter.go",
+            "before": "future_buffer_ms > 31536000000",
+            "after": "future_buffer_ms >= 31536000000"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
     }
   ]
 }

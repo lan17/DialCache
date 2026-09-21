@@ -1,3 +1,4 @@
+import { startRedisVectorServer } from './redis-vector-server.mjs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -17,7 +18,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = file => JSON.parse(readFileSync(file, 'utf8'));
 const protocolNames = ['TestProtocolKeys', 'TestProtocolFrames', 'TestProtocolDecoders', 'TestProtocolCohorts', 'TestProtocolRemainingVectors'];
-const generatedNames = ['TestCoreConformance', 'TestEffectsConformance', 'TestFeatureConformance', 'TestLocalClockConformance', 'TestGeneratedWitnessEvidence', ...protocolNames];
+const generatedNames = ['TestGeneratedInvalidationVectors', 'TestCoreConformance', 'TestEffectsConformance', 'TestFeatureConformance', 'TestLocalClockConformance', 'TestGeneratedWitnessEvidence', ...protocolNames];
 const fixedNames = ['TestBehaviorConformance', ...protocolNames];
 const infrastructureTestFile = /(?:replay|driver|coordinator|protocol|profile|registry|witness_evidence|integration)_test\.go$/;
 
@@ -56,6 +57,7 @@ export function causalPropertyAssertion(output) {
 // completion, or failing corpus audit is not an assertion-based detection.
 export function evaluateGoTestEvents(lines, exitCode) {
   const events = lines.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+  if (lines.includes('INVALIDATION_INFRASTRUCTURE:')) throw new Error('Redis vector infrastructure failure, not detection');
   if (!events.length) throw new Error('empty Go test event stream');
   const outputs = new Map(), tests = new Map(), packages = [];
   const append = (name, value) => outputs.set(name, (outputs.get(name) ?? '') + value);
@@ -159,6 +161,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
   // run 34666226055 had not finished it after 150 s). One timeout aborts the
   // whole measurement, so a generous bound costs at most one wait.
   const timeout = 540_000;
+  let vectorServer;
   try {
     // Copies preserve repo-relative witness definition paths while mutations
     // remain completely outside the shared checkout. No git resets or writes
@@ -189,6 +192,9 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
       DIALCACHE_FEATURE_TRACE_DIR: resolve(root, '.formal-traces/features'),
       DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory,
     });
+    vectorServer = startRedisVectorServer();
+    env.DIALCACHE_VECTOR_REDIS_URL = vectorServer.url;
+    report.redisVectorImage = vectorServer.image;
     const replayBoundary = (label, history) => runBoundaryReplay({
       port: language.port, history, label, output, root, workspace, env, go,
     });
@@ -288,7 +294,10 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     writeFileSync(resolve(output, 'report.md'), language.markdown(report));
     return report;
   } catch (error) { report.error = String(error); save(); throw error; }
-  finally { rmSync(workspace, { recursive: true, force: true }); }
+  finally {
+    rmSync(workspace, { recursive: true, force: true });
+    vectorServer?.close();
+  }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try { measureGoSemantics(selectionFromArguments(process.argv.slice(2))); } catch (error) { console.error(error); process.exitCode = 1; }

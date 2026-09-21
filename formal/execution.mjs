@@ -608,8 +608,6 @@ function validateNativeMutants(challenge, { catalog, models, publicOnly, source,
 // and listing it here instead is a reviewed change to this constant, never a
 // manifest edit.
 export const grandfatheredNativeMutantBacklog = Object.freeze([
-  'invalidation-transition-cutoff-moves-backwards',
-  'invalidation-transition-inclusive-buffer-limit',
 ]);
 
 // Which challenges cite each mutant, in manifest order. The mutation reports
@@ -660,8 +658,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'stale-recovery-candidate-stamped-at-read',
   'redis-protocol-inclusive-fence',
   'redis-protocol-untracked-fence',
-  'invalidation-transition-cutoff-moves-backwards',
-  'invalidation-transition-inclusive-buffer-limit',
   'scope-late-source-repopulates-closed-memo',
   'layers-late-memo-into-closed-scope',
   'independent-fresh-frame-retained',

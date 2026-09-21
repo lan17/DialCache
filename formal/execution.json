@@ -1656,7 +1656,37 @@
       "model": "formal/dialcache-invalidation-transition.qnt",
       "invariant": "successfulCutoffIsExactMaximum",
       "before": "val cutoff = if (priorCutoff > proposed) priorCutoff else proposed",
-      "after": "val cutoff = proposed"
+      "after": "val cutoff = proposed",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M63",
+        "text": "M63 changes the production Lua in src/internal/redis-scripts.ts and go/redis_adapter.go at the same invalidation boundary as this model fault. The generated Redis cohort executes the actual scripts, and the exact selected row records their public response and stored state.",
+        "evidence": {
+          "vector": {
+            "artifact": "formal/quint-invalidation-vectors.json",
+            "group": "vectors",
+            "rows": {
+              "typescript": "Quint 002: zero buffer / future finite",
+              "go": "Quint 002: zero buffer / future finite"
+            },
+            "fields": [
+              "content"
+            ],
+            "relation": "The named run applies case 2, exactly the generated row with an existing 10000000 cutoff and an older 1000 proposal. The returned stored cutoff must remain 10000000."
+          }
+        }
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "futureCutoffDoesNotMoveBackwardsTest",
+        "failure": "s.after.value == decimalText(10000000) and s.after.ttlMs == 13659000",
+        "family": "invalidation-maximum-cutoff",
+        "profiles": [
+          "formal/dialcache-invalidation-transition.qnt"
+        ],
+        "exclusions": {},
+        "scope": "Atomic Redis invalidation is a deterministic protocol transition, exported as generated decimal inputs and stored-state vectors. Native workers execute production Lua against a real Redis server; expected results stay in the coordinator. The named run applies case 2, exactly the generated row with an existing 10000000 cutoff and an older 1000 proposal. The returned stored cutoff must remain 10000000."
+      }
     },
     {
       "id": "invalidation-transition-inclusive-buffer-limit",
@@ -1665,7 +1695,37 @@
       "model": "formal/dialcache-invalidation-transition.qnt",
       "invariant": "argumentValidationIsExact",
       "before": "if (not(buffer.valid) or buffer.value > MAX_BUFFER_MS or",
-      "after": "if (not(buffer.valid) or buffer.value >= MAX_BUFFER_MS or"
+      "after": "if (not(buffer.valid) or buffer.value >= MAX_BUFFER_MS or",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M64",
+        "text": "M64 changes the production Lua in src/internal/redis-scripts.ts and go/redis_adapter.go at the same invalidation boundary as this model fault. The generated Redis cohort executes the actual scripts, and the exact selected row records their public response and stored state.",
+        "evidence": {
+          "vector": {
+            "artifact": "formal/quint-invalidation-vectors.json",
+            "group": "vectors",
+            "rows": {
+              "typescript": "Quint 036: maximum buffer / absent",
+              "go": "Quint 036: maximum buffer / absent"
+            },
+            "fields": [
+              "outcome"
+            ],
+            "relation": "The named run first applies case 36, exactly the generated row with the maximum 31536000000 buffer and no existing marker. The script must accept equality and install its buffered cutoff."
+          }
+        }
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "maximumBufferAndTimestampSumAreAcceptedTest",
+        "failure": "s.outcome == SUCCESS and s.after.ttlMs == 31539660000",
+        "family": "invalidation-maximum-buffer",
+        "profiles": [
+          "formal/dialcache-invalidation-transition.qnt"
+        ],
+        "exclusions": {},
+        "scope": "Atomic Redis invalidation is a deterministic protocol transition, exported as generated decimal inputs and stored-state vectors. Native workers execute production Lua against a real Redis server; expected results stay in the coordinator. The named run first applies case 36, exactly the generated row with the maximum 31536000000 buffer and no existing marker. The script must accept equality and install its buffered cutoff."
+      }
     },
     {
       "id": "key-protocol-untracked-brace-rejection",
@@ -3548,14 +3608,9 @@
     "stale-recovery-candidate-stamped-at-read",
     "redis-protocol-inclusive-fence",
     "redis-protocol-untracked-fence",
-    "invalidation-transition-cutoff-moves-backwards",
-    "invalidation-transition-inclusive-buffer-limit",
     "scope-late-source-repopulates-closed-memo",
     "layers-late-memo-into-closed-scope",
     "independent-fresh-frame-retained"
   ],
-  "nativeMutantBacklog": [
-    "invalidation-transition-cutoff-moves-backwards",
-    "invalidation-transition-inclusive-buffer-limit"
-  ]
+  "nativeMutantBacklog": []
 }

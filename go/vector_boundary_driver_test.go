@@ -31,6 +31,13 @@ func TestVectorBoundaryDriver(t *testing.T) {
 	}
 	var actual any
 	switch request.Operation {
+	case "invalidation":
+		var input vectorInvalidationInput
+		if err := json.Unmarshal(request.Input, &input); err != nil {
+			t.Fatal(err)
+		}
+		client, key := vectorInvalidationClient(t)
+		actual = recordVectorInvalidation(t, client, key, input)
 	case "key":
 		var input Identity
 		if err := json.Unmarshal(request.Input, &input); err != nil {

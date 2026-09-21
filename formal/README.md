@@ -109,7 +109,9 @@ The archive is cached under `~/.cache/dialcache/apalache/0.56.1/`; for offline
 use, supply `APALACHE_ARCHIVE=/absolute/path/to/apalache-0.56.1.tgz`. Supplied
 archives must pass the same checksum check.
 
-Real-server tests require Docker. The package floor requires exact Node 22.15.0
+Real-server tests and native mutation campaigns require Docker. Each mutation
+shard starts a private Redis 6.2 server, replays all generated invalidation
+vectors against the production Lua, and removes its own container afterward. The package floor requires exact Node 22.15.0
 provided through `NODE22_BIN`. `make help` lists targets and prerequisites.
 `make model-check` and `make ci` additionally require Java 21 and `tar`, because
 the pinned Apalache distribution is unpacked from a checksummed tarball; both

@@ -58,3 +58,11 @@ describe("Go local-clock mutation assertion attribution", () => {
     },
   );
 });
+
+
+it("does not count Redis transport or driver errors as native assertions", () => {
+  expect(() => evaluateGoTestEvents(replayFailure("TestGeneratedInvalidationVectors", "invalidation_vector_driver_test.go",
+    "INVALIDATION_INFRASTRUCTURE: connection refused"), 1)).toThrow(/Redis vector infrastructure failure/);
+  expect(evaluateGoTestEvents(replayFailure("TestGeneratedInvalidationVectors", "invalidation_vector_driver_test.go",
+    "invalidation result: got cutoff=1000 want cutoff=10000000"), 1)).toMatchObject({state: "detected"});
+});

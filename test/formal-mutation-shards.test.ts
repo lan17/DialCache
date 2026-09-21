@@ -1,3 +1,4 @@
+import type { VectorEvidence } from "../formal/vector-evidence.mjs";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -7,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 type Shard = { index: number; count: number };
 type Selection = { shard: Shard; only?: string[] | undefined };
 type Cohort = { state: "detected" | "survived" | "crashed"; passed: number; failed: number; failingTests: string[]; [key: string]: unknown };
-type Boundary = { challenge: string; mutant: string; history?: string; step?: number; fields?: string[]; state?: string; [key: string]: unknown };
+type Boundary = { vector?: VectorEvidence; challenge: string; mutant: string; history?: string; step?: number; fields?: string[]; state?: string; [key: string]: unknown };
 type Mutation = { id: string; case: string; description: string; cohorts: Record<string, Cohort>; boundary?: Boundary[] };
 type Report = Record<string, unknown> & { shard?: Shard & { mutationIds: string[] }; baselines: Record<string, Cohort>; mutations: Mutation[] };
 type CatalogEntry = { id: string; case: string; description: string; requiredDetections: string[] };
@@ -68,13 +69,35 @@ const slices = (count: number) => Array.from({ length: count }, (_, position) =>
 // The Challenges column names the model challenges each mutant is the native twin of.
 const challengesOf = (id: string) => (challengesByMutant(JSON.parse(readRepo("formal/execution.json").toString())).get(id) ?? []).join(", ") || "none";
 const evidence = boundaryEvidence();
-const boundaries = (id: string): Boundary[] => evidence.filter(entry => entry.mutant === id).map(entry => entry.state ? { ...entry } : {
-  ...entry, state: "confirmed", completed: true, lastStep: entry.step! + 1,
-  divergences: [{ step: entry.step!, paths: [entry.fields![0]!] }],
-});
-const boundaryBaselines = () => Object.fromEntries(evidence.filter(entry => entry.history).map(entry => [entry.history!, {
-  history: entry.history, completed: true, lastStep: Math.max(...evidence.filter(other => other.history === entry.history).map(other => other.step!)) + 1, divergences: [],
-}]));
+// Synthetic observations exercise the report merger; these are harness fixtures,
+// never native measurement evidence. Every vector fixture has typed actual output.
+function vectorRecording(entry: Boundary, port: "typescript" | "go", changed = false) {
+  const vector = entry.vector!, sample = vector.samples[port];
+  let actual = structuredClone(sample.expected);
+  if (changed) switch (sample.request.operation) {
+    case "key": actual = {kind: "key_error"}; break;
+    case "trackedDecode": actual.reason = actual.reason === "expired" ? "watermark_fenced" : "expired"; break;
+    case "envelope": actual.decodedHex = `${actual.decodedHex}ff`; break;
+    case "compression": actual.outcome = actual.outcome === "compressed" ? "not_smaller" : "compressed"; break;
+    case "invalidation":
+      if (entry.fields!.includes("content")) actual.content = `${actual.content}0`;
+      else actual.outcome = actual.outcome === "success" ? "rejected" : "success";
+      break;
+    default: throw new Error("Unknown vector fixture operation");
+  }
+  return { history: entry.history!, completed: true, lastStep: 0, divergences: [], vectorResult: {
+    history: entry.history!, port, row: sample.row, artifactSha256: vector.artifactSha256, inputSha256: sample.inputSha256, actual,
+  } };
+}
+const boundaries = (id: string, port: "typescript" | "go"): Boundary[] => evidence.filter(entry => entry.mutant === id).map(entry =>
+  entry.vector ? { ...entry, ...vectorRecording(entry, port, true), state: "confirmed" } : entry.state ? { ...entry } : {
+    ...entry, state: "confirmed", completed: true, lastStep: entry.step! + 1,
+    divergences: [{ step: entry.step!, paths: [entry.fields![0]!] }],
+  });
+const boundaryBaselines = (port: "typescript" | "go") => Object.fromEntries(evidence.filter(entry => entry.history).map(entry => [entry.history!,
+  entry.vector ? vectorRecording(entry, port) : {
+    history: entry.history, completed: true, lastStep: Math.max(...evidence.filter(other => other.history === entry.history).map(other => other.step!)) + 1, divergences: [],
+  }]));
 
 // Shapes follow the hosted Go report (run 34669546872) and the TypeScript
 // runner's report object: the same keys, small values.
@@ -100,7 +123,7 @@ const fixedSurvivors = new Set(["M09"]);
 function goMutation(entry: CatalogEntry): Mutation {
   const generated = goCohort(goTests.generated, [goTests.generated[0]!, goTests.generated[2]!]);
   const fixed = goCohort(goTests.fixed, fixedSurvivors.has(entry.id) ? [] : [goTests.fixed[1]!]);
-  return { id: entry.id, case: entry.case, description: entry.description, boundary: boundaries(entry.id),
+  return { id: entry.id, case: entry.case, description: entry.description, boundary: boundaries(entry.id, "go"),
     cohorts: { ordinary: goCohort(goTests.ordinary, ordinarySurvivors.has(entry.id) ? [] : [goTests.ordinary[0]!]), generated, fixed, portable: union(generated, fixed) } };
 }
 function goBaselines(): Record<string, Cohort> {
@@ -118,7 +141,7 @@ function goIdentity(catalogSha256: string, inputs: { files: number; sha256: stri
 // What measure-go-semantics.mjs writes for --shard=1/1.
 function goSingleReport(catalogSha256: string, inputs: { files: number; sha256: string }): Report {
   const mutations = goCatalog.mutations.map(goMutation);
-  return { schemaVersion: 1, complete: true, startedAt: "2026-09-12T00:27:22.662Z", baselines: goBaselines(), boundaryBaselines: boundaryBaselines(), mutations, elapsedSeconds: 1507,
+  return { schemaVersion: 1, complete: true, startedAt: "2026-09-12T00:27:22.662Z", baselines: goBaselines(), boundaryBaselines: boundaryBaselines("go"), mutations, elapsedSeconds: 1507,
     ...goIdentity(catalogSha256, inputs), detection: goDetection(mutations), requiredDetectionRegressions: [] };
 }
 // What each measure-go-semantics.mjs --shard=i/n run writes.
@@ -143,7 +166,7 @@ function tsCohort(executed: string[], failing: string[] = []): Cohort {
 function tsMutation(entry: CatalogEntry): Mutation {
   const generated = tsCohort(tsTests.generated, [tsTests.generated[0]!]);
   const fixed = tsCohort(tsTests.fixed, entry.id === "M09" ? [] : [tsTests.fixed[0]!]);
-  return { id: entry.id, case: entry.case, description: entry.description, boundary: boundaries(entry.id),
+  return { id: entry.id, case: entry.case, description: entry.description, boundary: boundaries(entry.id, "typescript"),
     cohorts: { ordinary: tsCohort(tsTests.ordinary, entry.id === "M12" ? [] : [tsTests.ordinary[0]!]), generated, fixed, portable: union(generated, fixed) } };
 }
 function tsBaselines(): Record<string, Cohort> {
@@ -157,7 +180,7 @@ function tsShardReports(catalogSha256: string, inputs: { files: number; sha256: 
     const shard = { index: position + 1, count };
     const slice = partitionMutations(mutations, shard);
     return { schemaVersion: 1, complete: false, shard: { ...shard, mutationIds: slice.map(mutation => mutation.id) }, startedAt: `2026-09-12T01:0${position}:00.000Z`,
-      revision: "ed9bd62", node: "v24.20.0", catalogSha256, sourceSha256: { "src/dialcache.ts": "aa".repeat(32) }, declaredCoverage, baselines: tsBaselines(), boundaryBaselines: boundaryBaselines(), mutations: slice,
+      revision: "ed9bd62", node: "v24.20.0", catalogSha256, sourceSha256: { "src/dialcache.ts": "aa".repeat(32) }, declaredCoverage, baselines: tsBaselines(), boundaryBaselines: boundaryBaselines("typescript"), mutations: slice,
       elapsedSeconds: 300, inputs, configurationSha256: { "package.json": "bb".repeat(32) }, corpus: { files: 5514, sha256: "cc".repeat(32) },
       reachedWitnesses: { effects: { required: 40, reached: 40, traces: 300 } } };
   });
@@ -483,8 +506,11 @@ describe("mutation shard merge over a shard directory", () => {
     directory = mkdtempSync(join(tmpdir(), "dialcache-mutation-shards-"));
     for (const path of ["formal", "src", "test", "go", "shards"]) mkdirSync(join(directory, path), { recursive: true });
     for (const path of ["formal/mutations.json", "formal/semantic-cases.json", "formal/execution.json"]) copyFileSync(new URL(path, repo), join(directory, path));
-    const manifest = JSON.parse(readRepo("formal/execution.json").toString()) as { models: { path: string }[] };
-    for (const model of manifest.models) copyFileSync(new URL(model.path, repo), join(directory, model.path));
+    const manifest = JSON.parse(readRepo("formal/execution.json").toString()) as { models: { path: string; vectorExport?: {artifact: string} }[] };
+    for (const model of manifest.models) {
+      copyFileSync(new URL(model.path, repo), join(directory, model.path));
+      if (model.vectorExport) copyFileSync(new URL(model.vectorExport.artifact, repo), join(directory, model.vectorExport.artifact));
+    }
     writeFileSync(join(directory, "src/index.ts"), "export {};\n");
     writeFileSync(join(directory, "test/index.test.ts"), "export {};\n");
     writeFileSync(join(directory, "go/cache.go"), "package dialcache\n");

@@ -20,7 +20,7 @@ export function evaluateSemanticTestReport(data, execution, exitCode, label = 'c
   const passed = assertions.filter(test => test.status === 'passed').length;
   const violation = failed.flatMap(test => test.failureMessages).find(message => settlementViolationPattern.test(message));
   const infrastructure = violation !== undefined
-    || failed.some(test => test.failureMessages.some(message => /(?:Test|Hook) timed out in/.test(message)));
+    || failed.some(test => test.failureMessages.some(message => /(?:Test|Hook) timed out in|(?:^|\n)(?:Error: )?INVALIDATION_INFRASTRUCTURE:/.test(message)));
   const { unhandledErrors } = execution;
   if (execution.reason !== (failed.length ? 'failed' : 'passed') || execution.collectionErrors.length || (unhandledErrors.length && !failed.length) ||
       passed + failed.length === 0 || infrastructure ||

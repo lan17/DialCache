@@ -302,6 +302,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     }
   });
 
+  it("requires Docker for mutation measurements but not report merging", () => {
+    fakeTool("docker", 'console.error("Docker not running"); process.exit(1)');
+    for (const target of ["mutations-ts", "mutations-go"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/docker/);
+    }
+    for (const target of ["mutations-merge-ts", "mutations-merge-go"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
+    }
+  });
+
   it("allows the standalone floor target on Node 22.15 and propagates its PATH without reintroducing selectors", async () => {
     const floor = fakeTool("node22", `if (process.argv[2] === '--version') console.log('v22.15.0');
 else {

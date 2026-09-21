@@ -1,3 +1,4 @@
+import { startRedisVectorServer } from './redis-vector-server.mjs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -42,9 +43,9 @@ if (only) {
 const declaredCoverage = checkSemanticCoverage();
 const mutantCatalog = readMutantCatalog();
 const catalog = { mutations: mutantsForPort(mutantCatalog, language.port) };
-const formalTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts', 'test/formal-local-clock.test.ts', 'test/formal-protocol-vectors.test.ts'];
+const formalTests = ['test/formal-invalidation-native.test.ts', 'test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts', 'test/formal-local-clock.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const portableTests = ['test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
-const generatedPattern = 'replays |reaches every action|covers every action|reaches fractional expiry and shared instance grid|formal protocol conformance vectors (?!keeps |requires )';
+const generatedPattern = 'generated invalidation vectors |replays |reaches every action|covers every action|reaches fractional expiry and shared instance grid|formal protocol conformance vectors (?!keeps |requires )';
 // Fixed scenario names carry a feature prefix. Protocol schema/audit checks
 // start with "keeps"/"requires" and must not count as behavioral detections.
 const portablePattern = 'portable behavioral scenarios [\\w-]+: |formal protocol conformance vectors (?!keeps |requires )';
@@ -123,7 +124,11 @@ function save() {
   writeFileSync(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 }
 save();
+let vectorServer;
 try {
+  vectorServer = startRedisVectorServer();
+  env.DIALCACHE_VECTOR_REDIS_URL = vectorServer.url;
+  report.redisVectorImage = vectorServer.image;
   for (const path of ['src', 'test', 'formal', 'docs', 'README.md', 'go/README.md', 'package.json', 'tsconfig.json', 'vitest.config.ts']) {
     cpSync(resolve(root, path), resolve(workspace, path), { recursive: true, filter: source => !source.includes('/docs/.vitepress/cache') && !source.includes('/docs/.vitepress/dist') });
   }
@@ -215,4 +220,5 @@ try {
 } finally {
   // Only this run's isolated copy is removed. The user's source is never edited.
   rmSync(workspace, { recursive: true, force: true });
+  vectorServer?.close();
 }
