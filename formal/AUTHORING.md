@@ -116,6 +116,19 @@ change; the check runs in `make differential` (the pull request lane) and
 `make formal-check` (the full run), the lanes that have Quint. `make audit`
 runs without Quint and does not include it.
 
+The same lint checks state shapes separately from composition counts. Held
+reads beside held dumps require a lifecycle that accounts for both; shadow
+jobs beside a caller source budget require the dark-job lifecycle. A local
+fault switch must use the fault-aware transitions and cannot accompany the
+healthy held lifecycle. These checks follow record type aliases and fail even
+when refreshing the baseline; unsupported combinations are never recorded as
+an allowed violation count. Each state is checked against the transitions
+assigned to it, so a valid transition on another state cannot satisfy its
+requirements, and mixing a valid lifecycle with an incompatible one still
+fails. Atomic-release profiles also schedule
+`atomicPathSeedsDecodableFrames`, because their reads and shadow comparisons
+have no decode-failure settlement.
+
 The [kernel library](./kernel/README.md) holds the concern modules a composed
 profile assigns through; `formal/dialcache-layers-conformance.qnt` is the first.
 A rewrite lands only when `node formal/differential.mjs <profile>` replays the
@@ -410,6 +423,15 @@ expectation, not an earlier step it disables or a later check. A history the
 fault does not distinguish, or one that fails elsewhere, is a measurement
 failure, not a survivor to record. The report entry gains
 `reproducer: { ..., baseline: 'passed', mutant: 'failed', code: 'QNT508' }`.
+
+For a reproduced library fault, the checker also measures the profile
+partition: a profile that does not import the changed source is `structural`,
+every listed profile must detect the mutant through a declared run or a
+scheduled invariant, and every reaching exclusion must keep all its runs
+passing (`holds`). A filtered `--only` run also checks the reaching exclusions'
+scheduled invariants at the normal exploration bounds. The report records
+these results in `partition`; a changed exclusion or a listed profile that
+stops detecting the fault fails the check, so dated prose is not its evidence.
 
 Existing challenges are backfilled as their models are touched. Until then each
 one is listed by id in the manifest's top-level `reproducerBacklog`;

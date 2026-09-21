@@ -114,9 +114,9 @@ module serving {
   }, LocalPayload]
   type RequestServed[r] = Traversed[r, {}]
 
-  // A caller participates when its call is enabled and its scope is open.
+  // A caller participates when enabled, its key is valid and its scope is open.
   pure def participating(state: Traversed[r, p], layout: Layout, call: Call): bool =
-    call.enabled and Memo::scopeOpen(state, call.context, layout.persistentContexts)
+    call.enabled and not(call.keyFailed) and Memo::scopeOpen(state, call.context, layout.persistentContexts)
   // The process identity a call serves: its instance's row of keys.
   pure def identity(layout: Layout, call: Call): int = call.instance * layout.keysPerInstance + call.key
   // The projections of a reply: without the remote layer, or with the request leaf only.

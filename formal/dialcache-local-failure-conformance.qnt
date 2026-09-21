@@ -1,5 +1,6 @@
 module dialcache_local_failure_conformance {
   import conformance_observations.* from "./conformance-observations"
+  import payloads as Payloads from "./kernel/payloads"
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
   import layer_policy.* from "./kernel/layer-policy"
@@ -15,7 +16,9 @@ module dialcache_local_failure_conformance {
   // is active at a time, with unbounded source time and no elapsed-time steps.
   // Native bindings inject failure at local storage/its integer-clock boundary.
   // A read fault is exercised on a present entry; a write fault is armed while
-  // source work is pending. Successful operations use the real native storage.
+  // source work is pending. Go's integer-clock seam is not consulted on a
+  // missing entry (go/cache.go), so the guards restrict read faults to present
+  // entries. Successful operations use the real native storage.
   // Every rule is a kernel transition (formal/kernel): the layered traversal
   // with the local fault switch read at admission and settlement
   // (`local_faults`). This module owns the bounded state, the scope and policy
@@ -176,6 +179,11 @@ module dialcache_local_failure_conformance {
     s.remoteValues.nth(0) == NO_VALUE or accepted(s.remoteValues.nth(0)),
     s.memo.indices().forall(slot => s.memo.nth(slot) == NO_VALUE or accepted(s.memo.nth(slot)))
   }
+
+  // Atomic reads and shadow comparisons have no decode-failure settlement.
+  val atomicPathSeedsDecodableFrames = Payloads::atomicSafe(s)
+  // The newest-source decoder can name only one pending source.
+  val oneSourceAtATime = s.sources.select(source => source.result == CALL_PENDING).length() <= 1
 
   run localReadFailureFallsThroughAndPreservesOldLocalTest = init
     .then(begin(2)).then(resolve(VALUE_ONE))

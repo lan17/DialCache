@@ -18,7 +18,10 @@ module layer_policy {
   // and the physical retention written with each remote frame. A layer whose
   // TTL is 0 is off (`gated`), and a source refills the remote layer iff it
   // captured a positive retention: a reply with `freshMs > 0` and
-  // `retentionMs` 0 reads the remote layer and never refills it.
+  // `retentionMs` 0 reads the remote layer and never refills it. That region
+  // is not native configuration: a positive staleOnErrorMaxAgeSec must exceed
+  // ttlSec.remote, and every profile decoder keeps retention at or above
+  // freshness (including policy overlays' fallback for invalid recovery ages).
   type Ttls = { localMs: int, freshMs: int, retentionMs: int }
   // The TTLs of a call that uses no layer: the bypass reply's.
   pure val NO_TTLS: Ttls = { localMs: 0, freshMs: 0, retentionMs: 0 }

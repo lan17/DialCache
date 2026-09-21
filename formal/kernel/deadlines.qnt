@@ -34,7 +34,10 @@ module deadlines {
   // before the clock moves: an open design point for a budgeted recovery
   // composition, unreachable in every scheduled profile today (independent's
   // source budget is 10 ms; the local shape makes no clock judgment at
-  // expiry). An expired source completes every
+  // expiry). The current zero-budget delivery is pinned by held-remote.qnt's
+  // `zeroBudgetLoaderStartedByExpiryDeliversInTheSameAdvanceTest` and
+  // budgeted-local.qnt's `zeroBudgetSourceSettlesAsDeadlineErrorTest`.
+  // An expired source completes every
   // caller it owns with DEADLINE_ERROR; a result arriving after its deadline
   // is a deadline error (`arrival`); work whose deadline already completed
   // its callers drains once, when the result arrives. `drained` is per loader

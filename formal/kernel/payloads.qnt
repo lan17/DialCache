@@ -42,12 +42,13 @@ module payloads {
   // value, so a class with no decoded value (UNSUPPORTED_ENCODING, or a class
   // this module names no rule for) yields NO_VALUE from `valueOf` and never
   // completes a caller with CALL_PENDING, the integer NO_VALUE shares.
-  // Documented limit: the atomic release
-  // (`serving::release`) has no decode step, so it serves `valueOf` of a
-  // fresh corrupt frame, the value its bytes would have carried; a profile
-  // composed over the atomic path must not seed decode-fault payloads
-  // (pinned by the payload-classes fixture,
-  // `atomicReleaseOfAFreshCorruptFrameServesWithoutADecodeStepTest`).
+  // Atomic-path limit: `serving::release` serves `valueOf` without a decode
+  // step, and `shadow::settleJob` compares through `valuesMatch` without a
+  // decode-failure arm. Profiles over either path schedule
+  // `atomicPathSeedsDecodableFrames = Payloads::atomicSafe(s)` so a future
+  // corrupt seed is refused by an invariant, rather than silently served or
+  // compared. The payload-classes fixture pins the underlying limit with
+  // `atomicReleaseOfAFreshCorruptFrameServesWithoutADecodeStepTest`.
   import encodings.* from "./encodings"
 
   // The classes, as hundreds: a payload in the band is a class plus a value
@@ -85,6 +86,10 @@ module payloads {
   // The bytes fail to decode: a fresh decode restarts the loader, a recovery
   // decode keeps the loader's error.
   pure def decodeFails(payload: int): bool = classOf(payload) == classOf(CORRUPT)
+  // Atomic consumers have no decode-failure settlement; held consumers do.
+  // Read only the payload slots so this helper stays below remote_frames.
+  pure def atomicSafe(state: { remoteValues: List[int] | r }): bool =
+    state.remoteValues.indices().forall(key => not(decodeFails(state.remoteValues.nth(key))))
   // The compression outcome a decode of the payload reports, none for an
   // uncompressed one.
   pure def decodeOutcome(payload: int): List[str] =

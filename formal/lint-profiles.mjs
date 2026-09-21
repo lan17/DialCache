@@ -3,7 +3,7 @@
 // evidence guarantee 6). `quint parse --out` yields the modules with their
 // declarations and a lookup table that resolves every name and operator
 // application to the declaration it refers to, across imports and instances.
-// The lint builds the reference graph from that table and checks two rules:
+// The lint builds the reference graph from that table and checks three rules:
 //
 // - Composition: from each action of the profile module, every value assigned
 //   to a state variable other than the driver input is built from kernel
@@ -29,6 +29,10 @@
 //   constant bound at instantiation may reference witness state. The witness
 //   monitor's own assignment may read its prior state, so the value of an
 //   assignment to a witness variable is not walked.
+//
+// - Supported shapes: fields that imply held work or local storage faults
+//   require transitions that define that combination. A record type carrying
+//   a field alone does not mean a row-polymorphic transition reads it.
 //
 // Quint IR facts the walk relies on (verified against Quint 0.32.0): a
 // parametrized definition is a `def` whose `expr` is a `lambda`; a declared
@@ -285,6 +289,12 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
   const reachable = new Set();
   const assigning = new Set();
   const transitions = new Set();
+  const transitionsByVariable = new Map();
+  const recordTransition = (variable, label) => {
+    transitions.add(label);
+    if (!transitionsByVariable.has(variable)) transitionsByVariable.set(variable, new Set());
+    transitionsByVariable.get(variable).add(label);
+  };
   const isState = declaration => declaration?.kind === 'var';
   const isKernel = declaration => (declaration?.kind === 'def' || declaration?.kind === 'const') && kernel.has(declaration.module);
   const isProfile = declaration => declaration?.kind === 'def' && declaration.module === index.main;
@@ -338,14 +348,17 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
   const higherOrderLabel = declaration => higherOrder.has(declaration.id) ? index.labelOf(declaration.module, declaration.name) : undefined;
   // Walks one expression; returns whether its value carries cache state.
   // `tainted` maps parameter and let names of the walked body to state taint.
-  const walk = (expr, { node, chain, tainted, variable }) => {
-    const again = child => walk(child, { node, chain, tainted, variable });
+  const walk = (expr, { node, chain, tainted, variable, libraries = new Map() }) => {
+    const again = child => walk(child, { node, chain, tainted, variable, libraries });
     switch (expr.kind) {
       case 'int': case 'str': case 'bool': return false;
       case 'name': {
         const declaration = resolveTarget(index, expr);
         if (isState(declaration)) return true;
-        if (declaration === undefined) return tainted.get(expr.name) === true;
+        if (declaration === undefined) {
+          for (const label of libraries.get(expr.name) ?? []) recordTransition(variable, label);
+          return tainted.get(expr.name) === true;
+        }
         if (declaration.kind === 'const') return false;
         // A chosen input is never cache state, whatever domain it was drawn from.
         if (declaration.qualifier === 'nondet') return false;
@@ -359,14 +372,16 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
       }
       case 'lambda': {
         const inner = new Map(tainted);
-        for (const parameter of expr.params) inner.set(parameter.name, false);
-        return walk(expr.expr, { node, chain, tainted: inner, variable });
+        const scoped = new Map(libraries);
+        for (const parameter of expr.params) { inner.set(parameter.name, false); scoped.delete(parameter.name); }
+        return walk(expr.expr, { node, chain, tainted: inner, variable, libraries: scoped });
       }
       case 'let': {
         const inner = new Map(tainted);
         inner.set(expr.opdef.name, expr.opdef.qualifier === 'nondet' ? false : again(expr.opdef.expr));
         // (the name case answers the same for a nondet reached without this map)
-        return walk(expr.expr, { node, chain, tainted: inner, variable });
+        const scoped = new Map(libraries); scoped.delete(expr.opdef.name);
+        return walk(expr.expr, { node, chain, tainted: inner, variable, libraries: scoped });
       }
       case 'app': break;
       default: return false;
@@ -380,7 +395,7 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
       const kernelDefinition = kernelCallee(declaration);
       if (kernelDefinition) {
         const label = index.labelOf(kernelDefinition.module, kernelDefinition.name);
-        if (kernelDefinition.kind === 'def') transitions.add(label);
+        if (kernelDefinition.kind === 'def') recordTransition(variable, label);
         if (higherOrderLabel(kernelDefinition)) report(node, chain, `higher-order ${label} instantiated in the value of ${variable}`);
         return true;
       }
@@ -416,6 +431,7 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
   // argument is the wrapper's), and the taint it carries reaches the callee's
   // parameter at every call site before the callee's assignments are judged.
   const parameterTaint = new Map();
+  const parameterLibraries = new Map();
   const definitions = topLevelDefinitions(index).filter(node => node.module === index.main);
   for (const caller of definitions) {
     const own = caller.expr?.kind === 'lambda' ? new Map(caller.expr.params.map(parameter => [parameter.name, false])) : new Map();
@@ -426,13 +442,17 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
       const callee = index.nodes.get(declaration.owner);
       if (!callee || callee.expr?.kind !== 'lambda') continue;
       const taints = parameterTaint.get(callee.key) ?? new Array(callee.expr.params.length).fill(false);
+      const carried = parameterLibraries.get(callee.key) ?? callee.expr.params.map(() => new Set());
       expr.args.forEach((argument, position) => {
         // An argument that itself assigns state is a transition fragment the
         // caller's own assignments cover; a value argument is walked here.
         if (hasEffects(index, argument)) return;
-        if (walk(argument, { node: caller, chain: [caller.label], tainted: own, variable: `the argument ${callee.expr.params[position]?.name} of ${callee.label}` })) taints[position] = true;
+        const variable = `the argument ${callee.expr.params[position]?.name} of ${callee.label}`;
+        if (walk(argument, { node: caller, chain: [caller.label], tainted: own, variable })) taints[position] = true;
+        for (const label of transitionsByVariable.get(variable) ?? []) carried[position].add(label);
       });
       parameterTaint.set(callee.key, taints);
+      parameterLibraries.set(callee.key, carried);
     }
   }
   for (const action of actions) {
@@ -451,7 +471,9 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
         if (variable.name === inputField) continue;
         const taints = parameterTaint.get(node.key) ?? [];
         const parameters = node.expr?.kind === 'lambda' ? node.expr.params.map((parameter, position) => [parameter.name, taints[position] === true]) : [];
-        walk(value, { node, chain, tainted: new Map(parameters), variable: variableLabel(index, variable) });
+        const libraries = node.expr?.kind === 'lambda' ? new Map(node.expr.params.map((parameter, position) =>
+          [parameter.name, parameterLibraries.get(node.key)?.[position] ?? new Set()])) : new Map();
+        walk(value, { node, chain, tainted: new Map(parameters), variable: variableLabel(index, variable), libraries });
       }
       for (const next of referencesOf(index, node)) {
         if (!parent.has(next.key)) { parent.set(next.key, node.key); queue.push(next); }
@@ -463,6 +485,11 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
   return { kernelModules: [...kernel].sort(compareStrings), actions: actions.map(node => node.name).sort(compareStrings),
     publicActions: exposed.map(node => node.name), reachableDefinitions: reachable.size,
     stateAssigningDefinitions: [...assigning].sort(compareStrings), libraryTransitions: [...transitions].sort(compareStrings),
+    stateTransitions: Object.fromEntries([...index.declarations.values()].filter(declaration => isState(declaration)
+      && declaration.module === index.main && declaration.name !== inputField).map(declaration => {
+      const variable = variableLabel(index, declaration);
+      return [variable, [...transitionsByVariable.get(variable) ?? []].sort(compareStrings)];
+    })),
     count: sorted.length, violations: sorted };
 }
 
@@ -630,7 +657,69 @@ export async function lintModel(model, { main, kernelModules, witnessPattern, ob
   const index = indexModules(parsed, { main });
   const composition = lintComposition(index, { kernelModules: kernelModules ?? kernelModulesOf(cwd) });
   const witnessIsolation = lintWitnessIsolation(index, { witnessPattern, observationField });
-  return { model, main: index.main, modules: index.modules, tableSize: index.tableSize, composition, witnessIsolation };
+  const shapes = lintShapes(index, composition.stateTransitions);
+  return { model, main: index.main, modules: index.modules, tableSize: index.tableSize, composition, witnessIsolation, shapes };
+}
+
+// A row-polymorphic transition can carry fields it never reads. These two
+// restrictions reject combinations whose lifecycle the selected transitions
+// do not model, even when the ordinary composition walk sees only pure calls.
+// Admission uses the served-shadow shape, whose refill slots stay empty; its
+// beginHeld/settleLoader family is valid here without admitting source budgets.
+export const shapeRules = [
+  { id: 'held-effects', combinations: [
+    { fields: ['reads', 'dumps'], requires: ['shadow::beginDark', 'shadow::settleHeld', 'shadow::beginHeld',
+      'shadow::releaseHeld', 'shadow::settleLoader', 'remote_writes::settleLoader', 'metrics::begin', 'metrics::settleLoader'] },
+    { fields: ['jobs', 'sourceBudget'], requires: ['shadow::beginDark', 'shadow::settleHeld'],
+      forbids: ['shadow::begin', 'shadow::release', 'shadow::settle', 'shadow::settleJob', 'shadow::advance',
+        'shadow::beginHeld', 'shadow::releaseHeld', 'shadow::settleRead', 'shadow::settleLoad', 'shadow::settleLoader'] },
+  ] },
+  { id: 'local-fault', combinations: [
+    { fields: ['localFailed'], requires: ['local_faults::begin', 'local_faults::settle'],
+      forbids: ['remote_io::*', 'remote_writes::*', 'deadlines::*', 'diagnostics::*', 'shadow::*', 'metrics::*',
+        'compression::*', 'adapter_replies::settleRead'] },
+  ] },
+];
+
+export function lintShapes(index, stateTransitions) {
+  const fieldsOf = (type, bindings = new Map(), seen = new Set()) => {
+    if (!type || (type.id !== undefined && seen.has(type.id))) return [];
+    const trail = type.id === undefined ? seen : new Set([...seen, type.id]);
+    if (type.kind === 'var') {
+      const bound = bindings.get(type.name);
+      return bound ? fieldsOf(bound.type, bound.bindings, trail) : [];
+    }
+    if (type.kind === 'const') return fieldsOf(index.table[type.id]?.type, bindings, trail);
+    if (type.kind === 'app') {
+      const target = index.table[type.ctor.id];
+      const applied = new Map((target?.params ?? []).map((name, i) => [name, { type: type.args[i], bindings }]));
+      return fieldsOf(target?.type, applied, trail);
+    }
+    if (type.kind === 'rec') return fieldsOf(type.fields, bindings, trail);
+    if (type.kind === 'row') return [...type.fields.map(field => field.fieldName), ...fieldsOf(type.other, bindings, trail)];
+    return [];
+  };
+  const states = [...index.declarations.values()].filter(declaration =>
+    declaration.module === index.main && declaration.kind === 'var' && declaration.name !== inputField)
+    .map(declaration => ({ variable: declaration.name, fields: [...new Set(fieldsOf(declaration.typeAnnotation))].sort(compareStrings),
+      transitions: stateTransitions[variableLabel(index, declaration)] ?? [] }));
+  const matches = (pattern, transition) => pattern.endsWith('::*') ? transition.startsWith(pattern.slice(0, -1)) : pattern === transition;
+  const violations = [];
+  for (const state of states) {
+    for (const rule of shapeRules) {
+      for (const combination of rule.combinations) {
+        if (!combination.fields.every(field => state.fields.includes(field))) continue;
+        if (!combination.requires.some(transition => state.transitions.includes(transition))) {
+          violations.push({ rule: rule.id, variable: state.variable, fields: combination.fields,
+            detail: `fields ${combination.fields.join(', ')} require one of ${combination.requires.join(', ')}` });
+        }
+        const forbidden = state.transitions.filter(transition => combination.forbids?.some(pattern => matches(pattern, transition)));
+        if (forbidden.length) violations.push({ rule: rule.id, variable: state.variable, fields: combination.fields,
+          detail: `fields ${combination.fields.join(', ')} cannot compose ${forbidden.join(', ')}` });
+      }
+    }
+  }
+  return { states, count: violations.length, violations };
 }
 
 export function loadProfiles(directory = root) {
@@ -651,6 +740,8 @@ export async function computeBaseline({ profiles, cwd = root, concurrency } = {}
     const parsed = await parseModel(profile.model, { cwd });
     const index = indexModules(parsed);
     const composition = lintComposition(index, { kernelModules });
+    const shapes = lintShapes(index, composition.stateTransitions);
+    if (shapes.count) throw new Error(`${profile.id}: unsupported kernel shape\n${shapes.violations.map(violation => `  ${violation.variable}: ${violation.detail}`).join('\n')}`);
     return { id: profile.id, model: profile.model, module: index.main, libraryTransitions: composition.libraryTransitions, compositionViolations: composition.count };
   }), concurrency === undefined ? {} : { concurrency });
   return { schemaVersion: 3, quintVersion: version, kernelModules, profiles: entries };
@@ -733,7 +824,7 @@ const usage = `Usage:
   node formal/lint-profiles.mjs <model.qnt> [--main=<module>] [--kernel=<module,...>] [--witness=<regex>] [--observation=<field>]
   node formal/lint-profiles.mjs baseline --check | --write
 
-The first form prints a JSON report and exits 1 when either rule is violated;
+The first form prints a JSON report and exits 1 when any lint rule is violated;
 --kernel defaults to the modules under formal/kernel. The second recomputes
 ${baselinePath} over every profile in formal/profiles.json and either checks
 it against the committed file (--check: library transitions and violation
@@ -784,7 +875,7 @@ async function main(argv) {
     observationField: typeof options.observation === 'string' ? options.observation : defaultObservationField,
   });
   console.log(JSON.stringify(report, null, 2));
-  return report.composition.count || report.witnessIsolation.count ? 1 : 0;
+  return report.composition.count || report.witnessIsolation.count || report.shapes.count ? 1 : 0;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

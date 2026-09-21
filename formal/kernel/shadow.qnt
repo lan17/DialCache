@@ -115,6 +115,10 @@ module shadow {
   // (`expireHeld`, through `settleJobHeld`); a job still holding its C0 read
   // then ends the same way when the read settles; a job budget due in the
   // same round finds the job gone and says nothing more.
+  // `held-dark-shadow.qnt` pins a source deadline below its job budget with
+  // `sourceDeadlineAloneEndsTheJobTest`. That arm is fixture-only: both native
+  // drivers derive both budgets from the call's fallback timeout; replaying
+  // separate budgets would require a per-call sourceTimeoutMs input.
   //
   // Cohort selection is the drivers' ramp decoded by the profile through
   // `cohort_boundaries` (strict against the key's numerator); the module reads

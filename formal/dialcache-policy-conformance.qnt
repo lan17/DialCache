@@ -1,5 +1,6 @@
 module dialcache_policy_conformance {
   import conformance_observations.* from "./conformance-observations"
+  import payloads as Payloads from "./kernel/payloads"
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
   import layer_policy.* from "./kernel/layer-policy"
@@ -336,6 +337,9 @@ module dialcache_policy_conformance {
     val error = s.policyErrors.nth(index)
     error.layer == "noop" and error.errorType == "config_resolution"
   })
+
+  // Atomic reads and shadow comparisons have no decode-failure settlement.
+  val atomicPathSeedsDecodableFrames = Payloads::atomicSafe(s)
 
   // -- Deterministic regression schedules ------------------------------------
 

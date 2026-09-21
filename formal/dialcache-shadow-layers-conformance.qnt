@@ -1,6 +1,7 @@
 module dialcache_shadow_layers_conformance {
   import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
+  import payloads as Payloads from "./kernel/payloads"
   import cohort_boundaries.* from "./cohort-boundaries"
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
@@ -284,6 +285,9 @@ module dialcache_shadow_layers_conformance {
   // Every held dump or write serializes an accepted result.
   val heldWorkHasAcceptedResults = s.dumps.indices().forall(i => accepted(s.sources.nth(s.dumps.nth(i).source).result))
     and s.writes.indices().forall(i => accepted(s.sources.nth(s.writes.nth(i).source).result))
+
+  // Atomic reads and shadow comparisons have no decode-failure settlement.
+  val atomicPathSeedsDecodableFrames = Payloads::atomicSafe(s)
 
   // Each regression uses only public input transitions. Later calls distinguish
   // real storage reuse/publication from a counter or an internal phase alone.

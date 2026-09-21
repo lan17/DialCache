@@ -1,5 +1,6 @@
 module dialcache_runtime_boundaries_conformance {
   import conformance_observations.* from "./conformance-observations"
+  import payloads as Payloads from "./kernel/payloads"
   import cohort_boundaries.* from "./cohort-boundaries"
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
@@ -229,6 +230,9 @@ module dialcache_runtime_boundaries_conformance {
     })
   val sourceEffectsMatch = s.sources.length() == s.o.loaders and s.owners.length() == s.o.calls.length()
     and s.held.length() <= 1
+
+  // Atomic reads and shadow comparisons have no decode-failure settlement.
+  val atomicPathSeedsDecodableFrames = Payloads::atomicSafe(s)
 
   // -- Deterministic regression schedules (verbatim) --------------------------
 

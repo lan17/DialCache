@@ -13,7 +13,8 @@ module clock {
   // (`cache_rules.wholeMs`, the projection `localEntryLiveOnGrid` judges
   // with, C09), so a fractional advance moves `now` only across a millisecond
   // boundary and local insertion and expiry fall on the grid whatever the
-  // instance's construction phase.
+  // instance's construction phase. Combining advanceTicks with delivered
+  // deadlines requires a kernel transition not yet defined here.
   type Ticked[r] = { now: int, ticks: int | r }
 
   pure def advance(state: Timed[r], ms: int): Timed[r] = { now: state.now + ms, ...state }

@@ -1,5 +1,6 @@
 module dialcache_layers_conformance {
   import conformance_observations.* from "./conformance-observations"
+  import payloads as Payloads from "./kernel/payloads"
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
   import layer_policy.* from "./kernel/layer-policy"
@@ -250,6 +251,9 @@ module dialcache_layers_conformance {
   val localMembershipMatchesLru = s.localValues.indices().forall(i =>
     (s.localValues.nth(i) > 0)
       == (s.lru.nth(i / KEYS_PER_INSTANCE).select(key => key == i % KEYS_PER_INSTANCE).length() > 0))
+
+  // Atomic reads and shadow comparisons have no decode-failure settlement.
+  val atomicPathSeedsDecodableFrames = Payloads::atomicSafe(s)
 
   // -- Deterministic regression schedules ------------------------------------
 

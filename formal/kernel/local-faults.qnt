@@ -28,7 +28,9 @@ module local_faults {
   // captured local TTL, so `serving::publish` warms nothing. The traversal and
   // the publication keep their one statement in `serving`; the remote fault
   // switches live in `serving::Served` because the traversal reads them mid
-  // release, where this one is read at its two entry points.
+  // release, where this one is read at its two entry points. The held
+  // lifecycle still judges a healthy local read; combining it with this
+  // switch needs fault-aware held transitions and is rejected by shape lint.
   import layer_policy.* from "./layer-policy"
   import calls.* from "./calls"
   import flights as Flights from "./flights"

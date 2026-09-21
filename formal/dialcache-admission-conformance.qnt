@@ -225,6 +225,9 @@ module dialcache_admission_conformance {
 
   // -- Independently stated safety properties over the library records --------
 
+  // This served-job shape delivers job budgets, not remote-read deadlines.
+  val elapsedStaysBelowReadDeadlines = s.now < READ_BUDGET_MS
+
   // A job's identity is its source's (instance, key); the registry is
   // pending-only, so every record is a live job.
   def jobInstance(i: int): int = s.sources.nth(s.jobs.nth(i).source).instance
