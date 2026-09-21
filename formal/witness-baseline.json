@@ -7,7 +7,7 @@
   "profiles": {
     "admission": {
       "sampledHistories": 128,
-      "corpusSha256": "706a2b21115095297825cc537e7ef4459cbbb48887de3f39c07b53249dc78619",
+      "corpusSha256": "27d0a291fdb2f93e01a01a0dc202ec951ab70006e5bebc377c1c2bd0a83db0de",
       "labels": {
         "outcome:match": 57,
         "outcome:mismatch": 35,
@@ -26,7 +26,8 @@
         "decode-timeout-keeps-slot": 7,
         "confirmation-timeout-keeps-slot": 7,
         "unselected-hit-skips-job": 99,
-        "uncoalesced-hit-overlap": 55
+        "uncoalesced-hit-overlap": 55,
+        "later-served-shadow-keeps-own-job-budget": 0
       }
     },
     "dark-layers": {
@@ -74,7 +75,13 @@
         "action:writeFault": 230,
         "local-entry-expires-at-its-ttl": 27,
         "request-follower-joins-leader": 71,
-        "transient-request-dark-error-uses-request-layer": 0
+        "transient-request-dark-error-uses-request-layer": 0,
+        "later-dark-source-keeps-own-budget": 0,
+        "timed-out-dark-read-retains-capacity-until-raw-release": 0,
+        "timed-out-dark-decode-retains-capacity-until-raw-release": 0,
+        "timed-out-dark-confirmation-retains-capacity-until-raw-release": 0,
+        "timed-out-dark-dump-retains-capacity-until-raw-release": 0,
+        "timed-out-dark-write-retains-capacity-until-raw-release": 0
       }
     },
     "effects": {
@@ -180,7 +187,7 @@
     },
     "independent": {
       "sampledHistories": 512,
-      "corpusSha256": "57134d035a0f317364338513d107f10d26765ca05b33f3af6b58c2836c236b6e",
+      "corpusSha256": "846dc3e49b3230a65e0c20be16aa80fba5fd638400a58b4142ac07d33f1ba0c3",
       "labels": {
         "independent-source-error-identities": 262,
         "independent-read-overlap": 465,
@@ -237,7 +244,7 @@
     },
     "local-clock": {
       "sampledHistories": 128,
-      "corpusSha256": "dd5c3f7d92942a834c84ec7b4e2602e4208cff99b4e94c23f8bd3e259df439ff",
+      "corpusSha256": "b4ef22b82f6c00adb35f09ac54abb1db81ee4dba3b18f24c6f80295544759590",
       "labels": {
         "fractional-insertion-expiry": 0,
         "shared-instance-grid": 0
@@ -457,7 +464,7 @@
     },
     "shadow": {
       "sampledHistories": 1024,
-      "corpusSha256": "c0dceb6430cd99bcb85948585856e5cb5fed5fa88771a525697e8304511a0038",
+      "corpusSha256": "d2027e4824ab64f7c15c9d9aceee09d3924476f932ed2aeef440719ef831eca5",
       "labels": {
         "outcome:match": 53,
         "outcome:mismatch": 54,
@@ -540,7 +547,7 @@
     },
     "shadow-layers": {
       "sampledHistories": 256,
-      "corpusSha256": "cf714d5332969b514f383c69ac1f2d5849f26058d6e8885a5a7e853c6b3394ab",
+      "corpusSha256": "6afffa10eb14b0fe44b31ed244d4c16a8ae448fc1999e8f9e20759043d8e814d",
       "labels": {
         "dark-present-c0-never-publishes-local": 0,
         "dark-local-source-publication-stops-later-shadow": 0,
@@ -580,7 +587,7 @@
     },
     "source-budgets": {
       "sampledHistories": 256,
-      "corpusSha256": "66f0cf911392eb56088394edb53eb471c86d55378ec8ca0670214d3cf079b064",
+      "corpusSha256": "90b412b41f2fa15c6c78b06cef9f9f812bd5310dcc38b18b89dff7bff5081929",
       "labels": {
         "outside-calls-skip-source-deadlines-sharing-and-publication": 0,
         "default-source-budget-expires-at-sixty-seconds": 0,
