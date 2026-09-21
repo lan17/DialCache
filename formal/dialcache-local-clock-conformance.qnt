@@ -5,6 +5,7 @@ module dialcache_local_clock_conformance {
   import layer_policy.* from "./kernel/layer-policy"
   import serving as Serving from "./kernel/serving"
   import clock as Clock from "./kernel/clock"
+  import local_grid as LocalGrid from "./kernel/local-grid"
   import instances as Instances from "./kernel/instances"
   import policy_gate as Gate from "./kernel/policy-gate"
 
@@ -16,9 +17,9 @@ module dialcache_local_clock_conformance {
   // one-second local TTL, and no request memo or remote layer bound this model.
   // The replay creates real default caches at the declared fractional times.
   // Every rule is a kernel transition (formal/kernel): the local projection of
-  // the traversal with an inline source (`Serving::callLocal`) over the
-  // fractional clock (`Clock::advanceTicks`). This module owns the bounded
-  // state, the instance decoding, the input choices and the guards.
+  // the traversal with an inline source and raw insertion receipt
+  // (`LocalGrid::call`) over the fractional clock (`Clock::advanceTicks`). This
+  // module owns the bounded state, instance decoding, input choices and guards.
 
   pure val TICKS_PER_MS = 1000
   pure val LOCAL_TTL_MS = 1000
@@ -46,6 +47,7 @@ module dialcache_local_clock_conformance {
     processFlights: List[int],
     localValues: List[int],
     localExpires: List[int],
+    localInsertedTicks: List[int],
     lru: List[List[int]],
     sources: List[Serving::LocalSource],
     owners: List[int],
@@ -72,6 +74,7 @@ module dialcache_local_clock_conformance {
       processFlights: List(NO_OWNER, NO_OWNER),
       localValues: List(NO_VALUE, NO_VALUE),
       localExpires: List(0, 0),
+      localInsertedTicks: List(0, 0),
       lru: List(List(), List()),
       sources: List(),
       owners: List(),
@@ -103,7 +106,7 @@ module dialcache_local_clock_conformance {
   action callWith(instance: int, offered: int): bool = all {
     s.constructed.nth(instance),
     s.o.calls.length() < MAX_CALLS,
-    s' = Serving::callLocal(s, LAYOUT, callOn(instance), LOCAL, TTLS, offered),
+    s' = LocalGrid::call(s, LAYOUT, callOn(instance), LOCAL, TTLS, offered, TICKS_PER_MS),
     input' = { name: "call", choice: instance * 2 + offered - 1 }
   }
   action call = {

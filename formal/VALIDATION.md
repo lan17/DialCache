@@ -103,10 +103,10 @@ The mutation gate requires `confirmed` for every mapping with an exported
 history or vector reproducer in both ports, alongside the required-cohort gate.
 It recomputes verdicts from current declarations and recordings: missing
 mapping entries, stale checkpoints and absent clean baselines fail, even when
-the report claims confirmation. `unreproduced` names a grandfathered mapping
-that still lacks a reproducer; the execution audit reports that backlog and
-forbids adding to it. A mapped fault cannot replace its portable evidence with
-a model run that exports no vector.
+the report claims confirmation. Historical `unreproduced` states remain
+readable, but both current backlogs are empty and the execution audit forbids
+reopening them. A mapped fault cannot replace its portable evidence with a
+model run that exports no vector.
 
 Read the evidence with `node formal/mutation-reports.mjs boundary --report
 <report.json>`. Optional `--cohorts <directory>` reads historical assertion

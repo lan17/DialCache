@@ -599,19 +599,10 @@ function validateNativeMutants(challenge, { catalog, models, publicOnly, source,
   });
 }
 
-// Challenges that predate the native-mutant requirement. The cutoff fault
-// lives only in the Lua invalidation script (src/internal/redis-scripts.ts,
-// go/redis_adapter.go), which no in-process cohort executes. The buffer-limit
-// fault has client-side lines in both ports (src/internal/duration.ts
-// assertSupportedFutureBufferMs, go/cache.go Invalidate), but no generated
-// history invalidates with the maximum buffer, so a mapped mutant would lack
-// its required detection; it closes when a profile exposes the buffer as an
-// input and an exported regression reaches the bound. The list may only
-// shrink: a new challenge maps to a native mutant or explains why none exists,
-// and listing it here instead is a reviewed change to this constant, never a
-// manifest edit.
-export const grandfatheredNativeMutantBacklog = Object.freeze([
-]);
+// Every challenge now maps to native mutants or explains why none exists.
+// Keep the empty grandfather list explicit so a manifest edit cannot reopen
+// the former native-mapping backlog.
+export const grandfatheredNativeMutantBacklog = Object.freeze([]);
 
 // Which challenges cite each mutant, in manifest order. The mutation reports
 // print it beside every measured mutant.
@@ -646,19 +637,9 @@ function validateBacklog(challenges, ids, { name, listed, present, grandfathered
   return backlog.size;
 }
 
-// Challenges that predate the reproducer requirement. The backlog may only
-// shrink: a new challenge must carry a reproducer, and listing it here instead
-// is a reviewed change to this constant, never a manifest edit.
-export const grandfatheredReproducerBacklog = Object.freeze([
-  'local-precise-grid',
-  'core-tracked-fallback-warms-local',
-  'runtime-policy-coalesce-defaults-off',
-  'runtime-policy-physical-ttl-ignores-recovery',
-  'stale-recovery-inclusive-served-maximum',
-  'stale-recovery-candidate-stamped-at-read',
-  'redis-protocol-inclusive-fence',
-  'redis-protocol-untracked-fence',
-]);
+// Every challenge has a deterministic reproducer. The empty grandfather list
+// makes removal of that evidence fail even if the manifest lists a backlog.
+export const grandfatheredReproducerBacklog = Object.freeze([]);
 
 // Compiling semantic faults, checked against independent model obligations.
 // Every scheduled model carries at least one challenge or an explicit waiver.

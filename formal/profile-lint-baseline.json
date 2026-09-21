@@ -14,6 +14,7 @@
     "instances",
     "layer_policy",
     "local_faults",
+    "local_grid",
     "local_storage",
     "markers",
     "metrics",
@@ -250,7 +251,7 @@
       "libraryTransitions": [
         "clock::advanceTicks",
         "instances::construct",
-        "serving::callLocal"
+        "local_grid::call"
       ],
       "compositionViolations": 0
     },

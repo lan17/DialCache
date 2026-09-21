@@ -45,8 +45,8 @@ module dialcache_redis_protocol {
       UnclassifiedMiss
     else if (st.tracked and st.frameTimestamp == 0)
       UnclassifiedMiss
-    else if (st.tracked and st.watermarkReply == BufferReply and
-      st.watermarkState == ValidWatermark and not(fenceAllows(st.frameTimestamp, st.watermarkValue)))
+    else if (st.watermarkReply == BufferReply and st.watermarkState == ValidWatermark and
+      not(readFenceAllows(st.tracked, st.frameTimestamp, st.watermarkValue)))
       WatermarkFenced
     else if (st.encoding == UnsupportedEncoding)
       PayloadEncodingError

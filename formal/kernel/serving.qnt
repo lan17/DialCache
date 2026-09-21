@@ -30,6 +30,7 @@ module serving {
   // when a remote read completes (`authority`), completion apart from the
   // recorded outcome (`complete`, `finish`) and publication apart from
   // completion (`publish`, `settle`). The atomic path composes the same steps.
+  import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import calls.* from "./calls"
@@ -220,7 +221,7 @@ module serving {
     {
       instance: who.instance,
       key: who.key,
-      localMs: if (not(state.tracked and read)) ttls.localMs else 0,
+      localMs: if (sourceMayWarmLocal(state.tracked, read)) ttls.localMs else 0,
       fence: if (refills) fence else NO_FENCE,
       retentionMs: if (refills) Remote::physicalRetention(state, ttls.retentionMs) else 0
     }
@@ -428,14 +429,17 @@ module serving {
   }
   pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): Served[r] =
     releaseJudged(state, layout, layeredRelease(state, layout, policyCall, resolved, ttls), policyCall, ttls)
-  pure def releaseLocal(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LocalServed[r] = {
+  // The local traversal accepts the value observed by its storage clock.
+  // Ordinary profiles use insertion expiry in milliseconds; the fractional
+  // profile supplies the same local value judged from its raw insertion ticks.
+  pure def releaseLocalObserved(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls, observedLocal: int): LocalServed[r] = {
     val held = Gate::entry(state, policyCall)
     val caller = held.caller
     val call = held.call
     val released = Gate::release(state, policyCall)
     val open = participating(released, layout, call)
     val effective = if (open) localOnly(gated(resolved, ttls)) else BYPASS
-    val localValue = if (effective.layers.local) Local::localValue(released, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
+    val localValue = if (effective.layers.local) observedLocal else NO_VALUE
     val decision = decide(released, layout, call, effective, localValue, NO_VALUE)
     val slot = decision.slot
     val attached = Flights::attachCaller(released, caller, ownerOf(decision.outcome), slot)
@@ -448,6 +452,14 @@ module serving {
       | ServesRemote(_) => attached
       | Starts => startLocalSource(attached, layout, caller, call, slot, open, effective, ttls)
     }
+  }
+
+  pure def releaseLocal(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LocalServed[r] = {
+    val call = Gate::entry(state, policyCall).call
+    val localEnabled = participating(state, layout, call) and gated(resolved, ttls).layers.local
+    val observedLocal = if (localEnabled)
+      Local::localValue(state, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
+    releaseLocalObserved(state, layout, policyCall, resolved, ttls, observedLocal)
   }
 
   // The request-only release, judged once for the traversal and for the
@@ -506,6 +518,16 @@ module serving {
   // work interleaves an inline call.
   pure def callLocal(state: LocalServed[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls, value: int): LocalServed[r] = {
     val begun = beginLocal(state, layout, call, resolved, ttls)
+    if (begun.sources.length() > state.sources.length()) settleLocal(begun, layout, Flights::latest(begun), value) else begun
+  }
+
+  // The same inline lifecycle with a value acquired under another local
+  // clock projection. It never uses that value unless local is enabled.
+  pure def callLocalObserved(state: LocalServed[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls, observedLocal: int, value: int): LocalServed[r] = {
+    val admitted = admitLocal(state, layout, call)
+    val begun = if (participating(state, layout, call))
+      releaseLocalObserved(admitted, layout, state.o.policyCalls, resolved, ttls, observedLocal)
+      else admitted
     if (begun.sources.length() > state.sources.length()) settleLocal(begun, layout, Flights::latest(begun), value) else begun
   }
 

@@ -41,6 +41,7 @@ module recovery {
   // (`remote_io::settleLoad`). A recovered value completes its flight without
   // publication.
   import cache_rules.* from "../cache-rules"
+  import cache_contract as Contract from "../cache-contract"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import layer_policy.* from "./layer-policy"
@@ -83,7 +84,7 @@ module recovery {
       { retained: state.retained.append({
         flight: flight,
         candidate: if (stale and Payloads::valueOf(code) > NO_VALUE) code else NO_VALUE,
-        created: created,
+        created: Contract::retainedFrameStamp(created, Clock::wallOf(state)),
         maximum: ttls.retentionMs,
         classifier: classifier
       }), ...state }
@@ -94,7 +95,7 @@ module recovery {
   pure def mayRecover(snapshot: Snapshot, timeout: bool): bool =
     snapshot.classifier == ALLOW or (snapshot.classifier == TIMEOUT_ONLY and timeout)
   pure def validCandidate(state: Recovering[r], snapshot: Snapshot): bool =
-    snapshot.candidate > NO_VALUE and recoveryAgeAllowed(snapshot.created, Clock::wallOf(state), snapshot.maximum)
+    snapshot.candidate > NO_VALUE and retainedCandidateAgeAllowed(snapshot.created, Clock::wallOf(state), snapshot.maximum)
   // The classification counted.
   pure def classified(state: Recovering[r], snapshot: Snapshot): Recovering[r] =
     { o: { classifications: state.o.classifications + (if (classifies(snapshot)) 1 else 0), ...state.o }, ...state }

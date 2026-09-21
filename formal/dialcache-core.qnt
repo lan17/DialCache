@@ -1,4 +1,5 @@
 module dialcache_core {
+  import cache_rules.* from "./cache-rules"
   // One-key behavioral model for caller-visible traversal and publication.
   // A single record state keeps every nondeterministic transition on the same
   // Quint update effect, while preserving the protocol-level distinctions.
@@ -353,9 +354,9 @@ module dialcache_core {
     s.remoteReadFailed,
     s' = {
       origin: SourceValue,
-      localWriteFailures: if (localWriteFails and not(s.callTracked)) s.localWriteFailures + 1 else s.localWriteFailures,
-      localHasValue: if (localWriteEligible and not(s.callTracked)) true else s.localHasValue,
-      localWrites: if (localWriteEligible and not(s.callTracked)) s.localWrites + 1 else s.localWrites,
+      localWriteFailures: if (localWriteFails and sourceMayWarmLocal(s.callTracked, true)) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (localWriteEligible and sourceMayWarmLocal(s.callTracked, true)) true else s.localHasValue,
+      localWrites: if (localWriteEligible and sourceMayWarmLocal(s.callTracked, true)) s.localWrites + 1 else s.localWrites,
       requestHasValue: if (requestMemoEligible) true else s.requestHasValue,
       requestWrites: if (requestMemoEligible) s.requestWrites + 1 else s.requestWrites,
       requestValueScope: if (requestMemoEligible) s.callScopeId else s.requestValueScope,
@@ -396,9 +397,9 @@ module dialcache_core {
     s' = {
       remoteWrites: s.remoteWrites + 1,
       remoteHasValue: true,
-      localWriteFailures: if (localWriteFails and not(s.callTracked)) s.localWriteFailures + 1 else s.localWriteFailures,
-      localHasValue: if (localWriteEligible and not(s.callTracked)) true else s.localHasValue,
-      localWrites: if (localWriteEligible and not(s.callTracked)) s.localWrites + 1 else s.localWrites,
+      localWriteFailures: if (localWriteFails and sourceMayWarmLocal(s.callTracked, true)) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (localWriteEligible and sourceMayWarmLocal(s.callTracked, true)) true else s.localHasValue,
+      localWrites: if (localWriteEligible and sourceMayWarmLocal(s.callTracked, true)) s.localWrites + 1 else s.localWrites,
       requestHasValue: if (requestMemoEligible) true else s.requestHasValue,
       requestWrites: if (requestMemoEligible) s.requestWrites + 1 else s.requestWrites,
       requestValueScope: if (requestMemoEligible) s.callScopeId else s.requestValueScope,

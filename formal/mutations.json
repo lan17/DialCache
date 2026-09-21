@@ -1657,7 +1657,7 @@
       "id": "M52",
       "case": "W04.untracked-decoder",
       "description": "Read and apply the entity watermark fence on untracked keys",
-      "rationale": "TypeScript src/internal/redis-cache.ts RedisCache.startRawPayloadRead always requests the watermark key instead of only for tracked keys, and Go go/protocol.go DecodeFrame applies a parsed watermark fence without consulting the tracked flag. The entity watermark fence is therefore read and applied on untracked keys. The TypeScript twin sits at read-request construction because TypeScript splits the decoders and its untracked decoder receives no watermark, while the Go twin sits at the decoder.",
+      "rationale": "TypeScript src/internal/redis-cache.ts RedisCache.startRawPayloadRead and Go go/engine.go execution.rawRead always request the grouped entity watermark, including for untracked keys. Go go/protocol.go DecodeFrame additionally applies an explicitly supplied watermark without consulting tracked, preserving the direct decoder-vector challenge. Both edits express the same wrong behavior at the actual cache-read and direct-codec API boundaries. Correct Go request construction otherwise supplies no watermark and masks the decoder-only fault from shared behavioral histories.",
       "typescript": {
         "edits": [
           {
@@ -1673,6 +1673,11 @@
       },
       "go": {
         "edits": [
+          {
+            "path": "go/engine.go",
+            "before": "raw := startPending(func() (ReadResult, error) { return x.cache.settings.remote.Read(ctx, x.remoteKey, x.watermark) })",
+            "after": "watermark := \"{\" + escape(x.op.Identity.Namespace) + \":\" + escape(x.op.Identity.KeyType) + \":\" + escape(x.op.Identity.ID) + \"}#watermark\"\n\traw := startPending(func() (ReadResult, error) { return x.cache.settings.remote.Read(ctx, x.remoteKey, watermark) })"
+          },
           {
             "path": "go/protocol.go",
             "before": "if tracked && fence != nil && stamp <= *fence {",

@@ -804,7 +804,36 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M19",
-        "text": "M19 is the native twin of cache-rules.qnt localEntryLiveOnGrid being replaced by a comparison on raw ticks, as measured by dialcache-rule-checks.qnt localGridUsesWholeMilliseconds: both ports compute local insertion and expiry on the precise clock instead of the whole-millisecond grid. The feature-profile driver clocks are integer, so only the local-clock profile observes it; local-clock/fractionalInsertionExpiresAtWholeMillisecondTest step 7 detects both ports."
+        "text": "M19 replaces whole-millisecond local insertion/expiry with precise time in both ports. The unchanged raw-tick-difference fault now reaches the local-clock lifecycle, which retains raw insertion ticks and judges lookup through localEntryLiveOnGrid. The original localGridUsesWholeMilliseconds property remains independent."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "fractionalInsertionExpiresAtWholeMillisecondTest",
+        "model": "formal/dialcache-local-clock-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO) and s.o.loaders == 2",
+        "family": "raw-versus-gridded-local-age",
+        "profiles": [
+          "formal/dialcache-rule-checks.qnt",
+          "local-clock"
+        ],
+        "exclusions": {
+          "core": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "effects": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "recovery": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "policy": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "shadow": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "scope": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "admission": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "layers": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "independent": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "recovery-read": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "local-failure": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "runtime-boundaries": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "shadow-layers": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "source-budgets": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "dark-layers": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes fractional local insertion and lookup expiry in this bounded read-deadline profile; the imported rule alone does not establish detection."
+        }
       }
     },
     {
@@ -991,8 +1020,8 @@
       "source": "formal/kernel/recovery.qnt",
       "model": "formal/dialcache-recovery-read-connection.qnt",
       "invariant": "retainedSnapshotMatchesAcquisition",
-      "before": "created: created,",
-      "after": "created: created + 1,",
+      "before": "created: Contract::retainedFrameStamp(created, Clock::wallOf(state)),",
+      "after": "created: Contract::retainedFrameStamp(created, Clock::wallOf(state)) + 1,",
       "reproducer": {
         "kind": "exported-regression",
         "run": "compressedRecoveryRechecksMaximumAfterDecodeTest",
@@ -1500,71 +1529,244 @@
     {
       "id": "core-tracked-fallback-warms-local",
       "contract": "C31",
-      "source": "formal/dialcache-core.qnt",
+      "source": "formal/cache-rules.qnt",
       "model": "formal/dialcache-core.qnt",
       "invariant": "trackedRemoteFallbackSuppressesLocalPublication",
-      "before": "      remoteHasValue: true,\n      localWriteFailures: if (localWriteFails and not(s.callTracked)) s.localWriteFailures + 1 else s.localWriteFailures,\n      localHasValue: if (localWriteEligible and not(s.callTracked)) true else s.localHasValue,\n      localWrites: if (localWriteEligible and not(s.callTracked)) s.localWrites + 1 else s.localWrites,",
-      "after": "      remoteHasValue: true,\n      localWriteFailures: if (localWriteFails) s.localWriteFailures + 1 else s.localWriteFailures,\n      localHasValue: if (localWriteEligible) true else s.localHasValue,\n      localWrites: if (localWriteEligible) s.localWrites + 1 else s.localWrites,",
+      "before": "pure def sourceMayWarmLocal(tracked: bool, readRemote: bool): bool =\n    not(tracked and readRemote)",
+      "after": "pure def sourceMayWarmLocal(tracked: bool, readRemote: bool): bool =\n    true",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M10",
-        "text": "M10 is exactly dialcache-core.qnt finishRemotePublication removing the not-tracked condition from its local write conjuncts: both ports publish an unvalidated tracked source value directly into local storage. layers/trackedSourceWaitsForValidatedReadToWarmLocalTest and recovery-read/trackedSourceNeedsRemoteValidationBeforeLocalReuseTest already detect it in both ports."
+        "text": "M10 allows a tracked source refill to warm local storage before a validating remote read. sourceMayWarmLocal is the original core publication condition shared with kernel authority; the original trackedRemoteFallbackSuppressesLocalPublication property stays independent. The second public read distinguishes reuse through local versus validated Redis.",
+        "evidence": {
+          "history": "layers/trackedRefillIsReadAgainBeforeLocalReuseTest",
+          "step": 3,
+          "fields": [
+            "o.reads"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "trackedRefillIsReadAgainBeforeLocalReuseTest",
+        "model": "formal/dialcache-layers-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.reads == 2 and s.o.loaders == 1",
+        "family": "tracked-source-publication-authority",
+        "profiles": [
+          "formal/dialcache-core.qnt",
+          "layers",
+          "recovery-read"
+        ],
+        "exclusions": {
+          "core": "This standalone profile does not import the shared source publication judgment.",
+          "effects": "The local layer is disabled and has zero capacity, so no source can warm local storage.",
+          "recovery": "The local layer is disabled and has zero capacity, so no source can warm local storage.",
+          "policy": "All calls are untracked, for which the correct and faulty source publication judgments both permit local writes.",
+          "shadow": "The local layer is disabled and has zero capacity, so no source can warm local storage.",
+          "scope": "The request-only projection has no remote read or local storage.",
+          "admission": "The local layer is disabled and has zero capacity, so no source can warm local storage.",
+          "independent": "The local layer is disabled and has zero capacity, so no source can warm local storage.",
+          "local-failure": "All calls are untracked, for which the correct and faulty source publication judgments both permit local writes.",
+          "runtime-boundaries": "All calls are untracked, for which the correct and faulty source publication judgments both permit local writes.",
+          "local-clock": "The local projection has no remote read, so no tracked remote miss can withhold local publication.",
+          "source-budgets": "The local projection has no remote read, so no tracked remote miss can withhold local publication.",
+          "dark-layers": "Foreground remote serving is always off, so source local publication is permitted by both judgments.",
+          "shadow-layers": "Dark sources may publish locally because remote serving is off. Its scheduled histories and properties do not detect the changed foreground tracked publication authority; layers and recovery-read supply that boundary.",
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes direct local publication after a tracked source refill in this bounded read-deadline profile; the imported rule alone does not establish detection."
+        }
       }
     },
     {
       "id": "runtime-policy-coalesce-defaults-off",
       "contract": "C17",
-      "source": "formal/dialcache-runtime-policy.qnt",
+      "source": "formal/cache-rules.qnt",
       "model": "formal/dialcache-runtime-policy.qnt",
       "invariant": "featureLibraryDefaults",
-      "before": "coalesce: inherit(runtime.coalesce, baseline.coalesce, 1),",
-      "after": "coalesce: inherit(runtime.coalesce, baseline.coalesce, 0),",
+      "before": "pure val libraryCoalescingDefault = true",
+      "after": "pure val libraryCoalescingDefault = false",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M28",
-        "text": "M28 is the native twin of dialcache-runtime-policy.qnt resolve changing the coalesce library default from on to off: both ports treat an omitted static coalesce leaf as no sharing while an explicit true still shares. runtime-boundaries/omittedRampAndSharingUseLibraryDefaultsTest and source-budgets/lateFollowerUsesLeadersRemainingBudgetTest are the expected evidence in both ports."
+        "text": "M28 treats an omitted static coalesce leaf as false. The verifier resolver and runtime fixture default normalization both consume libraryCoalescingDefault; featureLibraryDefaults still independently requires the true default. The public history observes both callers joined to the same source.",
+        "evidence": {
+          "history": "runtime-boundaries/omittedRampAndSharingUseLibraryDefaultsTest",
+          "step": 7,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "omittedRampAndSharingUseLibraryDefaultsTest",
+        "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.loaders == 1\n      and s.o.reads == 2 and s.o.loads == 1 and s.o.writeTtls == List(TTL_MS)\n      and s.o.shadow == List() and s.o.recovery == List()",
+        "family": "omitted-sharing-default",
+        "profiles": [
+          "formal/dialcache-runtime-policy.qnt",
+          "runtime-boundaries"
+        ],
+        "exclusions": {
+          "core": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "effects": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "recovery": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "policy": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "shadow": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "scope": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "admission": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "layers": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "independent": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "recovery-read": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "local-failure": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "shadow-layers": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "local-clock": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "source-budgets": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "dark-layers": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes the inherited library coalescing default in this bounded read-deadline profile; the imported rule alone does not establish detection."
+        }
       }
     },
     {
       "id": "runtime-policy-physical-ttl-ignores-recovery",
       "contract": "C22",
-      "source": "formal/dialcache-runtime-policy.qnt",
+      "source": "formal/cache-rules.qnt",
       "model": "formal/dialcache-runtime-policy.qnt",
       "invariant": "existingRemoteEntryKeepsPhysicalTtl",
-      "before": "      remotePhysicalTtlAtInsert:\n        if (s.snapshot.recoveryAge > s.snapshot.remoteTtl) s.snapshot.recoveryAge\n        else s.snapshot.remoteTtl,",
-      "after": "      remotePhysicalTtlAtInsert: s.snapshot.remoteTtl,",
+      "before": "pure def remoteRetentionFor(fresh: int, recovery: int): int =\n    if (recovery > fresh) recovery else fresh",
+      "after": "pure def remoteRetentionFor(fresh: int, recovery: int): int =\n    fresh",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M32",
-        "text": "M32 is the native twin of dialcache-runtime-policy.qnt insertRemoteEntry setting the physical TTL to the fresh TTL instead of the larger of recovery age and fresh TTL: both ports write every remote frame with the fresh TTL, ignoring stale-on-error retention. policy/eachSourceKeepsPublicationPolicyTest and every recovery-profile write are the evidence, since the drivers compare writeTtls on each step."
+        "text": "M32 retains remote frames only for freshness, discarding a larger recovery maximum. remoteRetentionFor is shared by verifier insertion and the portable policy resolver; existingRemoteEntryKeepsPhysicalTtl still independently compares the captured policy. The public history observes the actual per-source write TTLs.",
+        "evidence": {
+          "history": "policy/eachSourceKeepsPublicationPolicyTest",
+          "step": 7,
+          "fields": [
+            "o.writeTtls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "eachSourceKeepsPublicationPolicyTest",
+        "model": "formal/dialcache-policy-conformance.qnt",
+        "failure": "s.o.writeTtls == List(FOUR_SECONDS_MS, DEFAULT_RETENTION_MS) and s.remoteValues == List(1, 0)",
+        "family": "captured-physical-retention",
+        "profiles": [
+          "formal/dialcache-runtime-policy.qnt",
+          "policy"
+        ],
+        "exclusions": {
+          "core": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "effects": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "recovery": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "shadow": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "scope": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "admission": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "layers": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "independent": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "recovery-read": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "local-failure": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "runtime-boundaries": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "shadow-layers": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "local-clock": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "source-budgets": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "dark-layers": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes physical retention beyond the fresh lifetime for recovery in this bounded read-deadline profile; the imported rule alone does not establish detection."
+        }
       }
     },
     {
       "id": "stale-recovery-inclusive-served-maximum",
       "contract": "C45",
-      "source": "formal/dialcache-stale-recovery.qnt",
+      "source": "formal/cache-rules.qnt",
       "model": "formal/dialcache-stale-recovery.qnt",
       "invariant": "servedStaleIsStrictlyWithinMaxAge",
-      "before": "recoveryAgeAllowed(s.candidateCreatedAt, s.now, MAX_RECOVERY_AGE)",
-      "after": "recoveryAgeAllowed(s.candidateCreatedAt, s.now, MAX_RECOVERY_AGE + 1)",
+      "before": "pure def retainedCandidateAgeAllowed(created: int, observed: int, maximum: int): bool =\n    recoveryAgeAllowed(created, observed, maximum)",
+      "after": "pure def retainedCandidateAgeAllowed(created: int, observed: int, maximum: int): bool =\n    recoveryAgeAllowed(created, observed, maximum + 1)",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M01",
-        "text": "M01 makes the post-decode serving maximum inclusive in both ports, the boundary dialcache-stale-recovery.qnt candidateWithinRecoveryAge widens by one to gate the serve-stale transitions. recovery/maximumAgeAfterDecodePreservesSourceTest and witness recovery:exact-maximum-after-decode-rejects already detect it in both ports."
+        "text": "M01 serves a retained candidate at its exclusive maximum. The original verifier call-site judgment now lives in retainedCandidateAgeAllowed, also used at kernel recovery failure/decode settlement. servedStaleIsStrictlyWithinMaxAge remains independent; both ports must reject the same decoded candidate at equality."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "maximumAgeAfterDecodeFromStrictlyStaleFrameTest",
+        "model": "formal/dialcache-recovery-conformance.qnt",
+        "failure": "s.o.calls == List(SOURCE_ERROR) and s.o.loads == 1 and s.o.recovery == List(\"miss\") and s.d.ages == List() and s.o.writes == 0",
+        "family": "retained-recovery-maximum",
+        "profiles": [
+          "formal/dialcache-stale-recovery.qnt",
+          "recovery",
+          "recovery-read",
+          "independent"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated retained-candidate judgment is never executed; its own snapshot capture is stated in its own text.",
+          "effects": "Classifier NONE: no snapshot is retained, so the mutated retained-candidate judgment is never executed.",
+          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
+          "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
+          "admission": "Passes Recovery::NONE at every read settlement, so no snapshot is retained and no recovery decode is held; the mutated text is never executed.",
+          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "local-failure": "Composes the layered traversal without the recovery module (no stale-on-error snapshot is retained), so the mutated retained-candidate judgment is never executed.",
+          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "shadow-layers": "Composes recovery on the atomic path, but its guard excludes every stale candidate, so no snapshot holds a candidate and neither its stamp nor its maximum is ever consulted.",
+          "local-clock": "Composes the local projection without the recovery module, so the mutated retained-candidate judgment is never executed.",
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
+          "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot.",
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes serving a retained recovery candidate at maximum-age equality in this bounded read-deadline profile; the imported rule alone does not establish detection."
+        }
       }
     },
     {
       "id": "stale-recovery-candidate-stamped-at-read",
       "contract": "C44",
-      "source": "formal/dialcache-stale-recovery.qnt",
+      "source": "formal/cache-contract.qnt",
       "model": "formal/dialcache-stale-recovery.qnt",
       "invariant": "retainedCandidateWasEligible",
-      "before": "candidateCreatedAt: if (candidateAtInitialRead) s.frameCreatedAt else s.candidateCreatedAt,",
-      "after": "candidateCreatedAt: if (candidateAtInitialRead) s.now else s.candidateCreatedAt,",
+      "before": "pure def retainedFrameStamp(frameCreated: int, readAt: int): int = frameCreated",
+      "after": "pure def retainedFrameStamp(frameCreated: int, readAt: int): int = readAt",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M44",
-        "text": "M44 is the native twin of dialcache-stale-recovery.qnt performInitialRead stamping the candidate with the read time instead of the frame's creation: both ports retain the stale candidate with its timestamp replaced by the wall clock at read time. M43 shares the anchor with a different wrong behavior and stays distinct; recovery/maximumAgeAfterDecodePreservesSourceTest, recovery-read/compressedRecoveryRechecksMaximumAfterDecodeTest and witness recovery:expired-during-decode are the evidence."
+        "text": "M44 replaces the retained frame creation stamp with its acquisition clock. retainedFrameStamp is shared by the original verifier transition and kernel retention. The original retainedCandidateWasEligible property keeps the independent read receipt; the public decode history distinguishes an expired candidate from a restamped one.",
+        "evidence": {
+          "history": "recovery-read/compressedRecoveryRechecksMaximumAfterDecodeTest",
+          "step": 6,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "compressedRecoveryRechecksMaximumAfterDecodeTest",
+        "model": "formal/dialcache-recovery-read-conformance.qnt",
+        "failure": "s.o.calls == List(SOURCE_ERROR) and s.io.sourceErrors == List(1)\n      and s.o.recovery == List(\"miss\") and s.o.dumps == 0 and s.o.writes == 0",
+        "family": "retained-frame-stamp",
+        "profiles": [
+          "formal/dialcache-stale-recovery.qnt",
+          "recovery-read",
+          "recovery",
+          "independent"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated retained-candidate judgment is never executed; its own snapshot capture is stated in its own text.",
+          "effects": "Classifier NONE: no snapshot is retained, so the mutated retained-candidate judgment is never executed.",
+          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "shadow": "Composes remote_io with Recovery::NONE and no caller read: no snapshot is ever retained and no recovery decode is held.",
+          "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
+          "admission": "Passes Recovery::NONE at every read settlement, so no snapshot is retained and no recovery decode is held; the mutated text is never executed.",
+          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "local-failure": "Composes the layered traversal without the recovery module (no stale-on-error snapshot is retained), so the mutated retained-candidate judgment is never executed.",
+          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "shadow-layers": "Composes recovery on the atomic path, but its guard excludes every stale candidate, so no snapshot holds a candidate and neither its stamp nor its maximum is ever consulted.",
+          "local-clock": "Composes the local projection without the recovery module, so the mutated retained-candidate judgment is never executed.",
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
+          "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot.",
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes preserving the original frame timestamp in a retained recovery candidate in this bounded read-deadline profile; the imported rule alone does not establish detection."
+        }
       }
     },
     {
@@ -1653,29 +1855,111 @@
     {
       "id": "redis-protocol-inclusive-fence",
       "contract": "C33",
-      "source": "formal/dialcache-redis-protocol.qnt",
+      "source": "formal/cache-rules.qnt",
       "model": "formal/dialcache-redis-protocol.qnt",
       "invariant": "fenceCanPrecedeEncodingError",
-      "before": "st.watermarkState == ValidWatermark and not(fenceAllows(st.frameTimestamp, st.watermarkValue)))",
-      "after": "st.watermarkState == ValidWatermark and st.frameTimestamp < st.watermarkValue)",
+      "before": "pure def readFenceAllows(tracked: bool, created: int, watermark: int): bool =\n    not(tracked) or fenceAllows(created, watermark)",
+      "after": "pure def readFenceAllows(tracked: bool, created: int, watermark: int): bool =\n    not(tracked) or created >= watermark",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M06",
-        "text": "M06 makes the tracked decode fence inclusive in both ports, the exact site of dialcache-redis-protocol.qnt classify inlining a strict timestamp-below-watermark test in place of not fenceAllows in its WatermarkFenced branch. The generated tracked decode vectors and the redis-protocol fence-before-encoding-error ordering vectors already detect it in both ports."
+        "text": "M06 admits a frame at the tracked watermark in both codecs. The verifier classifier, generated frame decoder and behavioral remote reads consume the same readFenceAllows judgment; fenceCanPrecedeEncodingError remains independently stated in the original verifier. The exact native row matches the cited frame model run.",
+        "evidence": {
+          "vector": {
+            "artifact": "formal/quint-frame-vectors.json",
+            "group": "trackedDecodeVectors",
+            "rows": {
+              "typescript": "Quint frame 546 decode",
+              "go": "Quint frame 546 decode"
+            },
+            "fields": [
+              "kind",
+              "reason"
+            ],
+            "relation": "The named run executes requestFor(546), the exact generated tracked frame row: createdAtMs and watermark are both one. Its miss classification must precede serving the frame."
+          }
+        }
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "frameAtWatermarkIsDeclinedTest",
+        "failure": "result.kind == \"miss\" and result.reason == \"watermark_fenced\" and result.fence == 1",
+        "family": "shared-tracked-read-fence",
+        "profiles": [
+          "formal/dialcache-redis-protocol.qnt",
+          "formal/dialcache-frame-vectors.qnt",
+          "layers",
+          "independent",
+          "dark-layers",
+          "recovery-read"
+        ],
+        "exclusions": {
+          "core": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "effects": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "recovery": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "policy": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "shadow": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "scope": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "admission": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "local-failure": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "runtime-boundaries": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "shadow-layers": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "local-clock": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "source-budgets": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes tracked read acceptance at watermark equality in this bounded read-deadline profile; the imported rule alone does not establish detection."
+        },
+        "scope": "A deterministic protocol transform exports language-neutral vector inputs rather than an asynchronous driver history. Exact generated rows have their own native input/output recording and clean baseline in both ports. The named run executes requestFor(546), the exact generated tracked frame row: createdAtMs and watermark are both one. Its miss classification must precede serving the frame.",
+        "model": "formal/dialcache-frame-vectors.qnt"
       }
     },
     {
       "id": "redis-protocol-untracked-fence",
       "contract": "W04",
-      "source": "formal/dialcache-redis-protocol.qnt",
+      "source": "formal/cache-rules.qnt",
       "model": "formal/dialcache-redis-protocol.qnt",
       "invariant": "untrackedDecodingIgnoresWatermarks",
-      "before": "    else if (st.tracked and st.watermarkReply == BufferReply and\n      st.watermarkState == ValidWatermark",
-      "after": "    else if (st.watermarkReply == BufferReply and\n      st.watermarkState == ValidWatermark",
+      "before": "pure def readFenceAllows(tracked: bool, created: int, watermark: int): bool =\n    not(tracked) or fenceAllows(created, watermark)",
+      "after": "pure def readFenceAllows(tracked: bool, created: int, watermark: int): bool =\n    fenceAllows(created, watermark)",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M52",
-        "text": "M52 is the native twin of dialcache-redis-protocol.qnt classify dropping the tracked condition from its WatermarkFenced branch: both ports read and apply the entity watermark fence on untracked keys, the TypeScript twin one step earlier at read-request construction because its untracked decoder receives no watermark. Go TestProtocolDecoders untracked vectors (345 and its siblings) and the TypeScript witness layers:untracked-ignores-watermark plus layers replays are the expected evidence."
+        "text": "M52 applies entity watermarks to untracked reads at read-request construction in both ports. The original verifier classifier and behavioral remote read share readFenceAllows; untrackedDecodingIgnoresWatermarks remains independent. The public history returns both untracked values after grouped invalidation.",
+        "evidence": {
+          "history": "layers/untrackedReadsIgnoreGroupedInvalidationTest",
+          "step": 6,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "untrackedReadsIgnoreGroupedInvalidationTest",
+        "model": "formal/dialcache-layers-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.loaders == 0\n      and s.o.reads == 2 and s.o.loads == 2 and s.o.invalidations == 1",
+        "family": "untracked-read-ignores-fence",
+        "profiles": [
+          "formal/dialcache-redis-protocol.qnt",
+          "layers",
+          "local-failure"
+        ],
+        "exclusions": {
+          "core": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "effects": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "recovery": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "policy": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "shadow": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "scope": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "admission": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "independent": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "recovery-read": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "runtime-boundaries": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "shadow-layers": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "local-clock": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "source-budgets": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "dark-layers": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes ignoring a grouped watermark on an untracked read in this bounded read-deadline profile; the imported rule alone does not establish detection."
+        }
       }
     },
     {
@@ -1684,7 +1968,7 @@
       "source": "formal/dialcache-frame-vectors.qnt",
       "model": "formal/dialcache-frame-vectors.qnt",
       "invariant": "trackedHitsStrictlyClearValidFence",
-      "before": "else if (request.tracked and fence >= 0 and not(fenceAllows(timestamp, fence)))",
+      "before": "else if (request.tracked and fence >= 0 and not(readFenceAllows(request.tracked, timestamp, fence)))",
       "after": "else if (request.tracked and fence >= 0 and timestamp < fence)",
       "nativeMutants": {
         "kind": "mapped",
@@ -2871,11 +3155,11 @@
     {
       "id": "local-clock-precise-ttl",
       "contract": "C09",
-      "source": "formal/kernel/clock.qnt",
+      "source": "formal/cache-rules.qnt",
       "model": "formal/dialcache-local-clock-conformance.qnt",
       "invariant": "clockIsOnTheGrid",
-      "before": "    { ticks: state.ticks + ticks, now: wholeMs(state.ticks + ticks, ticksPerMs), ...state }",
-      "after": "    { ticks: state.ticks + ticks, now: wholeMs(state.ticks + ticks + ticksPerMs / 2, ticksPerMs), ...state }",
+      "before": "pure def wholeMs(ticks: int, ticksPerMs: int): int = ticks / ticksPerMs",
+      "after": "pure def wholeMs(ticks: int, ticksPerMs: int): int = (ticks + ticksPerMs / 2) / ticksPerMs",
       "reproducer": {
         "kind": "exported-regression",
         "run": "fractionalInsertionExpiresAtWholeMillisecondTest",
@@ -2906,7 +3190,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M19",
-        "text": "Same native fault as local-precise-grid: M19 replaces the whole-millisecond grid with the precise clock for local insertion and expiry in both ports, which is kernel/clock.qnt advanceTicks leaving the floor grid (a fill at 0.7 ms lands on grid instant 1, expiring at 1001 ms). The feature-profile driver clocks are integer, so only local-clock observes it."
+        "text": "M19 replaces the whole-millisecond local clock with precise time. This challenge retains its shifted-grid approximation: wholeMs rounds after adding half a millisecond, so a fill at 0.7 ms expires at 1001 ms. Clock.advanceTicks and raw-insertion lookup now share that projection; clockIsOnTheGrid remains independent and the original public history still detects the changed expiration."
       }
     },
     {
@@ -3747,15 +4031,6 @@
       }
     }
   ],
-  "reproducerBacklog": [
-    "local-precise-grid",
-    "core-tracked-fallback-warms-local",
-    "runtime-policy-coalesce-defaults-off",
-    "runtime-policy-physical-ttl-ignores-recovery",
-    "stale-recovery-inclusive-served-maximum",
-    "stale-recovery-candidate-stamped-at-read",
-    "redis-protocol-inclusive-fence",
-    "redis-protocol-untracked-fence"
-  ],
+  "reproducerBacklog": [],
   "nativeMutantBacklog": []
 }

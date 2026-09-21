@@ -299,6 +299,14 @@ module dialcache_layers_conformance {
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 2)
+  // The second caller must validate the tracked refill through Redis before
+  // its value is eligible for this process's local cache.
+  run trackedRefillIsReadAgainBeforeLocalReuseTest = trackedFixture
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.reads == 2 and s.o.loaders == 1)
+
   run trackedSourceWaitsForValidatedReadToWarmLocalTest = trackedFixture
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(finishSource(0, VALUE_ONE))

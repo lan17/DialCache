@@ -518,7 +518,9 @@ module dialcache_recovery_read_conformance {
   // The write's equal timestamp is fenced for a subsequent independent read.
   run laterInvalidationDoesNotRewriteObservedMissFenceTest = initialized(TRACKED_MODE)
     .then(beginIn(0)).then(releaseRead).then(invalidate).then(resolveLoader)
-    .then(beginIn(1)).then(releaseRead).then(rejectLoader)
+    .then(beginIn(1)).then(releaseRead)
+    .expect(s.o.loads == 0 and s.o.loaders == 2)
+    .then(rejectLoader)
     .expect(s.o.calls == List(VALUE_TWO, SOURCE_ERROR) and s.io.sourceErrors == List(0, 2)
       and s.o.dumps == 1 and s.o.writes == 1 and s.o.loads == 0 and s.o.reads == 2
       and s.o.recovery == List("miss"))

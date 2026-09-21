@@ -1,4 +1,5 @@
 module dialcache_runtime_boundaries_conformance {
+  import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
   import payloads as Payloads from "./kernel/payloads"
   import cohort_boundaries.* from "./cohort-boundaries"
@@ -95,7 +96,7 @@ module dialcache_runtime_boundaries_conformance {
     request: layerOf(fixture) == REQUEST_LAYER,
     local: (layerOf(fixture) == LOCAL_LAYER and configured(fixture)) or fixture == ALL_FEATURES_FIXTURE,
     remote: (layerOf(fixture) == REMOTE_LAYER and configured(fixture)) or fixture == ALL_FEATURES_FIXTURE,
-    coalesce: fixture >= DEFAULT_SHARING_FIXTURE_OFFSET,
+    coalesce: fixture >= DEFAULT_SHARING_FIXTURE_OFFSET and libraryCoalescingDefault,
     disabled: fixture == DISABLED_BASELINE_FIXTURE
   }
   val allFeatures = s.baseline.request and s.baseline.local
