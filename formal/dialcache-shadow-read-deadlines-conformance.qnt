@@ -144,7 +144,9 @@ module dialcache_shadow_read_deadlines_conformance {
     .then(readAt(0)).then(beginAt(1))
     .expect(s.o.reads == 2 and s.o.loaders == 3 and s.o.loads == 0 and s.o.dumps == 0 and s.o.shadow == List("redis_error", "dropped"))
 
-  run c1ReadDeadlineKeepsRawCapacityTest = init.then(seedAt(0)).then(beginAt(0)).then(readAt(0)).then(resolveWith(2)).then(loadAt(0)).then(advanceBy(5))
+  run c1ReadDeadlineKeepsRawCapacityTest = init.then(seedAt(0)).then(beginAt(0)).then(readAt(0))
+    .expect(s.o.calls == List(CALL_PENDING) and s.o.shadow == List() and s.o.loads == 0 and s.o.dumps == 0)
+    .then(resolveWith(2)).then(loadAt(0)).then(advanceBy(5))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List("confirmation_error") and s.io.aborted == List(1))
     .then(beginAt(1))
     .expect(s.o.reads == 2 and s.o.shadow == List("confirmation_error", "dropped"))
@@ -162,7 +164,9 @@ module dialcache_shadow_read_deadlines_conformance {
     .then(readAt(0)).then(beginAt(1))
     .expect(s.o.reads == 2 and s.o.loaders == 3 and s.o.shadow == List("timeout", "dropped"))
 
-  run confirmationKeepsCapturedReadBudgetTest = init.then(seedAt(0)).then(beginAt(0)).then(readAt(0)).then(policyWith(20))
+  run confirmationKeepsCapturedReadBudgetTest = init.then(seedAt(0)).then(beginAt(0)).then(readAt(0))
+    .expect(s.o.calls == List(CALL_PENDING) and s.o.shadow == List() and s.o.loads == 0 and s.o.dumps == 0)
+    .then(policyWith(20))
     .then(resolveWith(2)).then(loadAt(0))
     .expect(s.io.budgets == List(5, 5))
     .then(advanceBy(5))
@@ -170,7 +174,9 @@ module dialcache_shadow_read_deadlines_conformance {
     .then(readAt(1)).then(beginAt(1))
     .expect(s.io.budgets == List(5, 5, 20) and s.o.reads == 3)
 
-  run confirmationReadBudgetStartsAtItsOwnDispatchTest = init.then(seedAt(0)).then(beginAt(0)).then(readAt(0)).then(advanceBy(4))
+  run confirmationReadBudgetStartsAtItsOwnDispatchTest = init.then(seedAt(0)).then(beginAt(0)).then(readAt(0))
+    .expect(s.o.calls == List(CALL_PENDING) and s.o.shadow == List() and s.o.loads == 0 and s.o.dumps == 0)
+    .then(advanceBy(4))
     .then(resolveWith(2)).then(loadAt(0)).then(advanceBy(4))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List() and s.io.aborted == List())
     .then(advanceBy(1))

@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "60e5be41f3219b22153831af72d0ae96a4723806e9f60c2b988c9504558bcb38",
+      "sha256": "9393c663f9b710fa861490c485af6305e3ed179b9ccd54a52370e7e7ea69fa16",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1035,15 +1035,15 @@
         {"line":51,"title":"Fixture"},
         {"line":63,"title":"Inputs and completion boundaries"},
         {"line":84,"title":"Additional composition profiles"},
-        {"line":137,"title":"Observations"},
-        {"line":149,"title":"Additional fixed-scenario inputs"},
-        {"line":155,"title":"Generated pending-effect profile"},
-        {"line":208,"title":"Generated feature profiles"},
-        {"line":313,"title":"Generated independent-caller profile"},
-        {"line":334,"title":"Generated layer-composition profile"},
-        {"line":368,"title":"Generated request-scope profile"},
-        {"line":391,"title":"Generated served-hit shadow admission profile"},
-        {"line":415,"title":"Port workflow and limits"}
+        {"line":138,"title":"Observations"},
+        {"line":150,"title":"Additional fixed-scenario inputs"},
+        {"line":156,"title":"Generated pending-effect profile"},
+        {"line":209,"title":"Generated feature profiles"},
+        {"line":315,"title":"Generated independent-caller profile"},
+        {"line":336,"title":"Generated layer-composition profile"},
+        {"line":370,"title":"Generated request-scope profile"},
+        {"line":393,"title":"Generated served-hit shadow admission profile"},
+        {"line":417,"title":"Port workflow and limits"}
       ],
       "review": {
         "kind": "contract-guide",
@@ -1288,7 +1288,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "2ef38b578127e8fb825b72d009d3d38f1aad1a7c1766fd84599b8b635a10c431",
+      "sha256": "060a88bbae610ea41f0d927d72e0394cf58e8cf0c07fe6cd54c84eb2e10597dd",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},

@@ -659,7 +659,8 @@
           "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
           "local-failure": "Composes the remote freshness judgment (ageBeforeCeiling), but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets a ceiling (re-measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated (re-measured 2026-09-20 over the composed text).",
-          "runtime-boundaries": "No scheduled history reaches an exact age boundary: every regression passes under the mutant."
+          "runtime-boundaries": "No scheduled history reaches an exact age boundary: every regression passes under the mutant.",
+          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior."
         }
       }
     },
@@ -702,7 +703,8 @@
           "runtime-boundaries": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
           "shadow-layers": "Frames are stamped with the wall clock at write release (remote_writes.dispatch) or seeded at a non-negative age; the skew is 0 and never shifts, so no history observes a future stamp.",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated.",
-          "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated."
+          "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated.",
+          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior."
         }
       }
     },
@@ -834,7 +836,8 @@
           "effects",
           "dark-layers",
           "policy",
-          "recovery-read"
+          "recovery-read",
+          "shadow-read-deadlines"
         ],
         "exclusions": {
           "core": "This profile does not import cache-rules.qnt and has no timed source or read operation.",
@@ -1255,7 +1258,10 @@
           "shadow",
           "independent",
           "shadow-layers",
-          "source-budgets"
+          "source-budgets",
+          "dark-layers",
+          "admission",
+          "shadow-read-deadlines"
         ],
         "exclusions": {
           "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
@@ -1265,9 +1271,7 @@
           "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
           "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
           "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps.",
-          "admission": "Only served-hit shadow jobs are budgeted. The named timeout histories time jobs admitted at elapsed zero, then check retained capacity; the invariants check ownership and lifecycle, not each later job's deadline origin. All eight named runs and all nine scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps.",
-          "dark-layers": "The named source/job timeout history starts both at elapsed zero. The scheduled checks validate deadline ownership, cleanup and failure attribution, without independently comparing registration time with the work's own start. All 18 named runs and all 18 scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
+          "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
         }
       }
     },
@@ -1556,7 +1560,8 @@
         "family": "fill-before-source",
         "profiles": [
           "shadow",
-          "dark-layers"
+          "dark-layers",
+          "shadow-read-deadlines"
         ],
         "exclusions": {
           "core": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
@@ -1572,8 +1577,7 @@
           "runtime-boundaries": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
           "shadow-layers": "Composes the atomic lifecycle: the dark C0 read is made at the release and the job waits in the registry until remote_writes::settle, so the held read settlement the fault mutates is never executed.",
           "local-clock": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
-          "shadow-read-deadlines": "No named history supplies a detecting assertion: 3 histories are disabled by the mutation before their expected result, and the others pass. The scheduled 2000 x 40 invariant check passes; these disabled histories are not credited as detection."
+          "source-budgets": "Does not compose the shadow module, so the mutated C0 read settlement is never executed."
         }
       }
     },
@@ -1747,7 +1751,8 @@
           "local-failure": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
           "local-clock": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
           "source-budgets": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
-          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison."
+          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "shadow-read-deadlines": "Does not import formal/cohort-boundaries.qnt; the fault is outside this profile executable closure."
         }
       }
     },
@@ -2514,7 +2519,8 @@
           "shadow-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
           "local-clock": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
           "source-budgets": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison."
+          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "shadow-read-deadlines": "Does not import formal/kernel/runtime-policy.qnt; the fault is outside this profile executable closure."
         }
       }
     },
@@ -2561,7 +2567,8 @@
           "shadow-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
           "local-clock": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
           "source-budgets": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
-          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison."
+          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "shadow-read-deadlines": "Does not import formal/kernel/runtime-policy.qnt; the fault is outside this profile executable closure."
         }
       }
     },
@@ -2824,7 +2831,8 @@
           "scope": "Only request flights are registered; processFlights stays empty, so removing process-flight cleanup changes no state.",
           "shadow": "This single-execution projection cannot admit a second source after its one source/job lifetime; its scheduled properties do not observe the settled process registry.",
           "independent": "Every caller has coalesce false and registers no process flight, so processFlights remains empty.",
-          "shadow-layers": "Coalescing is disabled for its independent-source fixture, so no process flight is registered."
+          "shadow-layers": "Coalescing is disabled for its independent-source fixture, so no process flight is registered.",
+          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior."
         }
       }
     },
@@ -3195,7 +3203,8 @@
           "shadow-layers",
           "source-budgets",
           "dark-layers",
-          "admission"
+          "admission",
+          "shadow-read-deadlines"
         ],
         "exclusions": {
           "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
@@ -3244,7 +3253,8 @@
           "shadow-layers",
           "source-budgets",
           "dark-layers",
-          "admission"
+          "admission",
+          "shadow-read-deadlines"
         ],
         "exclusions": {
           "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
@@ -3330,7 +3340,8 @@
           "shadow-layers": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
           "local-clock": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
           "source-budgets": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
-          "dark-layers": "Does not import metrics; the changed frame-reply miss classification is outside this profile."
+          "dark-layers": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "shadow-read-deadlines": "Does not import formal/kernel/metrics.qnt; the fault is outside this profile executable closure."
         }
       },
       "nativeMutants": {
@@ -3377,7 +3388,8 @@
           "runtime-boundaries": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "shadow-layers": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "local-clock": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
-          "source-budgets": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories."
+          "source-budgets": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "shadow-read-deadlines": "Measured with all six exported read-deadline histories and all six scheduled invariants at 2000 x 40: all pass. The profile imports flights but never calls recordInspectionAdmission or inspectProcess, so this inspection-only fault has no executed path."
         }
       },
       "nativeMutants": {
@@ -3424,7 +3436,8 @@
           "runtime-boundaries": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "shadow-layers": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "local-clock": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
-          "source-budgets": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories."
+          "source-budgets": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "shadow-read-deadlines": "Measured with all six exported read-deadline histories and all six scheduled invariants at 2000 x 40: all pass. The profile imports flights but never calls recordInspectionAdmission or inspectProcess, so this inspection-only fault has no executed path."
         }
       },
       "nativeMutants": {

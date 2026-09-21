@@ -12,7 +12,7 @@
     "formal/conformance-observations.qnt": "76e26fb0c5802a13c63f0819071b5326b1586cab187c73d8b204ec7da70f5c2f",
     "formal/dialcache-admission-conformance.qnt": "6d2559203dfc49d014c4cc6f426f9bcb8851d20e975a4fc63da5946494815e24",
     "formal/dialcache-conformance.qnt": "3e91cad0afa6ba44353d651078fdf6284df0354ca82de0e3712dfe4f243244d7",
-    "formal/dialcache-dark-layers-conformance.qnt": "e5fd90a3bfdfd32962b590364dcbacdd06689de1034e676a883ac599f498ec36",
+    "formal/dialcache-dark-layers-conformance.qnt": "48eabb9a055a364249b4aa4404642732e022d6d8b67ab35f7c4b82c3412b9ea7",
     "formal/dialcache-effects-conformance.qnt": "e0f635a8257355017f8298d258b2b361bc162797e2eb0a38127c95ddb9508900",
     "formal/dialcache-independent-conformance.qnt": "3533ec3bce4ef1c713c034130654b5cd7eb824d3371b58fe796e31e5b70cdf75",
     "formal/dialcache-layers-conformance.qnt": "ec1466114c4379a391b457b4d231c2180bb8a5a2b4e731147ed14ac36d228e8a",
@@ -25,9 +25,9 @@
     "formal/dialcache-scope-conformance.qnt": "7cde548402db5767ad3175baa9266f0c318b68c4cda4eb5b3f7727c350c24e1b",
     "formal/dialcache-shadow-conformance.qnt": "b4806f313929597cafd64cd8ef8f9a7c2f38c63d27481da7e36702063f82a7c7",
     "formal/dialcache-shadow-layers-conformance.qnt": "76a1219307e707b713acc20998c0d9852fa64f782bf18c7c2c634eab74b1e5c9",
-    "formal/dialcache-shadow-read-deadlines-conformance.qnt": "b68a94693990aacdccc56b397cc5e835f37a53a71db380db8177d9717e756eff",
+    "formal/dialcache-shadow-read-deadlines-conformance.qnt": "b43373789a9cbfd907b50c5ebb49dec738e3621eab8132d16a4101634ed0d9f2",
     "formal/dialcache-source-budgets-conformance.qnt": "fb9707785725add09358fb8c0c7cb764f86cd42e659ed1f4cc459fd5afe93574",
-    "formal/fixture-recipes.json": "2f948b437e77919285c21609a1dda0a31ecab087e140cbb3ade942658f126f5d",
+    "formal/fixture-recipes.json": "e878149874c9afbc4a8eddfdb44458ec1246b37cb3fd94ff81a1676b203910f3",
     "formal/generated-fixtures.mjs": "f73a527cbbc0178be167c11ff8ff21985f05976379ae4054d5f61caa889e34c2",
     "formal/kernel/adapter-replies.qnt": "490e1d65552a174f728aae973f92525ff616b0cf26253873c9fe1804aef7da7d",
     "formal/kernel/calls.qnt": "1fd63856061a9fa9c419b88a736b0d07bce9702eab8b347c936eaaf11f7b4eb3",
@@ -90,8 +90,10 @@
     "test/fixtures/layers-witnesses.json": "2b3d3e70da715b103b3fcbca6754a251b7e1091b872295ab42df15e20dab0962",
     "test/fixtures/independent-witnesses.json": "d89a21165ac3b401343fd8bebf0f34eaa629f3fdf260ddfe4a3f26b53bac99c9",
     "test/fixtures/independent-shadow-witnesses.json": "c28fc3adb21499dc2fb5f3d2ba431d64d46035eb833bf3f548b19a4a8a72356a",
-    "formal/dark-layers-smoke.itf.json": "ab5126916ca785cfc146d3dd9a810f0ae393d9a985ccfaed9666f4ec6c6babda",
-    "test/fixtures/dark-layers-witnesses.json": "203057465a648fdeb8daa2808f6cffd32f0035b18a94fc43c12962b7d4220b3d",
-    "test/fixtures/admission-budget-witnesses.json": "3698e2f6a48575c88687f12794115a8724a3f3a813e0ea7cfe38a8f6b87ae87c"
+    "formal/dark-layers-smoke.itf.json": "c205714a4169b1d8ff707787f69a89e65433ca0c1d5f8b7d4b03c81c39dc5d40",
+    "test/fixtures/dark-layers-witnesses.json": "f0855922f055fcae546f0588d6c77eb3fd5082e2ef5c7b4888ccebd36ac95eb1",
+    "test/fixtures/admission-budget-witnesses.json": "3698e2f6a48575c88687f12794115a8724a3f3a813e0ea7cfe38a8f6b87ae87c",
+    "formal/shadow-read-deadlines-smoke.itf.json": "1bb6a5937ebeb20beb8155349029143053adb87a35c4a50a82a43a45ac38fb22",
+    "test/fixtures/shadow-read-deadlines-witnesses.json": "74306eaf69f7b03f7f89966263d3a8f81c7a70d98908b934b5cb577e0b0a7f7b"
   }
 }

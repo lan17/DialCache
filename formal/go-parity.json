@@ -8,32 +8,32 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "82d0495493d418c0d150fdec733d698a89568ffbe67b87075bd68245b6b67619",
-    "executionSha256": "714750df4d1d5430cb84316663cbcc1a96b2dbc8b33838c5f4c31108972d498e",
-    "sourceAuditSha256": "fa06641a9fe8c2d890b8d735f20eed5b995842ef2ee2374fd9d512083cba202e",
-    "featureCoverageSha256": "9a5ffdf30e1e39f9739f678580cfafc80225b24c870d49bb7a5141fcafdc93d6",
-    "coverageWitnessesSha256": "6070c8d04863c0281fcde0ea703c5023401d8fe2ea287b527973174f018a80b7",
-    "profilesSha256": "5770441b15c9e615ce27cd524322c9bf8c3ad01788595d5e9622786d0e505e72"
+    "semanticCasesSha256": "107dcd5233e05ea22e4e2d1bcbd6a191c490214ff88a4038736edb5634867ca2",
+    "executionSha256": "f48afc34d888fff30df68a3a16084a340c02221ab8a93591f1abd873bed30813",
+    "sourceAuditSha256": "79bdd555782754ce6bd7aac2362984e5ac69246bc16c16e127bcc779c8c2954c",
+    "featureCoverageSha256": "f3140654700f62b89d1bf5b34ecc78944fdd186826f38d401b30647370e9d5a0",
+    "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
+    "profilesSha256": "f8ec93fe5aa23faa69edd0a632a645874a6190a48ed613d2c65f82045219f49c"
   },
   "inventory": {
-    "behavioralCases": 243,
-    "withRequiredGeneratedWitnesses": 243,
+    "behavioralCases": 244,
+    "withRequiredGeneratedWitnesses": 244,
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
     "sourceDeclarations": 772,
-    "casesWithScheduledChecks": 265,
-    "requiredWitnesses": 486,
-    "casesWithQuintRegressionReplay": 189,
+    "casesWithScheduledChecks": 266,
+    "requiredWitnesses": 497,
+    "casesWithQuintRegressionReplay": 192,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
-    "quintModels": 31,
-    "scheduledInvariants": 243,
-    "scheduledRegressions": 450,
+    "quintModels": 32,
+    "scheduledInvariants": 253,
+    "scheduledRegressions": 463,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 332,
-    "exportedRegressionHistories": 343
+    "caseReferencedWitnesses": 343,
+    "exportedRegressionHistories": 356
   },
   "cases": [
     {

@@ -52,9 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     # Shared-library challenges now execute the importing profiles' partitions,
     # including clean baselines and mutant checks cached by exact source closure.
-    # Allow 60 minutes while measuring this expanded workload on hosted runners;
-    # the earlier 30-minute budget covered only the pre-partition model checks.
-    timeout-minutes: 60
+    # The earlier partition workload already approaches 60 minutes on hosted
+    # runners. Allow 120 minutes for the added profiles and shared faults while
+    # preserving every scheduled model check and partition measurement.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
