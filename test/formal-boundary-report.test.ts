@@ -6,7 +6,7 @@ type Verdict = { state: string; matched?: string[]; reason?: string; divergences
 const { assessBoundary, parseAssertionDivergences, boundaryReview } = await import(new URL("../formal/mutation-reports.mjs", import.meta.url).href) as {
   assessBoundary(evidence: Evidence | { challenge: string; mutant: string; state: string }, recording?: Recording): Verdict;
   parseAssertionDivergences(text: string, name?: string): unknown[];
-  boundaryReview(report: unknown, evidence: Evidence[]): Verdict[];
+  boundaryReview(report: unknown, evidence: unknown[], options?: { requireEntries?: boolean }): Verdict[];
 };
 const evidence: Evidence = { challenge: "captured-retention", mutant: "M29", history: "shadow-layers/capturedTest", step: 7, fields: ["o.writeTtls", "o.shadow"] };
 const record = (changes: Partial<Recording> = {}): Recording => ({
@@ -55,6 +55,14 @@ describe("native boundary evidence", () => {
   it("does not turn first-mismatch artifacts into a complete recording", () => {
     const reviewed = boundaryReview({ mutations: [{ id: "M29", cohorts: { generated: { divergences: [{ history: evidence.history, step: 7, paths: ["o.writeTtls.0"] }] } } }] }, [evidence]);
     expect(reviewed).toEqual([expect.objectContaining({ state: "unreached", reason: expect.stringContaining("historical first-mismatch") })]);
+  });
+
+  it("requires an explicit entry for coverage limitations when gating a report", () => {
+    const limitation = { challenge: "not-yet-reproduced", mutant: "M29", state: "unreproduced" };
+    const report = { mutations: [{ id: "M29", cohorts: {} }] };
+    expect(boundaryReview(report, [limitation])[0]?.state).toBe("unreproduced");
+    expect(boundaryReview(report, [limitation], { requireEntries: true })[0]).toMatchObject({ state: "unreached", reason: expect.stringContaining("per-challenge") });
+    expect(boundaryReview({ mutations: [{ ...report.mutations[0], boundary: [limitation] }] }, [limitation], { requireEntries: true })[0]?.state).toBe("unreproduced");
   });
 
   it("refuses missing mutants, stale pins and missing clean baselines when reading reports", () => {

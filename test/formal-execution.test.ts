@@ -548,7 +548,13 @@ describe("formal execution schedule", () => {
   it("validates reproducer kinds, cited models, declared checkpoints, profile partitions and model-only scope", () => {
     const exported = (edit: (reproducer: Reproducer) => void) => {
       const edited = manifest();
-      edit(edited.challenges.find(challenge => challenge.id === "source-budgets-accepts-at-deadline-equality")!.reproducer!);
+      const reproducer = edited.challenges.find(challenge => challenge.id === "source-budgets-accepts-at-deadline-equality")!.reproducer!;
+      // This validation fixture deliberately uses the two-checkpoint timer
+      // history. The live native mapping uses effects' settlement-time history.
+      delete reproducer.model;
+      reproducer.run = "defaultSourceBudgetExpiresAtSixtySecondsTest";
+      reproducer.failure = "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2";
+      edit(reproducer);
       return edited;
     };
     const modelRun = (edit: (reproducer: Reproducer) => void) => {
@@ -611,7 +617,7 @@ describe("formal execution schedule", () => {
     expect(() => validate(patching)).toThrow(/lateSourceResultIsADeadlineErrorTest is exported; cite it as an exported-regression reproducer/);
     expect(() => validate(modelRun(r => { delete r.scope; }))).toThrow(/model-run reproducer needs a scope/);
     expect(() => validate(modelRun(r => { r.profiles = ["recovery"]; }))).toThrow(/must name known profiles and include formal\/dialcache-envelope-vectors\.qnt/);
-    const exportedAsModelRun = manifest();
+    const exportedAsModelRun = exported(() => {});
     const budgets = exportedAsModelRun.challenges.find(challenge => challenge.id === "source-budgets-accepts-at-deadline-equality")!;
     budgets.reproducer = { ...budgets.reproducer!, kind: "model-run", scope: "Pretend it is model-only." };
     expect(() => validate(exportedAsModelRun)).toThrow(/defaultSourceBudgetExpiresAtSixtySecondsTest is exported; cite it as an exported-regression reproducer/);
@@ -796,13 +802,24 @@ describe("native boundary evidence", () => {
     expect(entries.get("shadow-layers-fill-uses-current-retention")).toMatchObject({
       history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["o.writeTtls", "o.shadow"], origin: "derived",
     });
-    expect(entries.get("recovery-connection-inclusive-maximum")).toMatchObject({ step: 4 });
-    expect(entries.get("source-budgets-settlement-never-replaces-local-entry")).toMatchObject({ step: 30 });
+    expect(entries.get("recovery-connection-inclusive-maximum")).toMatchObject({
+      history: "recovery/maximumAgeAfterDecodeFromStrictlyStaleFrameTest", step: 7,
+    });
+    expect(entries.get("source-budgets-settlement-never-replaces-local-entry")).toMatchObject({
+      history: "policy/independentLocalPublicationUsesLastCompletionTest", step: 9, fields: ["o.calls", "o.loaders"],
+    });
+    expect(entries.get("source-budgets-failed-settlement-clears-local-entry")).toMatchObject({
+      history: "policy/independentFailureKeepsLocalValueWhenRemoteFailsTest", step: 10, fields: ["o.calls", "o.loaders", "o.reads"],
+    });
     expect(entries.get("effects-fenced-source-publishes")).toMatchObject({ fields: ["calls", "dumps", "writes"] });
     expect(entries.get("local-clock-precise-ttl")).toMatchObject({ fields: ["calls", "loaders"] });
     expect(entries.get("effects-wrong-acceptance-receipt")).toMatchObject({ step: 7, fields: ["events"], origin: "written" });
     const effectsSource = readFileSync(root + "formal/dialcache-effects-conformance.qnt", "utf8");
     expect(checkpointStep("tenMillisecondFixture", scanDeclarationBodies(effectsSource))).toBe(0);
+    const budgetsSource = readFileSync(root + "formal/dialcache-source-budgets-conformance.qnt", "utf8");
+    const repeated = reproducerCheckpoint(budgetsSource, "localEntryExpiresAfterItsTtlTest",
+      "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.o.loaders == 2");
+    expect(checkpointStep(repeated.before, scanDeclarationBodies(budgetsSource))).toBe(30);
   });
 
   it("reports every mapped challenge once and computes the inventory from its evidence", () => {

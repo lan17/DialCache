@@ -98,8 +98,12 @@ observations differ, and `not-divergent` means the history still agrees.
 `unreached` records an incomplete history, missing recording, or driver failure;
 `vector` identifies a model-run with exported vectors, and `unreproduced` names
 a mapping without a portable reproducer. Clean boundary baselines must complete
-without divergences. These results are reported while the mappings are
-calibrated; the existing required-cohort gate remains in force.
+without divergences. The mutation gate requires `confirmed` for every mapping
+with an exported reproducer in both ports, alongside the required-cohort gate.
+It recomputes verdicts from current declarations and recordings: missing
+mapping entries, stale checkpoints and absent clean baselines fail, even when
+the report claims confirmation. `vector` and `unreproduced` remain explicit
+limits to boundary coverage.
 
 Read the evidence with `node formal/mutation-reports.mjs boundary --report
 <report.json>`. Optional `--cohorts <directory>` reads historical assertion

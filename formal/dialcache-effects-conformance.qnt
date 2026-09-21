@@ -590,4 +590,12 @@ module dialcache_effects_conformance {
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2
       and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
     .expect(missReasons == List("value_absent", "value_absent"))
+
+  // Stop at the observable decision so both the clean and faulty implementation
+  // can complete this boundary history without a later fault-dependent command.
+  run fencedSourceSkipsSerializationTest = tenMillisecondFixture
+    .then(replyWith(Replies::ABSENT_WITH_FENCE)).then(beginCall).then(readAt(0))
+    .expect(latestSource.fence == Clock::wallOf(s) + FUTURE_BUFFER_MS and latestSource.retentionMs > 0 and s.o.loaders == 1)
+    .then(resolveAt(0))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 0 and s.o.writes == 0)
 }

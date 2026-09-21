@@ -199,8 +199,10 @@ replaying that history through the coordinator. An earlier unrelated counter
 mismatch cannot establish the later behavioral consequence. A `confirmed`
 boundary requires a complete mutant replay and a clean replay of the same
 history; driver failures, settlement violations and missing recordings remain
-`unreached`. Boundaries are reported during calibration, with `vector` and
-`unreproduced` mappings kept visible beside the cohort detection results.
+`unreached`. Every mapped exported reproducer must be confirmed by the mutation
+gate in both ports; an entire cohort detecting the mutant cannot replace that
+evidence. `vector` and `unreproduced` mappings remain visible beside the
+confirmed boundaries and cohort detection results.
 
 To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with the Go section of every entry in `mutations.json`. A mutant whose fault leaves a goroutine blocked or a pointer nil makes the Go port's own synctest suite panic instead of failing an assertion, and one that settles a promise the TypeScript suite was not awaiting can leave no failed assertion behind; each runner records such an ordinary cohort as `crashed`, outside the detected and survived totals, as it does every cohort of a mutant that does not compile, and the generated cohort remains the required detection. Broader interaction histories and larger domains remain separate assurance work.
 

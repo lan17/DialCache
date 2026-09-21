@@ -480,4 +480,10 @@ module dialcache_shadow_layers_conformance {
     .then(setPolicy(DARK_NONE)).then(seedAt(0)).then(beginAt(9)).then(seedAt(1)).then(resolveAt(2))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.loads == 1 and s.o.reads == 2
       and s.o.dumps == 0 and s.o.shadow == List("superseded"))
+
+  // Stop at the observable decision so both the clean and faulty implementation
+  // can complete this boundary history without a later fault-dependent command.
+  run expiredC0StartsFillWithoutDecodingTest = init
+    .then(setPolicy(DARK_NONE)).then(seedAt(3)).then(beginAt(9)).then(resolveAt(2))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.reads == 1 and s.o.loads == 0 and s.o.dumps == 1 and s.o.shadow == List())
 }

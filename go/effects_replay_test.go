@@ -24,6 +24,7 @@ func (d *behaviorDriver) assertEffectsHistory() error {
 	var active *source
 	authorized := false
 	previous := int64(-1)
+	var assertion error
 	for index, e := range history {
 		fail := func(reason string) error {
 			return fmt.Errorf("effects contract event %d %s: %s", index, e.event, reason)
@@ -55,25 +56,33 @@ func (d *behaviorDriver) assertEffectsHistory() error {
 			}
 			elapsed := float64(e.at - active.at)
 			if math.Abs(e.duration-elapsed) > 1e-7 {
-				return behaviorPropertyFailure("C23", "duration includes lookup or omits source time", obj{"event": e.event, "index": index, "atMs": e.at, "elapsedMs": elapsed, "durationMs": e.duration})
+				if assertion == nil {
+					assertion = behaviorPropertyFailure("C23", "duration includes lookup or omits source time", obj{"event": e.event, "index": index, "atMs": e.at, "elapsedMs": elapsed, "durationMs": e.duration})
+				}
 			}
 			if !e.failed && (elapsed >= 10 || active.settled != "resolve") {
-				return behaviorPropertyFailure("C25", "success must be accepted before its source deadline", obj{"event": e.event, "index": index, "atMs": e.at, "elapsedMs": elapsed, "budgetMs": 10, "settlement": active.settled, "failed": e.failed})
+				if assertion == nil {
+					assertion = behaviorPropertyFailure("C25", "success must be accepted before its source deadline", obj{"event": e.event, "index": index, "atMs": e.at, "elapsedMs": elapsed, "budgetMs": 10, "settlement": active.settled, "failed": e.failed})
+				}
 			}
 			if e.failed && elapsed < 10 && active.settled != "reject" {
-				return behaviorPropertyFailure("C23", "source lost its full source-relative budget", obj{"event": e.event, "index": index, "atMs": e.at, "elapsedMs": elapsed, "budgetMs": 10, "settlement": active.settled, "failed": e.failed})
+				if assertion == nil {
+					assertion = behaviorPropertyFailure("C23", "source lost its full source-relative budget", obj{"event": e.event, "index": index, "atMs": e.at, "elapsedMs": elapsed, "budgetMs": 10, "settlement": active.settled, "failed": e.failed})
+				}
 			}
 			active = nil
 			authorized = !e.failed
 		case "writeDispatch":
 			if !authorized {
-				return behaviorPropertyFailure("C26", "publication without accepted source success", obj{"event": e.event, "index": index, "atMs": e.at, "authorized": authorized})
+				if assertion == nil {
+					assertion = behaviorPropertyFailure("C26", "publication without accepted source success", obj{"event": e.event, "index": index, "atMs": e.at, "authorized": authorized})
+				}
 			}
 		default:
 			return fail("unknown monitor event")
 		}
 	}
-	return nil
+	return assertion
 }
 
 // Both public replay and witness validation consume this exact inventory.

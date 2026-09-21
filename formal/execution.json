@@ -635,9 +635,9 @@
       "measures": "Repeats the recovery-inclusive-maximum fault against the recovery connection model: the same shared-rule mutation must also be caught by that monitor's own clause.",
       "reproducer": {
         "kind": "exported-regression",
-        "run": "maximumAgeBeforeDecodePreservesSourceTest",
+        "run": "maximumAgeAfterDecodeFromStrictlyStaleFrameTest",
         "model": "formal/dialcache-recovery-conformance.qnt",
-        "failure": "s.o.calls == List(SOURCE_ERROR) and s.o.loads == 0 and s.o.reads == 1 and s.o.recovery == List(\"miss\")",
+        "failure": "s.o.calls == List(SOURCE_ERROR) and s.o.loads == 1 and s.o.recovery == List(\"miss\") and s.d.ages == List() and s.o.writes == 0",
         "family": "inclusive-maximum-boundary",
         "profiles": [
           "formal/dialcache-recovery-connection.qnt",
@@ -664,7 +664,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M01",
-        "text": "Same native fault as recovery-inclusive-maximum: M01 makes the post-decode serving maximum inclusive in both ports, which is cache-rules.qnt ageBeforeCeiling becoming inclusive as measured here by dialcache-recovery-connection.qnt recoveredValueWasWithinAcceptedAge over the snapshot a served recovery decode settles from. recovery/maximumAgeAfterDecodePreservesSourceTest and witness recovery:exact-maximum-after-decode-rejects already detect it in both ports."
+        "text": "Same native fault as recovery-inclusive-maximum: M01 makes the post-decode serving maximum inclusive in both ports, which is cache-rules.qnt ageBeforeCeiling becoming inclusive as measured here by dialcache-recovery-connection.qnt recoveredValueWasWithinAcceptedAge over the snapshot a served recovery decode settles from."
       }
     },
     {
@@ -704,7 +704,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M18",
-        "text": "M18 is the native twin of kernel/local-storage.qnt localValue replacing localEntryLiveAt with an inclusive comparison against the entry's expiry: both ports serve a local entry at the exact millisecond its insertion TTL elapses. policy/localHitDoesNotRenewInsertionTtlTest step 10 and source-budgets/localEntryExpiresAfterItsTtlTest detect it in both ports."
+        "text": "M18 is the native twin of kernel/local-storage.qnt localValue replacing localEntryLiveAt with an inclusive comparison against the entry's expiry: both ports serve a local entry at the exact millisecond its insertion TTL elapses."
       }
     },
     {
@@ -843,7 +843,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M43",
-        "text": "M43 is the native twin of kernel/recovery.qnt retain stamping the retained candidate one millisecond after the acquired frame, checked by dialcache-recovery-read-connection.qnt retainedSnapshotMatchesAcquisition: both ports retain the stale candidate with a timestamp one millisecond later than the frame they acquired. recovery-read/compressedRecoveryRechecksMaximumAfterDecodeTest, recovery/maximumAgeAfterDecodePreservesSourceTest and the millisecond diagnostic ages are the evidence."
+        "text": "M43 is the native twin of kernel/recovery.qnt retain stamping the retained candidate one millisecond after the acquired frame, checked by dialcache-recovery-read-connection.qnt retainedSnapshotMatchesAcquisition: both ports retain the stale candidate with a timestamp one millisecond later than the frame they acquired."
       }
     },
     {
@@ -885,7 +885,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M45",
-        "text": "M45 is the native twin of kernel/remote-io.qnt dispatchRead recording a recovery maximum one unit above the reply's on the held read, checked by dialcache-recovery-read-connection.qnt retainedSnapshotMatchesAcquisition: both ports admit the call with a recovery maximum one second above the configured value, one second being the smallest configurable unit. recovery-read/compressedRecoveryRechecksMaximumAfterDecodeTest and independent/independentRecoveryAtCapturedAgeBoundaryTest are the evidence."
+        "text": "M45 is the native twin of kernel/remote-io.qnt dispatchRead recording a recovery maximum one unit above the reply's on the held read, checked by dialcache-recovery-read-connection.qnt retainedSnapshotMatchesAcquisition: both ports admit the call with a recovery maximum one second above the configured value, one second being the smallest configurable unit."
       }
     },
     {
@@ -927,7 +927,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M46",
-        "text": "M46 is the native twin of kernel/remote-io.qnt dispatchRead recording a fixed retention on the held read instead of the reply's effective TTLs (the maximum its snapshot is retained under): the ports have no constant to substitute for a generic policy, so admitting with the static default while ignoring the runtime overlay is the faithful analog. independent/independentRecoveryAtCapturedAgeBoundaryTest and recovery-read/physicalCapDoesNotClampLogicalRecoveryTest are the expected evidence."
+        "text": "M46 is the native twin of kernel/remote-io.qnt dispatchRead recording a fixed retention on the held read instead of the reply's effective TTLs (the maximum its snapshot is retained under): the ports have no constant to substitute for a generic policy, so admitting with the static default while ignoring the runtime overlay is the faithful analog."
       }
     },
     {
@@ -981,7 +981,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M36",
-        "text": "M36 is the native twin of kernel/metrics.qnt stamping the dump's hold one millisecond late: the serialization-start stamp both ports take one millisecond late is the only native acceptance receipt, and the dump duration comes out one millisecond short. effects/sourceDurationExcludesPublicationTest (dump amount 0.009 instead of 0.010) is the expected evidence in both ports.",
+        "text": "M36 is the native twin of kernel/metrics.qnt stamping the dump's hold one millisecond late: the serialization-start stamp both ports take one millisecond late is the only native acceptance receipt, and the dump duration comes out one millisecond short.",
         "evidence": {
           "history": "effects/sourceDurationExcludesPublicationTest",
           "step": 7,
@@ -1028,7 +1028,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M34",
-        "text": "M34 is the native twin of kernel/serving.qnt complete finishing only the flight's first owner instead of every caller it owns: both ports stop followers of a joined flight from receiving the accepted value while errors still propagate. Followers get an undefined or zero value rather than staying pending because a blocked follower would deadlock synctest; recovery/crossRequestRecoveryMemoizesBothScopesTest and coalescedRecoveryClassifiesAndDecodesOnceTest are the evidence."
+        "text": "M34 is the native twin of kernel/serving.qnt complete finishing only the flight's first owner instead of every caller it owns: both ports stop followers of a joined flight from receiving the accepted value while errors still propagate. Followers get an undefined or zero value rather than staying pending because a blocked follower would deadlock synctest."
       }
     },
     {
@@ -1140,7 +1140,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M30",
-        "text": "M30 is the native twin of kernel/remote-frames.qnt fresh replacing freshAgeAllowed with an inclusive age comparison: both ports serve a remote frame whose age equals the fresh TTL as a hit. Without stale-on-error retention the maximum-age check runs first and masks the flip, as the model's retained masks it when retention equals freshness; policy/exactRemoteFreshBoundaryStartsSourceTest with the 5 s retention fixture and witness policy:remote-exact-fresh-boundary-miss are the evidence."
+        "text": "M30 is the native twin of kernel/remote-frames.qnt fresh replacing freshAgeAllowed with an inclusive age comparison: both ports serve a remote frame whose age equals the fresh TTL as a hit. Without stale-on-error retention the maximum-age check runs first and masks the flip, as the model's retained masks it when retention equals freshness."
       }
     },
     {
@@ -1153,7 +1153,7 @@
       "after": "pure def acquired(observed: Remote::Observed): int = observed.payload",
       "reproducer": {
         "kind": "exported-regression",
-        "run": "c0AtExactFreshnessBoundaryRefillsTest",
+        "run": "expiredC0BeginsFillBeforePublicationTest",
         "failure": "s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.loads == 1 and s.o.dumps == 1",
         "family": "inclusive-freshness-boundary",
         "profiles": [
@@ -1180,7 +1180,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M31",
-        "text": "M31 is the native twin of kernel/shadow.qnt acquired keeping a dark C0 from a visible frame remote_frames.observe declined for the reply's freshness: both ports acquire a dark C0 frame whose age equals the fresh TTL instead of treating it as expired. shadow/c0AtExactFreshnessBoundaryRefillsTest (the second job acquires C0, decodes it and never fills) is the expected evidence in both ports."
+        "text": "M31 is the native twin of kernel/shadow.qnt acquired keeping a dark C0 from a visible frame remote_frames.observe declined for the reply's freshness: both ports acquire a dark C0 frame whose age equals the fresh TTL instead of treating it as expired."
       }
     },
     {
@@ -1277,7 +1277,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M04",
-        "text": "M04 is the native twin of kernel/remote-writes.qnt dispatch skipping the fence recheck at dump release: both ports skip the post-serialization fence recheck in the write routine the shadow fill also uses, so a fenced dark fill writes and reports filled instead of fill_fenced. shadow/fenceRejudgedAtDumpReleaseAfterRollbackTest (a dump released after a wall rollback below the fence dispatches no write) is the expected evidence in both ports.",
+        "text": "M04 is the native twin of kernel/remote-writes.qnt dispatch skipping the fence recheck at dump release: both ports skip the post-serialization fence recheck in the write routine the shadow fill also uses, so a fenced dark fill writes and reports filled instead of fill_fenced.",
         "crossContract": "M04 skips the post-serialization fence in the caller write routine (C34.second-fence); the shadow fill reaches the same line through putForShadow (TS) and putRemote (Go), so under it a fenced dark fill writes and reports filled instead of fill_fenced (witness shadow:outcome:fill_fenced)."
       },
       "reproducer": {
@@ -1318,7 +1318,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M47",
-        "text": "M47 is the native twin of kernel/shadow.qnt settleJobRead filling at once when the job's source is still pending instead of waiting for it: both ports continue dark shadow work without waiting for the caller's source, comparing and filling with an undefined or zero value. shadow/darkReadBeforeSourceWaitsForItTest (no dump while the loader is held) and shadow-layers/darkSourcePublishesLocalBeforeShadowWriteTest are the expected evidence."
+        "text": "M47 is the native twin of kernel/shadow.qnt settleJobRead filling at once when the job's source is still pending instead of waiting for it: both ports continue dark shadow work without waiting for the caller's source, comparing and filling with an undefined or zero value."
       },
       "reproducer": {
         "kind": "exported-regression",
@@ -1501,7 +1501,7 @@
       "after": "accepted(value) and source.retentionMs > 0",
       "reproducer": {
         "kind": "exported-regression",
-        "run": "absentReplyWithFutureFenceBlocksRefillTest",
+        "run": "fencedSourceSkipsSerializationTest",
         "failure": "s.o.calls == List(VALUE_ONE) and s.o.dumps == 0 and s.o.writes == 0",
         "family": "first-fence-check",
         "profiles": [
@@ -1528,7 +1528,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M39",
-        "text": "M39 is the native twin of kernel/serving.qnt refills dropping the fence half of refillAllowed: both ports drop the pre-serialization fence check, so a source accepted behind an observed fence is serialized while the post-serialization recheck still blocks the write. effects/absentReplyWithFutureFenceBlocksRefillTest (dumps 0 becomes 1) and witness effects:normalized-fence-blocks-publication are the expected evidence in both ports."
+        "text": "M39 is the native twin of kernel/serving.qnt refills dropping the fence half of refillAllowed: both ports drop the pre-serialization fence check, so a source accepted behind an observed fence is serialized while the post-serialization recheck still blocks the write."
       }
     },
     {
@@ -1568,7 +1568,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M03",
-        "text": "M03 is the native twin of kernel/deadlines.qnt arrival accepting a result whose deadline was reached undelivered: both ports accept an externally settled result after its elapsed deadline when the timer has not run. effects/lateSourceResultIsADeadlineErrorTest and the late-resolve and late-reject witnesses are the expected evidence in both ports."
+        "text": "M03 is the native twin of kernel/deadlines.qnt arrival accepting a result whose deadline was reached undelivered: both ports accept an externally settled result after its elapsed deadline when the timer has not run."
       }
     },
     {
@@ -1662,7 +1662,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M15",
-        "text": "M15 is the native reading of kernel/request-memo.qnt closeScope clearing every memo row instead of only the closing context's: a completed nested enable evicts the enclosing request's memo while the outer scope stays open. A nested handle can only reach its own enclosing row, so the port fault evicts one outer row rather than all rows; scope/nestedCloseAndDisabledBypassKeepOuterMemoTest step 11 detects both ports."
+        "text": "M15 is the native reading of kernel/request-memo.qnt closeScope clearing every memo row instead of only the closing context's: a completed nested enable evicts the enclosing request's memo while the outer scope stays open. A nested handle can only reach its own enclosing row, so the port fault evicts one outer row rather than all rows."
       }
     },
     {
@@ -1702,7 +1702,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M48",
-        "text": "M48 is the native twin of kernel/shadow.qnt busy judged without its duplicate disjunct (admitServed and the dark arm of admitJobs both consult it): both ports admit a shadow job for an identity that already has a live job, subject only to capacity. admission/duplicateDropsBeforeCapacityIsFullTest and shadow-layers/deduplicatedJobKeepsIndependentCallerSourcesTest are the expected evidence in both ports."
+        "text": "M48 is the native twin of kernel/shadow.qnt busy judged without its duplicate disjunct (admitServed and the dark arm of admitJobs both consult it): both ports admit a shadow job for an identity that already has a live job, subject only to capacity."
       }
     },
     {
@@ -1742,7 +1742,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M49",
-        "text": "M49 is the native twin of kernel/shadow.qnt full comparing the instance's live jobs strictly against its capacity: both ports admit one shadow job beyond the per-instance capacity. admission/fullInstanceDoesNotBlockOtherInstanceTest and shadow-layers/fullMixedInstanceDoesNotBlockAnotherInstanceTest are the expected evidence in both ports."
+        "text": "M49 is the native twin of kernel/shadow.qnt full comparing the instance's live jobs strictly against its capacity: both ports admit one shadow job beyond the per-instance capacity."
       }
     },
     {
@@ -1893,7 +1893,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M01",
-        "text": "M01 makes the post-decode serving maximum inclusive in both ports, the observable site of kernel/recovery.qnt validCandidate calling recoveryAgeAllowed with the snapshot's maximum plus one, checked by dialcache-recovery-read-connection.qnt recoveryReturnMatchesAcquiredContract; a pre-decode flip alone is masked in the ports by the post-decode recheck. recovery-read/compressedRecoveryRechecksMaximumAfterDecodeTest and witness recovery:exact-maximum-after-decode-rejects are the evidence."
+        "text": "M01 makes the post-decode serving maximum inclusive in both ports, the observable site of kernel/recovery.qnt validCandidate calling recoveryAgeAllowed with the snapshot's maximum plus one, checked by dialcache-recovery-read-connection.qnt recoveryReturnMatchesAcquiredContract; a pre-decode flip alone is masked in the ports by the post-decode recheck."
       }
     },
     {
@@ -1935,7 +1935,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M42",
-        "text": "M42 is the native twin of kernel/remote-io.qnt settleLoad warming local storage with a served recovery candidate, checked by dialcache-recovery-read-connection.qnt recoveredResultsNeverPublishShared: both ports publish a recovered stale value into process-local storage. The recovery profile has no local TTL, so detection rests on the recovery-read profile; recovery-read/untrackedCompressedRecoveryDoesNotWarmLocalTest and compressedRecoveryMemoizesWithoutLocalPublicationTest are the evidence."
+        "text": "M42 is the native twin of kernel/remote-io.qnt settleLoad warming local storage with a served recovery candidate, checked by dialcache-recovery-read-connection.qnt recoveredResultsNeverPublishShared: both ports publish a recovered stale value into process-local storage. The recovery profile has no local TTL, so detection rests on the recovery-read profile."
       }
     },
     {
@@ -1975,7 +1975,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M56",
-        "text": "M56 is the native twin of kernel/serving.qnt authority capturing a tracked refill's retention uncapped instead of through remote_frames.physicalRetention: both ports write a tracked value for its full configured retention above one hour instead of clamping it to the hour. recovery-read/trackedPhysicalRetentionExpiresAtCapTest (observed write TTL 14400000 against 3600000) is the expected evidence in both ports."
+        "text": "M56 is the native twin of kernel/serving.qnt authority capturing a tracked refill's retention uncapped instead of through remote_frames.physicalRetention: both ports write a tracked value for its full configured retention above one hour instead of clamping it to the hour."
       }
     },
     {
@@ -2023,12 +2023,12 @@
       "source": "formal/kernel/serving.qnt",
       "model": "formal/dialcache-local-failure-conformance.qnt",
       "invariant": "storageHoldsAcceptedValuesOnly",
-      "before": "    if (accepted(value)) warm(frames, layout, source, value, source.localMs) else frames",
-      "after": "    warm(frames, layout, source, value, source.localMs)",
+      "before": "    if (accepted(value)) warm(state, layout, source, value, source.localMs) else state",
+      "after": "    warm(state, layout, source, value, source.localMs)",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M37",
-        "text": "M37 is the native twin of kernel/serving.qnt publish warming local storage without the accepted judgment: both ports publish a rejected source's result into process-local storage before rethrowing. local-failure/rejectedSourceDoesNotSeedLocalTest is the portable evidence: the transient call after the rejection reads remote and starts its own source (calls 3,0 with two loaders and two reads) instead of serving the stored error."
+        "text": "M37 is the native twin of kernel/serving.qnt publishLocal warming local storage without the accepted-value judgment: both ports publish a rejected source's result into process-local storage before rethrowing."
       },
       "reproducer": {
         "kind": "exported-regression",
@@ -2037,7 +2037,8 @@
         "family": "source-error-published",
         "profiles": [
           "local-failure",
-          "policy"
+          "policy",
+          "source-budgets"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated definition is never executed; its own rule is stated in its own text.",
@@ -2051,8 +2052,7 @@
           "recovery-read": "Composes the layered shape and reaches the mutated warm when a source is rejected while local storage participates, but none of its scheduled invariants or exported regressions reads the local slot between that rejection and the next publication (measured under the mutant at 2000 x 40 and over its exported regressions).",
           "runtime-boundaries": "Composes the layered shape and reaches the mutated warm when a source is rejected while local storage participates, but none of its scheduled invariants or exported regressions reads the local slot between that rejection and the next publication (measured under the mutant at 2000 x 40 and over its exported regressions).",
           "shadow-layers": "Composes the layered shape and reaches the mutated warm when a source is rejected while local storage participates, but none of its scheduled invariants or exported regressions reads the local slot between that rejection and the next publication (measured under the mutant at 2000 x 40 and over its exported regressions).",
-          "local-clock": "Composes the local projection, which settles through serving.settleLocal, never serving.publish; its inline sources never fail besides.",
-          "source-budgets": "Composes the local projection, whose sources settle through serving.settleLocal, never serving.publish.",
+          "local-clock": "Its inline sources only return accepted values, so the acceptance judgment in publishLocal never rejects one.",
           "dark-layers": "The held source lifecycle rejects errors before the accepted-only serving publication call. Native M37 also edits a serving/recovery failure-publication site outside finishRampedDownRemote; both ports replay this dark corpus unchanged under the absent-value mutation."
         }
       }
@@ -2095,7 +2095,7 @@
       "after": "pure def acquired(observed: Remote::Observed): int = observed.payload",
       "reproducer": {
         "kind": "exported-regression",
-        "run": "expiredC0CanFillAndServeNewValueTest",
+        "run": "expiredC0StartsFillWithoutDecodingTest",
         "model": "formal/dialcache-shadow-layers-conformance.qnt",
         "failure": "s.o.calls == List(VALUE_TWO) and s.o.reads == 1 and s.o.loads == 0 and s.o.dumps == 1 and s.o.shadow == List()",
         "family": "c0-freshness-boundary",
@@ -2124,7 +2124,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M31",
-        "text": "Same native fault as shadow-inclusive-c0-freshness: M31 makes the dark C0 acquisition inclusive in both ports, which is kernel/shadow.qnt acquired keeping a dark C0 from a visible frame remote_frames.observe declined for the reply's freshness (the boundary itself is remote_frames' own partition), checked by dialcache-shadow-layers-connection.qnt retainedC0WasFreshWhenAcquired. shadow-layers/expiredC0CanFillAndServeNewValueTest (seed age equal to the fresh TTL) is the expected evidence."
+        "text": "Same native fault as shadow-inclusive-c0-freshness: M31 makes the dark C0 acquisition inclusive in both ports, which is kernel/shadow.qnt acquired keeping a dark C0 from a visible frame remote_frames.observe declined for the reply's freshness (the boundary itself is remote_frames' own partition), checked by dialcache-shadow-layers-connection.qnt retainedC0WasFreshWhenAcquired."
       },
       "measures": "Repeats the shadow-inclusive-c0-freshness fault against the shadow-layers connection model: the same acquisition mutation must also be caught by that monitor's own clause."
     },
@@ -2165,7 +2165,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M29",
-        "text": "M29 is the native twin of kernel/shadow.qnt fill holding the dark fill's dump with the source's retention (0 for a dark source) instead of the retention the job captured at admission: both ports re-resolve the runtime policy at fill time and write the dark fill with the retention then in force. Detection most likely fires on the extra provider call before writeTtls diverge; shadow-layers/darkFillRetainsPolicyThroughSerializationTest is the expected evidence."
+        "text": "M29 is the native twin of kernel/shadow.qnt fill holding the dark fill's dump with the source's retention (0 for a dark source) instead of the retention the job captured at admission: both ports re-resolve the runtime policy at fill time and write the dark fill with the retention then in force."
       }
     },
     {
@@ -2205,7 +2205,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M19",
-        "text": "Same native fault as local-precise-grid: M19 replaces the whole-millisecond grid with the precise clock for local insertion and expiry in both ports, which is kernel/clock.qnt advanceTicks leaving the floor grid (a fill at 0.7 ms lands on grid instant 1, expiring at 1001 ms). The feature-profile driver clocks are integer, so only local-clock observes it; local-clock/fractionalInsertionExpiresAtWholeMillisecondTest step 7 (calls 1,1,1 with one loader instead of 1,1,2 with two) detects both ports."
+        "text": "Same native fault as local-precise-grid: M19 replaces the whole-millisecond grid with the precise clock for local insertion and expiry in both ports, which is kernel/clock.qnt advanceTicks leaving the floor grid (a fill at 0.7 ms lands on grid instant 1, expiring at 1001 ms). The feature-profile driver clocks are integer, so only local-clock observes it."
       }
     },
     {
@@ -2219,7 +2219,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M11",
-        "text": "M11 is the native twin of kernel/local-storage.qnt promote re-stamping the insertion expiry on a hit instead of renewing recency alone: both ports refresh the insertion time on every hit while keeping the value. policy/localHitDoesNotRenewInsertionTtlTest and local-clock/fractionalInsertionExpiresAtWholeMillisecondTest already detect it in both ports. promote has no TTL parameter, so the mutant stamps a literal second, the local-clock TTL."
+        "text": "M11 is the native twin of kernel/local-storage.qnt promote re-stamping the insertion expiry on a hit instead of renewing recency alone: both ports refresh the insertion time on every hit while keeping the value. promote has no TTL parameter, so the mutant stamps a literal second, the local-clock TTL."
       },
       "reproducer": {
         "kind": "exported-regression",
@@ -2317,7 +2317,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M40",
-        "text": "Same native fault as recovery-future-candidate: M40 classifies a frame dated after the reader clock as a valid frame of age zero in both ports, which is cache-rules.qnt ageBeforeCeiling losing its created-before-observed clause as measured on the read receipt by dialcache-stale-recovery.qnt futureFrameIsNeverFreshOrRetained. policy/wallRollbackRejectsFutureRemoteFrameTest, effects/futureFrameReportsPositiveObservingOffsetTest and witness policy:rollback-rejects-future-remote are the evidence."
+        "text": "Same native fault as recovery-future-candidate: M40 classifies a frame dated after the reader clock as a valid frame of age zero in both ports, which is cache-rules.qnt ageBeforeCeiling losing its created-before-observed clause as measured on the read receipt by dialcache-stale-recovery.qnt futureFrameIsNeverFreshOrRetained."
       }
     },
     {
@@ -2355,8 +2355,8 @@
       "after": "pure def dueAt(now: int, d: Due): bool = now > d.at",
       "reproducer": {
         "kind": "exported-regression",
-        "run": "defaultSourceBudgetExpiresAtSixtySecondsTest",
-        "failure": "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2",
+        "run": "lateSourceResultIsADeadlineErrorTest",
+        "failure": "s.o.calls == List(DEADLINE_ERROR) and s.o.dumps == 0 and errorReasons == List(\"fallback\") and amounts(\"fallback\") == List(10)",
         "family": "inclusive-deadline-boundary",
         "profiles": [
           "source-budgets",
@@ -2377,7 +2377,8 @@
           "local-failure": "does not compose the deadlines module: its sources have no budget",
           "runtime-boundaries": "does not compose the deadlines module: its sources have no budget",
           "local-clock": "does not compose the deadlines module: its sources have no budget"
-        }
+        },
+        "model": "formal/dialcache-effects-conformance.qnt"
       },
       "nativeMutants": {
         "kind": "mapped",
@@ -2422,7 +2423,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M21",
-        "text": "M21 is the native twin of kernel/serving.qnt decide moving JoinsProcess below the memo, local and remote branches: both ports serve a live local entry before joining the pending process flight registered for the key. policy/independentCompletionKeepsRegisteredLeaderTest step 9 detects both ports, as does runtime-boundaries/defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest."
+        "text": "M21 is the native twin of kernel/serving.qnt decide moving JoinsProcess below the memo, local and remote branches: both ports serve a live local entry before joining the pending process flight registered for the key."
       }
     },
     {
@@ -2435,7 +2436,7 @@
       "after": "if (sharedLayers(layers) and memoValue == NO_VALUE)",
       "reproducer": {
         "kind": "exported-regression",
-        "run": "independentCompletionKeepsRegisteredLeaderTest",
+        "run": "nonCoalescingCallStartsSeparateSourceTest",
         "failure": "s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2",
         "family": "join-ignores-coalesce",
         "profiles": [
@@ -2462,47 +2463,48 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M22",
-        "text": "M22 is the native twin of kernel/serving.qnt decide dropping the coalesce condition from its process-owner conjunction: both ports let a non-coalescing caller join a pending process flight while registration still respects coalesce. policy/independentCompletionKeepsRegisteredLeaderTest step 5 and policy/independentFailureKeepsRegisteredLeaderTest detect both ports."
+        "text": "M22 is the native twin of kernel/serving.qnt decide dropping the coalesce condition from its process-owner conjunction: both ports let a non-coalescing caller join a pending process flight while registration still respects coalesce."
       }
     },
     {
       "id": "source-budgets-settlement-never-replaces-local-entry",
       "contract": "C13",
-      "source": "formal/kernel/serving.qnt",
+      "source": "formal/kernel/local-storage.qnt",
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "invariant": "localPublicationRequiresAcceptedSource",
-      "before": "val warmed = if (accepted(value) and source.localMs > 0)",
-      "after": "val warmed = if (accepted(value) and source.localMs > 0 and state.localValues.nth(source.instance * layout.keysPerInstance + source.key) == NO_VALUE)",
+      "before": "if (state.capacity == 0) state else {",
+      "after": "if (state.capacity == 0 or state.localValues.nth(slot) != NO_VALUE) state else {",
       "reproducer": {
         "kind": "exported-regression",
-        "run": "localEntryExpiresAfterItsTtlTest",
-        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.o.loaders == 2",
+        "run": "independentLocalPublicationUsesLastCompletionTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2",
         "family": "local-publication-never-replaces",
         "profiles": [
           "source-budgets",
-          "local-clock"
+          "local-clock",
+          "policy",
+          "runtime-boundaries"
         ],
         "exclusions": {
-          "core": "Composes no kernel module, so serving.settleLocal is never executed.",
-          "effects": "Composes the held remote lifecycle: its loaders settle through remote_io, never the local projection's settleLocal, so the mutated text is never executed.",
-          "recovery": "Composes the held remote lifecycle, whose loaders settle through remote_io.settleLoader, so serving.settleLocal is never executed.",
-          "policy": "Composes no kernel module, so serving.settleLocal is never executed.",
-          "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read, and publishes through serving.publish, never settleLocal.",
-          "scope": "Composes the request-only projection without local storage: its sources settle through serving.settleRequest.",
-          "admission": "Composes the layered shape, which settles through remote_io and serving.publish, never serving.settleLocal.",
-          "layers": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
-          "independent": "Composes the layered shape: its loaders settle through remote_io and serving.publish, never the local projection's settleLocal.",
-          "recovery-read": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
-          "local-failure": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
-          "runtime-boundaries": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
-          "shadow-layers": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
-          "dark-layers": "The challenged settleLocal projection is not composed; dark sources settle through the held diagnosed lifecycle."
-        }
+          "core": "Does not import local_storage: the core profile states its local behavior in its own model.",
+          "effects": "The fixture gives every source a zero local TTL, so the mutated local put has no observable effect.",
+          "recovery": "The fixture has zero local capacity, so putLocal stores nothing before or after this fault.",
+          "shadow": "Every reply leaves the local layer off and local capacity is zero, so no local entry is published.",
+          "scope": "The request-only traversal never publishes a local entry.",
+          "admission": "Serving reads are remote hits and detached shadow sources have no local publication authority; no occupied local slot is replaced.",
+          "layers": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; its properties check ownership and storage membership, not a last-completion probe.",
+          "independent": "Every reply leaves the local layer off and local capacity is zero, so no local entry is published.",
+          "recovery-read": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; the partition checker remeasures that exclusion.",
+          "local-failure": "Only one source can be pending, time never expires a local entry, and a failed local read withdraws local publication authority. The profile never requires replacing an occupied slot.",
+          "shadow-layers": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; the partition checker remeasures that exclusion.",
+          "dark-layers": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; the partition checker remeasures that exclusion."
+        },
+        "model": "formal/dialcache-policy-conformance.qnt"
       },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M23",
-        "text": "M23 is the native twin of kernel/serving.qnt settleLocal warming a slot only when it holds NO_VALUE: both ports make a local publication skip a slot that is already occupied, even by an expired entry. The declared reproducer source-budgets/localEntryExpiresAfterItsTtlTest does not transfer natively because both ports purge an expired entry at the read that starts the source; policy/independentLocalPublicationUsesLastCompletionTest is the portable evidence (calls 1,2,2 instead of 1,2,1)."
+        "text": "M23 is the native twin of kernel/local-storage.qnt putLocal refusing an occupied slot: both ports skip a local publication when an entry already occupies the key, even if it has expired. The shared storage rule is reached by both the local-only and layered traversals."
       }
     },
     {
@@ -2511,38 +2513,39 @@
       "source": "formal/kernel/serving.qnt",
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "invariant": "localPublicationRequiresAcceptedSource",
-      "before": "Local::putLocal(state, source.instance, source.key, value, source.localMs, layout.keysPerInstance) else state",
-      "after": "Local::putLocal(state, source.instance, source.key, value, source.localMs, layout.keysPerInstance) else { localValues: state.localValues.replaceAt(source.instance * layout.keysPerInstance + source.key, NO_VALUE), localExpires: state.localExpires.replaceAt(source.instance * layout.keysPerInstance + source.key, 0), ...state }",
+      "before": "if (accepted(value)) warm(state, layout, source, value, source.localMs) else state",
+      "after": "if (accepted(value)) warm(state, layout, source, value, source.localMs) else { localValues: state.localValues.replaceAt(source.instance * layout.keysPerInstance + source.key, NO_VALUE), localExpires: state.localExpires.replaceAt(source.instance * layout.keysPerInstance + source.key, 0), lru: state.lru.replaceAt(source.instance, state.lru.nth(source.instance).select(key => key != source.key)), ...state }",
       "reproducer": {
         "kind": "exported-regression",
-        "run": "rejectedSourceLeavesPublishedLocalEntryTest",
-        "failure": "s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE) and s.o.loaders == 2",
+        "run": "independentFailureKeepsLocalValueWhenRemoteFailsTest",
+        "failure": "s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE) and s.o.loaders == 2 and s.o.reads == 2",
         "family": "failed-settlement-clears-local-entry",
         "profiles": [
-          "source-budgets"
+          "source-budgets",
+          "policy",
+          "local-failure"
         ],
         "exclusions": {
-          "core": "Composes no kernel module, so serving.settleLocal is never executed.",
-          "effects": "Composes the held remote lifecycle: its loaders settle through remote_io, never the local projection's settleLocal, so the mutated text is never executed.",
-          "recovery": "Composes the held remote lifecycle, whose loaders settle through remote_io.settleLoader, so serving.settleLocal is never executed.",
-          "policy": "Composes no kernel module, so serving.settleLocal is never executed.",
-          "shadow": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local entry is ever written or read, and publishes through serving.publish, never settleLocal.",
-          "scope": "Composes the request-only projection without local storage: its sources settle through serving.settleRequest.",
-          "admission": "Composes the layered shape, which settles through remote_io and serving.publish, never serving.settleLocal.",
-          "layers": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
-          "independent": "Composes the layered shape: its loaders settle through remote_io and serving.publish, never the local projection's settleLocal.",
-          "recovery-read": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
-          "local-failure": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
-          "runtime-boundaries": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
-          "shadow-layers": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
-          "local-clock": "Composes the local projection through serving.settleLocal, but its inline sources never fail (every offered value is accepted), so the failed-settlement arm is never taken.",
-          "dark-layers": "The challenged settleLocal projection is not composed; dark sources settle through the held diagnosed lifecycle."
-        }
+          "core": "Does not import the kernel library: the core profile states its local behavior in its own model.",
+          "effects": "No local TTL is configured, and rejected held sources complete without calling publishLocal.",
+          "recovery": "The held lifecycle handles rejection without calling publishLocal, and local capacity is zero.",
+          "shadow": "Every reply leaves the local layer off and local capacity is zero, so no accepted local entry can be lost.",
+          "scope": "The request-only traversal settles through serving.settleRequest and never publishes local storage.",
+          "admission": "Serving local storage is disabled; detached shadow sources have no local publication authority and no accepted local entry can be lost.",
+          "layers": "The consistent removal preserves storage membership and source ownership. No scheduled history or sampled property at the check bounds probes a previously published local value after the rejection.",
+          "independent": "The held lifecycle handles rejection without calling publishLocal, and local capacity is zero.",
+          "recovery-read": "Rejected held sources go through remote_io.settleLoader, which handles their error or recovery without calling publishLocal with the rejected value.",
+          "runtime-boundaries": "No scheduled history or sampled property at the check bounds probes a previously published local value after another source rejects; the partition checker remeasures that exclusion.",
+          "shadow-layers": "Rejected sources go through remote_writes.failed, which completes or recovers them without calling publishLocal with the rejected value.",
+          "local-clock": "Its inline sources only return accepted values, so the failure-preserves-local branch is never taken.",
+          "dark-layers": "Rejected held sources complete without calling publishLocal with the rejected value, so they cannot take the mutated failure branch."
+        },
+        "model": "formal/dialcache-policy-conformance.qnt"
       },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M24",
-        "text": "M24 is the native twin of kernel/serving.qnt settleLocal writing NO_VALUE and a zero expiry into the slot on its not-accepted branch: both ports clear the key's local entry when a source settlement fails. The declared reproducer source-budgets/rejectedSourceLeavesPublishedLocalEntryTest does not transfer natively because its failing source is an outside bypass, so the policy regression independentFailureKeepsSettledLocalValueTest is the portable evidence."
+        "text": "M24 is the native twin of kernel/serving.qnt publishLocal removing the key's existing local entry on rejection. The shared rule applies to local-only and layered settlements; the native edits affect active fallback paths with an available key, while outside bypass calls never enter those paths."
       }
     },
     {

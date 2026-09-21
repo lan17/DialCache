@@ -542,9 +542,16 @@ consequence fields count at the checkpoint, while cumulative counters count
 only when their divergence first appears there relative to the previous step.
 Each mapping reports `confirmed`, `side-effect-only`, `not-divergent`,
 `unreached`, `vector`, or `unreproduced`; incomplete or failed replays never earn
-boundary credit. Boundary results are currently reported alongside the cohort
-gate while their existing mappings are calibrated, and both ports must replay
-every selected boundary history cleanly before the mutant is measured.
+boundary credit. Both ports must replay every selected history cleanly and
+confirm its boundary under the mutant; the mutation gate names a failure as
+`<mutant>/boundary:<challenge>`, independently of cohort detections. A new
+mapped challenge needs an exported reproducer whose checkpoint compares the
+consequence, or written evidence selecting that consequence in the same run.
+Keep the history executable through completion under the fault: end at the
+decision when a later command would require an operation the fault removes.
+The Go recorder also continues through typed semantic property assertions,
+after validating the complete monitor input; those diagnostics alone earn no
+boundary credit, and malformed driver or monitor records still terminate it.
 
 ### Exported runs are exactly the public-only runs
 

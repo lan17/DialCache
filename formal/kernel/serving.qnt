@@ -193,8 +193,12 @@ module serving {
   // participates (a positive effective TTL), whether it serves one caller at
   // release, completes a flight whose decode was held, or publishes a
   // settled source.
-  pure def warm(state: Served[r], layout: Layout, who: { instance: int, key: int | q }, value: int, localMs: int): Served[r] =
+  pure def warm(state: Local::Local[r], layout: Layout, who: { instance: int, key: int | q }, value: int, localMs: int): Local::Local[r] =
     if (localMs > 0) Local::putLocal(state, who.instance, who.key, value, localMs, layout.keysPerInstance) else state
+  // Only an accepted source value is a local publication. A rejected source
+  // leaves every previously published slot unchanged, in either traversal.
+  pure def publishLocal(state: Local::Local[r], layout: Layout, source: { instance: int, key: int, localMs: int | q }, value: int): Local::Local[r] =
+    if (accepted(value)) warm(state, layout, source, value, source.localMs) else state
   // Publication authority, fixed when a flight's remote read completes (at
   // release for an atomic read, at read settlement for a held one) from the
   // effective TTLs of the reply (`layer_policy::effectiveTtls`: a layer the
@@ -549,7 +553,7 @@ module serving {
     val dumped = { o: { dumps: state.o.dumps + (if (serializes) 1 else 0), ...state.o }, ...state }
     val dispatched = if (dispatches) dispatchWrite(dumped, source.retentionMs) else dumped
     val frames = if (stored) Remote::seedFrame(dispatched, source.key, value, source.retentionMs) else dispatched
-    if (accepted(value)) warm(frames, layout, source, value, source.localMs) else frames
+    publishLocal(frames, layout, source, value)
   }
   pure def settle(state: Served[r], layout: Layout, index: int, value: int): Served[r] =
     finish(publish(state, layout, index, value), layout, index, value)
@@ -557,8 +561,7 @@ module serving {
   // its source captured, when it captured one.
   pure def settleLocal(state: LocalServed[r], layout: Layout, index: int, value: int): LocalServed[r] = {
     val source = state.sources.nth(index)
-    val warmed = if (accepted(value) and source.localMs > 0)
-      Local::putLocal(state, source.instance, source.key, value, source.localMs, layout.keysPerInstance) else state
+    val warmed = publishLocal(state, layout, source, value)
     finish(warmed, layout, index, value)
   }
   pure def settleRequest(state: RequestServed[r], layout: Layout, index: int, value: int): RequestServed[r] =

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
+import { boundaryEvidence, challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
 import { countingPaths, diffPaths } from './replay/divergence.mjs';
 
 // Preserve profile/run identity when workspaces and artifact roots differ.
@@ -152,11 +152,15 @@ export function fingerprintFiles(directory, paths) {
 
 // Every listed catalog entry must have a measured result; a required cohort
 // that did not detect the fault is a regression named `<id>/<cohort>`.
-export function requiredDetectionRegressions(entries, results) {
+export function requiredDetectionRegressions(entries, results, boundaries = results.flatMap(result => result.boundary ?? [])) {
   return entries.flatMap(entry => {
     const result = results.find(item => item.id === entry.id);
     if (!result) throw new Error(`${entry.id}: catalog entry has no measured result`);
-    return entry.requiredDetections.filter(cohort => result.cohorts[cohort].state !== 'detected').map(cohort => `${entry.id}/${cohort}`);
+    return [
+      ...entry.requiredDetections.filter(cohort => result.cohorts[cohort].state !== 'detected').map(cohort => `${entry.id}/${cohort}`),
+      ...boundaries.filter(boundary => boundary.mutant === entry.id && !['confirmed', 'vector', 'unreproduced'].includes(boundary.state))
+        .map(boundary => `${entry.id}/boundary:${boundary.challenge}`),
+    ];
   });
 }
 
@@ -238,7 +242,7 @@ export function noncompilingResult(mutation, cohorts, reason) {
 // A partial (--only) run reports its lost required detections and stops: it
 // is not gated and never completes, so the complete report is untouched.
 export function finishPartial(report, selected, { output, save }) {
-  const lost = requiredDetectionRegressions(selected, report.mutations);
+  const lost = requiredDetectionRegressions(selected, report.mutations, currentBoundaries(report, selected));
   save();
   console.log(lost.length ? `Lost required detections (a partial run is not gated): ${lost.join(', ')}` : 'Every required detection of the selected mutants held');
   console.log(`Partial measurement of ${selected.map(m => m.id).join(', ')}: ${output}/report.json; measure the complete catalog for evidence`);
@@ -300,25 +304,42 @@ export const languages = {
 // A shard therefore fails on its own lost detections before any merge, and the
 // merged summary is computed by the code the single run uses.
 export function gateDetections(language, report, entries, { directory = root, summarize = true } = {}) {
-  const regressions = requiredDetectionRegressions(entries, report.mutations);
+  // Recompute verdicts from the current declarations and completed recordings.
+  // An omitted mapping, a stale pin or a claimed confirmation without a clean
+  // baseline must fail just as a measured non-detection does.
+  const regressions = requiredDetectionRegressions(entries, report.mutations, currentBoundaries(report, entries, directory));
   if (summarize) report.detection = language.detection(report.mutations, directory);
   if (language.recordsRegressions) report.requiredDetectionRegressions = regressions;
   if (regressions.length) throw new Error(`Lost required detections: ${regressions.join(', ')}`);
   if (summarize) report.complete = true;
 }
 
+function currentBoundaries(report, entries, directory = root) {
+  const readSource = path => readFileSync(resolve(directory, path), 'utf8');
+  const ids = new Set(entries.map(entry => entry.id));
+  const evidence = boundaryEvidence(JSON.parse(readSource('formal/execution.json')), { readSource })
+    .filter(entry => ids.has(entry.mutant));
+  return boundaryReview(report, evidence, { requireEntries: true });
+}
+
 // A historical report has only first-mismatch evidence. Preserve it for the
 // reader, but do not upgrade it to a complete recording or a boundary verdict.
-export function boundaryReview(report, evidence, { cohortsDirectory } = {}) {
+export function boundaryReview(report, evidence, { cohortsDirectory, requireEntries = false } = {}) {
   if (!Array.isArray(report.mutations)) throw new Error('Boundary report has no mutation results');
   if (new Set(report.mutations.map(mutation => mutation.id)).size !== report.mutations.length) throw new Error('Boundary report repeats a mutant');
   const legacyByMutant = new Map();
+  for (const mutation of report.mutations) {
+    if (mutation.boundary && new Set(mutation.boundary.map(entry => entry.challenge)).size !== mutation.boundary.length) {
+      throw new Error(`Boundary report repeats a challenge for ${mutation.id}`);
+    }
+  }
   return evidence.map(entry => {
     const mutation = report.mutations.find(mutation => mutation.id === entry.mutant);
     if (!mutation) return { ...entry, state: 'unreached', reason: 'Mapped mutant is absent from the report', divergences: [] };
     const recorded = mutation.boundary?.find(item => item.challenge === entry.challenge);
+    if (!recorded && requireEntries) return { ...entry, state: 'unreached', reason: 'No per-challenge boundary result was recorded', divergences: [] };
     if (recorded) {
-      const same = ['history', 'step', 'fields', 'origin'].every(key => JSON.stringify(recorded[key]) === JSON.stringify(entry[key]));
+      const same = ['mutant', 'history', 'step', 'fields', 'origin'].every(key => JSON.stringify(recorded[key]) === JSON.stringify(entry[key]));
       if (!same || (entry.state && recorded.state !== entry.state)) return { ...entry, state: 'unreached', reason: 'Recorded boundary differs from the current evidence declaration', divergences: recorded.divergences ?? [] };
       if (entry.state) return { ...entry, via: 'coordinator' };
       const baseline = report.boundaryBaselines?.[entry.history];
@@ -364,7 +385,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (command !== 'boundary' || !options.report) throw new Error('Usage: node formal/mutation-reports.mjs boundary --report <report.json> [--cohorts <directory>] [--gate]');
     const { boundaryEvidence } = await import('./execution.mjs');
     const report = JSON.parse(readFileSync(options.report, 'utf8'));
-    const entries = boundaryReview(report, boundaryEvidence(), { cohortsDirectory: options.cohorts });
+    const entries = boundaryReview(report, boundaryEvidence(), { cohortsDirectory: options.cohorts, requireEntries: options.gate === true });
     console.log(JSON.stringify({ sourceReport: resolve(options.report), entries }, null, 2));
     if (options.gate && (report.complete !== true || entries.some(entry => !['confirmed', 'vector', 'unreproduced'].includes(entry.state)))) process.exitCode = 1;
   } catch (error) { console.error(error.message); process.exitCode = 1; }

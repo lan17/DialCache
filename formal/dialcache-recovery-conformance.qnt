@@ -425,6 +425,13 @@ module dialcache_recovery_conformance {
     .then(beginWith(0)).then(rejectWith(0)).then(advanceBy(4000)).then(releaseLoad)
     .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 1
       and s.o.recovery == List("miss") and s.d.ages == List() and s.o.writes == 0)
+  // Start strictly beyond freshness so a shared inclusive age fault cannot
+  // turn the initial read into a hit before the recovery maximum is tested.
+  run maximumAgeAfterDecodeFromStrictlyStaleFrameTest = initialize(1)
+    .then(advanceBy(1000)).then(beginWith(0)).then(rejectWith(0))
+    .then(3.reps(_ => advanceBy(1000))).then(releaseLoad)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 1
+      and s.o.recovery == List("miss") and s.d.ages == List() and s.o.writes == 0)
   run operationAllowReplacesInstanceDenialTest = initialize(2)
     .then(beginWith(0)).then(rejectWith(0)).then(releaseLoad)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.classifications == 1

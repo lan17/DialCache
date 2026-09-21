@@ -635,4 +635,13 @@ module dialcache_shadow_conformance {
     .expect(s.o.calls == List(DEADLINE_ERROR) and s.o.shadow == List("timeout")
       and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0
       and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 990 }))
+
+  // Stop at the observable decision so both the clean and faulty implementation
+  // can complete this boundary history without a later fault-dependent command.
+  run expiredC0BeginsFillBeforePublicationTest = initialize(2)
+    .then(seedAt(1)).then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
+    .then(releaseLoad).then(advanceWallBy(FRESHNESS_MS)).then(releaseRead)
+    .expect(s.o.shadow == List("mismatch") and s.o.loads == 1 and s.o.writes == 0)
+    .then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
+    .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.loads == 1 and s.o.dumps == 1)
 }
