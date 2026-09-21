@@ -2863,6 +2863,18 @@
       "gaps": []
     },
     {
+      "id": "C22.adapter-frame-expiry",
+      "kind": "portable-behavior",
+      "group": "frame-age-and-retention",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "The same exported adapter frame histories establish last-fresh hit and exact-expiry miss, source refill, later reuse and expired diagnostic in both ports."
+      }
+    },
+    {
       "id": "C22.freshness-after-read",
       "group": "policy",
       "evidence": {
@@ -3222,18 +3234,6 @@
         "go": ".formal-traces/go-replay.jsonl",
         "nativeGo": [],
         "scope": "A later served-hit shadow job rejects within its own ten-millisecond budget and reports source_error, preserving the acquired caller value; both native ports replay the exact generated schedule."
-      }
-    },
-    {
-      "id": "C22.adapter-frame-expiry",
-      "kind": "portable-behavior",
-      "group": "frame-age-and-retention",
-      "gaps": [],
-      "evidence": {
-        "typescript": ".formal-traces/ts-replay.json",
-        "go": ".formal-traces/go-replay.jsonl",
-        "nativeGo": [],
-        "scope": "The same exported adapter frame histories establish last-fresh hit and exact-expiry miss, source refill, later reuse and expired diagnostic in both ports."
       }
     }
   ],
