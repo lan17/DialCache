@@ -227,7 +227,8 @@
         "effectsMatchRecords",
         "selectionsAwaitTheirHit",
         "jobBudgetsBelongToLiveJobs",
-        "elapsedStaysBelowReadDeadlines"
+        "elapsedStaysBelowReadDeadlines",
+        "pendingDeadlinesAreFuture"
       ],
       "profile": "admission",
       "differential": {
@@ -576,7 +577,8 @@
         "futureOffsetsFollowRollbacks",
         "channelRestrictionsHold",
         "agesRequireVerdicts",
-        "budgetsAreOneKnob"
+        "budgetsAreOneKnob",
+        "pendingDeadlinesAreFuture"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -810,7 +812,9 @@
           "shadow",
           "independent",
           "shadow-layers",
-          "source-budgets"
+          "source-budgets",
+          "dark-layers",
+          "admission"
         ],
         "exclusions": {
           "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
@@ -820,9 +824,7 @@
           "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
           "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
           "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
-          "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps.",
-          "admission": "Only served-hit shadow jobs are budgeted. The named timeout histories time jobs admitted at elapsed zero, then check retained capacity; the invariants check ownership and lifecycle, not each later job's deadline origin. All eight named runs and all nine scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps.",
-          "dark-layers": "The named source/job timeout history starts both at elapsed zero. The scheduled checks validate deadline ownership, cleanup and failure attribution, without independently comparing registration time with the work's own start. All 18 named runs and all 18 scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
+          "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
         }
       }
     },
@@ -2691,6 +2693,103 @@
         }
       },
       "measures": "Repeats the layers identity fault against the held dark path: every caller must own a source for its own key and instance."
+    },
+    {
+      "source": "formal/kernel/deadlines.qnt",
+      "before": "at: state.now + budget }), ...state }",
+      "after": "at: budget }), ...state }",
+      "id": "dark-layers-budget-starts-at-clock-origin",
+      "contract": "C23",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "invariant": "pendingDeadlinesAreFuture",
+      "measures": "Repeats the shared wrong-origin deadline fault against a later dark caller and its owned diagnostic job.",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M33",
+        "text": "M33 applies the generic elapsed deadline to clock uptime instead of the work start. The shared model fault registers the same wrong absolute deadline. A dark caller starts at elapsed 10 ms and resolves immediately, within its own 10 ms budget. The source must succeed and publish locally for another request scope while the independent dark read remains held. Both faulty variants reject this source and fail the caller-result checkpoint.",
+        "evidence": {
+          "history": "dark-layers/laterDarkSourceKeepsItsWholeBudgetTest",
+          "step": 5,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "laterDarkSourceKeepsItsWholeBudgetTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.o.reads == 1 and s.o.dumps == 0 and s.o.shadow == List() and s.d.fallbackErrors == List()",
+        "family": "source-budget-starts-with-source",
+        "profiles": [
+          "effects",
+          "recovery",
+          "shadow",
+          "independent",
+          "shadow-layers",
+          "source-budgets",
+          "dark-layers",
+          "admission"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "policy": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "layers": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "recovery-read": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
+        }
+      }
+    },
+    {
+      "source": "formal/kernel/deadlines.qnt",
+      "before": "at: state.now + budget }), ...state }",
+      "after": "at: budget }), ...state }",
+      "id": "admission-budget-starts-at-clock-origin",
+      "contract": "C54",
+      "model": "formal/dialcache-admission-conformance.qnt",
+      "invariant": "pendingDeadlinesAreFuture",
+      "measures": "Repeats the shared wrong-origin deadline fault against a later detached job admitted after a served cache hit.",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M33",
+        "text": "M33 applies the generic elapsed deadline to clock uptime instead of the job start. This served-hit job starts at 10 ms and its source rejects at 11 ms, inside its own 10 ms budget. Both the wrong model registration and native settlement report timeout instead of source_error; the served caller keeps its acquired value.",
+        "evidence": {
+          "history": "admission/laterServedShadowKeepsItsWholeBudgetTest",
+          "step": 6,
+          "fields": [
+            "o.shadow"
+          ]
+        },
+        "crossContract": "The C23 mutant changes the generic deadline wrapper used by both caller sources and C54 detached shadow jobs. This mapping requires the shadow outcome from the latter, not a caller-source failure."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "laterServedShadowKeepsItsWholeBudgetTest",
+        "failure": "s.o.calls == List(VALUE_ONE) and s.o.loaders == 1 and s.o.loads == 1 and s.o.shadow == List(\"source_error\")",
+        "family": "source-budget-starts-with-source",
+        "profiles": [
+          "effects",
+          "recovery",
+          "shadow",
+          "independent",
+          "shadow-layers",
+          "source-budgets",
+          "dark-layers",
+          "admission"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "policy": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "layers": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "recovery-read": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
+        }
+      }
     }
   ],
   "reproducerBacklog": [

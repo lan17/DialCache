@@ -10,9 +10,9 @@
     "formal/cohort-boundaries.qnt": "700f0b9ee734f2511b3c7f10138b9636cef93bc1045b653479a05be1766e3407",
     "formal/compact-json.mjs": "fe180d42ea438f915a011accf79728701fd51222877d39adbda8ea3ebf3f4bfb",
     "formal/conformance-observations.qnt": "76e26fb0c5802a13c63f0819071b5326b1586cab187c73d8b204ec7da70f5c2f",
-    "formal/dialcache-admission-conformance.qnt": "db73e02187e5195aac128a51fd97f412b77b86cec6bc5037e2477f31950101d5",
+    "formal/dialcache-admission-conformance.qnt": "6d2559203dfc49d014c4cc6f426f9bcb8851d20e975a4fc63da5946494815e24",
     "formal/dialcache-conformance.qnt": "3e91cad0afa6ba44353d651078fdf6284df0354ca82de0e3712dfe4f243244d7",
-    "formal/dialcache-dark-layers-conformance.qnt": "68e95658985f4f30146b95710835e40358d1e54350f28bc2c06ca03fc19dbe6f",
+    "formal/dialcache-dark-layers-conformance.qnt": "b4559527fcafb170f2282c20e83648fef36e303eaa673340c87ef3751b1dd83d",
     "formal/dialcache-effects-conformance.qnt": "b2592c7c238df42f3da8bf06a448747e76f5b6a8f0e7c271f470a9d9f37a9bef",
     "formal/dialcache-independent-conformance.qnt": "3533ec3bce4ef1c713c034130654b5cd7eb824d3371b58fe796e31e5b70cdf75",
     "formal/dialcache-layers-conformance.qnt": "ec1466114c4379a391b457b4d231c2180bb8a5a2b4e731147ed14ac36d228e8a",
@@ -26,7 +26,7 @@
     "formal/dialcache-shadow-conformance.qnt": "b4806f313929597cafd64cd8ef8f9a7c2f38c63d27481da7e36702063f82a7c7",
     "formal/dialcache-shadow-layers-conformance.qnt": "76a1219307e707b713acc20998c0d9852fa64f782bf18c7c2c634eab74b1e5c9",
     "formal/dialcache-source-budgets-conformance.qnt": "fb9707785725add09358fb8c0c7cb764f86cd42e659ed1f4cc459fd5afe93574",
-    "formal/fixture-recipes.json": "a4b025b6ac08af9f65f386351f03a3d83c02d43f53a85748ea48dfd309e5b127",
+    "formal/fixture-recipes.json": "b6eb70a347341e69860dd9d1ec6d75a1ae76d639a6147d0bfb628949c2e4b1a2",
     "formal/generated-fixtures.mjs": "f73a527cbbc0178be167c11ff8ff21985f05976379ae4054d5f61caa889e34c2",
     "formal/kernel/adapter-replies.qnt": "490e1d65552a174f728aae973f92525ff616b0cf26253873c9fe1804aef7da7d",
     "formal/kernel/calls.qnt": "1fd63856061a9fa9c419b88a736b0d07bce9702eab8b347c936eaaf11f7b4eb3",
@@ -89,6 +89,7 @@
     "test/fixtures/independent-witnesses.json": "d89a21165ac3b401343fd8bebf0f34eaa629f3fdf260ddfe4a3f26b53bac99c9",
     "test/fixtures/independent-shadow-witnesses.json": "c28fc3adb21499dc2fb5f3d2ba431d64d46035eb833bf3f548b19a4a8a72356a",
     "formal/dark-layers-smoke.itf.json": "ab5126916ca785cfc146d3dd9a810f0ae393d9a985ccfaed9666f4ec6c6babda",
-    "test/fixtures/dark-layers-witnesses.json": "120661525fa47ed9f609b1b50599721b9a243db9611f4261b15d6b22fe3bfe80"
+    "test/fixtures/dark-layers-witnesses.json": "a6e7f8a0cf29697d7b82cc380214c9badee6823789babfc633e3bb1b74bd04dc",
+    "test/fixtures/admission-budget-witnesses.json": "3698e2f6a48575c88687f12794115a8724a3f3a813e0ea7cfe38a8f6b87ae87c"
   }
 }

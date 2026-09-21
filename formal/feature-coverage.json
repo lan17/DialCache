@@ -221,7 +221,8 @@
         "C56.late-read",
         "C56.clear-read-timer",
         "C24.independent-source-budgets",
-        "C23.policy-does-not-spend-source-budget"
+        "C23.policy-does-not-spend-source-budget",
+        "C23.later-dark-budget-origins"
       ],
       "nativeCases": [
         "B02.precise-elapsed-deadlines"
@@ -414,6 +415,7 @@
         "C53.confirmation-fails-open",
         "C54.deduplication",
         "C54.source-ownership",
+        "C54.later-served-job-budget-origin",
         "C54.decode-ownership",
         "C54.read-ownership",
         "C54.comparison-budget",

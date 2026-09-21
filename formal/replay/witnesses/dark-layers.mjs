@@ -5,6 +5,10 @@ import { createWitnessRecorder } from "./recorder.mjs";
 // Public commands identify the schedule; consequences at each boundary earn
 // credit independently of filenames and the model's private storage.
 export const darkLayersWitnessRules = [
+  rule("later-dark-source-keeps-own-budget", "laterDarkSourceKeepsItsWholeBudgetTest",
+    [command("init"), command("advance", 10), command("policy", 0), command("beginCall", 0), command("resolveLoader", 1), command("beginCall", 2)],
+    check(4, { calls: [1], loaders: 1, reads: 1, dumps: 0, shadow: [] }, { fallbackErrors: [] }),
+    check(5, { calls: [1, 1], loaders: 1, reads: 1, dumps: 0, shadow: [] }, { fallbackErrors: [] })),
   rule("rejected-dark-source-seeds-no-layer", "rejectedDarkSourceSeedsNoLayerTest",
     [command("init"), command("policy", 0), command("beginCall", 0), command("releaseRead", 0), command("rejectLoader", 0), command("beginCall", 0)],
     check(4, {"calls": [3], "shadow": ["source_error"], "loads": 0, "dumps": 0, "writes": 0}, {"fallbackErrors": ["local"]}),

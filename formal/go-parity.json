@@ -8,32 +8,32 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "4d3a84bf607f845c53e83ec45eb1cfe23e47cff3a8a56678e2824eb177d92011",
-    "executionSha256": "a27f174dd1347d145776b6288da8e64e69156d84b104201302246718dc41347d",
+    "semanticCasesSha256": "1198bdb730d03945d1b7805da51739d1cd2faec37cb93913aa0e50d7c8a5ce5b",
+    "executionSha256": "37302166d1c03a715662efe8b8e58f3691c1caefd7f3e7449c3e51857df75ed2",
     "sourceAuditSha256": "ea98912ebd2e8955c83660ac8ec0a1ca1aea1b52e031b44a16b91bccb89128f4",
-    "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
-    "coverageWitnessesSha256": "3b51885597041d2f3959ede674af9ea13da9406b7b10006c297526c41850bfa2",
+    "featureCoverageSha256": "7139414ac2e69e352f245d0c326336deaf5e885ca60ff231130146a42415845e",
+    "coverageWitnessesSha256": "ed085dcd67902a21b4ae57c82f4221abb03d6a03b4fd35008df1bd496210e40a",
     "profilesSha256": "e8c4aa5d218f20203a5f3173430f9a99af2103c2536e823fa3785806612a9135"
   },
   "inventory": {
-    "behavioralCases": 240,
-    "withRequiredGeneratedWitnesses": 240,
+    "behavioralCases": 242,
+    "withRequiredGeneratedWitnesses": 242,
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
     "sourceDeclarations": 772,
-    "casesWithScheduledChecks": 262,
-    "requiredWitnesses": 477,
-    "casesWithQuintRegressionReplay": 183,
+    "casesWithScheduledChecks": 264,
+    "requiredWitnesses": 479,
+    "casesWithQuintRegressionReplay": 185,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 31,
-    "scheduledInvariants": 239,
-    "scheduledRegressions": 437,
+    "scheduledInvariants": 241,
+    "scheduledRegressions": 439,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 324,
-    "exportedRegressionHistories": 334
+    "caseReferencedWitnesses": 326,
+    "exportedRegressionHistories": 336
   },
   "cases": [
     {
@@ -3199,6 +3199,30 @@
       "id": "C09.fractional-clock-grid",
       "kind": "portable-behavior",
       "gaps": []
+    },
+    {
+      "id": "C23.later-dark-budget-origins",
+      "group": "deadlines",
+      "kind": "portable-behavior",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "An immediately resolved later dark source publishes locally and returns to both caller scopes while its independent dark read remains held; both native ports replay the exact generated schedule."
+      }
+    },
+    {
+      "id": "C54.later-served-job-budget-origin",
+      "group": "shadow",
+      "kind": "portable-behavior",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "A later served-hit shadow job rejects within its own ten-millisecond budget and reports source_error, preserving the acquired caller value; both native ports replay the exact generated schedule."
+      }
     }
   ],
   "sourceDeclarationScope": {

@@ -66,7 +66,8 @@
     "decode-timeout-keeps-slot",
     "confirmation-timeout-keeps-slot",
     "unselected-hit-skips-job",
-    "uncoalesced-hit-overlap"
+    "uncoalesced-hit-overlap",
+    "later-served-shadow-keeps-own-job-budget"
   ],
   "scope": [
     "failure-layer:request_local",
@@ -504,6 +505,7 @@
     "action:writeFault",
     "local-entry-expires-at-its-ttl",
     "request-follower-joins-leader",
-    "transient-request-dark-error-uses-request-layer"
+    "transient-request-dark-error-uses-request-layer",
+    "later-dark-source-keeps-own-budget"
   ]
 }

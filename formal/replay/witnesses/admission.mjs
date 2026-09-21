@@ -1,5 +1,14 @@
+import { publicPrefixWitnesses, publicPrefixRule as rule, publicCheckpoint as check, witnessCommand as command } from "./public-prefix.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 import { fidelityBinding } from "./fidelity.mjs";
+
+export const admissionWitnessRules = [
+  rule("later-served-shadow-keeps-own-job-budget", "laterServedShadowKeepsItsWholeBudgetTest",
+    [command("init"), command("advance", 10), command("beginCall", 0), command("releaseRead", 0), command("releaseLoad", 0), command("advance", 1), command("rejectLoader", 0)],
+    check(5, { calls: [1], loaders: 1, loads: 1, shadow: [] }),
+    check(6, { calls: [1], loaders: 1, loads: 1, shadow: ["source_error"] })),
+];
+
 
 // Shadow-job admission witnesses use declared inputs and public observations
 // only. Job bookkeeping below mirrors the observed effect indices; it never
@@ -11,6 +20,7 @@ import { fidelityBinding } from "./fidelity.mjs";
 // caller flight's (its identity, captured selection and callers) or a job's,
 // the flights registered for sharing, and the clock.
 export function admissionWitnesses(histories, recorder = createWitnessRecorder()) {
+  publicPrefixWitnesses(histories, admissionWitnessRules, recorder);
   for (const { path, steps, predictions } of histories) {
     recorder.enter(path);
     let overlay = 0;

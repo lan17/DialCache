@@ -2853,6 +2853,23 @@
           "id": "transientRequestOnlySourceFailureIsAttributedToRequestLayerTest",
           "regression": "transientRequestOnlySourceFailureIsAttributedToRequestLayerTest",
           "projection": "shadow"
+        },
+        {
+          "id": "laterDarkSourceKeepsItsWholeBudgetTest",
+          "regression": "laterDarkSourceKeepsItsWholeBudgetTest",
+          "projection": "shadow"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/admission-budget-witnesses.json",
+      "model": "formal/dialcache-admission-conformance.qnt",
+      "format": "named-list",
+      "recipes": [
+        {
+          "id": "laterServedShadowKeepsItsWholeBudgetTest",
+          "regression": "laterServedShadowKeepsItsWholeBudgetTest",
+          "projection": "observations"
         }
       ]
     }

@@ -327,6 +327,10 @@ module dialcache_dark_layers_conformance {
   // One knob (C6): the job budget is the source budget, as the library derives it from the call's fallback timeout.
   val budgetsAreOneKnob = shadowing(s.selected).budgetMs == s.sourceBudget
 
+  // Both finite budgets are positive, and advances deliver due work before
+  // observation. A newly started source or job cannot inherit clock uptime.
+  val pendingDeadlinesAreFuture = s.deadlines.indices().forall(i => s.deadlines.nth(i).at > s.now)
+
   // Regressions: public input schedules ---------------------------------------
   // A rejected dark source seeds neither local storage nor the request memo:
   // the next caller of the same scope and key starts its own source and its
@@ -427,6 +431,15 @@ module dialcache_dark_layers_conformance {
     .expect(s.jobs == List() and s.o.shadow == List("timeout") and s.o.dumps == 0)
     .then(beginAt(0))
     .expect(s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2 and s.d.coalesced == List())
+
+  // Earlier clock uptime belongs to neither budget. An immediately resolved
+  // later source publishes for another request scope while its dark read is
+  // still held; neither caller nor job should have already timed out.
+  run laterDarkSourceKeepsItsWholeBudgetTest = init
+    .then(advanceBy(SOURCE_BUDGET_MS)).then(setPolicy(DARK_ALL)).then(beginAt(0))
+    .then(resolveWith(1)).then(beginAt(2))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.o.reads == 1
+      and s.o.dumps == 0 and s.o.shadow == List() and s.d.fallbackErrors == List())
 
   // Same-key callers on two instances keep separate flights and separate jobs
   // (C11): the identity a flight is registered under includes the instance.

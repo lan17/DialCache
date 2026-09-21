@@ -228,6 +228,10 @@ module dialcache_admission_conformance {
   // This served-job shape delivers job budgets, not remote-read deadlines.
   val elapsedStaysBelowReadDeadlines = s.now < READ_BUDGET_MS
 
+  // Job budgets are positive and advances deliver every due timeout before
+  // observation. Work admitted later must not inherit elapsed clock uptime.
+  val pendingDeadlinesAreFuture = s.deadlines.indices().forall(i => s.deadlines.nth(i).at > s.now)
+
   // A job's identity is its source's (instance, key); the registry is
   // pending-only, so every record is a live job.
   def jobInstance(i: int): int = s.sources.nth(s.jobs.nth(i).source).instance
@@ -286,6 +290,15 @@ module dialcache_admission_conformance {
     .then(readWith(0))
     .then(loadWith(0))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.o.reads == 1 and s.o.shadow == List())
+
+  // A served hit starts a detached job after the clock has already advanced.
+  // A source rejection one millisecond later is still its own source error,
+  // not a timeout; the caller keeps the value it acquired from the cache.
+  run laterServedShadowKeepsItsWholeBudgetTest = init
+    .then(advanceBy(SHADOW_TIMEOUT_MS)).then(beginWith(0)).then(readWith(0)).then(loadWith(0))
+    .then(advanceBy(1)).then(rejectWith(0))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 1 and s.o.loads == 1
+      and s.o.shadow == List("source_error"))
 
   run duplicateDropsBeforeCapacityIsFullTest = init
     .then(beginWith(0))

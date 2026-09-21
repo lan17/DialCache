@@ -1137,6 +1137,74 @@
       {"ref": "formal/dialcache-local-clock-conformance.qnt:clockIsOnTheGrid", "scope": "Local insertion and expiry use the common process monotonic whole-millisecond grid, including fractional insertion times and cache instances constructed at different fractional times. The clock the layers read is the integer projection of the raw ticks, spelled without the clock module, so a precise-clock substitution violates it."},
       {"ref": "formal/dialcache-local-clock-conformance.qnt:callsServeLiveEntriesOrRunTheSource", "scope": "Local insertion and expiry use the common process monotonic whole-millisecond grid, including fractional insertion times and cache instances constructed at different fractional times. At a call step the caller served its instance's live entry (strictly before the entry's grid expiry) and started no source, or ran its source, returned the offered value and left the entry stamped from this grid instant for the local TTL."},
       {"ref": "formal/dialcache-local-clock-conformance.qnt:publicCallsMatchSources", "scope": "Local insertion and expiry use the common process monotonic whole-millisecond grid, including fractional insertion times and cache instances constructed at different fractional times. One source per loader, every owned caller completed by its own source's outcome and every entry the value of a source on its instance, so the public observation agrees with the library records."}], "definitions": [
-      {"ref": "formal/kernel/local-storage.qnt:promote", "scope": "A hit renews recency, never insertion: promote writes the LRU order only, so the entry keeps the grid expiry its fill stamped; the regression fractionalInsertionExpiresAtWholeMillisecondTest pins it."}]}
+      {"ref": "formal/kernel/local-storage.qnt:promote", "scope": "A hit renews recency, never insertion: promote writes the LRU order only, so the entry keeps the grid expiry its fill stamped; the regression fractionalInsertionExpiresAtWholeMillisecondTest pins it."}]},
+    {
+      "id": "C23.later-dark-budget-origins",
+      "rule": "A later dark caller and its shadow job receive full budgets from their own starts.",
+      "contracts": [
+        "C23"
+      ],
+      "scenarios": [],
+      "generated": [
+        {
+          "profile": "dark-layers",
+          "witness": "later-dark-source-keeps-own-budget"
+        }
+      ],
+      "vectors": [],
+      "quintReplays": [
+        "dark-layers/laterDarkSourceKeepsItsWholeBudgetTest"
+      ],
+      "models": [
+        {
+          "ref": "formal/dialcache-dark-layers-conformance.qnt:pendingDeadlinesAreFuture",
+          "scope": "Positive budgets remain strictly in the future after registration; time advancement delivers due work before observation."
+        },
+        {
+          "ref": "formal/dialcache-dark-layers-conformance.qnt:laterDarkSourceKeepsItsWholeBudgetTest",
+          "scope": "The caller and dark job start at 10 ms; immediate source success publishes locally for another request scope while the dark read remains held without timing out."
+        }
+      ],
+      "definitions": [
+        {
+          "ref": "formal/kernel/deadlines.qnt:due",
+          "scope": "Registers the absolute deadline from the current elapsed time plus the captured positive work budget."
+        }
+      ]
+    },
+    {
+      "id": "C54.later-served-job-budget-origin",
+      "rule": "A later served-hit shadow job receives its full budget from admission, independent of process uptime.",
+      "contracts": [
+        "C54"
+      ],
+      "scenarios": [],
+      "generated": [
+        {
+          "profile": "admission",
+          "witness": "later-served-shadow-keeps-own-job-budget"
+        }
+      ],
+      "vectors": [],
+      "quintReplays": [
+        "admission/laterServedShadowKeepsItsWholeBudgetTest"
+      ],
+      "models": [
+        {
+          "ref": "formal/dialcache-admission-conformance.qnt:pendingDeadlinesAreFuture",
+          "scope": "Positive budgets remain strictly in the future after registration; time advancement delivers due work before observation."
+        },
+        {
+          "ref": "formal/dialcache-admission-conformance.qnt:laterServedShadowKeepsItsWholeBudgetTest",
+          "scope": "After admission at 10 ms, source rejection at 11 ms reports source_error and the caller retains its served value. A clock-origin budget would report timeout."
+        }
+      ],
+      "definitions": [
+        {
+          "ref": "formal/kernel/deadlines.qnt:due",
+          "scope": "Registers the absolute deadline from the current elapsed time plus the captured positive work budget."
+        }
+      ]
+    }
   ]
 }
