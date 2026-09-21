@@ -1,18 +1,135 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterEach, describe, expect, it } from "vitest";
 
 type Evidence = { challenge: string; mutant: string; history: string; step: number; fields: string[] };
 type Recording = { path: string; completed: boolean; lastStep: number; divergences: Array<{ step: number; paths: string[] }>; error?: string };
 type Verdict = { state: string; matched?: string[]; reason?: string; divergences?: unknown[] };
-const { assessBoundary, parseAssertionDivergences, boundaryReview } = await import(new URL("../formal/mutation-reports.mjs", import.meta.url).href) as {
+const { assessBoundary, parseAssertionDivergences, boundaryReview, validateBoundaryReportFreshness, fingerprintFiles, sha256, languages } = await import(new URL("../formal/mutation-reports.mjs", import.meta.url).href) as {
   assessBoundary(evidence: Evidence | { challenge: string; mutant: string; state: string }, recording?: Recording): Verdict;
   parseAssertionDivergences(text: string, name?: string): unknown[];
   boundaryReview(report: unknown, evidence: unknown[], options?: { requireEntries?: boolean }): Verdict[];
+  validateBoundaryReportFreshness(report: unknown, options?: { directory?: string }): void;
+  fingerprintFiles(directory: string, paths: string[]): { files: number; sha256: string };
+  sha256(bytes: Buffer): string;
+  languages: Record<"ts" | "go", { inputs: string[] }>;
 };
 const evidence: Evidence = { challenge: "captured-retention", mutant: "M29", history: "shadow-layers/capturedTest", step: 7, fields: ["o.writeTtls", "o.shadow"] };
 const record = (changes: Partial<Recording> = {}): Recording => ({
   path: "/tmp/corpus/regressions/shadow-layers/capturedTest.itf.json", completed: true, lastStep: 11,
   divergences: [{ step: 4, paths: ["o.policyCalls"] }, { step: 6, paths: ["o.policyCalls", "o.writeTtls.0"] }, { step: 7, paths: ["o.policyCalls", "o.writeTtls.0"] }],
   ...changes,
+});
+
+const temporaryDirectories: string[] = [];
+afterEach(() => { for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
+
+function measuredSnapshot(port: "ts" | "go") {
+  const directory = mkdtempSync(join(tmpdir(), "dialcache-boundary-freshness-"));
+  temporaryDirectories.push(directory);
+  const corpusPaths = [".formal-traces/conformance", ".formal-traces/effects", ".formal-traces/features", ".formal-traces/regressions"];
+  for (const path of ["src", "test", "formal", "go", ...corpusPaths]) mkdirSync(join(directory, path), { recursive: true });
+  const files: Record<string, string> = {
+    "src/cache.ts": "export const value = 1;", "test/replay.ts": "compare(actual, expected);",
+    "formal/model.qnt": "pure val accepted = true", "formal/mutations.json": '{"mutations":[]}',
+    "go/cache.go": "package cache", "go/go.mod": "module cache", "go/go.sum": "dependency checksum",
+    "package.json": '{"type":"module"}', "pnpm-lock.yaml": "lockfileVersion: 9.0", "tsconfig.json": "{}", "vitest.config.ts": "export default {};",
+    ".formal-traces/regressions/shadow-layers/capturedTest.itf.json": '{"states":[{"input":{"name":"init"}}]}',
+  };
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(directory, path)), { recursive: true });
+    writeFileSync(join(directory, path), content);
+  }
+  const configuration = ["package.json", "pnpm-lock.yaml", "tsconfig.json", "vitest.config.ts"];
+  const report: Record<string, unknown> = {
+    complete: true, catalogSha256: sha256(readFileSync(join(directory, "formal/mutations.json"))),
+    inputs: fingerprintFiles(directory, languages[port].inputs), corpus: fingerprintFiles(directory, corpusPaths),
+    ...(port === "go" ? { go: "go version go1.27.1" } : {
+      configurationSha256: Object.fromEntries(configuration.map(path => [path, sha256(readFileSync(join(directory, path)))])),
+    }),
+    mutations: [{ id: "M29", cohorts: {}, boundary: [assessBoundary(evidence, record())] }],
+    boundaryBaselines: { [evidence.history]: { ...record({ divergences: [] }), history: evidence.history } },
+  };
+  return { directory, report };
+}
+
+describe("gated boundary report freshness", () => {
+  it("fails the actual gated command on stale inputs while historical inspection succeeds", async () => {
+    const { boundaryEvidence } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
+      boundaryEvidence(): Array<Evidence | { challenge: string; mutant: string; state: string }>;
+    };
+    const mutations = new Map<string, { id: string; cohorts: object; boundary: unknown[] }>();
+    const baselines: Record<string, { history: string; completed: boolean; lastStep: number; divergences: unknown[] }> = {};
+    for (const entry of boundaryEvidence()) {
+      if (!mutations.has(entry.mutant)) mutations.set(entry.mutant, { id: entry.mutant, cohorts: {}, boundary: [] });
+      if ("state" in entry) mutations.get(entry.mutant)!.boundary.push(entry);
+      else {
+        mutations.get(entry.mutant)!.boundary.push(assessBoundary(entry, record({
+          path: `regressions/${entry.history}.itf.json`, lastStep: entry.step, divergences: [{ step: entry.step, paths: [entry.fields[0]!] }],
+        })));
+        baselines[entry.history] = { history: entry.history, completed: true, lastStep: Math.max(baselines[entry.history]?.lastStep ?? 0, entry.step), divergences: [] };
+      }
+    }
+    const { directory, report } = measuredSnapshot("go");
+    Object.assign(report, {
+      catalogSha256: sha256(readFileSync(new URL("../formal/mutations.json", import.meta.url))),
+      inputs: { files: 0, sha256: "stale" }, mutations: [...mutations.values()], boundaryBaselines: baselines,
+    });
+    const path = join(directory, "historical-report.json");
+    writeFileSync(path, JSON.stringify(report));
+    const args = [fileURLToPath(new URL("../formal/mutation-reports.mjs", import.meta.url)), "boundary", "--report", path];
+    const historical = spawnSync(process.execPath, args, { encoding: "utf8" });
+    expect(historical.status, historical.stderr).toBe(0);
+    const gated = spawnSync(process.execPath, [...args, "--gate"], { encoding: "utf8" });
+    expect(gated.status).toBe(1);
+    expect(gated.stderr).toContain("source inputs differ from the measured report");
+  });
+
+  it.each(["ts", "go"] as const)("accepts the original %s snapshot but rejects changed sources with unchanged boundary declarations", port => {
+    const { directory, report } = measuredSnapshot(port);
+    expect(() => validateBoundaryReportFreshness(report, { directory })).not.toThrow();
+    for (const path of [port === "ts" ? "src/cache.ts" : "go/cache.go", "formal/model.qnt"]) {
+      const original = readFileSync(join(directory, path));
+      writeFileSync(join(directory, path), "changed behavior at the same named checkpoint");
+      // Historical inspection can still interpret the old recording, but its
+      // unchanged mapping cannot make it evidence for the modified checkout.
+      expect(boundaryReview(report, [evidence], { requireEntries: true })[0]?.state).toBe("confirmed");
+      expect(() => validateBoundaryReportFreshness(report, { directory })).toThrow(/source inputs differ/);
+      writeFileSync(join(directory, path), original);
+    }
+  });
+
+  it.each(["ts", "go"] as const)("rejects a changed catalog or corpus for %s", port => {
+    const { directory, report } = measuredSnapshot(port);
+    const catalog = join(directory, "formal/mutations.json"), original = readFileSync(catalog);
+    writeFileSync(catalog, '{"mutations":[{"id":"M29","after":"different fault"}]}');
+    expect(() => validateBoundaryReportFreshness(report, { directory })).toThrow(/mutation catalog differs/);
+    writeFileSync(catalog, original);
+    writeFileSync(join(directory, ".formal-traces/regressions/shadow-layers/capturedTest.itf.json"), '{"states":[]}');
+    expect(() => validateBoundaryReportFreshness(report, { directory })).toThrow(/corpus differs/);
+  });
+
+  it("checks separately recorded TypeScript configuration and Go module configuration", () => {
+    const ts = measuredSnapshot("ts"), go = measuredSnapshot("go");
+    writeFileSync(join(ts.directory, "pnpm-lock.yaml"), "changed dependency resolution");
+    expect(() => validateBoundaryReportFreshness(ts.report, ts)).toThrow(/TypeScript configuration differs/);
+    writeFileSync(join(go.directory, "go/go.mod"), "module changed");
+    expect(() => validateBoundaryReportFreshness(go.report, go)).toThrow(/source inputs differ/);
+  });
+
+  it("refuses missing fingerprints or ambiguous language metadata without blocking historical inspection", () => {
+    const { directory, report } = measuredSnapshot("ts");
+    for (const field of ["catalogSha256", "inputs", "corpus", "configurationSha256"]) {
+      const incomplete = { ...report };
+      delete incomplete[field];
+      expect(() => validateBoundaryReportFreshness(incomplete, { directory })).toThrow();
+      expect(boundaryReview(incomplete, [evidence])[0]?.state).toBe("confirmed");
+    }
+    expect(() => validateBoundaryReportFreshness({ ...report, go: "go version go1.27.1" }, { directory })).toThrow(/unambiguous/);
+  });
 });
 
 describe("native boundary evidence", () => {

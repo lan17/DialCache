@@ -829,7 +829,9 @@ describe("native boundary evidence", () => {
       [kind, entries.filter(entry => (entry.origin ?? entry.state) === kind).length])));
     expect(entries.find(entry => entry.challenge === "envelope-strips-unknown-zero-prefix")).toMatchObject({ state: "vector" });
     expect(entries.find(entry => entry.challenge === "frame-vectors-inclusive-fence")).toMatchObject({ state: "unreproduced" });
-    expect(entries.find(entry => entry.challenge === "scope-source-error-memoized")).toMatchObject({ state: "unreproduced" });
+    expect(entries.find(entry => entry.challenge === "scope-source-error-memoized")).toMatchObject({
+      history: "dark-layers/rejectedDarkSourceSeedsNoLayerTest", step: 5, origin: "derived",
+    });
   });
 
   it("keeps private state and string literals out of derived public paths", () => {
@@ -879,7 +881,7 @@ describe("native boundary evidence", () => {
     expect(validate(current)).toHaveProperty("boundaryEvidence");
     const model = current.models.find(item => item.path === challenge.model)!;
     expect(() => evidenceOf(challenge, new Map([[model.path, model]]), new Map([[model.path, []]]))).toThrow(/exported public-only history/);
-    const unreproduced = current.challenges.find(item => item.id === "scope-source-error-memoized")!;
+    const unreproduced = current.challenges.find(item => !item.reproducer && item.nativeMutants?.kind === "mapped")!;
     unreproduced.nativeMutants!.evidence = challenge.nativeMutants!.evidence;
     expect(() => validate(current)).toThrow(/written boundary evidence requires an exported-regression reproducer/);
   });

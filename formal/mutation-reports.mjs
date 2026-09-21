@@ -299,6 +299,35 @@ export const languages = {
     detection: mutations => goDetection(mutations), markdown: goMarkdown, recordsRegressions: true },
 };
 
+// Historical inspection may read a report anywhere. Gated inspection instead
+// binds its evidence to this checkout and the exact corpus it claims to test.
+// Existing report formats distinguish Go by its toolchain version and
+// TypeScript by its separately fingerprinted project configuration; Go's
+// module configuration is already covered by the go/ input tree.
+export function validateBoundaryReportFreshness(report, { directory = root } = {}) {
+  const go = typeof report.go === 'string';
+  const typescript = report.configurationSha256 !== undefined;
+  if (go === typescript) throw new Error('Boundary gate requires unambiguous TypeScript or Go report metadata');
+  const language = go ? languages.go : languages.ts;
+  const catalogSha256 = sha256(readFileSync(resolve(directory, language.catalog)));
+  if (report.catalogSha256 !== catalogSha256) throw new Error('Boundary gate: mutation catalog differs from the measured report');
+  const sameFingerprint = (recorded, measured) => recorded?.files === measured.files && recorded?.sha256 === measured.sha256;
+  if (!sameFingerprint(report.inputs, fingerprintFiles(directory, language.inputs))) {
+    throw new Error(`Boundary gate: ${language.name} source inputs differ from the measured report`);
+  }
+  if (typescript) {
+    const configuration = ['package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'vitest.config.ts'];
+    const recorded = report.configurationSha256;
+    if (!recorded || typeof recorded !== 'object' || Array.isArray(recorded) ||
+        Object.keys(recorded).sort().join() !== [...configuration].sort().join() ||
+        configuration.some(path => recorded[path] !== sha256(readFileSync(resolve(directory, path))))) {
+      throw new Error('Boundary gate: TypeScript configuration differs from the measured report');
+    }
+  }
+  const corpus = fingerprintFiles(directory, ['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
+  if (!sameFingerprint(report.corpus, corpus)) throw new Error('Boundary gate: corpus differs from the measured report');
+}
+
 // The same gate for a shard (its own catalog entries, no summary), the
 // single-process run and the merge (the whole catalog, summary, completion).
 // A shard therefore fails on its own lost detections before any merge, and the
@@ -385,6 +414,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (command !== 'boundary' || !options.report) throw new Error('Usage: node formal/mutation-reports.mjs boundary --report <report.json> [--cohorts <directory>] [--gate]');
     const { boundaryEvidence } = await import('./execution.mjs');
     const report = JSON.parse(readFileSync(options.report, 'utf8'));
+    if (options.gate) validateBoundaryReportFreshness(report);
     const entries = boundaryReview(report, boundaryEvidence(), { cohortsDirectory: options.cohorts, requireEntries: options.gate === true });
     console.log(JSON.stringify({ sourceReport: resolve(options.report), entries }, null, 2));
     if (options.gate && (report.complete !== true || entries.some(entry => !['confirmed', 'vector', 'unreproduced'].includes(entry.state)))) process.exitCode = 1;

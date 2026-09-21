@@ -109,8 +109,13 @@ Read the evidence with `node formal/mutation-reports.mjs boundary --report
 <report.json>`. Optional `--cohorts <directory>` reads historical assertion
 diagnostics, which show only the first mismatch and cannot establish that a
 later checkpoint was reached. Diagnostics with incompatible raw and projected
-record shapes are not credited. `--gate` fails the inspection command on any
-reported boundary gap other than `vector` or `unreproduced`.
+record shapes are not credited. Ungated inspection can read historical reports;
+it does not validate the current checkout. `--gate` additionally requires a
+complete report whose catalog, measured source inputs, recorded configuration
+and exact corpus fingerprints match the checkout. Keep the measured corpus
+artifact when checking a downloaded report; regenerating it may change its
+bytes. A missing fingerprint or any reported boundary gap other than `vector`
+or `unreproduced` fails the gated command.
 
 Model mutations challenge the specification's independent properties.
 Implementation mutations challenge the assertions that connect generated

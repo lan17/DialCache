@@ -50,8 +50,11 @@ jobs:
     # Scheduled workflows run the default branch; keep the intended main scope explicit.
     if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Run 34660598461 spent about 8.5 minutes on this work; a 2x slower runner needs 17.
-    timeout-minutes: 30
+    # Shared-library challenges now execute the importing profiles' partitions,
+    # including clean baselines and mutant checks cached by exact source closure.
+    # Allow 60 minutes while measuring this expanded workload on hosted runners;
+    # the earlier 30-minute budget covered only the pre-partition model checks.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation

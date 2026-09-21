@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "4d3a84bf607f845c53e83ec45eb1cfe23e47cff3a8a56678e2824eb177d92011",
     "executionSha256": "005a6b0c62e206e07802f43b41af1437f34d0034971991f8bd814252026f227d",
-    "sourceAuditSha256": "e816f5fdfa380fe705d0e4f670a6ba1d939c45ab21f3a1c4b0f33cb398f86a8d",
+    "sourceAuditSha256": "ea98912ebd2e8955c83660ac8ec0a1ca1aea1b52e031b44a16b91bccb89128f4",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "3b51885597041d2f3959ede674af9ea13da9406b7b10006c297526c41850bfa2",
     "profilesSha256": "e8c4aa5d218f20203a5f3173430f9a99af2103c2536e823fa3785806612a9135"
@@ -28,12 +28,12 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 31,
-    "scheduledInvariants": 232,
-    "scheduledRegressions": 431,
+    "scheduledInvariants": 239,
+    "scheduledRegressions": 437,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 324,
-    "exportedRegressionHistories": 328
+    "exportedRegressionHistories": 334
   },
   "cases": [
     {

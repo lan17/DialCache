@@ -139,7 +139,7 @@ describe("Quint process pool", () => {
     expect(planned.args).toEqual(["run", "formal/dialcache-layers-conformance.qnt", "--mbt", "--backend=rust", "--n-threads=1", "--seed=0xd1a1ca",
       "--max-samples=2048", "--max-steps=80", "--n-traces=512", "--out-itf=.formal-traces/features/layers/trace_{seq}.itf.json", "--verbosity=1", "--invariants",
       "sourceEffectsMatch", "capacityIsPerInstance", "closedScopesHaveNoMemo", "registeredSourcesArePending", "zeroCapacityHasNoLocalValues", "callsKeepSourceOutcome",
-      "localMembershipMatchesLru", "absentRemoteHasNoAdapterEffects", "sourceOwnershipNeverCrossesKeyOrInstance"]);
+      "localMembershipMatchesLru", "absentRemoteHasNoAdapterEffects", "sourceOwnershipNeverCrossesKeyOrInstance", "atomicPathSeedsDecodableFrames"]);
     const pilot = generationArguments("/differential/layers/candidate/formal/dialcache-layers-conformance.qnt", layers.generate!, ["a", "b"], { ...options, outputDirectory: "/scratch" });
     const shared = planned.args.slice(0, planned.args.indexOf("--invariants") + 1)
       .map(arg => arg === layers.path ? "/differential/layers/candidate/formal/dialcache-layers-conformance.qnt" : arg.startsWith("--out-itf=") ? "--out-itf=/scratch/trace_{seq}.itf.json" : arg);

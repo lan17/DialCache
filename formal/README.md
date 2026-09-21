@@ -88,10 +88,12 @@ and time. Their introduction does not imply that every product of those domains
 is explored. [profiles.json](./profiles.json) records profile versions, input
 encodings, smoke traces and implementation declarations.
 
-The [kernel library](./kernel/README.md) states each portable rule once as pure
-transitions; a composed profile assigns state only through them. The layers,
-runtime-boundaries, scope, source-budgets and policy profiles are composed today, each
-verified by the corpus differential; the other profiles remain authoritative and their totals are unchanged.
+The [kernel library](./kernel/README.md) states shared portable rules as pure
+transitions; a composed profile assigns state only through them. Every profile
+except core composes this library. The corpus differential checks that changes
+preserve existing profiles' observable behavior; a new profile establishes its
+behavior through independent properties, consequential witnesses and replay in
+both implementations.
 
 ## Generating and replaying behavior
 
