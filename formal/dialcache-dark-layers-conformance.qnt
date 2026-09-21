@@ -262,6 +262,17 @@ module dialcache_dark_layers_conformance {
       Shadow::holdsJob(s, s.dumps.nth(i).source) and accepted(s.sources.nth(s.dumps.nth(i).source).result))
     and s.writes.indices().forall(i =>
       Shadow::holdsJob(s, s.writes.nth(i).source) and accepted(s.sources.nth(s.writes.nth(i).source).result))
+  // A job deadline ends the diagnostic result, not the raw work it owns.
+  // Every held effect still has its registration until the external release;
+  // the source-only dark wait is the exception and owns none of these effects.
+  val heldEffectsKeepTheirJob = s.reads.indices().forall(i =>
+      s.jobs.indices().exists(j => s.jobs.nth(j).source == s.reads.nth(i).flight))
+    and s.loads.indices().forall(i =>
+      s.jobs.indices().exists(j => s.jobs.nth(j).source == s.loads.nth(i).flight))
+    and s.dumps.indices().forall(i =>
+      s.jobs.indices().exists(j => s.jobs.nth(j).source == s.dumps.nth(i).source))
+    and s.writes.indices().forall(i =>
+      s.jobs.indices().exists(j => s.jobs.nth(j).source == s.writes.nth(i).source))
   def captured(source: int): int = Remote::physicalRetention(s, Shadow::jobOf(s, source).ttls.retentionMs)
   val fillsCarryCapturedAuthority = s.dumps.indices().forall(i =>
       not(Shadow::holdsJob(s, s.dumps.nth(i).source))
@@ -464,6 +475,72 @@ module dialcache_dark_layers_conformance {
     .expect(s.o.reads == 1 and s.o.shadow == List("dropped") and s.jobs.length() == 1)
     .then(beginAt(4))
     .expect(s.o.reads == 2 and s.o.shadow == List("dropped") and s.jobs.length() == 2)
+
+  // The caller is already complete when the job times out. A different key
+  // is dropped while its raw C0 read still holds the slot; releasing the read
+  // drains it without decode or fill, and a later competing job is admitted.
+  run timedOutDarkReadKeepsCapacityUntilRawReleaseTest = init
+    .then(setPolicy(DARK_NONE)).then(beginAt(0)).then(resolveWith(1))
+    .then(advanceBy(SOURCE_BUDGET_MS))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.shadow == List("timeout"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.reads == 1 and s.o.shadow == List("timeout", "dropped"))
+    .then(resolveWith(3)).then(readAt(0))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0 and s.o.shadow == List("timeout", "dropped"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 3 and s.o.reads == 2 and s.o.shadow == List("timeout", "dropped"))
+
+  // The raw decode likewise retains capacity after the verdict timed out.
+  // Its late settlement must start no confirmation read before freeing it.
+  run timedOutDarkDecodeKeepsCapacityUntilRawReleaseTest = init
+    .then(setPolicy(DARK_NONE)).then(seedAt(0)).then(beginAt(0)).then(readAt(0)).then(resolveWith(2))
+    .then(advanceBy(SOURCE_BUDGET_MS))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.loads == 1 and s.o.shadow == List("timeout"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_TWO, CALL_PENDING) and s.o.reads == 1 and s.o.shadow == List("timeout", "dropped"))
+    .then(resolveWith(3)).then(loadAt(0))
+    .expect(s.o.reads == 1 and s.o.dumps == 0 and s.o.writes == 0 and s.o.shadow == List("timeout", "dropped"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_TWO, VALUE_ONE, CALL_PENDING) and s.o.loaders == 3 and s.o.reads == 2 and s.o.shadow == List("timeout", "dropped"))
+
+  // This is the whole-job deadline while C1 is held, distinct from a separate
+  // Redis read deadline. The latter has its own contract and fixture.
+  run timedOutDarkConfirmationKeepsCapacityUntilRawReleaseTest = init
+    .then(setPolicy(DARK_NONE)).then(seedAt(0)).then(beginAt(0)).then(readAt(0)).then(resolveWith(2)).then(loadAt(0))
+    .then(advanceBy(SOURCE_BUDGET_MS))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.reads == 2 and s.o.shadow == List("timeout"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_TWO, CALL_PENDING) and s.o.reads == 2 and s.o.shadow == List("timeout", "dropped"))
+    .then(resolveWith(3)).then(readAt(1))
+    .expect(s.o.reads == 2 and s.o.dumps == 0 and s.o.writes == 0 and s.o.shadow == List("timeout", "dropped"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_TWO, VALUE_ONE, CALL_PENDING) and s.o.loaders == 3 and s.o.reads == 3 and s.o.shadow == List("timeout", "dropped"))
+
+  // An accepted source cannot free the slot of its unfinished serialization.
+  // After timeout its raw completion frees capacity without dispatching SET.
+  run timedOutDarkDumpKeepsCapacityUntilRawReleaseTest = init
+    .then(setPolicy(DARK_NONE)).then(beginAt(0)).then(readAt(0)).then(resolveWith(1))
+    .then(advanceBy(SOURCE_BUDGET_MS))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 1 and s.o.shadow == List("timeout"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.reads == 1 and s.o.shadow == List("timeout", "dropped"))
+    .then(resolveWith(3)).then(releaseDumpAt(0))
+    .expect(s.o.writes == 0 and s.o.shadow == List("timeout", "dropped"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 3 and s.o.reads == 2 and s.o.shadow == List("timeout", "dropped"))
+
+  // A dispatched write continues to own capacity after timeout. Its late SET
+  // can finish, but emits no second verdict and frees the slot for a new job.
+  run timedOutDarkWriteKeepsCapacityUntilRawReleaseTest = init
+    .then(setPolicy(DARK_NONE)).then(beginAt(0)).then(readAt(0)).then(resolveWith(1)).then(releaseDumpAt(0))
+    .then(advanceBy(SOURCE_BUDGET_MS))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.writes == 1 and s.o.shadow == List("timeout"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.reads == 1 and s.o.shadow == List("timeout", "dropped"))
+    .then(resolveWith(3)).then(releaseWriteAt(0))
+    .expect(s.o.writes == 1 and s.o.shadow == List("timeout", "dropped"))
+    .then(beginAt(1))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 3 and s.o.reads == 2 and s.o.shadow == List("timeout", "dropped"))
 
   // A dump fault ends the fill without a write; the caller's result stands (C53).
   run dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest = init

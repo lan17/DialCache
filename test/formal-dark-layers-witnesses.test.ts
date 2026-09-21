@@ -51,6 +51,17 @@ describe("held dark-layer public witnesses", () => {
     trace.states[11]!.s.o.shadow = ["filled", "filled"];
     expect(classify(trace).has(name)).toBe(false);
   });
+  it("requires both denied admission and later released capacity for every held effect", () => {
+    for (const rule of darkLayersWitnessRules.filter(rule => rule.name.startsWith("timed-out-dark-"))) {
+      const dropped = rule.checkpoints[1]!, readmitted = rule.checkpoints.at(-1)!;
+      const early = traceFor(rule.name);
+      early.states[dropped.step]!.s.o.reads = integer(Number(dropped.observation.reads) + 1);
+      expect(classify(early).has(rule.name)).toBe(false);
+      const leaked = traceFor(rule.name);
+      leaked.states[readmitted.step]!.s.o.reads = integer(Number(readmitted.observation.reads) - 1);
+      expect(classify(leaked).has(rule.name)).toBe(false);
+    }
+  });
   it("requires the profile's diagnostic identity and keeps the existing default", () => {
     const observed = { ...emptyObservation(), events: [{ event: "coalesced" as const, cacheNamespace: "urn", keyType: "id", useCase: "DarkLayers", scope: "request_local" }] };
     expect(projectObservation(darkLayersProfile, observed)).toMatchObject({ d: { coalesced: ["request_local"] } });

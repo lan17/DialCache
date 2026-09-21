@@ -1812,6 +1812,38 @@
           "portable"
         ]
       }
+    },
+    {
+      "id": "M58",
+      "case": "C54.dump-ownership",
+      "description": "Release shadow capacity at the whole-job timeout before its raw work settles",
+      "rationale": "TypeScript runShadowValidation calls release from the whole-job timeout hook and Go runShadow deletes the matching registration after awaitDeadline reports the timeout. Both free the slot while the raw source/read/decode/dump/write work still runs, allowing a competing job too early. The edits keep abandonment and late-result suppression unchanged.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "src/dialcache.ts",
+            "before": "        signalShadowTimeout();\n      },",
+            "after": "        signalShadowTimeout();\n        release();\n      },"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow.go",
+            "before": "if err != nil {\n\t\tverdict = shadowVerdict{outcome: \"timeout\"}\n\t}",
+            "after": "if err != nil {\n\t\tverdict = shadowVerdict{outcome: \"timeout\"}\n\t\tx.cache.mu.Lock()\n\t\tif x.cache.shadows[x.key] == f {\n\t\t\tdelete(x.cache.shadows, x.key)\n\t\t}\n\t\tx.cache.mu.Unlock()\n\t}"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
     }
   ]
 }

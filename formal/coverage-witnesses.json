@@ -506,6 +506,11 @@
     "local-entry-expires-at-its-ttl",
     "request-follower-joins-leader",
     "transient-request-dark-error-uses-request-layer",
-    "later-dark-source-keeps-own-budget"
+    "later-dark-source-keeps-own-budget",
+    "timed-out-dark-read-retains-capacity-until-raw-release",
+    "timed-out-dark-decode-retains-capacity-until-raw-release",
+    "timed-out-dark-confirmation-retains-capacity-until-raw-release",
+    "timed-out-dark-dump-retains-capacity-until-raw-release",
+    "timed-out-dark-write-retains-capacity-until-raw-release"
   ]
 }

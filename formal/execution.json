@@ -578,7 +578,8 @@
         "channelRestrictionsHold",
         "agesRequireVerdicts",
         "budgetsAreOneKnob",
-        "pendingDeadlinesAreFuture"
+        "pendingDeadlinesAreFuture",
+        "heldEffectsKeepTheirJob"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -2789,6 +2790,46 @@
           "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
           "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
         }
+      }
+    },
+    {
+      "id": "dark-layers-timeout-releases-held-capacity",
+      "contract": "C54",
+      "source": "formal/kernel/shadow.qnt",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "invariant": "heldEffectsKeepTheirJob",
+      "before": "if (job.dark and job.phase == WAITING_SOURCE) { jobs: expired.jobs.select(other => other.source != job.source), ...expired }",
+      "after": "if (true) { jobs: expired.jobs.select(other => other.source != job.source), ...expired }",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "timedOutDarkDumpKeepsCapacityUntilRawReleaseTest",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.reads == 1 and s.o.shadow == List(\"timeout\", \"dropped\")",
+        "family": "shadow-timeout-releases-held-capacity",
+        "profiles": [
+          "shadow",
+          "admission",
+          "shadow-layers",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "effects": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "recovery": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "policy": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "scope": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "layers": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "independent": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "recovery-read": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "local-failure": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "runtime-boundaries": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "local-clock": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release.",
+          "source-budgets": "Does not compose the shadow module, so a shadow job deadline cannot reach the mutated release."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M58",
+        "text": "M58 removes the shadow registration when the whole-job timeout is reported in both ports, while raw read/decode/dump/write work can still be pending. The kernel expireJob edit frees the same held-work capacity at timeout. The exported held-dump history detects the premature admission at its competing-key public checkpoint; companion histories cover C0 read, decode, C1 read and write."
       }
     }
   ],
