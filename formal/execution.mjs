@@ -648,9 +648,6 @@ function validateBacklog(challenges, ids, { name, listed, present, grandfathered
 // is a reviewed change to this constant, never a manifest edit.
 export const grandfatheredReproducerBacklog = Object.freeze([
   'local-precise-grid',
-  'profile-source-wrong-owner',
-  'independent-source-wrong-owner',
-  'core-unhealthy-local-read-hits',
   'core-tracked-fallback-warms-local',
   'runtime-policy-coalesce-defaults-off',
   'runtime-policy-physical-ttl-ignores-recovery',
@@ -658,9 +655,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'stale-recovery-candidate-stamped-at-read',
   'redis-protocol-inclusive-fence',
   'redis-protocol-untracked-fence',
-  'scope-late-source-repopulates-closed-memo',
-  'layers-late-memo-into-closed-scope',
-  'independent-fresh-frame-retained',
 ]);
 
 // Compiling semantic faults, checked against independent model obligations.

@@ -114,6 +114,11 @@ establishes that the corpus would catch the mistake in a port; an explained
 one establishes only that the model rejects it. Unmapped challenges are listed
 in `nativeMutantBacklog`, which only shrinks. See
 [mapping every challenge to native mutants](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
+Ownership receipts, failed-read state, closed-scope memo cleanup and initial
+recovery retention have exact model checkpoints. The closed-scope and recovery
+histories also use public inputs replayed by both ports, but their additional
+private-state assertions remain model evidence; they do not create native
+mutation coverage where later native checks hide the same internal fault.
 Boundary properties can challenge an eligibility helper by stating the
 inequality directly. Connection and composition properties may reuse that
 helper while checking independently captured inputs, ownership and history;

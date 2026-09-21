@@ -15,11 +15,15 @@ module dialcache_source_connection {
   var sources: List[SourceExecution]
   var before: { now: int, calls: int, held: List[Gate::Held], registered: int, budget: int }
 
-  action init = all {
-    profile::init,
+  action clearMonitor = all {
     sources' = List(),
     before' = { now: 0, calls: 0, held: List(), registered: -1, budget: 0 }
   }
+
+  action init = all { profile::init, clearMonitor }
+  // An exact fixture for the ownership receipt below; outside calls ignore
+  // this finite budget, but it removes initialization choice from the run.
+  action initFinite = all { profile::initialize(profile::FINITE_BUDGET_MODE), clearMonitor }
 
   val startedOwner = if (profile::input.name == "releasePolicy")
     Gate::entry(before, profile::input.choice).caller else before.calls
@@ -29,12 +33,13 @@ module dialcache_source_connection {
     sources.append(captureSource(startedOwner, before.now,
       if (startedOutside) -1 else before.budget)) else sources
 
-  action step = all {
+  action recordBefore = all {
     sources' = observedSources,
     before' = { now: profile::s.now, calls: profile::s.o.calls.length(),
-      held: profile::s.held, registered: profile::s.processFlights.nth(0), budget: profile::s.sourceBudget },
-    profile::step
+      held: profile::s.held, registered: profile::s.processFlights.nth(0), budget: profile::s.sourceBudget }
   }
+  action step = all { recordBefore, profile::step }
+  action beginOutside = all { recordBefore, profile::begin(profile::OUTSIDE) }
 
   val sourceOriginsMatchContract = observedSources.length() == profile::s.sources.length() and
     observedSources.indices().forall(index => {
@@ -55,4 +60,11 @@ module dialcache_source_connection {
   })
   val followerKeepsAcquiredOwner = profile::input.name != "releasePolicy" or before.registered < 0 or
     profile::s.owners.nth(Gate::entry(before, profile::input.choice).caller) == before.registered
+
+  // The monitor records caller identity from the external admission count,
+  // independently of registerSource's owners table. Source one must belong
+  // to the second outside caller even though no sharing registry is used.
+  run outsideSourcesKeepDistinctOwnersTest = initFinite
+    .then(beginOutside).then(beginOutside)
+    .expect(sourceOwnersMatchContract and observedSources.length() == 2)
 }

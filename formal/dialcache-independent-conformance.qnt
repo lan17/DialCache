@@ -332,6 +332,13 @@ module dialcache_independent_conformance {
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.recovery == List("served", "served")
       and s.o.reads == 2 and s.o.loaders == 2 and s.o.loads == 2 and s.o.dumps == 0 and s.o.writes == 0)
 
+  // This private receipt is stricter than native observability: even though
+  // later recovery rechecks would reject it, a frame already at its captured
+  // maximum must not become a retained candidate in the model.
+  run initiallyExpiredFrameIsNotRetainedTest = init.then(seedWith(3)).then(advanceBy(1))
+    .then(beginCall).then(readAt(0))
+    .expect(retainedSnapshotsWereEligible and s.retained.nth(0).candidate == NO_VALUE)
+
   // A fresh hit retains nothing: when its decode fails, the loader it starts
   // cannot recover, and a rejection completes with the source error and the
   // loader's identity, unclassified.

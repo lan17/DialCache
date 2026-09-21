@@ -404,7 +404,11 @@ reproducer. A `model-run` cites a run that only the model executes and must
 carry a `scope` explaining its evidence boundary: a vector model
 whose cases reach the codecs through an exported artifact, or instrumentation
 such as a receipt that no driver observes. A run that is exported must be cited
-as an `exported-regression`; `scope` is rejected on that kind. `profiles` must
+as an `exported-regression`; `scope` is rejected on that kind. Public inputs
+do not make every model expectation observable: a run may also check private
+retention or memo state. Keep its `nativeMutants` classification `model-only`
+or `unobservable` when those checks have no native consequence; exporting the
+history alone does not establish a native fault mapping. `profiles` must
 include the challenged model's own profile id, or its path for a model without
 a profile, and the cited run's profile. For a fault in a shared library every
 known profile must appear in `profiles` or in `exclusions`; a fault in one

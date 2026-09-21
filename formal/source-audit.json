@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "49c30eb7ce4557cdcbc63388cb585c1b9c7c3283170a2f8d88181d084c67e8f4",
+      "sha256": "e2dfb3a88674961fc47f10ee48062bf58a46ddcfbd65d8657f59cd8d9abef042",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":20,"title":"Reading a model"},
@@ -1017,8 +1017,8 @@
         {"line":327,"title":"Reproducible committed fixtures"},
         {"line":337,"title":"Refactoring and execution"},
         {"line":365,"title":"Challenging every model"},
-        {"line":447,"title":"Mapping every challenge to native mutants"},
-        {"line":580,"title":"Exported runs are exactly the public-only runs"}
+        {"line":451,"title":"Mapping every challenge to native mutants"},
+        {"line":584,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1363,16 +1363,16 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "15b2ce2142ea46438c9ebe46efef41dce3736fdc2eef0a0a81983f134bd0a217",
+      "sha256": "96693505907a84258f46ae275c19d1558e90b763d027132008e4876f880562c7",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
         {"line":65,"title":"Model assurance"},
-        {"line":128,"title":"Generated boundary evidence"},
-        {"line":136,"title":"Behavioral mutation comparison"},
-        {"line":150,"title":"Recorded measurements"},
-        {"line":156,"title":"Reproduction and CI"},
-        {"line":216,"title":"Model properties and cross-language execution"}
+        {"line":133,"title":"Generated boundary evidence"},
+        {"line":141,"title":"Behavioral mutation comparison"},
+        {"line":155,"title":"Recorded measurements"},
+        {"line":161,"title":"Reproduction and CI"},
+        {"line":221,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",

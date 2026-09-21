@@ -954,6 +954,35 @@
       "nativeMutants": {
         "kind": "model-only",
         "text": "The fault rewrites kernel/flights.qnt registerSource to record every source-starting caller as the owner of source 0, so finish (finishOwnedCalls and ownedBy) never completes a caller from the source it started; the connection monitor sourceOwnersMatchContract checks this bookkeeping against a reference captured at start. Neither port has an owners table: the starter awaits the promise its own run returned (TypeScript src/dialcache.ts singleFlightProcess and singleFlightRequestLocal) or its own goroutine result (Go go/engine.go singleFlight), and followers await the flight they looked up by key, so a caller cannot be bound to any source other than the one it started or joined. A wrong-key lookup is the C11 identity fault (M20), not this one."
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "outsideSourcesKeepDistinctOwnersTest",
+        "failure": "sourceOwnersMatchContract and observedSources.length() == 2",
+        "family": "source-owner-receipt",
+        "profiles": [
+          "formal/dialcache-source-connection.qnt",
+          "effects",
+          "recovery",
+          "policy",
+          "shadow",
+          "scope",
+          "admission",
+          "layers",
+          "independent",
+          "recovery-read",
+          "local-failure",
+          "runtime-boundaries",
+          "shadow-layers",
+          "local-clock",
+          "source-budgets",
+          "dark-layers",
+          "shadow-read-deadlines"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/flights.qnt; the ownership-registry mutation is outside its executable closure."
+        },
+        "scope": "Two outside callers start distinct sources. The connection monitor captures each caller from the external admission count and rejects an owners-table rewrite at the second source. This checks model bookkeeping only: native callers await their own source promise or goroutine result, with no owners table to mutate."
       }
     },
     {
@@ -1287,6 +1316,35 @@
       "nativeMutants": {
         "kind": "model-only",
         "text": "The fault rewrites kernel/flights.qnt registerSource to record every caller as the owner of flight 0, so the flight a caller's own read dispatched never completes it and flight 0 completes every caller; the connection monitor independentSourceOriginsMatchContract finds no owner for any other flight's loader. With coalesce false each port caller awaits the promise or goroutine of the source it started itself (TypeScript src/dialcache.ts finishRedisChain through callFallback and withFallbackTimeout; Go go/engine.go execution.source returning into GetOrLoad), so no registry exists that could route a settlement to another caller."
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "independentReadSourcesKeepDistinctOwnersTest",
+        "failure": "independentSourceOriginsMatchContract and profile::s.o.loaders == 2",
+        "family": "source-owner-receipt",
+        "profiles": [
+          "formal/dialcache-independent-connection.qnt",
+          "effects",
+          "recovery",
+          "policy",
+          "shadow",
+          "scope",
+          "admission",
+          "layers",
+          "independent",
+          "recovery-read",
+          "local-failure",
+          "runtime-boundaries",
+          "shadow-layers",
+          "local-clock",
+          "source-budgets",
+          "dark-layers",
+          "shadow-read-deadlines"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/flights.qnt; the ownership-registry mutation is outside its executable closure."
+        },
+        "scope": "Two independent held reads start distinct loaders. The unchanged connection property rejects the second loader having no caller in the mutated ownership registry. Both ports return each independent source into its own caller without such a registry; this reproducer checks the model monitor, not a native wrong-key fault."
       }
     },
     {
@@ -1426,6 +1484,17 @@
       "nativeMutants": {
         "kind": "model-only",
         "text": "The core model keeps localHasValue apart from the environment flag localReadHealthy, so the fault in dialcache-core.qnt localHit serves a value through a read the environment declared failed. In both ports the failed read is the harness seam and yields no value: TypeScript spies LocalCache.prototype.getWithResolvedConfig in test/formal/behavior-driver.ts and throws before delegation, so DialCache.readLocalWithResolvedConfig in src/dialcache.ts returns a disabled result with reason config_error; Go panics in behaviorLocalFaultClock.ElapsedMS (go/behavior_driver_test.go) inside Cache.localGet (go/cache.go) and callSafely returns the zero localResult. No decision point could return the stored value from a failed read; a Go-only bypass of the seam has no TypeScript twin and would test the harness. Moving either seam must re-trigger this review."
+      },
+      "reproducer": {
+        "kind": "model-run",
+        "run": "failedLocalReadCannotServePreviouslyStoredValueTest",
+        "failure": "s.localHasValue and s.phase == RemoteLookup and s.origin == NoResult and s.localReads == 1 and failedLocalReadSkipsReuseAndPublication",
+        "family": "unhealthy-read-served",
+        "profiles": [
+          "formal/dialcache-core.qnt"
+        ],
+        "exclusions": {},
+        "scope": "The run first populates local storage, then fails the next read and stops at its lookup decision. The independent property rejects serving that retained model value through a failed read. Native fault seams throw or panic before returning an entry, so there is no native value-selection decision to mutate at this boundary."
       }
     },
     {
@@ -2050,6 +2119,33 @@
       "nativeMutants": {
         "kind": "unobservable",
         "text": "The closure guard on the memo write (TypeScript RequestLocalCache.set in src/context.ts; Go the owner-live check before the memo write in the run closure of go/engine.go GetOrLoad) is the native line of kernel/request-memo.qnt memoize memoizing into a closed scope, but removing it changes no public history: both ports re-check closure on the memo read (TypeScript RequestLocalCache.read in src/context.ts; the same Go run closure serves the memo only while the owner is live) and bypass closed scopes at admission, mirroring the kernel's admission bypass. Measured once while this table was authored, the edit survived every scope and layers history in both ports; the model detects the fault only through the state invariant closedScopesHaveNoMemo, so the challenge is unobservable rather than mapped."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "lateSourceCannotPopulateReplacementTest",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.memo == List(NO_VALUE, NO_VALUE)",
+        "family": "closed-scope-memo-publication",
+        "profiles": [
+          "recovery",
+          "scope",
+          "layers",
+          "recovery-read"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/request-memo.qnt; the memo-write closure mutation is outside its executable closure.",
+          "effects": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "policy": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "shadow": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "admission": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "independent": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "local-failure": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "runtime-boundaries": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "shadow-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "local-clock": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "source-budgets": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "dark-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection."
+        }
       }
     },
     {
@@ -2271,6 +2367,34 @@
       "nativeMutants": {
         "kind": "unobservable",
         "text": "The closure guard on the memo write (TypeScript RequestLocalCache.set in src/context.ts; Go the owner-live check before the memo write in the run closure of go/engine.go GetOrLoad) is the native line of kernel/request-memo.qnt memoize memoizing into a closed scope, but removing it changes no public history: both ports re-check closure on the memo read (TypeScript RequestLocalCache.read in src/context.ts; the same Go run closure serves the memo only while the owner is live) and bypass closed scopes at admission, mirroring the kernel's admission bypass. Measured once while this table was authored, the edit survived every scope and layers history in both ports; the model detects the fault only through the state invariant closedScopesHaveNoMemo, so the challenge is unobservable rather than mapped."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "model": "formal/dialcache-scope-conformance.qnt",
+        "run": "lateSourceCannotPopulateReplacementTest",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.memo == List(NO_VALUE, NO_VALUE)",
+        "family": "closed-scope-memo-publication",
+        "profiles": [
+          "recovery",
+          "scope",
+          "layers",
+          "recovery-read"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/request-memo.qnt; the memo-write closure mutation is outside its executable closure.",
+          "effects": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "policy": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "shadow": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "admission": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "independent": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "local-failure": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "runtime-boundaries": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "shadow-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "local-clock": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "source-budgets": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "dark-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection."
+        }
       }
     },
     {
@@ -2284,6 +2408,33 @@
       "nativeMutants": {
         "kind": "model-only",
         "text": "The fault drops the age window from kernel/recovery.qnt retain, so a visible frame the read declined is retained whatever its age. A fresh frame never reaches retain, so the candidate retained under the fault is one past the maximum, consulted only through validCandidate's maximum recheck at loader failure and at decode settlement: no observation changes and only retainedSnapshotsWereEligible sees it; the former literal mutant (retainedAgeAllowed to recoveryAgeAllowed) is equivalent here for the same reason. In both ports retention and serving are mutually exclusive (TypeScript src/internal/redis-cache.ts getWithResolvedConfig returns hit or retained by comparing the age with the fresh age; Go go/engine.go readServing returns kind hit before recover) and the maximum is rechecked before and after decode, so no single edit retains an out-of-window frame a later check does not reject."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "initiallyExpiredFrameIsNotRetainedTest",
+        "failure": "retainedSnapshotsWereEligible and s.retained.nth(0).candidate == NO_VALUE",
+        "family": "initial-recovery-retention-window",
+        "profiles": [
+          "independent"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
+          "effects": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "recovery": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "policy": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
+          "shadow": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "scope": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "admission": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "layers": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
+          "recovery-read": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "local-failure": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
+          "runtime-boundaries": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
+          "shadow-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "local-clock": "This profile does not import formal/kernel/recovery.qnt; the candidate-retention mutation is outside its executable closure.",
+          "source-budgets": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "dark-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it."
+        }
       }
     },
     {
@@ -3598,19 +3749,13 @@
   ],
   "reproducerBacklog": [
     "local-precise-grid",
-    "profile-source-wrong-owner",
-    "independent-source-wrong-owner",
-    "core-unhealthy-local-read-hits",
     "core-tracked-fallback-warms-local",
     "runtime-policy-coalesce-defaults-off",
     "runtime-policy-physical-ttl-ignores-recovery",
     "stale-recovery-inclusive-served-maximum",
     "stale-recovery-candidate-stamped-at-read",
     "redis-protocol-inclusive-fence",
-    "redis-protocol-untracked-fence",
-    "scope-late-source-repopulates-closed-memo",
-    "layers-late-memo-into-closed-scope",
-    "independent-fresh-frame-retained"
+    "redis-protocol-untracked-fence"
   ],
   "nativeMutantBacklog": []
 }

@@ -14,7 +14,7 @@
     "formal/dialcache-conformance.qnt": "3e91cad0afa6ba44353d651078fdf6284df0354ca82de0e3712dfe4f243244d7",
     "formal/dialcache-dark-layers-conformance.qnt": "48eabb9a055a364249b4aa4404642732e022d6d8b67ab35f7c4b82c3412b9ea7",
     "formal/dialcache-effects-conformance.qnt": "e0f635a8257355017f8298d258b2b361bc162797e2eb0a38127c95ddb9508900",
-    "formal/dialcache-independent-conformance.qnt": "3533ec3bce4ef1c713c034130654b5cd7eb824d3371b58fe796e31e5b70cdf75",
+    "formal/dialcache-independent-conformance.qnt": "a73b277b380f40ef8d57fc0cc88ca2d0a303c688ed3b46e338780a0a2b5303d2",
     "formal/dialcache-layers-conformance.qnt": "ec1466114c4379a391b457b4d231c2180bb8a5a2b4e731147ed14ac36d228e8a",
     "formal/dialcache-local-clock-conformance.qnt": "be5ff65ab487d716eb4e4f35f6e85a42edb129da616525024711334fc3256754",
     "formal/dialcache-local-failure-conformance.qnt": "7265971af30386195a60ed76dd7bd5a3b71501b81cf7d4a183222f9d52cebee6",

@@ -516,6 +516,17 @@ module dialcache_core {
     .then(toggleLocalReadHealth).then(startEnabledCall).then(requestLookup).then(localLookup).then(remoteLookupHealthy)
     .expect(s.origin == RemoteValue and s.localReads == 1 and s.remoteReads == 1 and s.sourceCalls == 0 and s.localWrites == 0)
 
+  // Populate local storage first, then fail its read. Ending at the lookup
+  // decision attributes the fault to illegal reuse rather than a later action
+  // that becomes disabled after the faulty hit.
+  run failedLocalReadCannotServePreviouslyStoredValueTest = init.then(toggleLocalPolicy)
+    .then(openScope).then(startEnabledCall).then(requestLookup).then(localLookup)
+    .then(skipRemote).then(loaderSuccessWithoutRemote).expect(s.localHasValue)
+    .then(resetCall).then(toggleLocalReadHealth).then(startEnabledCall)
+    .then(requestLookup).then(localLookup)
+    .expect(s.localHasValue and s.phase == RemoteLookup and s.origin == NoResult
+      and s.localReads == 1 and failedLocalReadSkipsReuseAndPublication)
+
   run localWriteFailurePreservesSourceAndMemoTest = init.then(toggleLocalPolicy).then(toggleRequestPolicy)
     .then(toggleLocalWriteHealth).then(openScope).then(startEnabledCall).then(requestLookup).then(localLookup)
     .then(skipRemote).then(loaderSuccessWithoutRemote)
