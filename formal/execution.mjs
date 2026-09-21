@@ -222,6 +222,169 @@ export function reproducerCheckpoint(source, run, failure, declarations = scanDe
   throw new Error(`${run} has no top-level expect whose condition is the declared failure`);
 }
 
+// Count states in the supported deterministic action-chain syntax, then turn
+// that count into a zero-based ITF checkpoint. Expectations add no state;
+// literal repetitions add every transition they execute. This deliberately
+// refuses an unfamiliar expression instead of assigning it an approximate
+// index: the challenge can supply reviewed written evidence in that case.
+export function checkpointStep(before, declarations) {
+  const refuse = detail => { throw new Error(`Cannot derive boundary checkpoint: ${detail}; write nativeMutants.evidence`); };
+  const matching = (tokens, start) => {
+    const close = shuts[opens.indexOf(tokens[start])];
+    let depth = 1;
+    for (let i = start + 1; i < tokens.length; i++) {
+      if (tokens[i] === tokens[start]) depth++;
+      else if (tokens[i] === close && --depth === 0) return i;
+    }
+    return refuse('unbalanced action expression');
+  };
+  const add = (a, b) => {
+    const count = a + b;
+    if (!Number.isSafeInteger(count)) refuse('checkpoint exceeds safe integer range');
+    return count;
+  };
+  function count(tokens, trail = new Set()) {
+    while (tokens[0] === '(' && matching(tokens, 0) === tokens.length - 1) tokens = tokens.slice(1, -1);
+    if (!tokens.length) return refuse('empty action expression');
+    const chain = [];
+    for (let i = 0; i < tokens.length; i++) {
+      if (opens.includes(tokens[i])) { i = matching(tokens, i); continue; }
+      if (tokens[i] === '.' && ['then', 'expect'].includes(tokens[i + 1])) {
+        if (tokens[i + 2] !== '(') return refuse('unrecognized chain operator');
+        const end = matching(tokens, i + 2);
+        chain.push({ start: i, end, method: tokens[i + 1], argument: tokens.slice(i + 3, end) });
+        i = end;
+      }
+    }
+    if (chain.length) {
+      let total = count(tokens.slice(0, chain[0].start), trail);
+      let end = chain[0].start - 1;
+      for (const part of chain) {
+        if (part.start !== end + 1) return refuse('unsupported expression between chain steps');
+        if (part.method === 'then') total = add(total, count(part.argument, trail));
+        end = part.end;
+      }
+      if (end !== tokens.length - 1) return refuse('unsupported action-chain suffix');
+      return total;
+    }
+    const dot = tokens.indexOf('.');
+    if (dot > 0 && tokens[dot + 1] === 'reps' && tokens[dot + 2] === '(' && matching(tokens, dot + 2) === tokens.length - 1) {
+      const literal = tokens.slice(0, dot).join('');
+      if (!/^\d+$/.test(literal) || !Number.isSafeInteger(Number(literal))) return refuse('repetition count must be a safe integer literal');
+      const lambda = tokens.slice(dot + 3, -1);
+      if (!/^[A-Za-z_]\w*$/.test(lambda[0] ?? '') || lambda[1] !== '=' || lambda[2] !== '>') return refuse('unsupported repetition lambda');
+      const repeated = Number(literal) * count(lambda.slice(3), trail);
+      if (!Number.isSafeInteger(repeated)) return refuse('repetition count exceeds safe integer range');
+      return repeated;
+    }
+    const name = tokens[0];
+    const declaration = declarations.get(name);
+    if (!declaration || !['action', 'run'].includes(declaration.kind)) return refuse(`unknown action ${name}`);
+    if (trail.has(name)) return refuse(`cyclic action alias ${name}`);
+    if (tokens.length !== 1 && !(tokens[1] === '(' && matching(tokens, 1) === tokens.length - 1)) return refuse(`unsupported action expression ${name}`);
+    const body = declaration.body;
+    let equals = -1;
+    for (let i = 0; i < body.length; i++) {
+      if (opens.includes(body[i])) { i = matching(body, i); continue; }
+      if (body[i] === '=') { equals = i; break; }
+    }
+    if (equals < 0) return refuse(`action ${name} has no body`);
+    const rhs = body.slice(equals + 1);
+    const sequences = rhs.some((token, i) => token === '.' && ['then', 'reps'].includes(rhs[i + 1]));
+    if (['all', 'any', '{'].includes(rhs[0])) {
+      if (sequences) return refuse(`nested action sequence in ${name}`);
+      // An atomic wrapper must not hide a multi-state action behind an alias.
+      for (const [index, token] of rhs.entries()) {
+        if (rhs[index - 1] === ':' || rhs[index - 1] === '.' || rhs[index + 1] === ':') continue;
+        if (declarations.get(token)?.kind === 'action' && count([token], new Set([...trail, name])) !== 1) {
+          return refuse(`nested action sequence in ${name}`);
+        }
+      }
+      return 1;
+    }
+    return count(rhs, new Set([...trail, name]));
+  }
+  const states = count(tokenize(before).tokens);
+  if (states < 1) refuse('history has no initial state');
+  return states - 1;
+}
+
+const observationFields = new Set(['calls', 'loaders', 'reads', 'loads', 'dumps', 'writes', 'policyCalls', 'invalidations',
+  'classifications', 'comparisons', 'maintenance', 'recovery', 'shadow', 'sourceScopes', 'writeTtls']);
+const effectsFields = new Set(['calls', 'loaders', 'reads', 'loads', 'dumps', 'writes', 'policyCalls', 'invalidations',
+  'writeTtls', 'events', 'readContexts', 'readAborts']);
+function boundaryField(profile, field) {
+  if (profile === 'effects' || profile === 'local-clock') {
+    if (field.startsWith('o.')) field = field.slice(2);
+    if (profile === 'effects') field = ({ 'io.budgets': 'readContexts', 'io.aborted': 'readAborts' })[field] ?? field;
+    return (profile === 'effects' ? effectsFields : observationFields).has(field) ? field : undefined;
+  }
+  return /^(o|d|io)\.\w+$/.test(field) || /^(markers|compression|policyErrors)$/.test(field) ? field : undefined;
+}
+
+// Fields name the actual assertion record, rather than the model's private
+// state. The two flat replay bindings (effects and local-clock) are explicit;
+// feature profiles retain their channel prefix. Tests cross-check these paths
+// against the bindings without making the manifest validator import replay.
+export function evidenceOf(challenge, models, publicOnly, { readSource = read, scanSource = scanDeclarationBodies } = {}) {
+  const native = challenge.nativeMutants;
+  if (native?.kind !== 'mapped') return undefined;
+  const base = { challenge: challenge.id, mutant: native.mutant };
+  const model = models.get(challenge.reproducer?.model ?? challenge.model);
+  if (!model) throw new Error(`${challenge.id}: boundary evidence model is not scheduled`);
+  const reproducer = challenge.reproducer;
+  const written = native.evidence;
+  if (reproducer?.kind !== 'exported-regression') {
+    if (written !== undefined) throw new Error(`${challenge.id}: written boundary evidence requires an exported-regression reproducer`);
+    return { ...base, state: model.vectorExport && reproducer?.kind === 'model-run' ? 'vector' : 'unreproduced' };
+  }
+  if (!model.profile || !publicOnly.get(model.path)?.includes(reproducer.run)) throw new Error(`${challenge.id}: boundary evidence requires an exported public-only history`);
+  const history = `${model.profile}/${reproducer.run}`;
+  if (written !== undefined) {
+    if (!written || typeof written !== 'object' || Array.isArray(written) ||
+      Object.keys(written).some(key => !['history', 'step', 'fields'].includes(key))) throw new Error(`${challenge.id}: invalid written boundary evidence`);
+    if (written.history !== history) throw new Error(`${challenge.id}: evidence history must equal the reproducer history ${history}`);
+    if (!Number.isSafeInteger(written.step) || written.step < 1) throw new Error(`${challenge.id}: evidence step must be a positive integer`);
+    if (!Array.isArray(written.fields) || !written.fields.length || new Set(written.fields).size !== written.fields.length ||
+      written.fields.some(field => typeof field !== 'string' || boundaryField(model.profile, field) !== field)) {
+      throw new Error(`${challenge.id}: evidence fields must be nonempty unique public assertion paths for ${model.profile}`);
+    }
+    return { ...base, history, step: written.step, fields: [...written.fields], origin: 'written' };
+  }
+  const source = readSource(model.path), declarations = scanSource(source);
+  const checkpoint = reproducerCheckpoint(source, reproducer.run, reproducer.failure, declarations);
+  const tokens = tokenize(reproducer.failure).tokens;
+  const fields = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] !== 's' || tokens[i + 1] !== '.') continue;
+    const channel = tokens[i + 2];
+    // A private field can share a public name (effects' reads/loaders lists).
+    // Only the public channels, plus the explicitly compared root channels,
+    // contribute evidence; flat paths are produced by projection below.
+    if (!['o', 'd', 'io', 'events', 'markers', 'compression', 'policyErrors'].includes(channel)) continue;
+    const raw = ['o', 'd', 'io'].includes(channel) && tokens[i + 3] === '.'
+      ? `${channel}.${tokens[i + 4]}` : channel;
+    const field = boundaryField(model.profile, raw);
+    if (field && !fields.includes(field)) fields.push(field);
+  }
+  if (!fields.length) throw new Error(`${challenge.id}: checkpoint has no derived public fields; write nativeMutants.evidence`);
+  const step = checkpointStep(checkpoint.before, declarations);
+  if (step < 1) throw new Error(`${challenge.id}: boundary evidence checkpoint must follow initialization`);
+  return { ...base, history, step, fields, origin: 'derived' };
+}
+
+export function boundaryEvidence(manifest = readExecution(), { readSource = read, scanSource = scanDeclarationBodies } = {}) {
+  const sources = new Map(), declarations = new Map();
+  const source = path => { if (!sources.has(path)) sources.set(path, readSource(path)); return sources.get(path); };
+  const scanned = text => { if (!declarations.has(text)) declarations.set(text, scanSource(text)); return declarations.get(text); };
+  const models = new Map(manifest.models.map(model => [model.path, model]));
+  const publicOnly = new Map(manifest.models.filter(model => model.profile).map(model => [model.path, classifyRuns(scanned(source(model.path))).publicOnly]));
+  return manifest.challenges.flatMap(challenge => {
+    const evidence = evidenceOf(challenge, models, publicOnly, { readSource: source, scanSource: scanned });
+    return evidence === undefined ? [] : [evidence];
+  });
+}
+
 const positiveInteger = (value, label) => {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Invalid positive bound: ${label}`);
 };
@@ -307,7 +470,7 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
 // the challenge's contract. The challenge text says why the mutant is the same
 // fault as the model's; the port-side account lives once on the catalog entry.
 export const nativeMutantKinds = ['mapped', 'unobservable', 'model-only'];
-const nativeMutantFields = ['kind', 'text', 'mutant', 'crossContract'];
+const nativeMutantFields = ['kind', 'text', 'mutant', 'crossContract', 'evidence'];
 const nativeMutantTextLimits = { mapped: 500, unobservable: 900, 'model-only': 900 };
 
 // One catalog of native mutants, each entry a fault described once and
@@ -386,7 +549,7 @@ export function checkMutantAnchors(catalog, readText = read) {
 }
 
 const portPath = /\b(?:src|go)\/[\w./-]+/;
-function validateNativeMutants(challenge, { catalog }) {
+function validateNativeMutants(challenge, { catalog, models, publicOnly, source, scanned }) {
   const { id, nativeMutants: native } = challenge;
   if (!native || typeof native !== 'object' || Array.isArray(native)) throw new Error(`${id}: invalid nativeMutants`);
   const unknown = Object.keys(native).filter(key => !nativeMutantFields.includes(key));
@@ -398,7 +561,7 @@ function validateNativeMutants(challenge, { catalog }) {
   // keeps the port-side account from creeping back into every citing challenge.
   if (text.length > nativeMutantTextLimits[kind]) throw new Error(`${id}: nativeMutants text exceeds ${nativeMutantTextLimits[kind]} characters; the port-side account belongs in the mutant's rationale`);
   if (kind !== 'mapped') {
-    if (mutant !== undefined || crossContract !== undefined) throw new Error(`${id}: ${kind} nativeMutants name no mutant`);
+    if (mutant !== undefined || crossContract !== undefined || native.evidence !== undefined) throw new Error(`${id}: ${kind} nativeMutants name no mutant or evidence`);
     // An explanation names the port code it examined, so a reader can check it.
     if (!portPath.test(text)) throw new Error(`${id}: ${kind} nativeMutants text must name the port file it examined`);
     return;
@@ -411,6 +574,9 @@ function validateNativeMutants(challenge, { catalog }) {
   const outside = !catalog.caseContracts.get(entry.case).includes(challenge.contract);
   if (outside && !nonEmptyText(crossContract)) throw new Error(`${id}: ${mutant} is on case ${entry.case} which does not list ${challenge.contract}; add a crossContract reason`);
   if (!outside && crossContract !== undefined) throw new Error(`${id}: crossContract note for in-contract mutant ${mutant}`);
+  return evidenceOf(challenge, models, publicOnly, {
+    readSource: source, scanSource: () => scanned(challenge.reproducer?.model ?? challenge.model),
+  });
 }
 
 // Challenges that predate the native-mutant requirement. The cutoff fault
@@ -518,6 +684,7 @@ function validateChallenges(manifest, { source, scanned, contracts, sources, pro
   const optional = ['measures', 'reproducer', 'nativeMutants'];
   const ids = new Set(), faults = new Map(), challengedModels = new Set();
   const kinds = { mapped: 0, unobservable: 0, 'model-only': 0 };
+  const boundary = { derived: 0, written: 0, unreproduced: 0, vector: 0 };
   let reproducers = 0;
   for (const challenge of challenges) {
     if (!challenge || typeof challenge !== 'object' || fields.some(key => typeof challenge[key] !== 'string' || !challenge[key])) {
@@ -547,7 +714,8 @@ function validateChallenges(manifest, { source, scanned, contracts, sources, pro
       reproducers++;
     }
     if (challenge.nativeMutants !== undefined) {
-      validateNativeMutants(challenge, { catalog });
+      const evidence = validateNativeMutants(challenge, { catalog, models, publicOnly, source, scanned });
+      if (evidence) boundary[evidence.origin ?? evidence.state]++;
       kinds[challenge.nativeMutants.kind]++;
     }
     // One fault, one native mapping: a repeated fault measured against another
@@ -579,7 +747,7 @@ function validateChallenges(manifest, { source, scanned, contracts, sources, pro
   return { challenges: challenges.length, distinctFaults: faults.size, challengedModels: challengedModels.size, waivedModels: waived.length,
     reproducers, reproducerBacklog: reproducerBacklogSize,
     nativeMutants: { mapped: kinds.mapped, unobservable: kinds.unobservable, modelOnly: kinds['model-only'], backlog: nativeBacklogSize },
-    unmappedMutants };
+    boundaryEvidence: boundary, unmappedMutants };
 }
 
 export function validateExecution(manifest = readExecution(), {

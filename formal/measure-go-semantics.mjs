@@ -4,8 +4,9 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
-import { classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { boundaryEvidence, checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
+import { assessBoundary, classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, parseAssertionDivergences, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { boundaryBaselines, boundaryTrace, mutationBoundaries, runBoundaryReplay } from './boundary-replay.mjs';
 import { settlementViolationPattern } from './replay/settlement.mjs';
 
 // The whole output line that carries a settlement violation. Anchored per
@@ -119,6 +120,7 @@ export function evaluateGoTestEvents(lines, exitCode) {
   if (exitCode !== (failed ? 1 : 0) || packages[0] !== (failed ? 'fail' : 'pass')) throw new Error('Go exit code and assertion results disagree');
   return { state: failed ? 'detected' : 'survived', passed: leaves.length - failed, failed,
     failingTests: failedLeaves, assertionKinds, assertionEvidence: Object.fromEntries(failedLeaves.map(name => [name, outputs.get(name)])),
+    divergences: failedLeaves.flatMap(name => parseAssertionDivergences(outputs.get(name), name)),
     executedTests: leaves };
 }
 
@@ -172,6 +174,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     const originals = checkMutantAnchors(mutantCatalog, readWorkspace);
     const catalog = { mutations: mutantsForPort(mutantCatalog, language.port) };
     const selected = selectMutations(catalog.mutations, { shard, only });
+    const evidence = boundaryEvidence().filter(entry => selected.some(mutation => mutation.id === entry.mutant));
     if (!only && shard.count > 1) report.shard = { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) };
     const ordinaryFiles = readdirSync(moduleDirectory).filter(file => file.endsWith('_test.go') && !infrastructureTestFile.test(file)).sort();
     const ordinary = ordinaryFiles.flatMap(file => [...readFileSync(resolve(moduleDirectory, file), 'utf8').matchAll(/^func (Test\w+)\(t \*testing\.T\)/gm)].map(match => match[1]));
@@ -186,6 +189,11 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
       DIALCACHE_FEATURE_TRACE_DIR: resolve(root, '.formal-traces/features'),
       DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory,
     });
+    const replayBoundary = (label, history) => runBoundaryReplay({
+      port: language.port, history, label, output, root, workspace, env, go,
+    });
+    const boundaries = (id, replay = history => replayBoundary(id, history)) =>
+      mutationBoundaries(evidence.filter(entry => entry.mutant === id), replay, assessBoundary);
     report.revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
     report.go = spawnSync(go, ['version'], { cwd: moduleDirectory, encoding: 'utf8' }).stdout?.trim();
     report.node = process.version;
@@ -237,6 +245,8 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
       console.log(`baseline ${cohort}: ${report.baselines[cohort].passed} passing leaf tests`); save();
     }
     report.baselines.portable = portableCohort(report.baselines.generated, report.baselines.fixed);
+    report.boundaryBaselines = boundaryBaselines(evidence, history => replayBoundary('baseline', history));
+    save();
     for (const mutation of selected) {
       const editedPaths = new Set();
       try {
@@ -249,13 +259,17 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
         try { compile(mutation.id); } catch (error) {
           // Recorded, never measured: the gate names the mutant while the rest
           // of the shard is still measured.
-          report.mutations.push(noncompilingResult(mutation, [...Object.keys(cohorts), 'portable'], error.message));
+          const result = noncompilingResult(mutation, [...Object.keys(cohorts), 'portable'], error.message);
+          result.boundary = boundaries(mutation.id, history => ({ path: boundaryTrace(history, resolve(root, '.formal-traces')).path,
+            completed: false, lastStep: -1, divergences: [], error: error.message }));
+          report.mutations.push(result);
           console.log(`${mutation.id}: noncompiling`); save();
           continue;
         }
         const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
         for (const cohort of Object.keys(cohorts)) result.cohorts[cohort] = run(mutation.id, cohort, false);
         result.cohorts.portable = portableCohort(result.cohorts.generated, result.cohorts.fixed);
+        result.boundary = boundaries(mutation.id);
         report.mutations.push(result);
         console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, value]) => `${name}=${value.state}(${value.failed})`).join(', ')}`); save();
       } finally { for (const path of editedPaths) writeFileSync(resolve(workspace, path), originals.get(path)); }

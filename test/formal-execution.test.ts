@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 type Reproducer = { kind: string; run: string; model?: string; failure: string; family: string; profiles: string[]; exclusions: Record<string, string>; scope?: string };
-type NativeMutants = { kind: string; text: string; mutant?: string; crossContract?: string };
+type WrittenEvidence = { history: string; step: number; fields: string[] };
+type BoundaryEvidence = { challenge: string; mutant: string; history?: string; step?: number; fields?: string[]; origin?: "derived" | "written"; state?: "vector" | "unreproduced" };
+type NativeMutants = { kind: string; text: string; mutant?: string; crossContract?: string; evidence?: WrittenEvidence };
 type Challenge = { id: string; contract: string; source: string; model: string; invariant: string; before: string; after: string; measures?: string; reproducer?: Reproducer; nativeMutants?: NativeMutants };
 type Manifest = {
   check: { maxSamples: number; maxSteps: number; outputDirectory: string };
@@ -32,7 +34,7 @@ type Catalog = { mutations: Map<string, MutantEntry>; caseContracts: Map<string,
 type Summary = { [key: string]: unknown; nativeMutants: { mapped: number; unobservable: number; modelOnly: number; backlog: number }; unmappedMutants: number };
 type Declarations = Map<string, { kind: string; body: string[]; spans: Array<[number, number]> }>;
 type Options = { readSource?(path: string): string; scanSource?(source: string): Declarations; grandfathered?: readonly string[]; grandfatheredNative?: readonly string[]; catalog?: Catalog; files?: string[] };
-const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution, scheduleExecution, readMutantCatalog, checkMutantAnchors, mutantsForPort, challengesByMutant, nativeMutantKinds, grandfatheredReproducerBacklog, grandfatheredNativeMutantBacklog, quintSources } = await import(moduleUrl) as {
+const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, checkpointStep, boundaryEvidence, evidenceOf, validateExecution, scheduleExecution, readMutantCatalog, checkMutantAnchors, mutantsForPort, challengesByMutant, nativeMutantKinds, grandfatheredReproducerBacklog, grandfatheredNativeMutantBacklog, quintSources } = await import(moduleUrl) as {
   root: string;
   quintSources(directory?: string): string[];
   scheduleExecution(manifest?: Manifest, options?: Options): Scheduled;
@@ -40,6 +42,9 @@ const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerC
   scanDeclarationBodies(source: string): Declarations;
   classifyRuns(declarations: Map<string, { kind: string; body: string[] }>): { publicOnly: string[]; patching: string[] };
   reproducerCheckpoint(source: string, run: string, failure: unknown): { before: string; through: string };
+  checkpointStep(before: string, declarations: Declarations): number;
+  boundaryEvidence(manifest?: Manifest, options?: Options): BoundaryEvidence[];
+  evidenceOf(challenge: Challenge, models: Map<string, Manifest["models"][number]>, publicOnly: Map<string, string[]>, options?: Options): BoundaryEvidence | undefined;
   validateExecution(value: unknown, options?: Options): Summary;
   readMutantCatalog(readText?: (path: string) => string): Catalog;
   checkMutantAnchors(catalog: Catalog, readText?: (path: string) => string): Map<string, string>;
@@ -96,6 +101,8 @@ describe("formal execution schedule", () => {
       challenges: raw.challenges.length, distinctFaults: new Set(raw.challenges.map(challenge => JSON.stringify([challenge.source, challenge.before, challenge.after]))).size,
       challengedModels: challenged, waivedModels: waived, reproducers: liveReproducers(), reproducerBacklog: raw.reproducerBacklog.length,
       nativeMutants: { mapped: kinds("mapped"), unobservable: kinds("unobservable"), modelOnly: kinds("model-only"), backlog: raw.nativeMutantBacklog.length },
+      boundaryEvidence: Object.fromEntries(["derived", "written", "unreproduced", "vector"].map(kind =>
+        [kind, boundaryEvidence(raw).filter(entry => (entry.origin ?? entry.state) === kind).length])),
       unmappedMutants: catalog.mutations.size - cited.size,
     });
     expect(current.libraries.length + raw.models.length).toBe(quintSources().length);
@@ -757,5 +764,144 @@ describe("formal execution schedule", () => {
     }
     expect(generated[0]!.args).toEqual(expect.arrayContaining(["--max-samples=256", "--max-steps=30", "--seed=0x1234"]));
     expect(sampled.find(job => job.outputDirectory === ".formal-traces/features/layers")!.args).toEqual(expect.arrayContaining(["--max-samples=2048", "--max-steps=80"]));
+  });
+});
+
+describe("native boundary evidence", () => {
+  it("counts initializer aliases, nested chains and every repeated public transition", () => {
+    const declarations = scanDeclarationBodies(`module checkpoints {
+      var s: int
+      action initialized(mode: int): bool = all { s' = mode }
+      action init = initialized(0)
+      action advance(n: int): bool = all { s' = s + n }
+      action fixture = init.then(advance(1))
+      action alias = fixture
+      action loop = 3.reps(_ => advance(1))
+      action wrapped = all { alias }
+      action circular = circular
+    }`);
+    expect(checkpointStep("initialized(1).then(advance(2)).expect(s > 0)", declarations)).toBe(1);
+    expect(checkpointStep("alias.then(2.reps(_ => advance(1).then(advance(2))))", declarations)).toBe(5);
+    expect(checkpointStep("init.then(loop)", declarations)).toBe(3);
+    expect(() => checkpointStep("missing.then(advance(1))", declarations)).toThrow(/unknown action missing/);
+    expect(() => checkpointStep("circular", declarations)).toThrow(/cyclic action alias/);
+    expect(() => checkpointStep("init.then(wrapped)", declarations)).toThrow(/nested action sequence in wrapped/);
+    expect(() => checkpointStep("init.then(n.reps(_ => advance(1)))", declarations)).toThrow(/repetition count must be a safe integer literal/);
+    expect(() => checkpointStep("init.then(if (true) advance(1) else advance(2))", declarations)).toThrow(/unknown action if/);
+    expect(() => checkpointStep("init.then(advance(1)).unknown()", declarations)).toThrow(/unsupported action-chain suffix/);
+  });
+
+  it("derives reviewed checkpoints in init, parameterized initializer and repetition histories", () => {
+    const entries = new Map(boundaryEvidence().map(entry => [entry.challenge, entry]));
+    expect(entries.get("shadow-layers-fill-uses-current-retention")).toMatchObject({
+      history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["o.writeTtls", "o.shadow"], origin: "derived",
+    });
+    expect(entries.get("recovery-connection-inclusive-maximum")).toMatchObject({ step: 4 });
+    expect(entries.get("source-budgets-settlement-never-replaces-local-entry")).toMatchObject({ step: 30 });
+    expect(entries.get("effects-fenced-source-publishes")).toMatchObject({ fields: ["calls", "dumps", "writes"] });
+    expect(entries.get("local-clock-precise-ttl")).toMatchObject({ fields: ["calls", "loaders"] });
+    expect(entries.get("effects-wrong-acceptance-receipt")).toMatchObject({ step: 7, fields: ["events"], origin: "written" });
+    const effectsSource = readFileSync(root + "formal/dialcache-effects-conformance.qnt", "utf8");
+    expect(checkpointStep("tenMillisecondFixture", scanDeclarationBodies(effectsSource))).toBe(0);
+  });
+
+  it("reports every mapped challenge once and computes the inventory from its evidence", () => {
+    const current = manifest(), entries = boundaryEvidence(current);
+    expect(entries.map(entry => entry.challenge)).toEqual(current.challenges.filter(challenge => challenge.nativeMutants?.kind === "mapped").map(challenge => challenge.id));
+    expect(validate(current).boundaryEvidence).toEqual(Object.fromEntries(["derived", "written", "unreproduced", "vector"].map(kind =>
+      [kind, entries.filter(entry => (entry.origin ?? entry.state) === kind).length])));
+    expect(entries.find(entry => entry.challenge === "envelope-strips-unknown-zero-prefix")).toMatchObject({ state: "vector" });
+    expect(entries.find(entry => entry.challenge === "frame-vectors-inclusive-fence")).toMatchObject({ state: "unreproduced" });
+    expect(entries.find(entry => entry.challenge === "scope-source-error-memoized")).toMatchObject({ state: "unreproduced" });
+  });
+
+  it("keeps private state and string literals out of derived public paths", () => {
+    const current = manifest();
+    const entry = boundaryEvidence(current).find(item => item.challenge === "recovery-strands-followers")!;
+    expect(entry.fields).toEqual(["o.calls", "d.coalesced", "o.loads"]);
+    const challenge = structuredClone(current.challenges.find(item => item.id === "recovery-strands-followers")!);
+    const cited = current.models.find(item => item.path === (challenge.reproducer!.model ?? challenge.model))!;
+    const failure = 's.memo == 0 and s.o.calls == List("s.o.loaders")';
+    challenge.reproducer = { ...challenge.reproducer!, run: "quotedTest", failure };
+    expect(evidenceOf(challenge, new Map([[cited.path, cited]]), new Map([[cited.path, ["quotedTest"]]]), {
+      readSource: () => `module quotes { var s: int action init = all { s' = 0 }
+        action next = all { s' = 1 } run quotedTest = init.then(next).expect(${failure}) }`,
+    })).toMatchObject({ fields: ["o.calls"] });
+    const effectsChallenge = structuredClone(current.challenges.find(item => item.id === "effects-fenced-source-publishes")!);
+    const effectsModel = current.models.find(item => item.path === effectsChallenge.model)!;
+    const privateFailure = 's.reads == List() and s.o.calls == List()';
+    effectsChallenge.reproducer = { ...effectsChallenge.reproducer!, run: "privateTest", failure: privateFailure };
+    expect(evidenceOf(effectsChallenge, new Map([[effectsModel.path, effectsModel]]), new Map([[effectsModel.path, ["privateTest"]]]), {
+      readSource: () => `module private_fields { var s: int action init = all { s' = 0 }
+        action next = all { s' = 1 } run privateTest = init.then(next).expect(${privateFailure}) }`,
+    })).toMatchObject({ fields: ["calls"] });
+    const altered = structuredClone(current);
+    delete altered.challenges.find(challenge => challenge.id === "effects-wrong-acceptance-receipt")!.nativeMutants!.evidence;
+    expect(() => validate(altered)).toThrow(/checkpoint has no derived public fields; write nativeMutants.evidence/);
+  });
+
+  it.each([
+    { history: "shadow-layers/anotherTest", step: 7, fields: ["o.shadow"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 0, fields: ["o.shadow"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 1.5, fields: ["o.shadow"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: [] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["s.memo"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["calls"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["o.calls.0"] },
+    { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 7, fields: ["o.shadow", "o.shadow"] },
+  ])("rejects malformed or unrelated written evidence: %j", evidence => {
+    const current = manifest();
+    current.challenges.find(challenge => challenge.id === "shadow-layers-fill-uses-current-retention")!.nativeMutants!.evidence = evidence;
+    expect(() => validate(current)).toThrow(/evidence (history|step|fields)/);
+  });
+
+  it("allows written evidence to override a derivation but never to choose another history", () => {
+    const current = manifest(), challenge = current.challenges.find(item => item.id === "shadow-layers-fill-uses-current-retention")!;
+    challenge.nativeMutants!.evidence = { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 6, fields: ["o.writeTtls"] };
+    expect(boundaryEvidence(current).find(entry => entry.challenge === challenge.id)).toMatchObject({ step: 6, fields: ["o.writeTtls"], origin: "written" });
+    expect(validate(current)).toHaveProperty("boundaryEvidence");
+    const model = current.models.find(item => item.path === challenge.model)!;
+    expect(() => evidenceOf(challenge, new Map([[model.path, model]]), new Map([[model.path, []]]))).toThrow(/exported public-only history/);
+    const unreproduced = current.challenges.find(item => item.id === "scope-source-error-memoized")!;
+    unreproduced.nativeMutants!.evidence = challenge.nativeMutants!.evidence;
+    expect(() => validate(current)).toThrow(/written boundary evidence requires an exported-regression reproducer/);
+  });
+
+  it("requires actual flat assertion fields for effects and local-clock", () => {
+    for (const [id, fields] of [["effects-wrong-acceptance-receipt", ["o.calls"]], ["local-clock-precise-ttl", ["events"]]] as const) {
+      const current = manifest(), challenge = current.challenges.find(item => item.id === id)!;
+      const original = boundaryEvidence(current).find(item => item.challenge === id)!;
+      challenge.nativeMutants!.evidence = { history: original.history!, step: original.step!, fields: [...fields] };
+      expect(() => validate(current)).toThrow(/evidence fields/);
+    }
+  });
+
+  it("cross-checks every evidence field against the profile's actual comparison record", async () => {
+    const features = await import(new URL("../formal/replay/features.mjs", import.meta.url).href) as {
+      profiles: Record<string, { diagnosticAge?: string; readIO?: boolean; markerIO?: boolean; compressionIO?: boolean; policyErrorIO?: boolean }>;
+      parseTrace(raw: unknown, path: string, profile: unknown): { steps: unknown[] };
+      expectedObservation(step: unknown): Record<string, unknown>;
+    };
+    const effects = await import(new URL("../formal/replay/effects.mjs", import.meta.url).href) as { parseTrace(raw: unknown, path: string): { steps: Array<{ expected: Record<string, unknown> }> } };
+    const clock = await import(new URL("../formal/replay/local-clock.mjs", import.meta.url).href) as { parseLocalClockTrace(raw: unknown, path: string): { steps: Array<{ expected: Record<string, unknown> }> } };
+    const registry = JSON.parse(readFileSync(root + "formal/profiles.json", "utf8")) as { profiles: Array<{ id: string; smoke: string }> };
+    for (const entry of boundaryEvidence().filter(item => item.history !== undefined)) {
+      const profile = entry.history!.split("/")[0]!, path = registry.profiles.find(item => item.id === profile)!.smoke;
+      const raw = JSON.parse(readFileSync(root + path, "utf8")) as unknown;
+      const descriptor = features.profiles[profile];
+      const expected = profile === "effects" ? effects.parseTrace(raw, path).steps[0]!.expected
+        : profile === "local-clock" ? clock.parseLocalClockTrace(raw, path).steps[0]!.expected
+        : features.expectedObservation(features.parseTrace(raw, path, descriptor).steps[0]);
+      for (const field of entry.fields!) {
+        const flag = field.startsWith("d.") ? "diagnosticAge" : field.startsWith("io.") ? "readIO"
+          : field === "markers" ? "markerIO" : field === "compression" ? "compressionIO" : field === "policyErrors" ? "policyErrorIO" : undefined;
+        if (flag) expect(descriptor?.[flag], `${entry.challenge}: ${field}`).toBeTruthy();
+        let observed: unknown = expected;
+        for (const part of field.split(".")) {
+          expect(observed !== null && typeof observed === "object" && Object.hasOwn(observed, part), `${entry.challenge}: ${field}`).toBe(true);
+          observed = (observed as Record<string, unknown>)[part];
+        }
+      }
+    }
   });
 });

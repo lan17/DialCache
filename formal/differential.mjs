@@ -13,6 +13,7 @@ import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawn
 import { parseTrace, profiles } from './replay/features.mjs';
 import { localClockDescriptor } from './replay/local-clock.mjs';
 import { effectsDescriptor } from './replay/effects.mjs';
+import { diffPaths } from './replay/divergence.mjs';
 import { generationArguments } from './run-models.mjs';
 
 // Corpus differential for a composed profile (#165).
@@ -137,14 +138,9 @@ export function differentialPlan(referenceManifests, candidateManifests, profile
 
 // The step-by-step comparison. Inputs are compared first; then every asserted
 // channel of the step, naming the differing channel and field.
-function differing(expected, actual, prefix = '') {
-  if (isDeepStrictEqual(expected, actual)) return [];
-  const composite = value => value !== null && typeof value === 'object';
-  if (composite(expected) && composite(actual) && Array.isArray(expected) === Array.isArray(actual)) {
-    const keys = Array.isArray(expected) ? [...Array(Math.max(expected.length, actual.length)).keys()] : Object.keys({ ...expected, ...actual }).sort();
-    return keys.flatMap(key => differing(expected[key], actual[key], `${prefix}${key}.`));
-  }
-  return [`${prefix.slice(0, -1)} ${JSON.stringify(actual)} (reference ${JSON.stringify(expected)})`];
+function differing(expected, actual) {
+  const valueAt = (value, path) => path === '$' ? value : path.split('.').reduce((part, key) => part?.[key], value);
+  return diffPaths(expected, actual).map(path => `${path} ${JSON.stringify(valueAt(actual, path))} (reference ${JSON.stringify(valueAt(expected, path))})`);
 }
 export function compareHistory(reference, replayed) {
   const length = Math.min(reference.steps.length, replayed.steps.length);

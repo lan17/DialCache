@@ -508,6 +508,22 @@ mutant while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
 complete evidence. Then run the full lanes, or let the weekly workflow run
 them.
 
+A mapped challenge also records which assertion detects its native mutant.
+For an exported-regression reproducer, the runner derives a boundary from its
+history, the state index of its failure checkpoint (including initializer
+aliases and literal repetitions), and the public observation fields in that
+expectation. When the expectation uses a helper or needs another observation
+projection, provide `nativeMutants.evidence: { history, step, fields }` for the
+same reproducer; fields use the record actually compared by the profile.
+The coordinator records every differing observation in a separate replay:
+consequence fields count at the checkpoint, while cumulative counters count
+only when their divergence first appears there relative to the previous step.
+Each mapping reports `confirmed`, `side-effect-only`, `not-divergent`,
+`unreached`, `vector`, or `unreproduced`; incomplete or failed replays never earn
+boundary credit. Boundary results are currently reported alongside the cohort
+gate while their existing mappings are calibrated, and both ports must replay
+every selected boundary history cleanly before the mutant is measured.
+
 ### Exported runs are exactly the public-only runs
 
 A profile run is public-only when every transition it takes records a command

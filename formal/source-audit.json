@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "abbda4d86306771ce8c8bd4df66134acaac0eb66966accba70d3b3d544f19b8f",
+      "sha256": "77c160f95044c6037847415dc1a95b1981cd5ed7f27c912b06b463694bf4c0e4",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":20,"title":"Reading a model"},
@@ -1018,7 +1018,7 @@
         {"line":324,"title":"Refactoring and execution"},
         {"line":352,"title":"Challenging every model"},
         {"line":425,"title":"Mapping every challenge to native mutants"},
-        {"line":511,"title":"Exported runs are exactly the public-only runs"}
+        {"line":527,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1363,7 +1363,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "1d026f63937685a63f9f7f90339aa1d88696046a56083dc16a82b19a64adb807",
+      "sha256": "cfc049153420af0496ab14fa206ce174a92320426795dcafea887997302f0cf4",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1372,7 +1372,7 @@
         {"line":136,"title":"Behavioral mutation comparison"},
         {"line":150,"title":"Recorded measurements"},
         {"line":156,"title":"Reproduction and CI"},
-        {"line":198,"title":"Model properties and cross-language execution"}
+        {"line":207,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1502,15 +1502,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "b7211947e99a84098ae07879c8be22862c00bcb83f91d0ef0f0ee3e4143bcf6c",
+      "sha256": "3b564793cc4993327e0635b917d1a753ed857ff180e6736a1be8f70787d97d32",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":72,"title":"Reading a completion report"},
         {"line":90,"title":"Mutation evidence"},
-        {"line":171,"title":"Exploratory runs"},
-        {"line":219,"title":"A retained sampling regression"},
-        {"line":256,"title":"Historical results"}
+        {"line":190,"title":"Exploratory runs"},
+        {"line":238,"title":"A retained sampling regression"},
+        {"line":275,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

@@ -25,6 +25,12 @@ describe("Go local-clock mutation assertion attribution", () => {
       "TestLocalClockConformance/trace.itf.json": "observation-mismatch",
     } });
   });
+  it("retains the failing history, checkpoint, and compared paths for report harvesting", () => {
+    const result = evaluateGoTestEvents(replayFailure("TestFeatureConformance", "feature_replay_test.go",
+      "/tmp/corpus/regressions/shadow-layers/capturedRetentionTest.itf.json step 4 action resolveLoader: Observation mismatch\n" +
+      "expected: {\"o\":{\"policyCalls\":1,\"writeTtls\":[]}}\nactual: {\"o\":{\"policyCalls\":2,\"writeTtls\":[]}}"), 1);
+    expect(result).toMatchObject({ divergences: [{ history: "shadow-layers/capturedRetentionTest", step: 4, action: "resolveLoader", paths: ["o.policyCalls"] }] });
+  });
   it("credits the core replay's coalesced-pair assertion, which carries no expected/actual pair", () => {
     const pair = replayFailure("TestCoreConformance", "core_replay_test.go", "pair returned different values");
     expect(evaluateGoTestEvents(pair, 1)).toMatchObject({ state: "detected", assertionKinds: { "TestCoreConformance/trace.itf.json": "pair-value-mismatch" } });

@@ -89,6 +89,25 @@ and environmental assumptions are defined once in
 
 ## Mutation evidence
 
+Each native mutation report includes a `boundary` entry for every mapped
+challenge. A separate coordinator replay continues after observation mismatches
+and records the differing fields at every step; it preserves the normal driver
+and settlement checks. `confirmed` means the intended checkpoint differs on a
+consequential field or a newly differing counter; `side-effect-only` means other
+observations differ, and `not-divergent` means the history still agrees.
+`unreached` records an incomplete history, missing recording, or driver failure;
+`vector` identifies a model-run with exported vectors, and `unreproduced` names
+a mapping without a portable reproducer. Clean boundary baselines must complete
+without divergences. These results are reported while the mappings are
+calibrated; the existing required-cohort gate remains in force.
+
+Read the evidence with `node formal/mutation-reports.mjs boundary --report
+<report.json>`. Optional `--cohorts <directory>` reads historical assertion
+diagnostics, which show only the first mismatch and cannot establish that a
+later checkpoint was reached. Diagnostics with incompatible raw and projected
+record shapes are not credited. `--gate` fails the inspection command on any
+reported boundary gap other than `vector` or `unreproduced`.
+
 Model mutations challenge the specification's independent properties.
 Implementation mutations challenge the assertions that connect generated
 histories to real TS/Go behavior. Report these measurements separately, including

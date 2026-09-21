@@ -274,6 +274,25 @@ describe("mutation shard merge", () => {
     expect((report.shards as unknown[]).length).toBe(ids.length + 1);
   });
 
+  it("unions clean boundary baselines and preserves each mutant's boundary result", () => {
+    const reports = shards();
+    const history = "shadow-layers/capturedTest";
+    const boundary = { challenge: "captured-retention", history, step: 7, fields: ["o.writeTtls"], state: "confirmed" };
+    for (const [index, report] of reports.entries()) report.boundaryBaselines = {
+      [history]: { history, path: `/runner-${index}/regressions/${history}.itf.json`, completed: true, lastStep: 11, divergences: [] },
+    };
+    Object.assign(reports[0]!.mutations[0]!, { boundary: [boundary] });
+    const result = merged(reports);
+    expect(result.boundaryBaselines).toEqual({ [history]: { history, completed: true, lastStep: 11, divergences: [] } });
+    expect(result.mutations[0]).toMatchObject({ boundary: [boundary] });
+    const divergent = structuredClone(reports);
+    divergent[1]!.boundaryBaselines = { [history]: { history, completed: true, lastStep: 11, divergences: [{ step: 2, paths: ["o.calls.0"] }] } };
+    refuse(divergent, /boundary baseline .*not a clean completed replay/);
+    const missing = structuredClone(reports);
+    for (const report of missing) report.boundaryBaselines = {};
+    refuse(missing, /boundary history .*no clean baseline/);
+  });
+
   it("keeps a crashed Go cohort out of the detection total and lists it apart from survivors", () => {
     const generated = goCohort(goTests.generated, [goTests.generated[0]!]);
     const fixed = goCohort(goTests.fixed);

@@ -79,8 +79,13 @@ async function replay(trace: Trace, harness: { settle?: boolean } = {}) {
         // Check C23/C25/C26 directly on observed history, independently of
         // expected Quint phases, timestamps, and outcome predictions.
         assertEffectsHistory(driver.contractHistory());
-        expect(project(observed), context).toEqual(expected);
-      } catch (cause) { throw mismatch(cause); }
+        const actual = project(observed);
+        try { expect(actual, context).toEqual(expected); }
+        catch (cause) { throw new Error(`${context}\ncomparison: projected-v1\nexpected: ${JSON.stringify(expected)}\nactual: ${JSON.stringify(actual)}`, { cause }); }
+      } catch (cause) {
+        if (cause instanceof Error && cause.message.includes('\ncomparison: projected-v1\n')) throw cause;
+        throw mismatch(cause);
+      }
     }
   } finally { await driver.dispose(); }
 }

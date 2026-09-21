@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { assertSubset } from "./validation.mjs";
+import { assertObservation } from "./divergence.mjs";
 import { emptyObservation } from "./observation.mjs";
 import { assertInputMetadata, itfInteger, itfSignedInteger, record } from "./itf.mjs";
 import { recoveryReadProfile } from "./profiles/recovery-read.mjs";
@@ -480,4 +481,4 @@ function projectBaseObservation(profile, observed) {
 export function expectedObservation(step) { return { o: step.expected, ...(step.policyErrors === undefined ? {} : { policyErrors: step.policyErrors }), ...(step.diagnostics === undefined ? {} : { d: step.diagnostics }), ...(step.io === undefined ? {} : { io: step.io }), ...(step.markers === undefined ? {} : { markers: step.markers }), ...(step.compression === undefined ? {} : { compression: step.compression }) }; }
 export function featureInput(profile, action, choice, observed, environment) { const binding = profile.actions[action]; if (!binding || (binding.choices ? !binding.choices.includes(choice) : choice !== -1 && choice !== 0))
   throw new Error("Unknown feature action or choice"); return binding.input(choice, observed, environment); }
-export function assertFeatureObservation(profile, step, observed) { assert.deepEqual(projectObservation(profile, observed), expectedObservation(step)); }
+export function assertFeatureObservation(profile, step, observed) { assertObservation(projectObservation(profile, observed), expectedObservation(step)); }

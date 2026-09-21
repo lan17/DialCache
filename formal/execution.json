@@ -909,7 +909,14 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M36",
-        "text": "M36 is the native twin of kernel/metrics.qnt stamping the dump's hold one millisecond late: the serialization-start stamp both ports take one millisecond late is the only native acceptance receipt, and the dump duration comes out one millisecond short. effects/sourceDurationExcludesPublicationTest (dump amount 0.009 instead of 0.010) is the expected evidence in both ports."
+        "text": "M36 is the native twin of kernel/metrics.qnt stamping the dump's hold one millisecond late: the serialization-start stamp both ports take one millisecond late is the only native acceptance receipt, and the dump duration comes out one millisecond short. effects/sourceDurationExcludesPublicationTest (dump amount 0.009 instead of 0.010) is the expected evidence in both ports.",
+        "evidence": {
+          "history": "effects/sourceDurationExcludesPublicationTest",
+          "step": 7,
+          "fields": [
+            "events"
+          ]
+        }
       }
     },
     {

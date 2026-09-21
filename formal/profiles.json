@@ -318,6 +318,8 @@
     "formal/replay/coordinator.mjs",
     "formal/replay/core.d.mts",
     "formal/replay/core.mjs",
+    "formal/replay/divergence.d.mts",
+    "formal/replay/divergence.mjs",
     "formal/replay/effects.d.mts",
     "formal/replay/effects.mjs",
     "formal/replay/features.d.mts",
