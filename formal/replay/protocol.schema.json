@@ -54,6 +54,7 @@
               "enum": [
                 "admission",
                 "core",
+                "dark-layers",
                 "effects",
                 "independent",
                 "layers",

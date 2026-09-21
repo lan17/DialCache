@@ -18,7 +18,7 @@ export function checkProfiles(registry = parse('formal/profiles.json')) {
   if (registry.schemaVersion !== 1 || registry.specificationVersion !== '0.1.0' || registry.status !== 'experimental') throw new Error('Unsupported specification/profile registry');
   if (registry.behavioralSchemaVersion !== parse('formal/behavioral-scenarios.json').schemaVersion ||
     registry.protocolSchemaVersion !== protocol.schemaVersion || registry.invalidationSchemaVersion !== parse('formal/invalidation-vectors.json').schemaVersion) throw new Error('Profile registry schema versions have drifted');
-  const expected = ['admission', 'core', 'effects', 'independent', 'layers', 'local-clock', 'local-failure', 'policy', 'recovery', 'recovery-read', 'runtime-boundaries', 'scope', 'shadow', 'shadow-layers', 'source-budgets'];
+  const expected = ['admission', 'core', 'dark-layers', 'effects', 'independent', 'layers', 'local-clock', 'local-failure', 'policy', 'recovery', 'recovery-read', 'runtime-boundaries', 'scope', 'shadow', 'shadow-layers', 'source-budgets'];
   if (!Array.isArray(registry.profiles) || JSON.stringify(registry.profiles.map(p => p.id).sort()) !== JSON.stringify(expected)) throw new Error('Profile inventory changed; review claims');
   read(registry.normativeDefinition);
   if (registry.behavioralAuthority?.kind !== 'quint' || registry.behavioralAuthority.executionManifest !== 'formal/execution.json' || !registry.behavioralAuthority.conflictPolicy) throw new Error('Quint behavioral authority must be explicit');

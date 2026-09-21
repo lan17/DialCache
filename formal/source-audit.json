@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "999ead7066aa1b178912530020bdef6f9aa10670a1dc1351feacde2c442d0527",
+      "sha256": "1fb9b67e1ff16e6f529ff1995441416f25ba4efe7c625da8c2d46874fa60212b",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1035,15 +1035,15 @@
         {"line":50,"title":"Fixture"},
         {"line":62,"title":"Inputs and completion boundaries"},
         {"line":82,"title":"Additional composition profiles"},
-        {"line":134,"title":"Observations"},
-        {"line":146,"title":"Additional fixed-scenario inputs"},
-        {"line":152,"title":"Generated pending-effect profile"},
-        {"line":203,"title":"Generated feature profiles"},
-        {"line":303,"title":"Generated independent-caller profile"},
-        {"line":324,"title":"Generated layer-composition profile"},
-        {"line":358,"title":"Generated request-scope profile"},
-        {"line":381,"title":"Generated served-hit shadow admission profile"},
-        {"line":405,"title":"Port workflow and limits"}
+        {"line":135,"title":"Observations"},
+        {"line":147,"title":"Additional fixed-scenario inputs"},
+        {"line":153,"title":"Generated pending-effect profile"},
+        {"line":204,"title":"Generated feature profiles"},
+        {"line":309,"title":"Generated independent-caller profile"},
+        {"line":330,"title":"Generated layer-composition profile"},
+        {"line":364,"title":"Generated request-scope profile"},
+        {"line":387,"title":"Generated served-hit shadow admission profile"},
+        {"line":411,"title":"Port workflow and limits"}
       ],
       "review": {
         "kind": "contract-guide",
@@ -1347,14 +1347,14 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "7edd8ccbb9d6dc4d3e528c085e6b4337b540f4e793f827b1a7867dc64f30c86a",
+      "sha256": "a38be99808862a991d54b363da2575d9cc056de4882d9bc453fdea550af26c0e",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
         {"line":26,"title":"How the specification connects to code"},
         {"line":46,"title":"Models and composition profiles"},
-        {"line":95,"title":"Generating and replaying behavior"},
-        {"line":182,"title":"Evidence and scope"}
+        {"line":96,"title":"Generating and replaying behavior"},
+        {"line":183,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",

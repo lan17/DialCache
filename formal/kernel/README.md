@@ -237,7 +237,10 @@ by ordinal over the diagnosed budgeted held remote lifecycle, with the held
 fill and the buffered invalidation; `formal/dialcache-effects-conformance.qnt`
 the fourteenth, over the held remote lifecycle with its refills held, the
 queued adapter reply and the metric events, the first whose drivers' channel
-is an ordered event trail). It keeps
+is an ordered event trail); `formal/dialcache-dark-layers-conformance.qnt`
+is the fifteenth, over `Shadow::DiagnosedShadowed`: held dark effects composed
+with request/local traversal and source deadlines, so every shadow job uses
+its caller-owned source. It keeps
 its constants, its flat `State`, `var s` and `var input`, its `nondet` input
 choices, its guards, its invariants and its regressions. Each wrapper action
 assigns `s'` to one library transition and `input'` to the driver record:
@@ -350,6 +353,11 @@ their meaning: a record literal that overrides a library result passes it; the
 corpus differential is the behavioral check.
 
 ## Migrating a profile
+
+A new profile records absolute corpus size and bytes per state. Keep its sampled
+corpus below 100 MB and below the measured admission reference (4731 bytes per
+state), or state why its required shape exceeds that bound. Historical
+per-slice measurements below retain their original corpus layouts.
 
 A rewrite lands when the corpus differential agrees on every history:
 
@@ -593,3 +601,17 @@ baseline was re-recorded, the both-way differential (554 of 554 forward, 560 of
 The pilot that preceded the library (#171, #172) instantiated one kernel state
 machine per profile and measured its cost; its conclusions and measurements are
 recorded in issue #165.
+
+## Record of the dark-layers interaction profile
+
+This new profile has no reference corpus to compare. With the manifest seed,
+256 sampled histories contain 15,616 states and 69,478,386 bytes (4449 bytes per
+state); 18 named histories pin the public interaction boundaries. Its twelve
+kernel transitions introduce no profile rule-logic violations. The additional
+transient-request diagnostic history records a model correction found by replay:
+TypeScript and Go both attribute an active-local failure to local, and a
+request-only failure to request_local even without a persistent memo slot.
+
+The sampled corpus contains nine match verdicts, eight mismatches, one
+supersession and no confirmation errors, and 79 request-local follower joins.
+The separate shadow profile retains named confirmation-error coverage.

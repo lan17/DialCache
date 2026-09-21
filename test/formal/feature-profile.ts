@@ -16,6 +16,7 @@ export interface Profile {
   diagnosticConfigErrors?: boolean;
   diagnosticFutureOffsets?: boolean;
   diagnosticAge?: "shadowAge" | "recoveryAge" | "none";
+  diagnosticUseCase?: string;
   fixture: Fixture | ((choice: number) => Fixture);
   initChoices?: readonly number[];
   setup: Input[];

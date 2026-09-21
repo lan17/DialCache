@@ -567,6 +567,6 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
   it("passes baseline --check from the CLI on the committed file", () => {
     const result = cli("baseline", "--check");
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain(`${baselinePath} matches 15 profiles`);
+    expect(result.stdout).toContain(`${baselinePath} matches ${JSON.parse(readFileSync(join(root, baselinePath), "utf8")).profiles.length} profiles`);
   }, 180_000);
 });

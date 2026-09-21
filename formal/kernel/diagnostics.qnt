@@ -108,8 +108,8 @@ module diagnostics {
   // singleflight a caller coalesced into, judged once beside the release
   // (`Serving::judgeRelease` applied through `Deadlines::releaseJudged`); the
   // layer a flight is attributed to when it starts (the remote layer for a
-  // flight that dispatched a read, whatever the read observed; the request
-  // memo or the shared layers' fallback for a source started without the
+  // flight that dispatched a read, whatever the read observed; the
+  // innermost active layer for a source started without the
   // remote layer; none for a bypass source started at admission); the
   // fallback error recorded against that layer when the flight's failure is
   // recorded (a late result that only drains records none); the recovery age
@@ -126,13 +126,20 @@ module diagnostics {
   // `Deadlines::releaseJudged`), labelled from that judgment; a variant that
   // admits work beside the held release (`shadow::beginHeld`) judges once
   // and applies this.
+  // TypeScript getThroughActiveLocal/finishRampedDownRemote attributes a failed
+  // source to local even inside a request memo. Without a shared layer,
+  // getThroughRequestLocal attributes it to request_local, including a transient
+  // request with no persistent model memo slot. Dark-layers pins both cases.
   pure def releaseJudged(state: DiagnosedHeld[r, q], layout: Serving::Layout, judged: Serving::LayeredRelease, policyCall: int, ttls: Ttls, budget: int): DiagnosedHeld[r, q] = {
     val released = Deadlines::releaseJudged(state, layout, judged, policyCall, ttls, budget)
     match judged.decision.outcome {
       | JoinsRequest(_) => recordCoalesced(released, REQUEST_LOCAL_LAYER)
       | JoinsProcess(_) => recordCoalesced(released, PROCESS_SCOPE)
       | Starts => recordSourceLayer(released,
-        if (judged.effective.layers.remote) REMOTE_LAYER else sourceLayer(judged.open, judged.decision.slot))
+        if (not(judged.open)) NO_CACHE_LAYER
+        else if (judged.effective.layers.remote) REMOTE_LAYER
+        else if (judged.effective.layers.local) LOCAL_LAYER
+        else if (judged.effective.layers.request) REQUEST_LOCAL_LAYER else LOCAL_LAYER)
       | ServesMemo(_) => released
       | ServesLocal(_) => released
       | ServesRemote(_) => released

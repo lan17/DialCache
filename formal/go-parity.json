@@ -8,12 +8,12 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "5bfe68e355c8334ad2f6e17b973618ff2c8c2a13b19c391940945e9d3b99643d",
-    "executionSha256": "79a380780f942e56d71e90be1e72b87796f8c7dd4a5d2f14bfab4f87d448d76a",
-    "sourceAuditSha256": "e2731a6bd6e461d5e9c7d4f53fe14210b874b8422dc67214966fe082e69a2318",
+    "semanticCasesSha256": "6c7f31b13824a78fba60b6554a65de19d11f0c354ccaf31b33ece5696301c52c",
+    "executionSha256": "95d4f3ae079795f95672b667b0b59b1701bcc03683aa601473c4e8019e5ddc69",
+    "sourceAuditSha256": "e16481dcf3310da5baae96f25d1371e5af065f23036ebfabb997117db397eb71",
     "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
-    "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
-    "profilesSha256": "1bc6e56ba3d20212c446bd3c5f52ccd243d45f70fb7e00d4a22509d85dc3eb20"
+    "coverageWitnessesSha256": "3b51885597041d2f3959ede674af9ea13da9406b7b10006c297526c41850bfa2",
+    "profilesSha256": "e8c4aa5d218f20203a5f3173430f9a99af2103c2536e823fa3785806612a9135"
   },
   "inventory": {
     "behavioralCases": 240,
@@ -23,17 +23,17 @@
     "sourceFiles": 27,
     "sourceDeclarations": 772,
     "casesWithScheduledChecks": 262,
-    "requiredWitnesses": 440,
-    "casesWithQuintRegressionReplay": 174,
+    "requiredWitnesses": 477,
+    "casesWithQuintRegressionReplay": 183,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
-    "quintModels": 30,
-    "scheduledInvariants": 220,
-    "scheduledRegressions": 413,
+    "quintModels": 31,
+    "scheduledInvariants": 232,
+    "scheduledRegressions": 431,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 310
+    "caseReferencedWitnesses": 324,
+    "exportedRegressionHistories": 328
   },
   "cases": [
     {

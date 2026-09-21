@@ -263,6 +263,26 @@
         "deadlines::settleLocal"
       ],
       "compositionViolations": 0
+    },
+    {
+      "id": "dark-layers",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "module": "dialcache_dark_layers_conformance",
+      "libraryTransitions": [
+        "clock::shiftWall",
+        "flights::recordIdentity",
+        "remote_frames::seedAged",
+        "serving::closeScope",
+        "serving::invalidate",
+        "shadow::advanceHeld",
+        "shadow::beginDark",
+        "shadow::releaseDump",
+        "shadow::releaseLoad",
+        "shadow::releaseRead",
+        "shadow::releaseWrite",
+        "shadow::settleHeld"
+      ],
+      "compositionViolations": 0
     }
   ]
 }

@@ -8,6 +8,7 @@ import { localFailureProfile } from "./profiles/local-failure.mjs";
 import { runtimeBoundariesProfile } from "./profiles/runtime-boundaries.mjs";
 import { shadowLayersProfile } from "./profiles/shadow-layers.mjs";
 import { sourceBudgetsProfile } from "./profiles/source-budgets.mjs";
+import { darkLayersProfile } from "./profiles/dark-layers.mjs";
 const settle = (op) => ({
   ...(op === "resolve" ? { choices: [1, 2] } : {}),
   input: (choice, o) => op === "resolve" ? { op, loader: o.loaders - 1, value: choice } : { op, loader: o.loaders - 1 },
@@ -46,6 +47,7 @@ const shadowSeed = { choices: [1, 2, 3, 4, 5, 6, 7, 8], input: (choice) => choic
     : choice === 8 ? { op: "seed", payloadHex: "22636166c3a922" } : choice === 6 ? { op: "seed", payloadText: " 1" }
       : { op: "seed", payloadHex: choice === 3 ? "31" : choice === 4 ? "32" : "2031" } };
 export const profiles = {
+  "dark-layers": darkLayersProfile,
   "source-budgets": sourceBudgetsProfile,
   "runtime-boundaries": runtimeBoundariesProfile,
   "shadow-layers": shadowLayersProfile,
@@ -432,13 +434,13 @@ function projectBaseObservation(profile, observed) {
     // This profile selects source failures; other error trails are specified
     // by effects. Maintenance errors deliberately carry another use case.
     if (profile.diagnosticConfigErrors && event.event === "error" && event.error === "config_resolution") {
-      assertSubset(event, { cacheNamespace: "urn", useCase: "Behavior", keyType: "id", layer: "remote", inFallback: false });
+      assertSubset(event, { cacheNamespace: "urn", useCase: profile.diagnosticUseCase ?? "Behavior", keyType: "id", layer: "remote", inFallback: false });
       configErrors++;
       continue;
     }
     if (event.event === "error" && event.error !== "fallback")
       continue;
-    assertSubset(event, { cacheNamespace: "urn", useCase: "Behavior", keyType: "id" });
+    assertSubset(event, { cacheNamespace: "urn", useCase: profile.diagnosticUseCase ?? "Behavior", keyType: "id" });
     if (event.event === "coalesced") {
       if (typeof event.scope !== "string")
         throw new Error("Missing coalescing scope");

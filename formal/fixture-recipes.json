@@ -2717,6 +2717,144 @@
           "projection": "independent-shadow"
         }
       ]
+    },
+    {
+      "path": "formal/dark-layers-smoke.itf.json",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "format": "smoke",
+      "recipes": [
+        {
+          "id": "smoke",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "releaseDump",
+              0
+            ],
+            [
+              "releaseWrite",
+              0
+            ]
+          ],
+          "projection": "shadow"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/dark-layers-witnesses.json",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "format": "named-list",
+      "recipes": [
+        {
+          "id": "rejectedDarkSourceSeedsNoLayerTest",
+          "regression": "rejectedDarkSourceSeedsNoLayerTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "uncoalescedPublicationDoesNotPreemptTheRegisteredLeaderTest",
+          "regression": "uncoalescedPublicationDoesNotPreemptTheRegisteredLeaderTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "darkFillCarriesCapturedRetentionOnTheHeldPathTest",
+          "regression": "darkFillCarriesCapturedRetentionOnTheHeldPathTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "fillAtTheWatermarkInstantIsFencedTest",
+          "regression": "fillAtTheWatermarkInstantIsFencedTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "frameAtTheWatermarkIsFencedFromTheDarkReadTest",
+          "regression": "frameAtTheWatermarkIsFencedFromTheDarkReadTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "fillFenceIsRejudgedAfterAWallRollbackTest",
+          "regression": "fillFenceIsRejudgedAfterAWallRollbackTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "staleVisibleFrameDeclinedByTheDarkReadFillsUnfencedTest",
+          "regression": "staleVisibleFrameDeclinedByTheDarkReadFillsUnfencedTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "undecodableDarkC0IsNeverRepairedTest",
+          "regression": "undecodableDarkC0IsNeverRepairedTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "unsupportedEncodingFailsTheDarkReadTest",
+          "regression": "unsupportedEncodingFailsTheDarkReadTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "sourceDeadlineExpiresTheDarkJobAndAttributesToTheLocalLayerTest",
+          "regression": "sourceDeadlineExpiresTheDarkJobAndAttributesToTheLocalLayerTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest",
+          "regression": "sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "closedScopeCallerBypassesLayersAndAdmitsNoJobTest",
+          "regression": "closedScopeCallerBypassesLayersAndAdmitsNoJobTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "fullInstanceDropsAnotherKeyWhileTheC0ReadIsHeldTest",
+          "regression": "fullInstanceDropsAnotherKeyWhileTheC0ReadIsHeldTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest",
+          "regression": "dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "localPublicationStopsLaterDarkWorkTest",
+          "regression": "localPublicationStopsLaterDarkWorkTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "retainedC0AgeIsSampledAtTheVerdictTest",
+          "regression": "retainedC0AgeIsSampledAtTheVerdictTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "rollbackMakesTheSeededFrameFutureAndReportsItsOffsetTest",
+          "regression": "rollbackMakesTheSeededFrameFutureAndReportsItsOffsetTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "transientRequestOnlySourceFailureIsAttributedToRequestLayerTest",
+          "regression": "transientRequestOnlySourceFailureIsAttributedToRequestLayerTest",
+          "projection": "shadow"
+        }
+      ]
     }
   ]
 }

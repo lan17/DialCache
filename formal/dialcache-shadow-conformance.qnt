@@ -349,6 +349,7 @@ module dialcache_shadow_conformance {
 
   // Invariants: independent checks over the public channels and the library records.
   // Over the public channels, verbatim from the former text.
+  val budgetsAreOneKnob = JOB_BUDGET_MS == s.sourceBudget
   val oneSourcePerCaller = s.o.loaders == s.o.calls.length()
   val writesHaveRetention = s.o.writes == s.o.writeTtls.length()
   val missingHookHasNoShadowEffects = s.hook or (s.o.reads == 0 and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)

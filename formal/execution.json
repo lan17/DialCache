@@ -184,7 +184,8 @@
         "budgetsBelongToPendingWork",
         "heldEffectsAreTheDrivers",
         "oneExecution",
-        "fillsClearTheirFence"
+        "fillsClearTheirFence",
+        "budgetsAreOneKnob"
       ],
       "profile": "shadow",
       "generate": {
@@ -553,6 +554,36 @@
         "retainedC0WasFreshWhenAcquired",
         "localPublicationBelongsToCaller"
       ]
+    },
+    {
+      "path": "formal/dialcache-dark-layers-conformance.qnt",
+      "profile": "dark-layers",
+      "invariants": [
+        "boundedJobRegistry",
+        "oneJobPerIdentity",
+        "darkJobsRunOverOwnedSources",
+        "sourcesAreCallersOwn",
+        "heldFillsBelongToJobs",
+        "fillsCarryCapturedAuthority",
+        "fillsClearTheirFence",
+        "sourceOwnersShareTheSourcesIdentity",
+        "deadlinesBelongToPendingWork",
+        "failedFlightsAreAttributedOnce",
+        "coalescedLabelsCountFollowers",
+        "localEntriesHoldAcceptedOwnedValues",
+        "memoHoldsAcceptedValues",
+        "callersOwnTheirResults",
+        "futureOffsetsFollowRollbacks",
+        "channelRestrictionsHold",
+        "agesRequireVerdicts",
+        "budgetsAreOneKnob"
+      ],
+      "generate": {
+        "maxSamples": 1024,
+        "maxSteps": 60,
+        "traces": 256,
+        "outputDirectory": ".formal-traces/features/dark-layers"
+      }
     }
   ],
   "symbolic": {
@@ -615,7 +646,8 @@
           "independent",
           "recovery-read",
           "shadow-layers",
-          "shadow"
+          "shadow",
+          "dark-layers"
         ],
         "exclusions": {
           "scope": "The request-only projection has no frames and no clock, so no age judgment is evaluated.",
@@ -665,7 +697,8 @@
           "local-failure": "Composes local storage, but its clock never advances (now stays 0 against a 60 s local TTL), so no read meets an entry at its expiry instant.",
           "scope": "Composes the request-only projection, which never reads local storage.",
           "layers": "Composes local storage, but its 60 s entries never reach their insertion expiry within the bound of 1 ms ticks.",
-          "runtime-boundaries": "Composes local storage, but no input advances the clock, so no entry reaches its expiry."
+          "runtime-boundaries": "Composes local storage, but no input advances the clock, so no entry reaches its expiry.",
+          "dark-layers": "The named dark-job histories and invariants do not distinguish inclusive local expiry. The sampled local-expiry witness drives native replay, but this profile supplies no model-side assertion for that exact local boundary."
         }
       },
       "nativeMutants": {
@@ -713,7 +746,35 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M06",
-        "text": "M06 is exactly cache-rules.qnt fenceAllows becoming inclusive, as measured by dialcache-rule-checks.qnt fenceBoundaryIsExclusive: the tracked decoders of both ports accept a frame stamped exactly at its observed watermark. The equal-timestamp row of the generated tracked decode vectors already detects it in both ports."
+        "text": "M06 makes the tracked native decoder accept a frame stamped exactly at its watermark. The shared model fenceAllows edit also changes fill-side checks; frameAtTheWatermarkIsFencedFromTheDarkReadTest isolates the read boundary through dumps and loads and completes in both mutated ports."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "model": "formal/dialcache-dark-layers-conformance.qnt",
+        "run": "frameAtTheWatermarkIsFencedFromTheDarkReadTest",
+        "failure": "s.o.calls == List(VALUE_TWO) and s.o.dumps == 1 and s.o.loads == 0",
+        "family": "strict-read-fence",
+        "profiles": [
+          "formal/dialcache-rule-checks.qnt",
+          "layers",
+          "independent",
+          "recovery-read",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/cache-rules.qnt; the mutation is outside its executable closure.",
+          "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "scope": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "admission": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "local-failure": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+        }
       }
     },
     {
@@ -775,7 +836,8 @@
           "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
-          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
+          "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot."
         }
       },
       "nativeMutants": {
@@ -816,7 +878,8 @@
           "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
-          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
+          "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read."
         }
       },
       "nativeMutants": {
@@ -857,7 +920,8 @@
           "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
-          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
+          "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read."
         }
       },
       "nativeMutants": {
@@ -910,7 +974,8 @@
           "runtime-boundaries": "Does not import metrics; the mutated text is never executed.",
           "shadow-layers": "Does not import metrics; the mutated text is never executed.",
           "local-clock": "Does not import metrics; the mutated text is never executed.",
-          "source-budgets": "Does not import metrics; the mutated text is never executed."
+          "source-budgets": "Does not import metrics; the mutated text is never executed.",
+          "dark-layers": "Dark-layers does not import formal/kernel/metrics.qnt; the mutation is outside its executable closure."
         }
       },
       "nativeMutants": {
@@ -947,7 +1012,8 @@
           "runtime-boundaries",
           "source-budgets",
           "admission",
-          "effects"
+          "effects",
+          "dark-layers"
         ],
         "exclusions": {
           "independent": "Coalescing is off in every reply: every flight has one owner, so completing the first owner completes them all.",
@@ -1006,7 +1072,35 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M06",
-        "text": "Same native fault as fence-inclusive-timestamp: M06 makes the tracked decode fence inclusive in both ports, which is cache-rules.qnt fenceAllows becoming inclusive as measured here by dialcache-tracked-invalidation.qnt servedSnapshotClearedObservedFence. The equal-timestamp tracked decode vector and recovery-read/laterInvalidationDoesNotRewriteObservedMissFenceTest already detect it in both ports."
+        "text": "M06 makes the tracked native decoder accept a frame stamped exactly at its watermark. The shared model fenceAllows edit also changes fill-side checks; frameAtTheWatermarkIsFencedFromTheDarkReadTest isolates the read boundary through dumps and loads and completes in both mutated ports."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "model": "formal/dialcache-dark-layers-conformance.qnt",
+        "run": "frameAtTheWatermarkIsFencedFromTheDarkReadTest",
+        "failure": "s.o.calls == List(VALUE_TWO) and s.o.dumps == 1 and s.o.loads == 0",
+        "family": "strict-read-fence",
+        "profiles": [
+          "formal/dialcache-tracked-invalidation.qnt",
+          "layers",
+          "independent",
+          "recovery-read",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/cache-rules.qnt; the mutation is outside its executable closure.",
+          "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "scope": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "admission": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "local-failure": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+        }
       }
     },
     {
@@ -1028,7 +1122,8 @@
           "recovery-read",
           "shadow-layers",
           "recovery",
-          "shadow"
+          "shadow",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
@@ -1063,7 +1158,8 @@
         "family": "inclusive-freshness-boundary",
         "profiles": [
           "shadow",
-          "shadow-layers"
+          "shadow-layers",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
@@ -1191,7 +1287,8 @@
         "family": "fence-recheck-at-dispatch",
         "profiles": [
           "shadow",
-          "effects"
+          "effects",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Does not compose remote_writes, so the mutated dispatch is never executed.",
@@ -1229,7 +1326,8 @@
         "failure": "s.o.calls == List(CALL_PENDING) and s.o.shadow == List() and s.o.dumps == 0 and s.o.loads == 0",
         "family": "fill-before-source",
         "profiles": [
-          "shadow"
+          "shadow",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Does not compose the shadow module, so the mutated C0 read settlement is never executed.",
@@ -1423,7 +1521,8 @@
           "runtime-boundaries": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock.",
           "shadow-layers": "Composes refills, but no scheduled regression and no sampled history at 2000 x 40 settles an accepted source while its fence is at or ahead of the wall clock.",
           "local-clock": "The local projection has no remote layer, so refills is never judged.",
-          "source-budgets": "The local projection never refills the remote layer, so refills is never judged."
+          "source-budgets": "The local projection never refills the remote layer, so refills is never judged.",
+          "dark-layers": "Caller remote serving is off, so callers capture no remote-refill authority. Dark fills apply the shadow job fence independently of this caller-publication guard."
         }
       },
       "nativeMutants": {
@@ -1462,7 +1561,8 @@
           "runtime-boundaries": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
           "shadow-layers": "Composes the budgeted lifecycle, but no scheduled regression and no sampled history at 2000 x 40 resolves a loader after its deadline was reached undelivered: its late results are timer-delivered or drained.",
           "local-clock": "Does not compose the deadlines module: its sources have no budget, so arrival never runs.",
-          "source-budgets": "Its late settlements are delivered deadlines: arrival never finds a reached deadline undelivered."
+          "source-budgets": "Its late settlements are delivered deadlines: arrival never finds a reached deadline undelivered.",
+          "dark-layers": "Elapsed-time advances deliver source deadlines before later settlements; this profile has no clock jump without timer delivery to expose the arrival-time check independently."
         }
       },
       "nativeMutants": {
@@ -1495,7 +1595,34 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M25",
-        "text": "M25 is the native form of kernel/serving.qnt finish memoizing a non-accepted value by dropping its accepted guard: neither port's memo can hold an error, so the request in-flight registry is the only request-scoped error carrier, and keeping a rejected request-local flight registered makes a later same-scope caller receive the rejection instead of retrying. scope/rejectedFlightAllowsRetryTest and the witnesses scope:rejected-flight-retry and shared-rejection are the expected evidence."
+        "text": "M25 preserves a rejected request-local flight in both ports, making the next same-scope caller receive that error instead of retrying. The kernel fault memoizes a non-accepted value by dropping the accepted guard. The exported held dark-layers history checks a rejected source followed by a new loader and read."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "model": "formal/dialcache-dark-layers-conformance.qnt",
+        "run": "rejectedDarkSourceSeedsNoLayerTest",
+        "failure": "s.o.calls == List(SOURCE_ERROR, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2 and s.d.coalesced == List()",
+        "family": "failed-source-retry",
+        "profiles": [
+          "scope",
+          "local-failure",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/serving.qnt; the mutation is outside its executable closure.",
+          "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "admission": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "independent": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "recovery-read": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+        }
       }
     },
     {
@@ -1528,7 +1655,8 @@
           "runtime-boundaries": "One persistent scope owns the only memo row, so a close that clears every row clears exactly its own.",
           "shadow-layers": "Composes the request memo but has no closeScope input.",
           "local-clock": "Composes the local projection with no request scope (persistentContexts 0) and no closeScope input.",
-          "source-budgets": "Composes the local projection with no request scope: no input opens or closes a scope and every reply disables the request layer, so request_memo.closeScope is never executed."
+          "source-budgets": "Composes the local projection with no request scope: no input opens or closes a scope and every reply disables the request layer, so request_memo.closeScope is never executed.",
+          "dark-layers": "The three persistent scopes are peers, with no nested scope relationship; closing one does not exercise the outer-memo eviction boundary."
         }
       },
       "nativeMutants": {
@@ -1567,7 +1695,8 @@
           "local-failure": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
           "runtime-boundaries": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
           "local-clock": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
-          "source-budgets": "Does not compose the shadow module, so the mutated admission judgment is never executed."
+          "source-budgets": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
+          "dark-layers": "One job fills the instance capacity of one, so the unchanged full-capacity check still drops a duplicate even when the duplicate test is removed."
         }
       },
       "nativeMutants": {
@@ -1591,7 +1720,8 @@
         "family": "capacity-off-by-one",
         "profiles": [
           "admission",
-          "shadow-layers"
+          "shadow-layers",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Does not compose the shadow module, so the mutated admission judgment is never executed.",
@@ -1626,7 +1756,34 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M20",
-        "text": "M20 is the native twin of kernel/serving.qnt identity dropping the instance term from the flight identity: both ports register process flights in one process-wide registry, so a pending flight on one instance is joined from another. The C11.distinct-keys quintReplay survives, so detection rests on sampled layers histories and the witness layers:different-instances-own-distinct-flights credited under C08.instance-capacity."
+        "text": "M20 is the native twin of kernel/serving.qnt identity dropping the instance term from the flight identity: both ports register process flights in one process-wide registry, so a pending flight on one instance is joined from another. The held dark-layers history replays the same public boundary in both ports."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "model": "formal/dialcache-dark-layers-conformance.qnt",
+        "run": "sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest",
+        "failure": "s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2 and s.o.shadow == List() and s.d.coalesced == List()",
+        "family": "instance-flight-identity",
+        "profiles": [
+          "layers",
+          "admission",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/serving.qnt; the mutation is outside its executable closure.",
+          "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "scope": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "independent": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "recovery-read": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "local-failure": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+        }
       }
     },
     {
@@ -1688,7 +1845,8 @@
           "runtime-boundaries": "Does not compose the deadlines module: its sources have no budget.",
           "shadow-layers": "Composes deadlines' delivery for job budgets whose expiry reads no clock and whose registration order is job order, so delivering at the target instead of each due instant yields the same labels in the same order.",
           "local-clock": "Does not compose the deadlines module: its sources have no budget and no deadline is ever delivered.",
-          "source-budgets": "Composes the budgeted local lifecycle, whose deliveries inside one advance complete the same sources with the same deadline error whichever instants the fold visits, and no delivery there starts further bounded work; only its private settledAt history sees the instant."
+          "source-budgets": "Composes the budgeted local lifecycle, whose deliveries inside one advance complete the same sources with the same deadline error whichever instants the fold visits, and no delivery there starts further bounded work; only its private settledAt history sees the instant.",
+          "dark-layers": "No recovery decode or source-duration observation samples the delivery instant inside an advance. Named runs and scheduled invariants still see the same final errors and retired jobs."
         }
       },
       "nativeMutants": {
@@ -1728,7 +1886,8 @@
           "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
-          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
+          "dark-layers": "No caller recovery candidate is retained while remote serving is off; the recovery maximum is never judged."
         }
       },
       "nativeMutants": {
@@ -1769,7 +1928,8 @@
           "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
-          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
+          "dark-layers": "No caller enters recovery or releases a recovery decode; dark jobs decode their own C0 and never use the challenged recovery publication arm."
         }
       },
       "nativeMutants": {
@@ -1808,7 +1968,8 @@
           "layers": "Composes serving.authority, but its 60000 ms retention is under the one-hour cap, so capped and raw retention coincide.",
           "runtime-boundaries": "Composes serving.authority, but its 120000 ms retention is written for an untracked entity, which the cap never applies to.",
           "scope": "Composes the request-only projection, which never reaches serving.authority.",
-          "source-budgets": "Composes the local projection, which never reaches serving.authority."
+          "source-budgets": "Composes the local projection, which never reaches serving.authority.",
+          "dark-layers": "Caller remote serving is off, so callers capture no refill retention. Held dark fills cap their own captured retention through remote_frames.physicalRetention."
         }
       },
       "nativeMutants": {
@@ -1851,7 +2012,8 @@
           "runtime-boundaries": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
           "shadow-layers": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
           "local-clock": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
-          "source-budgets": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed."
+          "source-budgets": "Does not compose the local fault switch (local_faults): its drivers inject no local storage fault, so the mutated settlement is never executed.",
+          "dark-layers": "Dark-layers does not import formal/kernel/local-faults.qnt; the mutation is outside its executable closure."
         }
       }
     },
@@ -1890,7 +2052,8 @@
           "runtime-boundaries": "Composes the layered shape and reaches the mutated warm when a source is rejected while local storage participates, but none of its scheduled invariants or exported regressions reads the local slot between that rejection and the next publication (measured under the mutant at 2000 x 40 and over its exported regressions).",
           "shadow-layers": "Composes the layered shape and reaches the mutated warm when a source is rejected while local storage participates, but none of its scheduled invariants or exported regressions reads the local slot between that rejection and the next publication (measured under the mutant at 2000 x 40 and over its exported regressions).",
           "local-clock": "Composes the local projection, which settles through serving.settleLocal, never serving.publish; its inline sources never fail besides.",
-          "source-budgets": "Composes the local projection, whose sources settle through serving.settleLocal, never serving.publish."
+          "source-budgets": "Composes the local projection, whose sources settle through serving.settleLocal, never serving.publish.",
+          "dark-layers": "The held source lifecycle rejects errors before the accepted-only serving publication call. Native M37 also edits a serving/recovery failure-publication site outside finishRampedDownRemote; both ports replay this dark corpus unchanged under the absent-value mutation."
         }
       }
     },
@@ -1939,7 +2102,8 @@
         "profiles": [
           "formal/dialcache-shadow-layers-connection.qnt",
           "shadow-layers",
-          "shadow"
+          "shadow",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Does not compose the shadow module, so the mutated dark C0 acquisition is never executed.",
@@ -1979,7 +2143,8 @@
         "family": "captured-fill-retention",
         "profiles": [
           "shadow-layers",
-          "shadow"
+          "shadow",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Does not compose the shadow module, so the mutated fill dump is never executed.",
@@ -2033,7 +2198,8 @@
           "local-failure": "Has no elapsed-time input and never composes the fractional clock (clock.advanceTicks), so the mutated projection is never executed.",
           "runtime-boundaries": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
           "shadow-layers": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
-          "source-budgets": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed."
+          "source-budgets": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
+          "dark-layers": "The environment advances in whole milliseconds and never calls clock.advanceTicks; wall rollback changes no monotonic insertion grid."
         }
       },
       "nativeMutants": {
@@ -2078,7 +2244,8 @@
           "independent": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so no local hit is ever served.",
           "local-failure": "Composes local storage, but no input advances the clock, so a renewed insertion is invisible.",
           "runtime-boundaries": "Composes local storage, but no input advances the clock, so a renewed insertion is invisible.",
-          "shadow-layers": "Composes local storage; its one expiry regression reads the entry again only after the advances that expire it, with no hit in between, so a renewed insertion is invisible (measured under the mutant at 2000 x 40 and over its exported regressions)."
+          "shadow-layers": "Composes local storage; its one expiry regression reads the entry again only after the advances that expire it, with no hit in between, so a renewed insertion is invisible (measured under the mutant at 2000 x 40 and over its exported regressions).",
+          "dark-layers": "The named dark-job histories and invariants do not constrain renewing local insertion expiry on a hit. Local-clock supplies the detecting model boundary; this profile does not claim that property."
         }
       }
     },
@@ -2131,7 +2298,8 @@
           "policy",
           "shadow",
           "recovery-read",
-          "effects"
+          "effects",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
@@ -2197,7 +2365,8 @@
           "recovery",
           "admission",
           "shadow",
-          "effects"
+          "effects",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "does not compose the deadlines module: its sources have no budget",
@@ -2213,7 +2382,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M35",
-        "text": "Same native fault as source-inclusive-deadline: M35 accepts a settlement observed at exactly the elapsed deadline in both ports, which is kernel/deadlines.qnt dueAt replacing not deadlinePendingAt with a strict comparison. The declared reproducer source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest cannot distinguish it: its advance delivers the timer at exactly 60000 ms and the unchanged timer path still times the source out; the effects jumpClock histories are the portable evidence."
+        "text": "M35 changes native settlement-time deadline equality. The shared dueAt mutation also affects timer delivery, which the dark-layers source/job deadline history detects model-side. Its native advance still delivers the unchanged timer, so that profile supplies no native M35 boundary; effects clock-jump histories isolate settlement."
       }
     },
     {
@@ -2232,7 +2401,8 @@
         "profiles": [
           "policy",
           "runtime-boundaries",
-          "layers"
+          "layers",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
@@ -2271,7 +2441,8 @@
         "profiles": [
           "policy",
           "runtime-boundaries",
-          "admission"
+          "admission",
+          "dark-layers"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
@@ -2324,7 +2495,8 @@
           "recovery-read": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
           "local-failure": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
           "runtime-boundaries": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
-          "shadow-layers": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal."
+          "shadow-layers": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
+          "dark-layers": "The challenged settleLocal projection is not composed; dark sources settle through the held diagnosed lifecycle."
         }
       },
       "nativeMutants": {
@@ -2363,7 +2535,8 @@
           "local-failure": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
           "runtime-boundaries": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
           "shadow-layers": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
-          "local-clock": "Composes the local projection through serving.settleLocal, but its inline sources never fail (every offered value is accepted), so the failed-settlement arm is never taken."
+          "local-clock": "Composes the local projection through serving.settleLocal, but its inline sources never fail (every offered value is accepted), so the failed-settlement arm is never taken.",
+          "dark-layers": "The challenged settleLocal projection is not composed; dark sources settle through the held diagnosed lifecycle."
         }
       },
       "nativeMutants": {
@@ -2371,6 +2544,47 @@
         "mutant": "M24",
         "text": "M24 is the native twin of kernel/serving.qnt settleLocal writing NO_VALUE and a zero expiry into the slot on its not-accepted branch: both ports clear the key's local entry when a source settlement fails. The declared reproducer source-budgets/rejectedSourceLeavesPublishedLocalEntryTest does not transfer natively because its failing source is an outside bypass, so the policy regression independentFailureKeepsSettledLocalValueTest is the portable evidence."
       }
+    },
+    {
+      "id": "dark-layers-process-flight-crosses-instance",
+      "contract": "C11",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "invariant": "sourceOwnersShareTheSourcesIdentity",
+      "before": "pure def identity(layout: Layout, call: Call): int = call.instance * layout.keysPerInstance + call.key",
+      "after": "pure def identity(layout: Layout, call: Call): int = call.key",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M20",
+        "text": "M20 is the native twin of kernel/serving.qnt identity dropping the instance term from the flight identity: both ports register process flights in one process-wide registry, so a pending flight on one instance is joined from another. The held dark-layers history replays the same public boundary in both ports."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest",
+        "failure": "s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2 and s.o.shadow == List() and s.d.coalesced == List()",
+        "family": "instance-flight-identity",
+        "profiles": [
+          "dark-layers",
+          "admission",
+          "layers"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/serving.qnt; the mutation is outside its executable closure.",
+          "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "recovery": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "policy": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "scope": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "independent": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "recovery-read": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "local-failure": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "runtime-boundaries": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
+          "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence."
+        }
+      },
+      "measures": "Repeats the layers identity fault against the held dark path: every caller must own a source for its own key and instance."
     }
   ],
   "reproducerBacklog": [
@@ -2378,13 +2592,11 @@
     "recovery-future-candidate",
     "local-precise-grid",
     "source-inclusive-deadline",
-    "fence-inclusive-timestamp",
     "profile-source-wrong-clock",
     "profile-source-wrong-owner",
     "independent-wrong-recovered-value",
     "independent-source-wrong-clock",
     "independent-source-wrong-owner",
-    "tracked-read-inclusive-fence",
     "core-unhealthy-local-read-hits",
     "core-tracked-fallback-warms-local",
     "runtime-policy-coalesce-defaults-off",
@@ -2403,8 +2615,6 @@
     "conformance-local-hit-returns-source",
     "conformance-remote-miss-skips-publication",
     "scope-late-source-repopulates-closed-memo",
-    "scope-source-error-memoized",
-    "layers-process-flight-crosses-instance",
     "layers-late-memo-into-closed-scope",
     "independent-fresh-frame-retained",
     "runtime-boundaries-inclusive-cohort",
