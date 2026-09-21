@@ -486,7 +486,7 @@ describe("full formal workflow shape", () => {
     const job = jobs.differential!;
     expect(job.if).toBe("github.event_name == 'pull_request'");
     // Every composed profile replaying both ways after a kernel change overran one 60-minute job
-    // (57 minutes, then a cancellation at the timeout); four round-robin shards keep each inside it.
+    // (57 minutes, then a cancellation at the timeout); retain the four required shard statuses.
     expect(job["timeout-minutes"]).toBe(60);
     expect(job.strategy).toEqual({ "fail-fast": false, matrix: { shard: [1, 2, 3, 4] } });
     const shards = job.strategy!.matrix!.shard as number[];

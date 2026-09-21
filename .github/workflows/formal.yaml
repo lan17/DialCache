@@ -49,12 +49,11 @@ jobs:
   # intended change. The reference is the merge base with the pull request's
   # base branch; a push to main has no reference. The step also checks the
   # composition lint baseline and the kernel fixtures. A kernel change replays
-  # every composed profile in both directions: six profiles took about 35
-  # minutes on the hosted runner, five about 26, and fourteen in one job
-  # overran the 60-minute budget (57 minutes, then a cancellation at the
-  # timeout), so the lane runs as four matrix shards, each replaying a
-  # round-robin quarter of the profiles sorted by name (DIFFERENTIAL_SHARD);
-  # a change outside the kernel skips unchanged closures in under ten. The
+  # every composed profile in both directions. One job overran the 60-minute
+  # budget; alphabetical splitting later left one shard at 47 minutes and
+  # another at eight. Four shards now balance estimated profile replay time
+  # (formal/differential.mjs); every history still runs in both directions.
+  # Replay batches report progress through one bounded pool per job. The
   # gate is the four statuses `differential (1)` to `differential (4)`; none
   # is required on main. Grow the matrix, and the count in DIFFERENTIAL_SHARD
   # with it, before a shard approaches the budget.

@@ -35,11 +35,15 @@ driver-asserted observation of its previous corpus, or accepts an input the
 previous text refused, fails unless the manifest declares the change by bumping
 its `differential.behaviorVersion`. The job is a matrix of four shards,
 `differential (1)` to `differential (4)`: each checks the lint baseline and the
-kernel fixtures, then replays a round-robin quarter of the composed profiles
-sorted by name (`DIFFERENTIAL_SHARD=<index>/4`; one unsharded job overran its
-60-minute budget) and preserves its reports and replay logs as the
-`formal-differential-<index>` artifact. The reports are migration evidence, not
-a conformance completion report; the profile lanes still run.
+kernel fixtures, then replays its assigned composed profiles
+(`DIFFERENTIAL_SHARD=<index>/4`). Profiles are assigned by estimated replay
+time, largest first into the least-loaded shard, with deterministic ties.
+The advisory weights in `differential.mjs` include estimates for new profiles;
+they change placement only. Every profile still runs both directions through
+one bounded worker pool per job, with completed/total batches and elapsed time
+logged after each batch. Each shard preserves reports and replay logs as the
+`formal-differential-<index>` artifact. These are migration evidence, not a
+conformance completion report; the profile lanes still run.
 
 The evaluator ends with a per-profile witness report: required labels with at
 most three sampled hits and no regression, labels pinned by a regression but

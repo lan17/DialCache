@@ -378,20 +378,34 @@ export function selectProfiles(prepared) {
     ...composedProfiles(prepared.candidate.manifests.execution, { cwd: prepared.candidate.tree })])].sort();
 }
 
-// The profiles one shard of a sharded run replays (--shard=<index>/<count>;
-// DIFFERENTIAL_SHARD in the hosted lane, which runs four): the names sorted,
-// then dealt round-robin (positions index-1, index-1+count, ...) rather than
-// cut into contiguous slices, so alphabetical neighbours (recovery and
-// recovery-read, shadow and shadow-layers) fall to different shards and, with
-// four shards, the two heaviest profiles, effects and shadow, do not share one.
-// Every name lands in exactly one shard; a shard past the number of profiles is
-// empty.
+// Advisory replay seconds, rounded from Actions run 35634905259. Its slowest
+// alphabetical shard took 47 minutes while another took eight. Effects and the
+// two new profiles were skipped there; estimate their cost from similarly sized
+// corpora instead of assigning zero. New names get a middle-sized estimate.
+// These weights only place whole profiles; they never select or drop histories.
+const replaySeconds = {
+  admission: 170, 'dark-layers': 400, effects: 700, independent: 280,
+  layers: 450, 'local-clock': 80, 'local-failure': 70, policy: 260,
+  recovery: 500, 'recovery-read': 250, 'runtime-boundaries': 220, scope: 170,
+  shadow: 1300, 'shadow-layers': 350, 'shadow-read-deadlines': 100, 'source-budgets': 140,
+};
+// Place expensive profiles first in the least-loaded shard. Sorted names break
+// equal-cost ties; shard index breaks equal-load ties, independently of input
+// order. Every name lands in exactly one shard, for any positive shard count.
 export function shardProfiles(names, index, count) {
   for (const [label, value] of [['index', index], ['count', count]]) {
     if (!Number.isSafeInteger(value) || value < 1) throw new Error(`Shard ${label} must be a positive integer; got ${String(value)}`);
   }
   if (index > count) throw new Error(`Shard index ${index} exceeds the shard count ${count}; use 1 <= index <= count`);
-  return [...names].sort().filter((_, position) => position % count === index - 1);
+  const cost = name => Object.hasOwn(replaySeconds, name) ? replaySeconds[name] : 250;
+  const ordered = [...new Set(names)].sort().sort((left, right) => cost(right) - cost(left));
+  const shards = Array.from({ length: Math.min(count, ordered.length) }, () => ({ names: [], seconds: 0 }));
+  for (const name of ordered) {
+    const shard = shards.reduce((lightest, candidate) => candidate.seconds < lightest.seconds ? candidate : lightest);
+    shard.names.push(name);
+    shard.seconds += cost(name);
+  }
+  return shards[index - 1]?.names.sort() ?? [];
 }
 
 // A generation whose inputs are byte-identical in both revisions is the same
@@ -436,7 +450,17 @@ export async function runDifferential(profileId, prepared, { chunk = defaultChun
   const started = performance.now();
   const forwardReplay = await prepareReplay(candidateTree, candidateModel, descriptor, referenceHistories, { chunk, output: resolve(outputDirectory, 'forward') });
   const reverseReplay = await prepareReplay(referenceTree, referenceModel, descriptor, candidateHistories, { chunk, output: resolve(outputDirectory, 'reverse') });
-  const results = await runPool([...forwardReplay.tasks, ...reverseReplay.tasks], { concurrency });
+  log(`${profileId}: ${forwardReplay.tasks.length} forward and ${reverseReplay.tasks.length} reverse replay batches, up to ${concurrency} concurrent processes.`);
+  const progress = (direction, tasks) => {
+    let completed = 0;
+    return tasks.map((task, index) => async () => {
+      const batchStarted = performance.now();
+      const result = await task();
+      log(`${profileId} ${direction}: ${++completed}/${tasks.length} batches complete; batch ${index + 1} replayed ${result.length} histories in ${seconds(performance.now() - batchStarted)} (${seconds(performance.now() - started)} elapsed).`);
+      return result;
+    });
+  };
+  const results = await runPool([...progress('forward', forwardReplay.tasks), ...progress('reverse', reverseReplay.tasks)], { concurrency });
   const forward = forwardReplay.collect(results.slice(0, forwardReplay.tasks.length));
   const reverse = reverseReplay.collect(results.slice(forwardReplay.tasks.length));
   const replayMs = performance.now() - started;
@@ -509,8 +533,8 @@ A profile whose import closure and generation settings are byte-identical in
 both revisions is reported as unchanged and not regenerated. --composed selects
 every profile that imports a kernel module in either revision; one the working
 tree no longer generates is reported as removed. --shard=<index>/<count>, with
---composed only, replays the index-th of count round-robin shards of those
-profiles sorted by name (the hosted lane runs four). Only profiles with an
+--composed only, replays the index-th of count shards balanced by estimated
+profile replay time (the hosted lane runs four). Only profiles with an
 explicit-input driver descriptor (formal/replay/features.mjs, or the local-clock
 descriptor in formal/replay/local-clock.mjs) can be replayed.
 Reports:

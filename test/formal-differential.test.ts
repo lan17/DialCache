@@ -27,6 +27,7 @@ const differential = await import(new URL("../formal/differential.mjs", import.m
   replayHistories(tree: string, model: Model, descriptor: unknown, histories: History[], options: { chunk: number; output: string; concurrency: number }): Promise<Verdict[]>;
   composedProfiles(manifest: { models: Array<{ path: string; profile?: string }> }, options?: { cwd?: string }): string[];
   prepare(reference: string, options?: { cwd?: string; output?: string }): { reference: { revision: string; tree: string; manifests: Manifests }; candidate: { tree: string; manifests: Manifests } };
+  runDifferential(profileId: string, prepared: ReturnType<typeof differential.prepare>, options: { chunk: number; output: string; concurrency: number; log: (message: string) => void }): Promise<Report>;
   selectProfiles(prepared: { reference: { manifests: Manifests; tree: string }; candidate: { manifests: Manifests; tree: string } }): string[];
   shardProfiles(names: string[], index: number, count: number): string[];
   closureSkip(reference: Model, candidate: Model, referenceSources: Record<string, string>, candidateSources: Record<string, string>): string | null;
@@ -259,21 +260,20 @@ describe("corpus differential comparison", () => {
     expect([...sources].sort()).toEqual(sources);
   });
 
-  it("deals the composed profiles round-robin into shards by sorted name, every profile in exactly one shard, and refuses an index outside 1..count", () => {
-    const names = ["shadow", "admission", "recovery-read", "effects", "layers", "recovery", "scope"];
-    const sorted = [...names].sort();
+  it("balances profiles deterministically, assigns every name once, and refuses an index outside 1..count", () => {
+    const names = ["shadow", "admission", "recovery-read", "effects", "layers", "recovery", "scope", "new-profile", "shadow"];
+    const sorted = [...new Set(names)].sort();
     for (const count of [1, 2, 3, 4, 7, 9]) {
       const shards = Array.from({ length: count }, (_, position) => differential.shardProfiles(names, position + 1, count));
       // The union is the input with no name repeated, whatever the input's order.
       expect(shards.flat().sort(), `${count} shards`).toEqual(sorted);
-      expect(shards.flat(), `${count} shards`).toHaveLength(names.length);
+      expect(shards.flat(), `${count} shards`).toHaveLength(sorted.length);
       expect(shards, `${count} shards`).toEqual(Array.from({ length: count }, (_, position) => differential.shardProfiles(sorted, position + 1, count)));
     }
-    // Round-robin, not contiguous slices: alphabetical neighbours (recovery, recovery-read) part ways.
-    expect(differential.shardProfiles(names, 1, 4)).toEqual(["admission", "recovery-read"]);
-    expect(differential.shardProfiles(names, 2, 4)).toEqual(["effects", "scope"]);
-    expect(differential.shardProfiles(names, 3, 4)).toEqual(["layers", "shadow"]);
-    expect(differential.shardProfiles(names, 4, 4)).toEqual(["recovery"]);
+    // Keep the dominant shadow workload apart from the next-largest profiles.
+    const shards = Array.from({ length: 4 }, (_, position) => differential.shardProfiles(names, position + 1, 4));
+    expect(shards.find(shard => shard.includes("shadow"))).toEqual(["shadow"]);
+    expect(shards.find(shard => shard.includes("effects"))).not.toContain("recovery");
     expect(differential.shardProfiles(names, 1, 1)).toEqual(sorted);
     // A shard past the number of profiles is empty, not an error.
     expect(differential.shardProfiles(["a", "b"], 3, 3)).toEqual([]);
@@ -282,6 +282,20 @@ describe("corpus differential comparison", () => {
     for (const [index, count] of refused) {
       expect(() => differential.shardProfiles(names, index, count), `${index}/${count}`).toThrow(/Shard (index|count) must be a positive integer|exceeds the shard count/);
     }
+  });
+
+  it("keeps the measured slow profiles apart for the full composed inventory, including currently skipped profiles", () => {
+    const names = differential.composedProfiles(readExecution());
+    const shards = Array.from({ length: 4 }, (_, position) => differential.shardProfiles(names, position + 1, 4));
+    expect(shards.flat().sort()).toEqual([...names].sort());
+    const shadow = shards.find(shard => shard.includes("shadow"))!;
+    expect(shadow).not.toEqual(expect.arrayContaining(["layers"]));
+    expect(shadow).not.toEqual(expect.arrayContaining(["recovery"]));
+    expect(shadow).not.toEqual(expect.arrayContaining(["effects"]));
+    expect(shards.flat()).toEqual(expect.arrayContaining(["effects", "dark-layers", "shadow-read-deadlines"]));
+    // Names without timing history still distribute evenly and deterministically.
+    expect([1, 2, 3].map(index => differential.shardProfiles(["z", "a", "b", "c"], index, 3)))
+      .toEqual([["a", "z"], ["b"], ["c"]]);
   });
 
   it("refuses --shard outside --composed and a malformed shard before preparing any tree", () => {
@@ -313,6 +327,46 @@ describe.skipIf(!quintAvailable)("corpus differential replay through a tree", ()
   };
   const smokeHistory = (descriptor: unknown) => parseTrace(JSON.parse(readFileSync(resolve(root, "formal/layers-smoke.itf.json"), "utf8")), "layers-smoke", descriptor);
   const copyTree = (into: string) => { copySources(root, into); return into; };
+
+  it("reports every replay batch in both directions while preserving all history verdicts", async () => {
+    const reference = copyTree(join(output, "progress-reference"));
+    const candidate = copyTree(join(output, "progress-candidate"));
+    const smallCorpus = (traces: number) => {
+      const manifests = differential.readManifests(root);
+      const model = manifests.execution.models.find(model => model.profile === "layers")!;
+      Object.assign(model, { generate: { ...(model.generate as object), maxSamples: traces, maxSteps: 4, traces }, replayRegressions: [] });
+      return manifests;
+    };
+    const prepared = {
+      reference: { revision: "test-reference", tree: reference, manifests: smallCorpus(2) },
+      candidate: { tree: candidate, manifests: smallCorpus(3) },
+    };
+    // Different corpus sizes prevent the unchanged-input skip and exercise an
+    // uneven final batch without changing either model's behavior.
+    const run = async (name: string) => {
+      const logs: string[] = [];
+      const report = await differential.runDifferential("layers", prepared,
+        { chunk: 2, output: join(output, name), concurrency: 2, log: message => logs.push(message) });
+      expect(report.forward).toMatchObject({ sampled: 2, regressions: 0 });
+      expect(report.reverse).toMatchObject({ sampled: 3, regressions: 0 });
+      expect(logs).toContain("layers: 1 forward and 2 reverse replay batches, up to 2 concurrent processes.");
+      const batches = logs.filter(line => line.includes("batches complete"));
+      expect(batches).toHaveLength(3);
+      expect(batches.filter(line => line.startsWith("layers forward:"))).toEqual([
+        expect.stringMatching(/^layers forward: 1\/1 batches complete; batch 1 replayed 2 histories in [\d.]+ s \([\d.]+ s elapsed\)\.$/),
+      ]);
+      const reverse = batches.filter(line => line.startsWith("layers reverse:"));
+      expect(reverse[0]).toContain("1/2 batches complete");
+      expect(reverse[1]).toContain("2/2 batches complete");
+      expect(reverse.filter(line => line.includes("batch 1 replayed 2 histories"))).toHaveLength(1);
+      expect(reverse.filter(line => line.includes("batch 2 replayed 1 histories"))).toHaveLength(1);
+      return report;
+    };
+    const clean = await run("progress-clean");
+    expect(clean.forward.disagreed).toBe(0);
+    expect(clean.reverse.disagreed).toBe(0);
+    expect(differential.verdict(clean).failed).toBe(false);
+  }, 180_000);
 
   it("shares one constrained clone per input pair across the histories of a chunk", async () => {
     const { model } = layers();

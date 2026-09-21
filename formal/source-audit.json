@@ -1503,19 +1503,19 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "065b585e6b646496126360c4ece767b4065c67ec5519b9a8884cdca22e2acff1",
+      "sha256": "7747e7e1668b8b9557306cf7724182c0995b84b0044c3434501ae0a9e37d3f21",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
-        {"line":72,"title":"Reading a completion report"},
-        {"line":90,"title":"Mutation evidence"},
-        {"line":201,"title":"Exploratory runs"},
-        {"line":252,"title":"A retained sampling regression"},
-        {"line":289,"title":"Historical results"}
+        {"line":76,"title":"Reading a completion report"},
+        {"line":94,"title":"Mutation evidence"},
+        {"line":205,"title":"Exploratory runs"},
+        {"line":256,"title":"A retained sampling regression"},
+        {"line":293,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Operating guide for local/hosted validation, exact completion report identity, mutation interpretation, separate alternate-seed diagnostics and versioned historical results. Fast PR checks do not enforce the stated full-validation policy."
+        "scope": "Operating guide for local/hosted validation, exact completion report identity, mutation interpretation, separate alternate-seed diagnostics and versioned historical results. Fast PR checks do not enforce the stated full-validation policy. Differential profiles are balanced by advisory replay estimates, with per-batch progress and unchanged comparison coverage."
       }
     },
     {
