@@ -636,9 +636,7 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'recovery-future-candidate',
   'local-precise-grid',
   'source-inclusive-deadline',
-  'profile-source-wrong-clock',
   'profile-source-wrong-owner',
-  'independent-wrong-recovered-value',
   'independent-source-wrong-clock',
   'independent-source-wrong-owner',
   'core-unhealthy-local-read-hits',
@@ -663,7 +661,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'independent-fresh-frame-retained',
   'runtime-boundaries-inclusive-cohort',
   'runtime-boundaries-inherited-sharing-ignores-default',
-  'source-budgets-outside-call-has-deadline',
   'source-budgets-settled-flight-stays-registered',
 ]);
 

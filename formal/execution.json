@@ -788,7 +788,42 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M33",
-        "text": "Same native fault as source-deadline-epoch: M33 judges a source settlement against a budget anchored at the clock origin rather than the source start, which is kernel/deadlines.qnt due registering a deadline at the bare budget instead of the current instant plus the budget, so deliver expires a source, and arrival rejects its late result, at the origin plus its budget. source-budgets/heldPolicyDoesNotSpendSourceBudgetTest is the expected evidence in both ports."
+        "text": "M33 judges source settlement against the clock origin instead of its start; kernel/deadlines.qnt due makes the same origin mistake when registering the deadline. The model expires during advance while the native faults reject at settlement. After policy waits 100 ms, a source taking 9 ms of its 10 ms budget and the subsequent local hit must both return VALUE_ONE. The final caller outcomes distinguish the shared consequence.",
+        "evidence": {
+          "history": "source-budgets/heldPolicyDoesNotSpendSourceBudgetTest",
+          "step": 7,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "heldPolicyDoesNotSpendSourceBudgetTest",
+        "model": "formal/dialcache-source-budgets-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1",
+        "family": "source-budget-starts-with-source",
+        "profiles": [
+          "formal/dialcache-source-connection.qnt",
+          "effects",
+          "recovery",
+          "shadow",
+          "independent",
+          "shadow-layers",
+          "source-budgets"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "policy": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "layers": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "recovery-read": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps.",
+          "admission": "Only served-hit shadow jobs are budgeted. The named timeout histories time jobs admitted at elapsed zero, then check retained capacity; the invariants check ownership and lifecycle, not each later job's deadline origin. All eight named runs and all nine scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps.",
+          "dark-layers": "The named source/job timeout history starts both at elapsed zero. The scheduled checks validate deadline ownership, cleanup and failure attribution, without independently comparing registration time with the work's own start. All 18 named runs and all 18 scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
+        }
       }
     },
     {
@@ -941,7 +976,42 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M41",
-        "text": "M41 is the native twin of kernel/remote-io.qnt settleLoad completing a served recovery with a constant other than the retained candidate: both ports decode the retained candidate and then serve an undefined or zero value, the only wrong constant expressible for a generic value type. independent/independentRecoveriesServeDistinctAcquiredSnapshotsTest and recovery/coalescedRecoveryClassifiesAndDecodesOnceTest are the expected evidence."
+        "text": "M41 is the native twin of kernel/remote-io.qnt settleLoad returning a wrong constant instead of each retained candidate. TypeScript serves undefined and Go the zero value; the model serves VALUE_TWO to both callers. After the two independent recoveries settle, caller results must preserve the distinct acquired values even though the stored frame was replaced and invalidated.",
+        "evidence": {
+          "history": "independent/independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+          "step": 10,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+        "model": "formal/dialcache-independent-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.recovery == List(\"served\", \"served\") and s.o.reads == 2 and s.o.loaders == 2 and s.o.loads == 2 and s.o.dumps == 0 and s.o.writes == 0",
+        "family": "recovery-keeps-acquired-value",
+        "profiles": [
+          "formal/dialcache-independent-connection.qnt",
+          "recovery",
+          "independent",
+          "recovery-read"
+        ],
+        "exclusions": {
+          "core": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
+          "effects": "Every held read settles with Recovery::NONE, so no caller retains a recovery candidate and the changed recovery-decode completion arm is unreachable.",
+          "policy": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
+          "shadow": "Every reply disables caller remote serving; held C0 decodes belong to shadow jobs, and no caller retains a recovery candidate.",
+          "scope": "Uses the request-only serving lifecycle, with no caller remote read or held recovery decode; it never executes RemoteIO::settleLoad.",
+          "admission": "Every caller read settles with Recovery::NONE, so held caller decodes can serve fresh hits but never execute the changed recovery-completion arm.",
+          "layers": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
+          "local-failure": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
+          "runtime-boundaries": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
+          "shadow-layers": "Uses the atomic caller traversal and RemoteWrites settlement, never RemoteIO::settleLoad; its guard also excludes ordinary stale caller recovery.",
+          "local-clock": "Does not import formal/kernel/remote-io.qnt; the changed recovery-decode completion is outside its executable closure.",
+          "source-budgets": "Uses the budgeted local projection, with no remote layer or held caller decode; it never executes RemoteIO::settleLoad.",
+          "dark-layers": "Every reply disables caller remote serving; held C0 decodes belong to shadow jobs, and no caller retains a recovery candidate."
+        }
       }
     },
     {
@@ -2260,7 +2330,40 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M14",
-        "text": "M14 is the native twin of kernel/deadlines.qnt admissionBudget returning the source budget instead of UNBOUNDED for a call whose key did not fail: both ports bound the disabled or outside bypass source with the configured fallback deadline. source-budgets/outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest detects both ports at its advance(100) step."
+        "text": "M14 is the native twin of kernel/deadlines.qnt admissionBudget applying the configured source budget to outside calls instead of UNBOUNDED. At advance(100), both outside callers must remain pending; the fault completes them with deadline errors. Boundary evidence selects caller outcomes so unrelated policy or loader counters cannot satisfy the mapping.",
+        "evidence": {
+          "history": "source-budgets/outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest",
+          "step": 3,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest",
+        "failure": "s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.policyCalls == 0 and s.o.loaders == 2",
+        "family": "outside-call-unbounded-source",
+        "profiles": [
+          "source-budgets",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
+          "effects": "All calls are enabled with valid keys and no closable request scope; sources start at release or read/decode settlement, never from bypass admission.",
+          "recovery": "Call and join guards admit only enabled callers in open scopes. Closing a scope after admission cannot start a bypass source, so the changed admission budget never registers a deadline.",
+          "policy": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
+          "shadow": "All calls are enabled with valid keys and no closable request scope; the caller source starts at participating release, not bypass admission.",
+          "scope": "Uses Diagnostics::admitRequest and the request-only serving lifecycle, with no budgeted source lifecycle; it never calls the changed admission-budget rule.",
+          "admission": "Uses Shadow::beginHeld through RemoteIO::begin without a source budget; only shadow jobs register deadlines, so caller admission never uses the changed rule.",
+          "layers": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
+          "independent": "All calls are enabled with valid keys and no closable request scope; source loaders start after read/decode settlement, not from bypass admission.",
+          "recovery-read": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
+          "local-failure": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
+          "runtime-boundaries": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure.",
+          "shadow-layers": "Uses Shadow::begin with the atomic serving lifecycle and no source budget; only shadow jobs are timed, so caller admission never uses the changed rule.",
+          "local-clock": "Does not import formal/kernel/deadlines.qnt; the changed admission-budget rule is outside its executable closure."
+        }
       }
     },
     {
@@ -2595,9 +2698,7 @@
     "recovery-future-candidate",
     "local-precise-grid",
     "source-inclusive-deadline",
-    "profile-source-wrong-clock",
     "profile-source-wrong-owner",
-    "independent-wrong-recovered-value",
     "independent-source-wrong-clock",
     "independent-source-wrong-owner",
     "core-unhealthy-local-read-hits",
@@ -2622,7 +2723,6 @@
     "independent-fresh-frame-retained",
     "runtime-boundaries-inclusive-cohort",
     "runtime-boundaries-inherited-sharing-ignores-default",
-    "source-budgets-outside-call-has-deadline",
     "source-budgets-settled-flight-stays-registered"
   ],
   "nativeMutantBacklog": [
