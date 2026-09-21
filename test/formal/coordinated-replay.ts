@@ -118,7 +118,7 @@ class CoordinatedBehaviorDriver implements CoordinatedDriver {
   }
 }
 
-// Core: the flat-integer conformance driver from test/formal-conformance.test.ts,
+// Core: the flat conformance driver from test/formal-conformance.test.ts,
 // consuming the coordinator's explicit advanceWall/bumpSource/invalidate/call
 // commands instead of action names.
 class CoordinatedCoreDriver implements CoordinatedDriver {
@@ -182,9 +182,13 @@ class CoordinatedCoreDriver implements CoordinatedDriver {
       this.redis.failGet = false;
     }
   }
-  observe(): Record<string, number> {
+  observe(): Record<string, number | { absent: true }> {
     return {
-      sourceVersion: this.sourceVersion, lastResult: this.lastResult, ...this.counters,
+      sourceVersion: this.sourceVersion,
+      // An absent actual result must survive the JSON roundtrip as data.
+      // Otherwise a wrong-value fault impersonates a missing driver field.
+      lastResult: this.lastResult === undefined ? { absent: true } : this.lastResult,
+      ...this.counters,
       redisReads: this.redis.getCalls + this.redis.mGetCalls, redisWrites: this.redis.setCalls,
     };
   }

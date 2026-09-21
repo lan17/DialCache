@@ -47,4 +47,11 @@ describe("comparison divergence paths", () => {
     // A counter repaired at k-1 can newly diverge at k; older differences do not suppress it.
     expect(countingPaths(["o.reads"], ["o.reads"], [])).toEqual(["o.reads"]);
   });
+
+  it("does not reuse core's earlier counter mismatch as evidence at a later result", () => {
+    const counters = ["outsideLoaderCalls", "requestLoaderCalls", "localLoaderCalls", "coalescedLoaderCalls", "remoteLoaderCalls", "redisReads", "redisWrites"];
+    expect(countingPaths([...counters, "lastResult"], [...counters, "lastResult"], counters)).toEqual(["lastResult"]);
+    expect(countingPaths(["redisWrites", "remoteLoaderCalls"], ["redisWrites", "remoteLoaderCalls"], ["redisWrites"]))
+      .toEqual(["remoteLoaderCalls"]);
+  });
 });

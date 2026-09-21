@@ -2,7 +2,9 @@ import type { Policy } from "../../test/formal/behavior-driver.js";
 export declare const actionNames: readonly ["init", "bumpSource", "outsideCall", "requestLocalPair", "localCall", "coalescedLocalPair", "remoteCall", "invalidateRemote", "remoteReadFailureCall"];
 export type ActionName = typeof actionNames[number];
 export declare const observationFields: readonly ["sourceVersion", "lastResult", "outsideLoaderCalls", "requestLoaderCalls", "localLoaderCalls", "coalescedLoaderCalls", "remoteLoaderCalls", "redisReads", "redisWrites"];
-export type Observation = Pick<Snapshot, typeof observationFields[number]>;
+export type Observation = Omit<Pick<Snapshot, typeof observationFields[number]>, "lastResult"> & {
+  lastResult: number | { absent: true };
+};
 export interface Snapshot {
   sourceVersion: number;
   lastResult: number;

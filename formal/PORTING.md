@@ -201,7 +201,7 @@ infrastructure error, never an observation mismatch: it carries no
 | --- | --- | --- |
 | Feature profiles (12) | `behaviorObservation` | The full behavior record below; `events` is present exactly when the fixture has an `observe` list |
 | `effects` | `behaviorObservation` | The same record; the fixture observes every metric event kind plus `readContext`/`readAbort` |
-| `core` | `coreObservation` | Nine nonnegative integers: `sourceVersion`, `lastResult`, `outsideLoaderCalls`, `requestLoaderCalls`, `localLoaderCalls`, `coalescedLoaderCalls`, `remoteLoaderCalls`, `redisReads`, `redisWrites` |
+| `core` | `coreObservation` | `sourceVersion` and the seven loader/Redis counters are nonnegative integers. `lastResult` is the actual returned integer, or `{ "absent": true }` for an absent return; it must remain present even when the implementation returns no value. Core histories offer integers, so absence is a behavioral mismatch. |
 | `local-clock` | `localClockObservation` | The behavior record without `events`; `calls` holds the plain integer each call returned, `loaders` counts source invocations, every other counter is zero and every other list empty |
 
 Behavior observation fields:

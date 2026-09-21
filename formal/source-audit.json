@@ -1288,7 +1288,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "2807f483a12eabe71fa7ead0d19df2d1dcf9f106da86b69d03555956472c167e",
+      "sha256": "2ef38b578127e8fb825b72d009d3d38f1aad1a7c1766fd84599b8b635a10c431",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},

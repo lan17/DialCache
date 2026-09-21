@@ -19,6 +19,7 @@ import { parseJSON, replayLines } from "../formal/replay/validation.mjs";
 import { replaySources } from "../formal/replay/sources.mjs";
 import { BehaviorDriver, type Fixture, type Input } from "./formal/behavior-driver.js";
 import { replayThroughCoordinator, smokeTracePath } from "./formal/coordinated-replay.js";
+import { LocalCache } from "../src/internal/local-cache.js";
 
 type Raw = { states: Array<Record<string, unknown> & { s: Record<string, unknown> }> };
 function smoke(profile: string): Raw {
@@ -190,6 +191,9 @@ describe("observation encoding contract", () => {
     { profile: "shadow", definition: "behaviorObservation", path: "observed.events[0].seconds", observed: () => ({ ...behaviorObservation("shadow"), events: [{ event: "shadowAge", cacheNamespace: "urn", useCase: "Behavior", keyType: "id", outcome: "match", seconds: "1" }] }) },
     { profile: "effects", definition: "behaviorObservation", path: "observed.writeTtls[0]", observed: () => ({ ...behaviorObservation("effects"), writeTtls: [60000.5] }) },
     { profile: "core", definition: "coreObservation", path: "observed.redisReads", observed: () => ({ ...coreObservation(), redisReads: -1 }) },
+    { profile: "core", definition: "coreObservation", path: "observed.lastResult", observed: () => ({ ...coreObservation(), lastResult: null }) },
+    { profile: "core", definition: "coreObservation", path: "observed.lastResult", observed: () => ({ ...coreObservation(), lastResult: { absent: false } }) },
+    { profile: "core", definition: "coreObservation", path: "observed.lastResult", observed: () => { const { lastResult: _value, ...rest } = coreObservation(); return rest; } },
     { profile: "core", definition: "coreObservation", path: "observed.redisWrites", observed: () => { const { redisWrites: _writes, ...rest } = coreObservation(); return rest; } },
     { profile: "local-clock", definition: "localClockObservation", path: "observed.calls[0]", observed: () => ({ ...emptyObservation(), calls: [{ status: "pending" }] }) },
     { profile: "local-clock", definition: "localClockObservation", path: "observed.events", observed: () => ({ ...emptyObservation(), calls: [], events: [] }) },
@@ -502,6 +506,25 @@ describe("fixture work on the receipt clocks", () => {
 });
 
 describe("coordinated end-to-end replay with the real drivers", () => {
+  it("records an absent actual core hit as a wrong result, preserving the complete history", async () => {
+    const raw = smoke("core");
+    raw.states = raw.states.slice(0, 6); // Warm local, change source, then read the stored value.
+    const original = LocalCache.prototype.getWithResolvedConfig;
+    vi.spyOn(LocalCache.prototype, "getWithResolvedConfig").mockImplementation(function (this: LocalCache, ...args) {
+      const result = original.apply(this, args);
+      return result.status === "hit" ? { ...result, value: undefined } : result;
+    });
+    const directory = mkdtempSync(resolve(tmpdir(), "dialcache-core-absent-"));
+    const records: ReplayRecording[] = [];
+    try {
+      const path = resolve(directory, "absent.itf.json");
+      writeFileSync(path, JSON.stringify(raw));
+      const result = await replayThroughCoordinator("core", path, new ReplayCoordinator({ record: true, onRecord: record => records.push(record) }));
+      expect(result.divergences).toEqual([{ step: 5, action: "localCall", paths: ["lastResult"] }]);
+      expect(records).toEqual([{ path, completed: true, lastStep: 5, divergences: result.divergences }]);
+    } finally { vi.restoreAllMocks(); rmSync(directory, { recursive: true, force: true }); }
+  });
+
   it.each(Object.keys(profileActions()))("replays the committed %s smoke trace through the coordinator", async profile => {
     const records: ReplayRecording[] = [];
     const result = await replayThroughCoordinator(profile, smokeTracePath(profile), new ReplayCoordinator({ record: true, onRecord: record => records.push(record) }));

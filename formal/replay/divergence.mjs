@@ -41,6 +41,9 @@ const counters = new Set([
   // Effects and local-clock compare these same counters without an `o`
   // wrapper. Paths retain the binding's spelling in every evidence packet.
   "loaders", "reads", "loads", "dumps", "writes", "policyCalls", "invalidations", "classifications", "comparisons",
+  // Core's counters are also flat; an omitted earlier publication must not
+  // count again merely because redisWrites is still wrong at a later call.
+  "outsideLoaderCalls", "requestLoaderCalls", "localLoaderCalls", "coalescedLoaderCalls", "remoteLoaderCalls", "redisReads", "redisWrites",
 ]);
 const within = (path, field) => path === field || path.startsWith(`${field}.`);
 

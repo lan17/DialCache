@@ -101,7 +101,7 @@ class ConformanceDriver {
   snapshot(): Observation {
     return {
       sourceVersion: this.sourceVersion,
-      lastResult: this.lastResult,
+      lastResult: this.lastResult === undefined ? { absent: true } : this.lastResult,
       ...this.counters,
       redisReads: this.redis.getCalls + this.redis.mGetCalls,
       redisWrites: this.redis.setCalls,

@@ -343,10 +343,10 @@ describe("formal execution schedule", () => {
     const current = manifest();
     const withReproducer = current.challenges.filter(challenge => challenge.reproducer);
     expect(withReproducer.map(challenge => challenge.id)).toEqual([
-      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "fence-inclusive-timestamp", "profile-source-wrong-clock", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "independent-wrong-recovered-value", "effects-wrong-acceptance-receipt", "recovery-strands-followers", "tracked-read-inclusive-fence", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "shadow-fenced-fill-writes", "shadow-fill-before-source", "effects-fenced-source-publishes", "effects-late-source-accepted", "scope-source-error-memoized", "scope-nested-close-evicts-outer-memo", "admission-duplicate-key-admitted", "admission-capacity-off-by-one", "layers-process-flight-crosses-instance", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "local-failure-write-fault-publishes", "local-failure-source-error-published", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "local-clock-hit-renews-insertion", "source-budgets-outside-call-has-deadline", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry", "dark-layers-process-flight-crosses-instance", "dark-layers-budget-starts-at-clock-origin", "admission-budget-starts-at-clock-origin", "dark-layers-timeout-releases-held-capacity", "effects-stale-frame-reply-unclassified",
+      "recovery-connection-inclusive-maximum", "policy-inclusive-local-expiry", "fence-inclusive-timestamp", "profile-source-wrong-clock", "profile-recovery-wrong-snapshot", "recovery-read-wrong-admission-policy", "independent-wrong-admission-policy", "independent-wrong-recovered-value", "effects-wrong-acceptance-receipt", "recovery-strands-followers", "tracked-read-inclusive-fence", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "shadow-fenced-fill-writes", "shadow-fill-before-source", "conformance-local-hit-returns-source", "conformance-remote-miss-skips-publication", "effects-fenced-source-publishes", "effects-late-source-accepted", "scope-source-error-memoized", "scope-nested-close-evicts-outer-memo", "admission-duplicate-key-admitted", "admission-capacity-off-by-one", "layers-process-flight-crosses-instance", "independent-deadline-settles-at-start", "recovery-read-inclusive-maximum", "recovery-read-recovery-warms-local", "recovery-read-tracked-retention-uncapped", "local-failure-write-fault-publishes", "local-failure-source-error-published", "shadow-layers-inclusive-c0-freshness", "shadow-layers-fill-uses-current-retention", "local-clock-precise-ttl", "local-clock-hit-renews-insertion", "source-budgets-outside-call-has-deadline", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix", "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce", "source-budgets-settlement-never-replaces-local-entry", "source-budgets-failed-settlement-clears-local-entry", "dark-layers-process-flight-crosses-instance", "dark-layers-budget-starts-at-clock-origin", "admission-budget-starts-at-clock-origin", "dark-layers-timeout-releases-held-capacity", "effects-stale-frame-reply-unclassified",
     ]);
     expect(withReproducer.map(challenge => challenge.reproducer!.kind)).toEqual([
-      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
+      "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression",
     ]);
     // The shared-rule fault of a verification model is pinned by a profile's exported regression.
     expect(withReproducer.find(challenge => challenge.id === "stale-recovery-future-candidate")!.reproducer).toMatchObject({
@@ -859,6 +859,25 @@ describe("native boundary evidence", () => {
     expect(() => validate(altered)).toThrow(/checkpoint has no derived public fields; write nativeMutants.evidence/);
   });
 
+  it("accepts only core's compared fields, never its stored-value predictions", () => {
+    const current = manifest();
+    const challenge = structuredClone(current.challenges.find(item => item.id === "conformance-local-hit-returns-source")!);
+    const model = current.models.find(item => item.path === challenge.model)!;
+    delete challenge.nativeMutants!.evidence;
+    const failure = 's.localValue == 1 and s.localCached and s.lastResult == 1 and s.localLoaderCalls == 1';
+    challenge.reproducer = { ...challenge.reproducer!, run: "coreBoundaryTest", failure };
+    expect(evidenceOf(challenge, new Map([[model.path, model]]), new Map([[model.path, ["coreBoundaryTest"]]]), {
+      readSource: () => `module core_boundary { var s: int action init = all { s' = 0 }
+        action call = all { s' = 1 } run coreBoundaryTest = init.then(call).expect(${failure}) }`,
+    })).toMatchObject({ fields: ["lastResult", "localLoaderCalls"], step: 1 });
+
+    for (const field of ["localValue", "remoteValue", "localCached", "remoteReadable", "o.calls", "calls", "lastResultExtra"]) {
+      const altered = structuredClone(current), target = altered.challenges.find(item => item.id === challenge.id)!;
+      target.nativeMutants!.evidence = { history: "core/localValueSurvivesSourceChangeTest", step: 3, fields: [field] };
+      expect(() => validate(altered), field).toThrow(/evidence fields/);
+    }
+  });
+
   it.each([
     { history: "shadow-layers/anotherTest", step: 7, fields: ["o.shadow"] },
     { history: "shadow-layers/darkFillRetainsPolicyThroughSerializationTest", step: 0, fields: ["o.shadow"] },
@@ -903,6 +922,10 @@ describe("native boundary evidence", () => {
     };
     const effects = await import(new URL("../formal/replay/effects.mjs", import.meta.url).href) as { parseTrace(raw: unknown, path: string): { steps: Array<{ expected: Record<string, unknown> }> } };
     const clock = await import(new URL("../formal/replay/local-clock.mjs", import.meta.url).href) as { parseLocalClockTrace(raw: unknown, path: string): { steps: Array<{ expected: Record<string, unknown> }> } };
+    const core = await import(new URL("../formal/replay/core.mjs", import.meta.url).href) as {
+      parseItfTrace(raw: unknown, path: string): { states: Array<{ state: unknown }> };
+      expectedCoreObservation(state: unknown): Record<string, unknown>;
+    };
     const registry = JSON.parse(readFileSync(root + "formal/profiles.json", "utf8")) as { profiles: Array<{ id: string; smoke: string }> };
     for (const entry of boundaryEvidence().filter(item => item.history !== undefined)) {
       const profile = entry.history!.split("/")[0]!, path = registry.profiles.find(item => item.id === profile)!.smoke;
@@ -910,6 +933,7 @@ describe("native boundary evidence", () => {
       const descriptor = features.profiles[profile];
       const expected = profile === "effects" ? effects.parseTrace(raw, path).steps[0]!.expected
         : profile === "local-clock" ? clock.parseLocalClockTrace(raw, path).steps[0]!.expected
+        : profile === "core" ? core.expectedCoreObservation(core.parseItfTrace(raw, path).states[0]!.state)
         : features.expectedObservation(features.parseTrace(raw, path, descriptor).steps[0]);
       for (const field of entry.fields!) {
         const flag = field.startsWith("d.") ? "diagnosticAge" : field.startsWith("io.") ? "readIO"

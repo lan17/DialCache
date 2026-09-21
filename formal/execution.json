@@ -1548,7 +1548,24 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M17",
-        "text": "M17 is the native reading of dialcache-conformance.qnt localCall recording the environment's sourceVersion as the result of a local hit: no port can read that version without invoking the loader, so the twin is a hit that returns something other than the stored value while loader counts stay unchanged. core/localValueSurvivesSourceChangeTest detects both ports in the generated cohort."
+        "text": "M17 is the native reading of dialcache-conformance.qnt localCall recording the environment's sourceVersion as the result of a local hit: no port can read that version without invoking the loader, so the twin is a hit that returns something other than the stored value while loader counts stay unchanged. core/localValueSurvivesSourceChangeTest detects both ports in the generated cohort.",
+        "evidence": {
+          "history": "core/localValueSurvivesSourceChangeTest",
+          "step": 3,
+          "fields": [
+            "lastResult"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "localValueSurvivesSourceChangeTest",
+        "failure": "s.lastResult == 1 and s.localLoaderCalls == 1",
+        "family": "local-hit-stored-value",
+        "profiles": [
+          "core"
+        ],
+        "exclusions": {}
       }
     },
     {
@@ -1562,7 +1579,24 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M38",
-        "text": "M38 is the native twin of dialcache-conformance.qnt remoteCall dropping remoteReadable from its miss branch: both ports skip the Redis publication after a semantic miss, including a decode failure, so only retained-candidate misses refill. core/invalidationRefillsFromCurrentSourceTest (redisWrites 3 and a later hit) and effects/nullReplyRefillsAndIsReadableTest are the expected evidence in both ports."
+        "text": "M38 is the native twin of dialcache-conformance.qnt remoteCall dropping remoteReadable from its miss branch: both ports skip the Redis publication after a semantic miss, including a decode failure, so only retained-candidate misses refill. core/invalidationRefillsFromCurrentSourceTest (redisWrites 3 and a later hit) and effects/nullReplyRefillsAndIsReadableTest are the expected evidence in both ports.",
+        "evidence": {
+          "history": "core/invalidationRefillsFromCurrentSourceTest",
+          "step": 3,
+          "fields": [
+            "lastResult"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "invalidationRefillsFromCurrentSourceTest",
+        "failure": "s.lastResult == 1 and s.remoteLoaderCalls == 1",
+        "family": "remote-miss-publication",
+        "profiles": [
+          "core"
+        ],
+        "exclusions": {}
       }
     },
     {
@@ -2904,8 +2938,6 @@
     "cohort-inclusive-threshold",
     "envelope-vectors-tie-compresses",
     "envelope-vectors-escape-misses-binary-marker",
-    "conformance-local-hit-returns-source",
-    "conformance-remote-miss-skips-publication",
     "scope-late-source-repopulates-closed-memo",
     "layers-late-memo-into-closed-scope",
     "independent-fresh-frame-retained",

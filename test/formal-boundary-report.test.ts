@@ -145,6 +145,22 @@ describe("native boundary evidence", () => {
     expect(assessBoundary(target, record({ divergences: [{ step: 6, paths: ["o.dumps"] }, { step: 7, paths: ["o.dumps"] }] })).state).toBe("side-effect-only");
   });
 
+  it("requires a core caller result instead of carrying an earlier missing-publication count", () => {
+    const history = "core/invalidationRefillsFromCurrentSourceTest";
+    const target = { challenge: "conformance-remote-miss-skips-publication", mutant: "M38", history, step: 3, fields: ["lastResult"] };
+    const recording = {
+      path: `/tmp/regressions/${history}.itf.json`, completed: true, lastStep: 5,
+      divergences: [{ step: 1, paths: ["redisWrites"] }, { step: 2, paths: ["redisWrites"] },
+        { step: 3, paths: ["lastResult", "remoteLoaderCalls", "redisWrites"] }],
+    };
+    expect(assessBoundary(target, recording)).toMatchObject({ state: "confirmed", matched: ["lastResult"] });
+    expect(assessBoundary({ ...target, fields: ["redisWrites"] }, recording).state).toBe("side-effect-only");
+    expect(assessBoundary(target, { ...recording, divergences: recording.divergences.map(entry => ({
+      ...entry, paths: entry.paths.filter(path => path !== "lastResult"),
+    })) }).state).toBe("side-effect-only");
+    expect(assessBoundary(target, { ...recording, completed: false, error: "driver failed after result" }).state).toBe("unreached");
+  });
+
   it("keeps failed or incomplete replays outside detection even after a matching divergence", () => {
     expect(assessBoundary(evidence, record({ completed: false, lastStep: 7, error: "step 8 releaseDump: No pending dump 0" }))).toMatchObject({ state: "unreached", reason: expect.stringContaining("step 8 releaseDump") });
     expect(assessBoundary(evidence, record({ completed: false, error: "step 8: Settlement violation: read gates" }))).toMatchObject({ state: "unreached", reason: expect.stringContaining("Settlement violation") });

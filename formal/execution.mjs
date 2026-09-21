@@ -313,7 +313,10 @@ const observationFields = new Set(['calls', 'loaders', 'reads', 'loads', 'dumps'
   'classifications', 'comparisons', 'maintenance', 'recovery', 'shadow', 'sourceScopes', 'writeTtls']);
 const effectsFields = new Set(['calls', 'loaders', 'reads', 'loads', 'dumps', 'writes', 'policyCalls', 'invalidations',
   'writeTtls', 'events', 'readContexts', 'readAborts']);
+const coreFields = new Set(['sourceVersion', 'lastResult', 'outsideLoaderCalls', 'requestLoaderCalls',
+  'localLoaderCalls', 'coalescedLoaderCalls', 'remoteLoaderCalls', 'redisReads', 'redisWrites']);
 function boundaryField(profile, field) {
+  if (profile === 'core') return coreFields.has(field) ? field : undefined;
   if (profile === 'effects' || profile === 'local-clock') {
     if (field.startsWith('o.')) field = field.slice(2);
     if (profile === 'effects') field = ({ 'io.budgets': 'readContexts', 'io.aborted': 'readAborts' })[field] ?? field;
@@ -323,7 +326,7 @@ function boundaryField(profile, field) {
 }
 
 // Fields name the actual assertion record, rather than the model's private
-// state. The two flat replay bindings (effects and local-clock) are explicit;
+// state. The flat replay bindings (core, effects and local-clock) are explicit;
 // feature profiles retain their channel prefix. Tests cross-check these paths
 // against the bindings without making the manifest validator import replay.
 export function evidenceOf(challenge, models, publicOnly, { readSource = read, scanSource = scanDeclarationBodies } = {}) {
@@ -358,6 +361,11 @@ export function evidenceOf(challenge, models, publicOnly, { readSource = read, s
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i] !== 's' || tokens[i + 1] !== '.') continue;
     const channel = tokens[i + 2];
+    if (model.profile === 'core') {
+      const field = boundaryField(model.profile, channel);
+      if (field && !fields.includes(field)) fields.push(field);
+      continue;
+    }
     // A private field can share a public name (effects' reads/loaders lists).
     // Only the public channels, plus the explicitly compared root channels,
     // contribute evidence; flat paths are produced by projection below.
@@ -654,8 +662,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'cohort-inclusive-threshold',
   'envelope-vectors-tie-compresses',
   'envelope-vectors-escape-misses-binary-marker',
-  'conformance-local-hit-returns-source',
-  'conformance-remote-miss-skips-publication',
   'scope-late-source-repopulates-closed-memo',
   'layers-late-memo-into-closed-scope',
   'independent-fresh-frame-retained',

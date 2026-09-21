@@ -1848,7 +1848,7 @@
     },
     "coreObservation": {
       "type": "object",
-      "description": "Flat integer observation of the core conformance driver.",
+      "description": "Flat core observation. Counters and offered source versions are nonnegative integers; lastResult also represents an absent actual return explicitly so it is compared as a behavioral mismatch.",
       "properties": {
         "sourceVersion": {
           "type": "integer",
@@ -1856,9 +1856,15 @@
           "maximum": 9007199254740991
         },
         "lastResult": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            {
+              "type": "object",
+              "properties": { "absent": { "const": true } },
+              "required": ["absent"],
+              "additionalProperties": false
+            }
+          ]
         },
         "outsideLoaderCalls": {
           "type": "integer",
