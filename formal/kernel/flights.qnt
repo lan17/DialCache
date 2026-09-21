@@ -96,4 +96,35 @@ module flights {
     callerKeys: state.callerKeys.append(call.key),
     ...state
   }
+
+  // Optional public inspection channel. Admission receipts preserve the source
+  // registration instant and the recorded join scope for each caller; they do
+  // not change flight ownership. A snapshot includes registered process work
+  // only: request followers, detached jobs and abandoned raw work are absent.
+  type Inspection = { instance: int, activeLeaders: int, activeFollowers: int, oldestLeaderAgeMs: int }
+  pure val NO_LEADER_AGE = -1
+  type Inspected[r, p, q] = {
+    now: int, skew: int, sources: List[Source[{ instance: int | p }]], owners: List[int],
+    processFlights: List[int], inspectionStarted: List[int], inspectionJoins: List[str],
+    d: { coalesced: List[str], inspections: List[Inspection] | q } | r
+  }
+  pure def recordInspectionAdmission(before: Inspected[r, p, q], after: Inspected[r, p, q]): Inspected[r, p, q] = {
+    inspectionStarted: if (after.sources.length() > before.sources.length()) before.inspectionStarted.append(before.now) else before.inspectionStarted,
+    inspectionJoins: before.inspectionJoins.append(
+      if (after.d.coalesced.length() > before.d.coalesced.length()) after.d.coalesced.nth(after.d.coalesced.length() - 1) else ""),
+    ...after
+  }
+  pure def inspectProcess(state: Inspected[r, p, q], instance: int, keysPerInstance: int): Inspected[r, p, q] = {
+    val registered = state.processFlights.indices().filter(slot => slot / keysPerInstance == instance
+      and state.processFlights.nth(slot) != NO_OWNER).map(slot => state.processFlights.nth(slot))
+    val joined = state.owners.indices().filter(caller => state.inspectionJoins.nth(caller) == "process"
+      and registered.contains(state.owners.nth(caller)))
+    val oldest = registered.fold(state.now, (at, owner) => if (state.inspectionStarted.nth(owner) < at) state.inspectionStarted.nth(owner) else at)
+    val snapshot = {
+      instance: instance, activeLeaders: registered.size(), activeFollowers: joined.size(),
+      oldestLeaderAgeMs: if (registered.size() == 0) NO_LEADER_AGE else state.now - oldest
+    }
+    { d: { inspections: state.d.inspections.append(snapshot), ...state.d }, ...state }
+  }
+
 }

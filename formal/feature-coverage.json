@@ -120,6 +120,7 @@
       "cases": [
         "C11.distinct-keys",
         "C11.one-registered-flight",
+        "C11.process-inspection",
         "C12.separate-request-memos",
         "C13.uncoalesced-caching",
         "C13.local-last-writer",
@@ -1611,7 +1612,7 @@
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
-      "adaptation": "Inspection is a public diagnostic feature not currently represented by portable event traces.",
+      "adaptation": "C11.process-inspection covers public snapshot semantics through the same Quint histories in both ports. Native tests retain API shape and fractional duration precision obligations; Go zero idle duration is projected to null using the observed zero leader count.",
       "gaps": []
     },
     {

@@ -4,11 +4,37 @@ import { createWitnessRecorder } from "./recorder.mjs";
 
 // Public commands identify the schedule; consequences at each boundary earn
 // credit independently of filenames and the model's private storage.
+const inspection = (instance, activeLeaders, activeFollowers, oldestLeaderAgeMs) =>
+  ({ instance, activeLeaders, activeFollowers, oldestLeaderAgeMs });
 export const darkLayersWitnessRules = [
   rule("later-dark-source-keeps-own-budget", "laterDarkSourceKeepsItsWholeBudgetTest",
     [command("init"), command("advance", 10), command("policy", 0), command("beginCall", 0), command("resolveLoader", 1), command("beginCall", 2)],
     check(4, { calls: [1], loaders: 1, reads: 1, dumps: 0, shadow: [] }, { fallbackErrors: [] }),
     check(5, { calls: [1, 1], loaders: 1, reads: 1, dumps: 0, shadow: [] }, { fallbackErrors: [] })),
+  rule("inspection-counts-process-followers-and-oldest", "inspectionTracksKeysFollowersAndOldestLeaderTest",
+    [command("init"), command("policy", 6), command("beginCall", 0), command("beginCall", 0), command("beginCall", 2), command("beginCall", 2), command("advance", 1), command("beginCall", 1), command("inspect", 0), command("resolveLoader", 1), command("inspect", 0), command("advance", 1), command("rejectLoader", 1), command("inspect", 0)],
+    check(8, { calls: [0, 0, 0, 0, 0], loaders: 2 }, { inspections: [inspection(0, 2, 1, 1)] }),
+    check(10, { calls: [1, 1, 1, 1, 0] }, { inspections: [inspection(0, 2, 1, 1), inspection(0, 1, 0, 0)] }),
+    check(13, { calls: [1, 1, 1, 1, 3] }, { inspections: [inspection(0, 2, 1, 1), inspection(0, 1, 0, 0), inspection(0, 0, 0, -1)] })),
+  rule("inspection-isolates-instances-and-wall-shifts", "inspectionIsPerInstanceAndUsesMonotonicTimeTest",
+    [command("init"), command("policy", 6), command("beginCall", 0), command("advance", 1), command("beginCall", 4), command("rollbackWall"), command("inspect", 0), command("inspect", 1), command("resolveLoader", 1), command("inspect", 0), command("inspect", 1)],
+    check(6, { calls: [0, 0], loaders: 2 }, { inspections: [inspection(0, 1, 0, 1)] }),
+    check(7, {}, { inspections: [inspection(0, 1, 0, 1), inspection(1, 1, 0, 0)] }),
+    check(10, { calls: [1, 0] }, { inspections: [inspection(0, 1, 0, 1), inspection(1, 1, 0, 0), inspection(0, 0, 0, -1), inspection(1, 1, 0, 0)] })),
+  rule("inspection-excludes-request-and-uncoalesced", "inspectionExcludesRequestOnlyAndUncoalescedWorkTest",
+    [command("init"), command("policy", 1), command("beginCall", 0), command("beginCall", 0), command("inspect", 0), command("policy", 5), command("beginCall", 2), command("beginCall", 2), command("inspect", 0)],
+    check(4, { calls: [0, 0], loaders: 1 }, { inspections: [inspection(0, 0, 0, -1)] }),
+    check(8, { calls: [0, 0, 0, 0], loaders: 3 }, { inspections: [inspection(0, 0, 0, -1), inspection(0, 0, 0, -1)] })),
+  rule("inspection-clears-timeout-before-raw-settlement", "inspectionClearsTimedOutCallersWhileRawWorkRemainsTest",
+    [command("init"), command("beginCall", 0), command("beginCall", 2), command("inspect", 0), command("advance", 10), command("inspect", 0), command("beginCall", 0), command("inspect", 0), command("resolveLoader", 1), command("releaseRead", 0), command("inspect", 0)],
+    check(3, { calls: [0, 0], loaders: 1 }, { inspections: [inspection(0, 1, 1, 0)] }),
+    check(5, { calls: [4, 4], shadow: ["timeout"] }, { inspections: [inspection(0, 1, 1, 0), inspection(0, 0, 0, -1)] }),
+    check(7, { calls: [4, 4, 0], loaders: 2 }, { inspections: [inspection(0, 1, 1, 0), inspection(0, 0, 0, -1), inspection(0, 1, 0, 0)] }),
+    check(10, { calls: [4, 4, 0] }, { inspections: [inspection(0, 1, 1, 0), inspection(0, 0, 0, -1), inspection(0, 1, 0, 0), inspection(0, 1, 0, 0)] })),
+  rule("inspection-excludes-unfinished-shadow", "inspectionExcludesUnfinishedShadowAfterCallerSuccessTest",
+    [command("init"), command("beginCall", 0), command("releaseRead", 0), command("resolveLoader", 1), command("inspect", 0), command("releaseDump", 0), command("inspect", 0)],
+    check(4, { calls: [1], dumps: 1, writes: 0, shadow: [] }, { inspections: [inspection(0, 0, 0, -1)] }),
+    check(6, { calls: [1], writes: 1, shadow: [] }, { inspections: [inspection(0, 0, 0, -1), inspection(0, 0, 0, -1)] })),
   rule("rejected-dark-source-seeds-no-layer", "rejectedDarkSourceSeedsNoLayerTest",
     [command("init"), command("policy", 0), command("beginCall", 0), command("releaseRead", 0), command("rejectLoader", 0), command("beginCall", 0)],
     check(4, {"calls": [3], "shadow": ["source_error"], "loads": 0, "dumps": 0, "writes": 0}, {"fallbackErrors": ["local"]}),

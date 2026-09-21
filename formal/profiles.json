@@ -265,7 +265,7 @@
     },
     {
       "id": "dark-layers",
-      "version": 1,
+      "version": 2,
       "definition": "formal/BEHAVIOR.md",
       "model": "formal/dialcache-dark-layers-conformance.qnt",
       "smoke": "formal/dark-layers-smoke.itf.json",

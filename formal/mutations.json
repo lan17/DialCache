@@ -1876,6 +1876,70 @@
           "portable"
         ]
       }
+    },
+    {
+      "id": "M59",
+      "case": "C11.process-inspection",
+      "description": "Include process leaders in the reported follower count",
+      "rationale": "TypeScript src/dialcache.ts getCoalescingState adds the registered leader count to activeProcessFollowers; Go go/bindings.go GetCoalescingState counts one extra follower per registered flight. The snapshot reports initiating callers as followers while caller outcomes and sharing remain unchanged.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "src/dialcache.ts",
+            "before": "activeFollowers: this.activeProcessFollowers,",
+            "after": "activeFollowers: this.activeProcessFollowers + this.processFlights.size,"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/bindings.go",
+            "before": "state.ActiveFollowers += f.followers",
+            "after": "state.ActiveFollowers += f.followers + 1"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M60",
+      "case": "C11.process-inspection",
+      "description": "Measure the oldest process leader age with the application wall clock",
+      "rationale": "TypeScript src/dialcache.ts getCoalescingState uses Date.now instead of performance.now, while Go go/bindings.go GetCoalescingState uses Clock.WallMS instead of elapsedNow. Both subtract a monotonic registration instant from an unrelated application wall clock; the public snapshot changes under wall shifts.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "src/dialcache.ts",
+            "before": "Math.max(performance.now() - oldestFlight.startedAtMs, 0)",
+            "after": "Math.max(Date.now() - oldestFlight.startedAtMs, 0)"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/bindings.go",
+            "before": "age := elapsedNow(c.settings.clock) - f.started",
+            "after": "age := time.Duration(c.settings.clock.WallMS())*time.Millisecond - f.started"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
     }
   ]
 }

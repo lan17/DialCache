@@ -78,6 +78,13 @@ Invocation counters and IDs also come from actual native observations. The
 coordinator retains expected state; its command responses do not contain
 predictions. Duplicate or skipped observation indices are errors.
 
+The `inspectCoalescing` command calls the port's public inspection API and records
+`coalescingState` in the selected event channel. Its counts and oldest age come
+from the implementation. TypeScript exposes a nullable millisecond age; Go
+exposes a duration and projects idle age to null only when the observed leader
+count is zero. The dark-layers profile compares whole-millisecond snapshots;
+native fractional precision remains a separate binding check.
+
 The shared command definitions and per-profile bindings are in
 [replay/bindings.mjs](./replay/bindings.mjs). Their normalization, dynamic input
 selection and assertions are maintained once. The Go transport adapter is

@@ -224,9 +224,9 @@ function observation(raw, context) {
   }));
   return result;
 }
-function diagnostics(raw, context, configErrors = false, futureOffsets = false) {
+function diagnostics(raw, context, configErrors = false, futureOffsets = false, inspect = false) {
   const value = record(raw, context);
-  const fields = ["ages", "coalesced", "fallbackErrors", "warnings", ...(configErrors ? ["configErrors"] : []), ...(futureOffsets ? ["futureOffsets"] : [])];
+  const fields = ["ages", "coalesced", "fallbackErrors", "warnings", ...(configErrors ? ["configErrors"] : []), ...(futureOffsets ? ["futureOffsets"] : []), ...(inspect ? ["inspections"] : [])];
   if (Object.keys(value).sort().join() !== fields.sort().join() || !Array.isArray(value.ages))
     throw new Error(`${context}: invalid diagnostics`);
   const labels = (items, allowed) => {
@@ -247,7 +247,18 @@ function diagnostics(raw, context, configErrors = false, futureOffsets = false) 
       return { layer: offset.layer, offsetMs };
     });
   })() : [];
-  return { ...(futureOffsets ? { futureOffsets: offsets } : {}), ...(configErrors ? { configErrors: itfInteger(value.configErrors, context) } : {}), warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
+  const inspections = inspect ? (() => {
+    if (!Array.isArray(value.inspections)) throw new Error(`${context}: missing coalescing inspections`);
+    return value.inspections.map(raw => {
+      const entry = record(raw, context);
+      if (Object.keys(entry).sort().join() !== "activeFollowers,activeLeaders,instance,oldestLeaderAgeMs") throw new Error(`${context}: invalid coalescing inspection`);
+      const age = itfSignedInteger(entry.oldestLeaderAgeMs, context);
+      if (age < -1) throw new Error(`${context}: invalid oldest leader age`);
+      return { instance: itfInteger(entry.instance, context), activeLeaders: itfInteger(entry.activeLeaders, context),
+        activeFollowers: itfInteger(entry.activeFollowers, context), oldestLeaderAgeMs: age === -1 ? null : age };
+    });
+  })() : [];
+  return { ...(inspect ? { inspections } : {}), ...(futureOffsets ? { futureOffsets: offsets } : {}), ...(configErrors ? { configErrors: itfInteger(value.configErrors, context) } : {}), warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
     coalesced: labels(value.coalesced, ["process", "request_local"]), fallbackErrors: labels(value.fallbackErrors, ["noop", "local", "remote", "request_local"]) };
 }
 function readIO(raw, context, callCount) {
@@ -302,7 +313,7 @@ export function parseTrace(raw, path, profile) {
         ...(profile.compressionIO ? { compression: compressionIO(record(state.s, context).compression, context) } : {}),
         ...(profile.markerIO ? { markers: markerIO(record(state.s, context).markers, context) } : {}),
         ...(profile.readIO ? { io: readIO(record(state.s, context).io, context, expected.calls.length) } : {}),
-        ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context, profile.diagnosticConfigErrors, profile.diagnosticFutureOffsets) }) };
+        ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context, profile.diagnosticConfigErrors, profile.diagnosticFutureOffsets, profile.diagnosticInspections) }) };
     }) };
 }
 function valueCode(value) {
@@ -427,10 +438,20 @@ function projectBaseObservation(profile, observed) {
   const ages = [];
   const futureOffsets = [];
   let warnings = 0, configErrors = 0;
-  const coalesced = [], fallbackErrors = [];
+  const coalesced = [], fallbackErrors = [], inspections = [];
   const outcomes = profile.diagnosticAge === "shadowAge" ? observed.shadow.filter(x => x === "match" || x === "mismatch")
     : observed.recovery.filter(x => x === "served");
   for (const event of events) {
+    if (profile.diagnosticInspections && event.event === "coalescingState") {
+      if (typeof event.instance !== "string" || !/^[01]$/.test(event.instance)
+          || !Number.isSafeInteger(event.activeLeaders) || event.activeLeaders < 0
+          || !Number.isSafeInteger(event.activeFollowers) || event.activeFollowers < 0
+          || !(event.oldestLeaderAgeMs === null || (Number.isFinite(event.oldestLeaderAgeMs) && event.oldestLeaderAgeMs >= 0)))
+        throw new Error("Malformed actual coalescing inspection");
+      inspections.push({ instance: Number(event.instance), activeLeaders: event.activeLeaders,
+        activeFollowers: event.activeFollowers, oldestLeaderAgeMs: event.oldestLeaderAgeMs });
+      continue;
+    }
     // This profile selects source failures; other error trails are specified
     // by effects. Maintenance errors deliberately carry another use case.
     if (profile.diagnosticConfigErrors && event.event === "error" && event.error === "config_resolution") {
@@ -478,7 +499,7 @@ function projectBaseObservation(profile, observed) {
       ages.push(event.seconds);
     }
   }
-  return { o: project(base), d: { warnings, ages, coalesced, fallbackErrors, ...(profile.diagnosticFutureOffsets ? { futureOffsets } : {}), ...(profile.diagnosticConfigErrors ? { configErrors } : {}) } };
+  return { o: project(base), d: { warnings, ages, coalesced, fallbackErrors, ...(profile.diagnosticInspections ? { inspections } : {}), ...(profile.diagnosticFutureOffsets ? { futureOffsets } : {}), ...(profile.diagnosticConfigErrors ? { configErrors } : {}) } };
 }
 export function expectedObservation(step) { return { o: step.expected, ...(step.policyErrors === undefined ? {} : { policyErrors: step.policyErrors }), ...(step.diagnostics === undefined ? {} : { d: step.diagnostics }), ...(step.io === undefined ? {} : { io: step.io }), ...(step.markers === undefined ? {} : { markers: step.markers }), ...(step.compression === undefined ? {} : { compression: step.compression }) }; }
 export function featureInput(profile, action, choice, observed, environment) { const binding = profile.actions[action]; if (!binding || (binding.choices ? !binding.choices.includes(choice) : choice !== -1 && choice !== 0))

@@ -271,7 +271,9 @@
       "module": "dialcache_dark_layers_conformance",
       "libraryTransitions": [
         "clock::shiftWall",
+        "flights::inspectProcess",
         "flights::recordIdentity",
+        "flights::recordInspectionAdmission",
         "remote_frames::seedAged",
         "serving::closeScope",
         "serving::invalidate",

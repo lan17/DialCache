@@ -134,6 +134,34 @@
         "futureOffsets": true
       }
     },
+    "dark-layers": {
+      "o": {
+        "calls": true,
+        "classifications": true,
+        "comparisons": true,
+        "dumps": true,
+        "invalidations": true,
+        "loaders": true,
+        "loads": true,
+        "maintenance": true,
+        "policyCalls": true,
+        "reads": true,
+        "recovery": true,
+        "shadow": true,
+        "sourceScopes": true,
+        "writeTtls": true,
+        "writes": true
+      },
+      "d": {
+        "ages": true,
+        "coalesced": true,
+        "configErrors": true,
+        "fallbackErrors": true,
+        "warnings": true,
+        "futureOffsets": true,
+        "inspections": true
+      }
+    },
     "policy-observations": {
       "o": {
         "calls": true,
@@ -304,21 +332,66 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", -1],
-            ["outsideCall", -1],
-            ["requestLocalPair", -1],
-            ["localCall", -1],
-            ["bumpSource", -1],
-            ["localCall", -1],
-            ["coalescedLocalPair", -1],
-            ["remoteCall", -1],
-            ["bumpSource", -1],
-            ["remoteCall", -1],
-            ["invalidateRemote", -1],
-            ["remoteCall", -1],
-            ["bumpSource", -1],
-            ["remoteReadFailureCall", -1],
-            ["requestLocalPair", -1]
+            [
+              "init",
+              -1
+            ],
+            [
+              "outsideCall",
+              -1
+            ],
+            [
+              "requestLocalPair",
+              -1
+            ],
+            [
+              "localCall",
+              -1
+            ],
+            [
+              "bumpSource",
+              -1
+            ],
+            [
+              "localCall",
+              -1
+            ],
+            [
+              "coalescedLocalPair",
+              -1
+            ],
+            [
+              "remoteCall",
+              -1
+            ],
+            [
+              "bumpSource",
+              -1
+            ],
+            [
+              "remoteCall",
+              -1
+            ],
+            [
+              "invalidateRemote",
+              -1
+            ],
+            [
+              "remoteCall",
+              -1
+            ],
+            [
+              "bumpSource",
+              -1
+            ],
+            [
+              "remoteReadFailureCall",
+              -1
+            ],
+            [
+              "requestLocalPair",
+              -1
+            ]
           ],
           "projection": "conformance"
         }
@@ -332,67 +405,250 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", 5],
-            ["futureFence", -1],
-            ["tick", -1],
-            ["adapterReply", 10],
-            ["tick", -1],
-            ["beginCall", -1],
-            ["failRead", 0],
-            ["seedRemote", -1],
-            ["seedRemote", -1],
-            ["rejectLoader", 0],
-            ["beginCall", -1],
-            ["releaseRead", 1],
-            ["resolveLoader", 1],
-            ["releaseDump", -1],
-            ["beginCall", -1],
-            ["seedRemote", -1],
-            ["failWrite", -1],
-            ["seedRemote", -1],
-            ["futureFence", -1],
-            ["beginCall", -1],
-            ["failRead", 2],
-            ["rejectLoader", 2],
-            ["beginCall", -1],
-            ["tick", -1],
-            ["rejectLoader", 3],
-            ["beginCall", -1],
-            ["beginCall", -1],
-            ["failRead", 3],
-            ["beginCall", -1],
-            ["releaseRead", 4],
-            ["failLoad", -1],
-            ["resolveLoader", 4],
-            ["jumpClock", -1],
-            ["failDump", -1],
-            ["seedRemote", -1],
-            ["jumpClock", -1],
-            ["seedRemote", -1],
-            ["tick", -1],
-            ["seedRemote", -1],
-            ["tick", -1],
-            ["seedRemote", -1],
-            ["seedRemote", -1],
-            ["seedRemote", -1],
-            ["tick", -1],
-            ["tick", -1],
-            ["tick", -1],
-            ["adapterReply", 10],
-            ["seedRemote", -1],
-            ["jumpClock", -1],
-            ["tick", -1],
-            ["seedRemote", -1],
-            ["rollbackWall", -1],
-            ["invalidate", -1],
-            ["readBudgetPolicy", 0],
-            ["jumpClock", -1],
-            ["seedRemote", -1],
-            ["jumpClock", -1],
-            ["tick", -1],
-            ["seedRemote", -1],
-            ["jumpClock", -1],
-            ["rollbackWall", -1]
+            [
+              "init",
+              5
+            ],
+            [
+              "futureFence",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "adapterReply",
+              10
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "failRead",
+              0
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "releaseDump",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "failWrite",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "futureFence",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "failRead",
+              2
+            ],
+            [
+              "rejectLoader",
+              2
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "rejectLoader",
+              3
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "failRead",
+              3
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              4
+            ],
+            [
+              "failLoad",
+              -1
+            ],
+            [
+              "resolveLoader",
+              4
+            ],
+            [
+              "jumpClock",
+              -1
+            ],
+            [
+              "failDump",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "jumpClock",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "adapterReply",
+              10
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "jumpClock",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "readBudgetPolicy",
+              0
+            ],
+            [
+              "jumpClock",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "jumpClock",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "seedRemote",
+              -1
+            ],
+            [
+              "jumpClock",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ]
           ],
           "projection": "effects"
         }
@@ -406,67 +662,250 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", -1],
-            ["beginCall", 5],
-            ["beginCall", 5],
-            ["openScope", 1],
-            ["rejectLoader", 1],
-            ["resolveLoader", 7],
-            ["policy", 2],
-            ["openScope", 2],
-            ["beginCall", 5],
-            ["beginCall", 2],
-            ["openScope", 3],
-            ["rejectLoader", 2],
-            ["releasePolicy", -1],
-            ["policy", 1],
-            ["policy", 1],
-            ["openScope", 4],
-            ["beginCall", 2],
-            ["rejectLoader", 3],
-            ["releasePolicy", -1],
-            ["beginCall", 0],
-            ["releasePolicy", -1],
-            ["rejectLoader", 5],
-            ["resolveLoader", 34],
-            ["beginCall", 4],
-            ["releasePolicy", -1],
-            ["rejectLoader", 6],
-            ["beginCall", 4],
-            ["releasePolicy", -1],
-            ["beginCall", 1],
-            ["releasePolicy", -1],
-            ["resolveLoader", 50],
-            ["policy", 0],
-            ["beginCall", 1],
-            ["releasePolicy", -1],
-            ["rejectLoader", 8],
-            ["policy", 0],
-            ["beginCall", 1],
-            ["rejectLoader", 9],
-            ["policy", 1],
-            ["policy", 1],
-            ["releasePolicy", -1],
-            ["rejectLoader", 10],
-            ["beginCall", 2],
-            ["policy", 2],
-            ["policy", 1],
-            ["closeScope", 4],
-            ["policy", 2],
-            ["releasePolicy", -1],
-            ["beginCall", 4],
-            ["policy", 0],
-            ["rejectLoader", 11],
-            ["releasePolicy", -1],
-            ["resolveLoader", 86],
-            ["beginCall", 1],
-            ["closeScope", 0],
-            ["policy", 1],
-            ["releasePolicy", -1],
-            ["beginCall", 5],
-            ["policy", 1],
-            ["rejectLoader", 13],
-            ["beginCall", 1]
+            [
+              "init",
+              -1
+            ],
+            [
+              "beginCall",
+              5
+            ],
+            [
+              "beginCall",
+              5
+            ],
+            [
+              "openScope",
+              1
+            ],
+            [
+              "rejectLoader",
+              1
+            ],
+            [
+              "resolveLoader",
+              7
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "openScope",
+              2
+            ],
+            [
+              "beginCall",
+              5
+            ],
+            [
+              "beginCall",
+              2
+            ],
+            [
+              "openScope",
+              3
+            ],
+            [
+              "rejectLoader",
+              2
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "openScope",
+              4
+            ],
+            [
+              "beginCall",
+              2
+            ],
+            [
+              "rejectLoader",
+              3
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "rejectLoader",
+              5
+            ],
+            [
+              "resolveLoader",
+              34
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "rejectLoader",
+              6
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              50
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "rejectLoader",
+              8
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "rejectLoader",
+              9
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "rejectLoader",
+              10
+            ],
+            [
+              "beginCall",
+              2
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "closeScope",
+              4
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "rejectLoader",
+              11
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              86
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "closeScope",
+              0
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "beginCall",
+              5
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "rejectLoader",
+              13
+            ],
+            [
+              "beginCall",
+              1
+            ]
           ],
           "projection": "scope"
         }
@@ -480,67 +919,250 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", 6],
-            ["beginCall", 0],
-            ["joinCall", 1],
-            ["joinCall", 0],
-            ["joinCall", 1],
-            ["invalidate", -1],
-            ["advance", 10],
-            ["seed", 0],
-            ["policy", 5000],
-            ["readFault", 0],
-            ["loadFault", 1],
-            ["joinCall", 1],
-            ["rejectLoader", 0],
-            ["readFault", 0],
-            ["closeScope", 0],
-            ["rollbackWall", -1],
-            ["releaseLoad", -1],
-            ["advance", 4000],
-            ["beginCall", 4],
-            ["joinCall", 1],
-            ["loadFault", 0],
-            ["rollbackWall", -1],
-            ["joinCall", 1],
-            ["resolveLoader", 1],
-            ["readFault", 1],
-            ["readFault", 1],
-            ["seed", 4],
-            ["policy", 5000],
-            ["closeScope", 1],
-            ["rollbackWall", -1],
-            ["loadFault", 0],
-            ["policy", 5000],
-            ["rollbackWall", -1],
-            ["invalidate", -1],
-            ["advance", 4000],
-            ["readFault", 1],
-            ["loadFault", 0],
-            ["rollbackWall", -1],
-            ["rollbackWall", -1],
-            ["readFault", 1],
-            ["loadFault", 1],
-            ["advance", 10],
-            ["seed", 3],
-            ["loadFault", 1],
-            ["advance", 4000],
-            ["invalidate", -1],
-            ["seed", 1],
-            ["policy", 5000],
-            ["readFault", 0],
-            ["readFault", 0],
-            ["loadFault", 1],
-            ["invalidate", -1],
-            ["seed", 4],
-            ["invalidate", -1],
-            ["rollbackWall", -1],
-            ["invalidate", -1],
-            ["readFault", 1],
-            ["loadFault", 1],
-            ["readFault", 1],
-            ["policy", 5000],
-            ["loadFault", 0]
+            [
+              "init",
+              6
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "seed",
+              0
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "closeScope",
+              0
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "advance",
+              4000
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "closeScope",
+              1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "advance",
+              4000
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "seed",
+              3
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "advance",
+              4000
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "loadFault",
+              0
+            ]
           ],
           "projection": "scope"
         }
@@ -554,17 +1176,50 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", -1],
-            ["beginCall", 0],
-            ["releasePolicy", -1],
-            ["resolveLoader", 1],
-            ["providerFault", 1],
-            ["beginCall", 0],
-            ["releasePolicy", -1],
-            ["resolveLoader", 9],
-            ["providerFault", 0],
-            ["beginCall", 0],
-            ["releasePolicy", -1]
+            [
+              "init",
+              -1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "providerFault",
+              1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              9
+            ],
+            [
+              "providerFault",
+              0
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ]
           ],
           "projection": "policy"
         }
@@ -667,67 +1322,250 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", 0],
-            ["beginCall", -1],
-            ["resolveLoader", 1],
-            ["releaseRead", -1],
-            ["invalidate", 20],
-            ["advance", 10],
-            ["shadowPolicy", 0],
-            ["shadowPolicy", 1],
-            ["releaseDump", -1],
-            ["writeFault", 1],
-            ["logPolicy", 2],
-            ["beginCall", -1],
-            ["releaseRead", -1],
-            ["loadFault", 0],
-            ["rejectLoader", -1],
-            ["seed", 6],
-            ["seed", 6],
-            ["beginCall", -1],
-            ["rejectLoader", -1],
-            ["releaseRead", -1],
-            ["seed", 4],
-            ["beginCall", -1],
-            ["resolveLoader", 1],
-            ["writeFault", 1],
-            ["seedUnicode", 8],
-            ["seed", 7],
-            ["advance", 1],
-            ["dumpFault", 1],
-            ["releaseRead", -1],
-            ["beginCall", -1],
-            ["readFault", 0],
-            ["releaseRead", -1],
-            ["rejectLoader", -1],
-            ["beginCall", -1],
-            ["resolveLoader", 2],
-            ["releaseRead", -1],
-            ["beginCall", -1],
-            ["releaseRead", -1],
-            ["rejectLoader", -1],
-            ["advance", 1],
-            ["advance", 10],
-            ["beginCall", -1],
-            ["seedUnicode", 8],
-            ["invalidate", 20],
-            ["loadFault", 0],
-            ["releaseRead", -1],
-            ["logPolicy", 1],
-            ["resolveLoader", 2],
-            ["releaseLoad", -1],
-            ["seed", 8],
-            ["releaseRead", -1],
-            ["logPolicy", 0],
-            ["seed", 2],
-            ["invalidate", 20],
-            ["readFault", 1],
-            ["shadowPolicy", 0],
-            ["loadFault", 0],
-            ["rollbackWall", -1],
-            ["shadowPolicy", 1],
-            ["readFault", 0],
-            ["dumpFault", 0]
+            [
+              "init",
+              0
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "invalidate",
+              20
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "shadowPolicy",
+              0
+            ],
+            [
+              "shadowPolicy",
+              1
+            ],
+            [
+              "releaseDump",
+              -1
+            ],
+            [
+              "writeFault",
+              1
+            ],
+            [
+              "logPolicy",
+              2
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "seed",
+              6
+            ],
+            [
+              "seed",
+              6
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "writeFault",
+              1
+            ],
+            [
+              "seedUnicode",
+              8
+            ],
+            [
+              "seed",
+              7
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "dumpFault",
+              1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "seedUnicode",
+              8
+            ],
+            [
+              "invalidate",
+              20
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "logPolicy",
+              1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "seed",
+              8
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "logPolicy",
+              0
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "invalidate",
+              20
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "shadowPolicy",
+              0
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "shadowPolicy",
+              1
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "dumpFault",
+              0
+            ]
           ],
           "projection": "shadow"
         }
@@ -741,63 +1579,234 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", -1],
-            ["beginCall", 4],
-            ["beginCall", 4],
-            ["advance", 10],
-            ["beginCall", 0],
-            ["releaseRead", 1],
-            ["seed", 4],
-            ["releaseRead", 0],
-            ["advance", 10],
-            ["policy", 2],
-            ["beginCall", 5],
-            ["beginCall", 4],
-            ["beginCall", 4],
-            ["releaseLoad", 1],
-            ["rejectLoader", 0],
-            ["beginCall", 3],
-            ["beginCall", 4],
-            ["releaseRead", 5],
-            ["releaseRead", 3],
-            ["beginCall", 1],
-            ["releaseLoad", 0],
-            ["beginCall", 0],
-            ["advance", 10],
-            ["beginCall", 1],
-            ["releaseLoad", 2],
-            ["advance", 10],
-            ["policy", 2],
-            ["seed", 5],
-            ["beginCall", 3],
-            ["beginCall", 0],
-            ["releaseRead", 9],
-            ["releaseLoad", 3],
-            ["releaseLoad", 4],
-            ["beginCall", 0],
-            ["releaseRead", 11],
-            ["resolveLoader", 3],
-            ["seed", 3],
-            ["resolveLoader", 10],
-            ["releaseLoad", 5],
-            ["rejectLoader", 2],
-            ["releaseRead", 4],
-            ["beginCall", 1],
-            ["resolveLoader", 11],
-            ["beginCall", 5],
-            ["rejectLoader", 3],
-            ["releaseRead", 12],
-            ["releaseRead", 14],
-            ["advance", 10],
-            ["releaseLoad", 9],
-            ["releaseRead", 6],
-            ["advance", 10],
-            ["releaseLoad", 8],
-            ["releaseRead", 10],
-            ["releaseRead", 8],
-            ["releaseLoad", 12],
-            ["rejectLoader", 6],
-            ["releaseLoad", 13]
+            [
+              "init",
+              -1
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releaseRead",
+              1
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "beginCall",
+              5
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "releaseLoad",
+              1
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "beginCall",
+              3
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "releaseRead",
+              5
+            ],
+            [
+              "releaseRead",
+              3
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "releaseLoad",
+              0
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "releaseLoad",
+              2
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "seed",
+              5
+            ],
+            [
+              "beginCall",
+              3
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releaseRead",
+              9
+            ],
+            [
+              "releaseLoad",
+              3
+            ],
+            [
+              "releaseLoad",
+              4
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releaseRead",
+              11
+            ],
+            [
+              "resolveLoader",
+              3
+            ],
+            [
+              "seed",
+              3
+            ],
+            [
+              "resolveLoader",
+              10
+            ],
+            [
+              "releaseLoad",
+              5
+            ],
+            [
+              "rejectLoader",
+              2
+            ],
+            [
+              "releaseRead",
+              4
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "resolveLoader",
+              11
+            ],
+            [
+              "beginCall",
+              5
+            ],
+            [
+              "rejectLoader",
+              3
+            ],
+            [
+              "releaseRead",
+              12
+            ],
+            [
+              "releaseRead",
+              14
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "releaseLoad",
+              9
+            ],
+            [
+              "releaseRead",
+              6
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "releaseLoad",
+              8
+            ],
+            [
+              "releaseRead",
+              10
+            ],
+            [
+              "releaseRead",
+              8
+            ],
+            [
+              "releaseLoad",
+              12
+            ],
+            [
+              "rejectLoader",
+              6
+            ],
+            [
+              "releaseLoad",
+              13
+            ]
           ],
           "projection": "observations"
         }
@@ -811,87 +1820,330 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", 4],
-            ["beginCall", 16],
-            ["beginCall", 3],
-            ["resolveLoader", 4],
-            ["resolveLoader", 2],
-            ["tick", -1],
-            ["invalidate", 0],
-            ["beginCall", 0],
-            ["beginCall", 12],
-            ["beginCall", 10],
-            ["resolveLoader", 6],
-            ["beginCall", 16],
-            ["beginCall", 1],
-            ["tick", -1],
-            ["beginCall", 7],
-            ["beginCall", 18],
-            ["beginCall", 15],
-            ["beginCall", 8],
-            ["beginCall", 1],
-            ["tick", -1],
-            ["seed", 4],
-            ["tick", -1],
-            ["beginCall", 0],
-            ["seed", 5],
-            ["resolveLoader", 9],
-            ["beginCall", 1],
-            ["tick", -1],
-            ["resolveLoader", 7],
-            ["tick", -1],
-            ["invalidate", 1],
-            ["beginCall", 0],
-            ["tick", -1],
-            ["beginCall", 11],
-            ["beginCall", 13],
-            ["invalidate", 1],
-            ["beginCall", 18],
-            ["seed", 7],
-            ["resolveLoader", 11],
-            ["tick", -1],
-            ["policy", 2],
-            ["beginCall", 16],
-            ["resolveLoader", 13],
-            ["invalidate", 0],
-            ["beginCall", 14],
-            ["policy", 3],
-            ["rejectLoader", 7],
-            ["policy", 3],
-            ["seed", 1],
-            ["tick", -1],
-            ["seed", 2],
-            ["closeScope", 2],
-            ["seed", 0],
-            ["policy", 3],
-            ["tick", -1],
-            ["seed", 3],
-            ["tick", -1],
-            ["invalidate", 1],
-            ["tick", -1],
-            ["tick", -1],
-            ["closeScope", 1],
-            ["tick", -1],
-            ["invalidate", 1],
-            ["tick", -1],
-            ["policy", 0],
-            ["policy", 2],
-            ["seed", 7],
-            ["tick", -1],
-            ["closeScope", 0],
-            ["tick", -1],
-            ["tick", -1],
-            ["tick", -1],
-            ["policy", 5],
-            ["seed", 4],
-            ["policy", 1],
-            ["invalidate", 0],
-            ["seed", 4],
-            ["seed", 1],
-            ["tick", -1],
-            ["policy", 3],
-            ["invalidate", 0],
-            ["tick", -1]
+            [
+              "init",
+              4
+            ],
+            [
+              "beginCall",
+              16
+            ],
+            [
+              "beginCall",
+              3
+            ],
+            [
+              "resolveLoader",
+              4
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "invalidate",
+              0
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "beginCall",
+              12
+            ],
+            [
+              "beginCall",
+              10
+            ],
+            [
+              "resolveLoader",
+              6
+            ],
+            [
+              "beginCall",
+              16
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "beginCall",
+              7
+            ],
+            [
+              "beginCall",
+              18
+            ],
+            [
+              "beginCall",
+              15
+            ],
+            [
+              "beginCall",
+              8
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "seed",
+              5
+            ],
+            [
+              "resolveLoader",
+              9
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "resolveLoader",
+              7
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "invalidate",
+              1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "beginCall",
+              11
+            ],
+            [
+              "beginCall",
+              13
+            ],
+            [
+              "invalidate",
+              1
+            ],
+            [
+              "beginCall",
+              18
+            ],
+            [
+              "seed",
+              7
+            ],
+            [
+              "resolveLoader",
+              11
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "beginCall",
+              16
+            ],
+            [
+              "resolveLoader",
+              13
+            ],
+            [
+              "invalidate",
+              0
+            ],
+            [
+              "beginCall",
+              14
+            ],
+            [
+              "policy",
+              3
+            ],
+            [
+              "rejectLoader",
+              7
+            ],
+            [
+              "policy",
+              3
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "closeScope",
+              2
+            ],
+            [
+              "seed",
+              0
+            ],
+            [
+              "policy",
+              3
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "seed",
+              3
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "invalidate",
+              1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "closeScope",
+              1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "invalidate",
+              1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "seed",
+              7
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "closeScope",
+              0
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "policy",
+              5
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "invalidate",
+              0
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "tick",
+              -1
+            ],
+            [
+              "policy",
+              3
+            ],
+            [
+              "invalidate",
+              0
+            ],
+            [
+              "tick",
+              -1
+            ]
           ],
           "projection": "observations"
         }
@@ -905,67 +2157,250 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", -1],
-            ["policy", 0],
-            ["invalidate", -1],
-            ["policy", 0],
-            ["beginCall", -1],
-            ["releaseRead", 0],
-            ["rejectLoader", 0],
-            ["seed", 2],
-            ["advance", 10],
-            ["beginCall", -1],
-            ["beginCall", -1],
-            ["releaseRead", 2],
-            ["invalidate", -1],
-            ["beginCall", -1],
-            ["rejectLoader", 1],
-            ["policy", 2],
-            ["policy", 3],
-            ["advance", 5],
-            ["releaseRead", 1],
-            ["policy", 3],
-            ["releaseRead", 3],
-            ["beginCall", -1],
-            ["releaseRead", 4],
-            ["rejectLoader", 4],
-            ["advance", 1],
-            ["beginCall", -1],
-            ["seed", 1],
-            ["policy", 3],
-            ["failRead", 5],
-            ["seed", 3],
-            ["seed", 0],
-            ["seed", 4],
-            ["policy", 0],
-            ["invalidate", -1],
-            ["rejectLoader", 5],
-            ["rejectLoader", 3],
-            ["invalidate", -1],
-            ["rejectLoader", 2],
-            ["advance", 1],
-            ["policy", 1],
-            ["invalidate", -1],
-            ["seed", 5],
-            ["invalidate", -1],
-            ["seed", 0],
-            ["seed", 5],
-            ["policy", 1],
-            ["policy", 0],
-            ["invalidate", -1],
-            ["policy", 0],
-            ["policy", 1],
-            ["invalidate", -1],
-            ["policy", 2],
-            ["invalidate", -1],
-            ["policy", 0],
-            ["advance", 1],
-            ["advance", 10],
-            ["invalidate", -1],
-            ["seed", 4],
-            ["seed", 0],
-            ["invalidate", -1],
-            ["invalidate", -1]
+            [
+              "init",
+              -1
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              2
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "rejectLoader",
+              1
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "policy",
+              3
+            ],
+            [
+              "advance",
+              5
+            ],
+            [
+              "releaseRead",
+              1
+            ],
+            [
+              "policy",
+              3
+            ],
+            [
+              "releaseRead",
+              3
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              4
+            ],
+            [
+              "rejectLoader",
+              4
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "policy",
+              3
+            ],
+            [
+              "failRead",
+              5
+            ],
+            [
+              "seed",
+              3
+            ],
+            [
+              "seed",
+              0
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "rejectLoader",
+              5
+            ],
+            [
+              "rejectLoader",
+              3
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "rejectLoader",
+              2
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "seed",
+              5
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "seed",
+              0
+            ],
+            [
+              "seed",
+              5
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "seed",
+              0
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "invalidate",
+              -1
+            ]
           ],
           "projection": "independent"
         }
@@ -979,20 +2414,62 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", 1],
-            ["invalidate", -1],
-            ["observeMarker", -1],
-            ["advance", 1],
-            ["policy", 2],
-            ["beginCall", 2],
-            ["releaseRead", -1],
-            ["resolveLoader", -1],
-            ["observeMarker", -1],
-            ["beginCall", 2],
-            ["releaseRead", -1],
-            ["releaseLoad", -1],
-            ["advance", 999],
-            ["observeMarker", -1]
+            [
+              "init",
+              1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "observeMarker",
+              -1
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "beginCall",
+              2
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "resolveLoader",
+              -1
+            ],
+            [
+              "observeMarker",
+              -1
+            ],
+            [
+              "beginCall",
+              2
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "advance",
+              999
+            ],
+            [
+              "observeMarker",
+              -1
+            ]
           ],
           "projection": "recovery-read"
         }
@@ -1006,15 +2483,42 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", -1],
-            ["beginCall", 2],
-            ["resolveLoader", 1],
-            ["seed", 2],
-            ["localFault", 1],
-            ["beginCall", 0],
-            ["localFault", 0],
-            ["beginCall", 2],
-            ["beginCall", 0]
+            [
+              "init",
+              -1
+            ],
+            [
+              "beginCall",
+              2
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "localFault",
+              1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "localFault",
+              0
+            ],
+            [
+              "beginCall",
+              2
+            ],
+            [
+              "beginCall",
+              0
+            ]
           ],
           "projection": "observations"
         }
@@ -1028,17 +2532,50 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", 2],
-            ["policy", 5],
-            ["beginCall", -1],
-            ["releasePolicy", -1],
-            ["resolveLoader", 0],
-            ["policy", 8],
-            ["beginCall", -1],
-            ["releasePolicy", -1],
-            ["resolveLoader", 9],
-            ["beginCall", -1],
-            ["releasePolicy", -1]
+            [
+              "init",
+              2
+            ],
+            [
+              "policy",
+              5
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              0
+            ],
+            [
+              "policy",
+              8
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              9
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releasePolicy",
+              -1
+            ]
           ],
           "projection": "observations"
         }
@@ -1052,12 +2589,30 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", -1],
-            ["policy", 2],
-            ["beginCall", 9],
-            ["resolveLoader", 1],
-            ["policy", 12],
-            ["beginCall", 9]
+            [
+              "init",
+              -1
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "beginCall",
+              9
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "policy",
+              12
+            ],
+            [
+              "beginCall",
+              9
+            ]
           ],
           "projection": "observations"
         }
@@ -1071,19 +2626,58 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", -1],
-            ["constructInstance", 0],
-            ["advanceTicks", 400],
-            ["constructInstance", 1],
-            ["advanceTicks", 300],
-            ["call", 0],
-            ["call", 2],
-            ["advanceTicks", 999200],
-            ["call", 1],
-            ["call", 3],
-            ["advanceTicks", 100],
-            ["call", 1],
-            ["call", 3]
+            [
+              "init",
+              -1
+            ],
+            [
+              "constructInstance",
+              0
+            ],
+            [
+              "advanceTicks",
+              400
+            ],
+            [
+              "constructInstance",
+              1
+            ],
+            [
+              "advanceTicks",
+              300
+            ],
+            [
+              "call",
+              0
+            ],
+            [
+              "call",
+              2
+            ],
+            [
+              "advanceTicks",
+              999200
+            ],
+            [
+              "call",
+              1
+            ],
+            [
+              "call",
+              3
+            ],
+            [
+              "advanceTicks",
+              100
+            ],
+            [
+              "call",
+              1
+            ],
+            [
+              "call",
+              3
+            ]
           ],
           "projection": "observations"
         }
@@ -1097,14 +2691,38 @@
         {
           "id": "smoke",
           "actions": [
-            ["init", 2],
-            ["beginCall", 0],
-            ["releasePolicy", 0],
-            ["advance", 6],
-            ["beginCall", 0],
-            ["releasePolicy", 1],
-            ["advance", 3],
-            ["advance", 1]
+            [
+              "init",
+              2
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              0
+            ],
+            [
+              "advance",
+              6
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              1
+            ],
+            [
+              "advance",
+              3
+            ],
+            [
+              "advance",
+              1
+            ]
           ],
           "projection": "observations"
         }
@@ -1285,12 +2903,30 @@
           "witness": "invalidation-preserves-request-hit",
           "title": "memo-created-after-invalidation",
           "actions": [
-            ["init", 1],
-            ["beginCall", 6],
-            ["invalidate", 1],
-            ["resolveLoader", 2],
-            ["seed", 3],
-            ["beginCall", 6]
+            [
+              "init",
+              1
+            ],
+            [
+              "beginCall",
+              6
+            ],
+            [
+              "invalidate",
+              1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "seed",
+              3
+            ],
+            [
+              "beginCall",
+              6
+            ]
           ],
           "startState": 0,
           "projection": "layers",
@@ -1304,16 +2940,46 @@
           "witness": "invalidation-preserves-request-hit",
           "title": "preexisting-memo-survives",
           "actions": [
-            ["init", 3],
-            ["beginCall", 2],
-            ["resolveLoader", 1],
-            ["invalidate", 1],
-            ["policy", 0],
-            ["beginCall", 19],
-            ["resolveLoader", 3],
-            ["seed", 1],
-            ["beginCall", 15],
-            ["beginCall", 2]
+            [
+              "init",
+              3
+            ],
+            [
+              "beginCall",
+              2
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "invalidate",
+              1
+            ],
+            [
+              "policy",
+              0
+            ],
+            [
+              "beginCall",
+              19
+            ],
+            [
+              "resolveLoader",
+              3
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "beginCall",
+              15
+            ],
+            [
+              "beginCall",
+              2
+            ]
           ],
           "startState": 0,
           "projection": "layers",
@@ -1332,22 +2998,70 @@
           "profile": "recovery",
           "witness": "recovery-age-sampled-at-successful-decode",
           "actions": [
-            ["init", 2],
-            ["beginCall", 4],
-            ["invalidate", -1],
-            ["invalidate", -1],
-            ["advance", 1],
-            ["rejectTimeout", 0],
-            ["seed", 2],
-            ["joinCall", 1],
-            ["joinCall", 0],
-            ["seed", 1],
-            ["readFault", 1],
-            ["readFault", 0],
-            ["loadFault", 0],
-            ["policy", 5000],
-            ["rollbackWall", -1],
-            ["releaseLoad", -1]
+            [
+              "init",
+              2
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "rejectTimeout",
+              0
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "releaseLoad",
+              -1
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1360,13 +3074,34 @@
           "profile": "recovery",
           "witness": "fenced-read-does-not-retain",
           "actions": [
-            ["init", 6],
-            ["invalidate", -1],
-            ["beginCall", 1],
-            ["readFault", 0],
-            ["rejectTimeout", 0],
-            ["beginCall", 0],
-            ["rejectLoader", 1]
+            [
+              "init",
+              6
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "rejectTimeout",
+              0
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "rejectLoader",
+              1
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1379,12 +3114,30 @@
           "profile": "recovery",
           "witness": "future-read-preserves-source-error",
           "actions": [
-            ["init", 1],
-            ["policy", 5000],
-            ["seed", 5],
-            ["policy", 2000],
-            ["beginCall", 7],
-            ["advance", 4000]
+            [
+              "init",
+              1
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "seed",
+              5
+            ],
+            [
+              "policy",
+              2000
+            ],
+            [
+              "beginCall",
+              7
+            ],
+            [
+              "advance",
+              4000
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1397,9 +3150,18 @@
           "profile": "recovery",
           "witness": "classifier-error-keeps-error-without-decode",
           "actions": [
-            ["init", 7],
-            ["beginCall", 3],
-            ["rejectLoader", 0]
+            [
+              "init",
+              7
+            ],
+            [
+              "beginCall",
+              3
+            ],
+            [
+              "rejectLoader",
+              0
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1412,28 +3174,94 @@
           "profile": "recovery",
           "witness": "maximum-age-read-preserves-source-error",
           "actions": [
-            ["init", 2],
-            ["beginCall", 0],
-            ["rejectLoader", 0],
-            ["policy", 2000],
-            ["joinCall", 1],
-            ["rollbackWall", -1],
-            ["advance", 4000],
-            ["joinCall", 0],
-            ["releaseLoad", -1],
-            ["policy", 5000],
-            ["policy", 5000],
-            ["beginCall", 7],
-            ["rejectTimeout", 1],
-            ["beginCall", 6],
-            ["rollbackWall", -1],
-            ["seed", 4],
-            ["joinCall", 1],
-            ["rejectTimeout", 2],
-            ["policy", 5000],
-            ["beginCall", 4],
-            ["joinCall", 0],
-            ["rejectLoader", 3]
+            [
+              "init",
+              2
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "policy",
+              2000
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "advance",
+              4000
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "beginCall",
+              7
+            ],
+            [
+              "rejectTimeout",
+              1
+            ],
+            [
+              "beginCall",
+              6
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "rejectTimeout",
+              2
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "rejectLoader",
+              3
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1446,21 +3274,66 @@
           "profile": "shadow",
           "witness": "fenced-c1-supersedes-without-repair",
           "actions": [
-            ["init", 2],
-            ["seed", 3],
-            ["shadowPolicy", 0],
-            ["beginCall", -1],
-            ["dumpFault", 0],
-            ["resolveLoader", 1],
-            ["advance", 10],
-            ["releaseRead", -1],
-            ["beginCall", -1],
-            ["releaseRead", -1],
-            ["invalidate", 0],
-            ["dumpFault", 1],
-            ["resolveLoader", 1],
-            ["releaseLoad", -1],
-            ["releaseRead", -1]
+            [
+              "init",
+              2
+            ],
+            [
+              "seed",
+              3
+            ],
+            [
+              "shadowPolicy",
+              0
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "dumpFault",
+              0
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "invalidate",
+              0
+            ],
+            [
+              "dumpFault",
+              1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ]
           ],
           "startState": 0,
           "projection": "shadow",
@@ -1479,22 +3352,70 @@
           "profile": "recovery",
           "witness": "first-stale-age-recovers-without-publication",
           "actions": [
-            ["init", 2],
-            ["beginCall", 4],
-            ["invalidate", -1],
-            ["invalidate", -1],
-            ["advance", 1],
-            ["rejectTimeout", 0],
-            ["seed", 2],
-            ["joinCall", 1],
-            ["joinCall", 0],
-            ["seed", 1],
-            ["readFault", 1],
-            ["readFault", 0],
-            ["loadFault", 0],
-            ["policy", 5000],
-            ["rollbackWall", -1],
-            ["releaseLoad", -1]
+            [
+              "init",
+              2
+            ],
+            [
+              "beginCall",
+              4
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "rejectTimeout",
+              0
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "releaseLoad",
+              -1
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1507,23 +3428,74 @@
           "profile": "recovery",
           "witness": "last-recovery-age-serves",
           "actions": [
-            ["init", 7],
-            ["beginCall", 3],
-            ["joinCall", 0],
-            ["rollbackWall", -1],
-            ["joinCall", 1],
-            ["rollbackWall", -1],
-            ["rejectLoader", 0],
-            ["seed", 3],
-            ["beginCall", 0],
-            ["rejectLoader", 1],
-            ["loadFault", 0],
-            ["policy", 5000],
-            ["joinCall", 0],
-            ["joinCall", 1],
-            ["policy", 2000],
-            ["joinCall", 0],
-            ["releaseLoad", -1]
+            [
+              "init",
+              7
+            ],
+            [
+              "beginCall",
+              3
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "seed",
+              3
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "rejectLoader",
+              1
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "policy",
+              2000
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "releaseLoad",
+              -1
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1536,20 +3508,62 @@
           "profile": "recovery",
           "witness": "exact-maximum-after-decode-rejects",
           "actions": [
-            ["init", 0],
-            ["beginCall", 0],
-            ["joinCall", 1],
-            ["joinCall", 1],
-            ["joinCall", 1],
-            ["joinCall", 0],
-            ["invalidate", -1],
-            ["loadFault", 1],
-            ["seed", 2],
-            ["advance", 4000],
-            ["resolveLoader", 0],
-            ["seed", 1],
-            ["loadFault", 0],
-            ["releaseLoad", -1]
+            [
+              "init",
+              0
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "advance",
+              4000
+            ],
+            [
+              "resolveLoader",
+              0
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "releaseLoad",
+              -1
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1562,28 +3576,94 @@
           "profile": "recovery",
           "witness": "failed-fresh-decode-is-not-recovery",
           "actions": [
-            ["init", 1],
-            ["beginCall", 6],
-            ["policy", 5000],
-            ["resolveLoader", 0],
-            ["loadFault", 0],
-            ["beginCall", 1],
-            ["joinCall", 0],
-            ["joinCall", 0],
-            ["loadFault", 1],
-            ["seed", 5],
-            ["joinCall", 1],
-            ["releaseLoad", -1],
-            ["seed", 0],
-            ["resolveLoader", 1],
-            ["beginCall", 6],
-            ["policy", 2000],
-            ["invalidate", -1],
-            ["advance", 4000],
-            ["releaseLoad", -1],
-            ["rollbackWall", -1],
-            ["joinCall", 0],
-            ["rejectLoader", 2]
+            [
+              "init",
+              1
+            ],
+            [
+              "beginCall",
+              6
+            ],
+            [
+              "policy",
+              5000
+            ],
+            [
+              "resolveLoader",
+              0
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "seed",
+              5
+            ],
+            [
+              "joinCall",
+              1
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "seed",
+              0
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "beginCall",
+              6
+            ],
+            [
+              "policy",
+              2000
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "advance",
+              4000
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "joinCall",
+              0
+            ],
+            [
+              "rejectLoader",
+              2
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1596,9 +3676,18 @@
           "profile": "recovery",
           "witness": "classifier-error-keeps-error-without-decode",
           "actions": [
-            ["init", 7],
-            ["beginCall", 3],
-            ["rejectLoader", 0]
+            [
+              "init",
+              7
+            ],
+            [
+              "beginCall",
+              3
+            ],
+            [
+              "rejectLoader",
+              0
+            ]
           ],
           "startState": 0,
           "projection": "scope",
@@ -1611,42 +3700,150 @@
           "profile": "shadow",
           "witness": "same-c1-bytes-confirm-mismatch",
           "actions": [
-            ["init", 2],
-            ["beginCall", -1],
-            ["rejectLoader", -1],
-            ["releaseRead", -1],
-            ["beginCall", -1],
-            ["seed", 5],
-            ["seed", 2],
-            ["releaseRead", -1],
-            ["invalidate", 0],
-            ["rejectLoader", -1],
-            ["beginCall", -1],
-            ["rejectLoader", -1],
-            ["logPolicy", 2],
-            ["releaseRead", -1],
-            ["beginCall", -1],
-            ["releaseRead", -1],
-            ["resolveLoader", 2],
-            ["beginCall", -1],
-            ["rejectLoader", -1],
-            ["releaseRead", -1],
-            ["beginCall", -1],
-            ["shadowPolicy", 1],
-            ["rejectLoader", -1],
-            ["seedUnicode", 8],
-            ["logPolicy", 0],
-            ["advance", 1],
-            ["releaseRead", -1],
-            ["seed", 8],
-            ["beginCall", -1],
-            ["releaseRead", -1],
-            ["resolveLoader", 2],
-            ["logPolicy", 2],
-            ["releaseLoad", -1],
-            ["reencode", 7],
-            ["reencode", 8],
-            ["releaseRead", -1]
+            [
+              "init",
+              2
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "seed",
+              5
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "invalidate",
+              0
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "logPolicy",
+              2
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "shadowPolicy",
+              1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "seedUnicode",
+              8
+            ],
+            [
+              "logPolicy",
+              0
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "seed",
+              8
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "logPolicy",
+              2
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "reencode",
+              7
+            ],
+            [
+              "reencode",
+              8
+            ],
+            [
+              "releaseRead",
+              -1
+            ]
           ],
           "startState": 0,
           "projection": "shadow",
@@ -1659,44 +3856,158 @@
           "profile": "shadow",
           "witness": "different-c1-bytes-supersede",
           "actions": [
-            ["init", 2],
-            ["beginCall", -1],
-            ["loadFault", 1],
-            ["rejectLoader", -1],
-            ["releaseRead", -1],
-            ["beginCall", -1],
-            ["releaseRead", -1],
-            ["logPolicy", 2],
-            ["rollbackWall", -1],
-            ["dumpFault", 0],
-            ["seedUnicode", 8],
-            ["rejectLoader", -1],
-            ["beginCall", -1],
-            ["rollbackWall", -1],
-            ["rollbackWall", -1],
-            ["advance", 10],
-            ["releaseRead", -1],
-            ["resolveLoader", 1],
-            ["beginCall", -1],
-            ["resolveLoader", 2],
-            ["shadowPolicy", 0],
-            ["loadFault", 0],
-            ["releaseRead", -1],
-            ["seedUnicode", 8],
-            ["releaseDump", -1],
-            ["dumpFault", 1],
-            ["seed", 1],
-            ["releaseWrite", -1],
-            ["beginCall", -1],
-            ["releaseRead", -1],
-            ["rejectLoader", -1],
-            ["beginCall", -1],
-            ["resolveLoader", 2],
-            ["releaseRead", -1],
-            ["releaseLoad", -1],
-            ["shadowPolicy", 1],
-            ["seed", 3],
-            ["releaseRead", -1]
+            [
+              "init",
+              2
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "logPolicy",
+              2
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "dumpFault",
+              0
+            ],
+            [
+              "seedUnicode",
+              8
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "shadowPolicy",
+              0
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "seedUnicode",
+              8
+            ],
+            [
+              "releaseDump",
+              -1
+            ],
+            [
+              "dumpFault",
+              1
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "releaseWrite",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "shadowPolicy",
+              1
+            ],
+            [
+              "seed",
+              3
+            ],
+            [
+              "releaseRead",
+              -1
+            ]
           ],
           "startState": 0,
           "projection": "shadow",
@@ -1709,63 +4020,234 @@
           "profile": "shadow",
           "witness": "late-shadow-dump-cannot-dispatch-write",
           "actions": [
-            ["init", 10],
-            ["readFault", 1],
-            ["writeFault", 1],
-            ["beginCall", -1],
-            ["invalidate", 20],
-            ["seed", 5],
-            ["resolveLoader", 2],
-            ["releaseRead", -1],
-            ["readFault", 1],
-            ["beginCall", -1],
-            ["seed", 6],
-            ["loadFault", 1],
-            ["logPolicy", 0],
-            ["readFault", 1],
-            ["advance", 1],
-            ["dumpFault", 0],
-            ["advance", 1],
-            ["releaseRead", -1],
-            ["rejectLoader", -1],
-            ["beginCall", -1],
-            ["rejectLoader", -1],
-            ["dumpFault", 0],
-            ["logPolicy", 2],
-            ["seedUnicode", 8],
-            ["releaseRead", -1],
-            ["beginCall", -1],
-            ["seed", 2],
-            ["seedUnicode", 7],
-            ["resolveLoader", 2],
-            ["readFault", 0],
-            ["dumpFault", 1],
-            ["loadFault", 0],
-            ["releaseRead", -1],
-            ["writeFault", 1],
-            ["releaseLoad", -1],
-            ["beginCall", -1],
-            ["advance", 1],
-            ["advance", 1],
-            ["releaseRead", -1],
-            ["rejectLoader", -1],
-            ["logPolicy", 2],
-            ["beginCall", -1],
-            ["rejectLoader", -1],
-            ["invalidate", 0],
-            ["invalidate", 0],
-            ["rollbackWall", -1],
-            ["releaseRead", -1],
-            ["rollbackWall", -1],
-            ["beginCall", -1],
-            ["resolveLoader", 2],
-            ["shadowPolicy", 1],
-            ["releaseRead", -1],
-            ["advance", 10],
-            ["seedUnicode", 8],
-            ["seed", 4],
-            ["dumpFault", 1],
-            ["releaseDump", -1]
+            [
+              "init",
+              10
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "writeFault",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "invalidate",
+              20
+            ],
+            [
+              "seed",
+              5
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "seed",
+              6
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "logPolicy",
+              0
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "dumpFault",
+              0
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "dumpFault",
+              0
+            ],
+            [
+              "logPolicy",
+              2
+            ],
+            [
+              "seedUnicode",
+              8
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "seedUnicode",
+              7
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "dumpFault",
+              1
+            ],
+            [
+              "loadFault",
+              0
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "writeFault",
+              1
+            ],
+            [
+              "releaseLoad",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "logPolicy",
+              2
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "invalidate",
+              0
+            ],
+            [
+              "invalidate",
+              0
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "shadowPolicy",
+              1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "seedUnicode",
+              8
+            ],
+            [
+              "seed",
+              4
+            ],
+            [
+              "dumpFault",
+              1
+            ],
+            [
+              "releaseDump",
+              -1
+            ]
           ],
           "startState": 0,
           "projection": "shadow",
@@ -1778,19 +4260,58 @@
           "profile": "shadow",
           "witness": "fill-write-error-preserves-caller",
           "actions": [
-            ["init", 3],
-            ["advance", 1],
-            ["logPolicy", 1],
-            ["beginCall", -1],
-            ["resolveLoader", 2],
-            ["releaseRead", -1],
-            ["loadFault", 1],
-            ["dumpFault", 1],
-            ["readFault", 0],
-            ["dumpFault", 0],
-            ["releaseDump", -1],
-            ["writeFault", 1],
-            ["releaseWrite", -1]
+            [
+              "init",
+              3
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "logPolicy",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "dumpFault",
+              1
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "dumpFault",
+              0
+            ],
+            [
+              "releaseDump",
+              -1
+            ],
+            [
+              "writeFault",
+              1
+            ],
+            [
+              "releaseWrite",
+              -1
+            ]
           ],
           "startState": 0,
           "projection": "shadow",
@@ -1803,34 +4324,118 @@
           "profile": "shadow",
           "witness": "dark-read-error-still-allows-source-result",
           "actions": [
-            ["init", 10],
-            ["readFault", 1],
-            ["beginCall", -1],
-            ["logPolicy", 2],
-            ["rejectLoader", -1],
-            ["dumpFault", 1],
-            ["releaseRead", -1],
-            ["beginCall", -1],
-            ["invalidate", 0],
-            ["advance", 1],
-            ["rejectLoader", -1],
-            ["invalidate", 20],
-            ["shadowPolicy", 2],
-            ["dumpFault", 0],
-            ["releaseRead", -1],
-            ["rollbackWall", -1],
-            ["dumpFault", 1],
-            ["beginCall", -1],
-            ["resolveLoader", 2],
-            ["loadFault", 1],
-            ["logPolicy", 0],
-            ["rollbackWall", -1],
-            ["seedUnicode", 7],
-            ["beginCall", -1],
-            ["invalidate", 20],
-            ["releaseRead", -1],
-            ["writeFault", 0],
-            ["resolveLoader", 1]
+            [
+              "init",
+              10
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "logPolicy",
+              2
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "dumpFault",
+              1
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "invalidate",
+              0
+            ],
+            [
+              "advance",
+              1
+            ],
+            [
+              "rejectLoader",
+              -1
+            ],
+            [
+              "invalidate",
+              20
+            ],
+            [
+              "shadowPolicy",
+              2
+            ],
+            [
+              "dumpFault",
+              0
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "dumpFault",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "resolveLoader",
+              2
+            ],
+            [
+              "loadFault",
+              1
+            ],
+            [
+              "logPolicy",
+              0
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "seedUnicode",
+              7
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "invalidate",
+              20
+            ],
+            [
+              "releaseRead",
+              -1
+            ],
+            [
+              "writeFault",
+              0
+            ],
+            [
+              "resolveLoader",
+              1
+            ]
           ],
           "startState": 0,
           "projection": "shadow",
@@ -2765,7 +5370,7 @@
               0
             ]
           ],
-          "projection": "shadow"
+          "projection": "dark-layers"
         }
       ]
     },
@@ -2777,122 +5382,147 @@
         {
           "id": "rejectedDarkSourceSeedsNoLayerTest",
           "regression": "rejectedDarkSourceSeedsNoLayerTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "uncoalescedPublicationDoesNotPreemptTheRegisteredLeaderTest",
           "regression": "uncoalescedPublicationDoesNotPreemptTheRegisteredLeaderTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "darkFillCarriesCapturedRetentionOnTheHeldPathTest",
           "regression": "darkFillCarriesCapturedRetentionOnTheHeldPathTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "fillAtTheWatermarkInstantIsFencedTest",
           "regression": "fillAtTheWatermarkInstantIsFencedTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "frameAtTheWatermarkIsFencedFromTheDarkReadTest",
           "regression": "frameAtTheWatermarkIsFencedFromTheDarkReadTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "fillFenceIsRejudgedAfterAWallRollbackTest",
           "regression": "fillFenceIsRejudgedAfterAWallRollbackTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "staleVisibleFrameDeclinedByTheDarkReadFillsUnfencedTest",
           "regression": "staleVisibleFrameDeclinedByTheDarkReadFillsUnfencedTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "undecodableDarkC0IsNeverRepairedTest",
           "regression": "undecodableDarkC0IsNeverRepairedTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "unsupportedEncodingFailsTheDarkReadTest",
           "regression": "unsupportedEncodingFailsTheDarkReadTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "sourceDeadlineExpiresTheDarkJobAndAttributesToTheLocalLayerTest",
           "regression": "sourceDeadlineExpiresTheDarkJobAndAttributesToTheLocalLayerTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest",
           "regression": "sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "closedScopeCallerBypassesLayersAndAdmitsNoJobTest",
           "regression": "closedScopeCallerBypassesLayersAndAdmitsNoJobTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "fullInstanceDropsAnotherKeyWhileTheC0ReadIsHeldTest",
           "regression": "fullInstanceDropsAnotherKeyWhileTheC0ReadIsHeldTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest",
           "regression": "dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "localPublicationStopsLaterDarkWorkTest",
           "regression": "localPublicationStopsLaterDarkWorkTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "retainedC0AgeIsSampledAtTheVerdictTest",
           "regression": "retainedC0AgeIsSampledAtTheVerdictTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "rollbackMakesTheSeededFrameFutureAndReportsItsOffsetTest",
           "regression": "rollbackMakesTheSeededFrameFutureAndReportsItsOffsetTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "transientRequestOnlySourceFailureIsAttributedToRequestLayerTest",
           "regression": "transientRequestOnlySourceFailureIsAttributedToRequestLayerTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "laterDarkSourceKeepsItsWholeBudgetTest",
           "regression": "laterDarkSourceKeepsItsWholeBudgetTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "timedOutDarkReadKeepsCapacityUntilRawReleaseTest",
           "regression": "timedOutDarkReadKeepsCapacityUntilRawReleaseTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "timedOutDarkDecodeKeepsCapacityUntilRawReleaseTest",
           "regression": "timedOutDarkDecodeKeepsCapacityUntilRawReleaseTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "timedOutDarkConfirmationKeepsCapacityUntilRawReleaseTest",
           "regression": "timedOutDarkConfirmationKeepsCapacityUntilRawReleaseTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "timedOutDarkDumpKeepsCapacityUntilRawReleaseTest",
           "regression": "timedOutDarkDumpKeepsCapacityUntilRawReleaseTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
         },
         {
           "id": "timedOutDarkWriteKeepsCapacityUntilRawReleaseTest",
           "regression": "timedOutDarkWriteKeepsCapacityUntilRawReleaseTest",
-          "projection": "shadow"
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionTracksKeysFollowersAndOldestLeaderTest",
+          "regression": "inspectionTracksKeysFollowersAndOldestLeaderTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionIsPerInstanceAndUsesMonotonicTimeTest",
+          "regression": "inspectionIsPerInstanceAndUsesMonotonicTimeTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionExcludesRequestOnlyAndUncoalescedWorkTest",
+          "regression": "inspectionExcludesRequestOnlyAndUncoalescedWorkTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionClearsTimedOutCallersWhileRawWorkRemainsTest",
+          "regression": "inspectionClearsTimedOutCallersWhileRawWorkRemainsTest",
+          "projection": "dark-layers"
+        },
+        {
+          "id": "inspectionExcludesUnfinishedShadowAfterCallerSuccessTest",
+          "regression": "inspectionExcludesUnfinishedShadowAfterCallerSuccessTest",
+          "projection": "dark-layers"
         }
       ]
     },

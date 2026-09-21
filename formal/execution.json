@@ -580,7 +580,11 @@
         "agesRequireVerdicts",
         "budgetsAreOneKnob",
         "pendingDeadlinesAreFuture",
-        "heldEffectsKeepTheirJob"
+        "heldEffectsKeepTheirJob",
+        "inspectionReceiptsCoverAdmissions",
+        "inspectionsDescribeLiveLeaders",
+        "inspectionsCountOnlyProcessFollowers",
+        "inspectionAgeUsesTheOldestLiveMonotonicStart"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -3279,6 +3283,100 @@
           "step": 4,
           "fields": [
             "events"
+          ]
+        }
+      }
+    },
+    {
+      "id": "inspection-counts-leaders-as-followers",
+      "contract": "C11",
+      "source": "formal/kernel/flights.qnt",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "invariant": "inspectionsCountOnlyProcessFollowers",
+      "before": "activeFollowers: joined.size()",
+      "after": "activeFollowers: joined.size() + registered.size()",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "inspectionTracksKeysFollowersAndOldestLeaderTest",
+        "failure": "s.d.inspections == List({ instance: 0, activeLeaders: 2, activeFollowers: 1, oldestLeaderAgeMs: 1 })",
+        "family": "process-follower-accounting",
+        "profiles": [
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "effects": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "scope": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "recovery": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "policy": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "shadow": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "admission": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "layers": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "independent": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "recovery-read": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "local-failure": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "runtime-boundaries": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "shadow-layers": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "local-clock": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "source-budgets": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M59",
+        "text": "M59 is the native twin of counting each registered leader as an extra follower in the public process-coalescing snapshot.",
+        "evidence": {
+          "history": "dark-layers/inspectionTracksKeysFollowersAndOldestLeaderTest",
+          "step": 8,
+          "fields": [
+            "d.inspections"
+          ]
+        }
+      }
+    },
+    {
+      "id": "inspection-age-uses-wall-clock",
+      "contract": "C11",
+      "source": "formal/kernel/flights.qnt",
+      "model": "formal/dialcache-dark-layers-conformance.qnt",
+      "invariant": "inspectionAgeUsesTheOldestLiveMonotonicStart",
+      "before": "oldestLeaderAgeMs: if (registered.size() == 0) NO_LEADER_AGE else state.now - oldest",
+      "after": "oldestLeaderAgeMs: if (registered.size() == 0) NO_LEADER_AGE else state.now + state.skew - oldest",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "inspectionIsPerInstanceAndUsesMonotonicTimeTest",
+        "failure": "s.d.inspections == List({ instance: 0, activeLeaders: 1, activeFollowers: 0, oldestLeaderAgeMs: 1 })",
+        "family": "process-inspection-clock",
+        "profiles": [
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "effects": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "scope": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "recovery": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "policy": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "shadow": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "admission": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "layers": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "independent": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "recovery-read": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "local-failure": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "runtime-boundaries": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "shadow-layers": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "local-clock": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
+          "source-budgets": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M60",
+        "text": "M60 is the native twin of subtracting the monotonic registration instant from the application wall clock in the public oldest-leader age.",
+        "evidence": {
+          "history": "dark-layers/inspectionIsPerInstanceAndUsesMonotonicTimeTest",
+          "step": 6,
+          "fields": [
+            "d.inspections"
           ]
         }
       }

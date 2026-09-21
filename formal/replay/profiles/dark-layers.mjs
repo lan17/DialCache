@@ -29,10 +29,10 @@ const fault = field => ({ choices: [0, 1], input: choice => ({ op: "faults", val
 // tracked invalidation. Every timestamp and effect id is an external input.
 export const darkLayersProfile = {
   explicitInputs: true, diagnosticAge: "shadowAge", diagnosticUseCase: useCase,
-  diagnosticConfigErrors: true, diagnosticFutureOffsets: true,
+  diagnosticConfigErrors: true, diagnosticFutureOffsets: true, diagnosticInspections: true,
   fixture: { policy: policy(0), tracked: true, fallbackTimeoutMs: 10, readTimeoutMs: 30_000_000,
     shadowMaxInFlight: 1, recovery: "allow", probeSourceScope: true,
-    observe: ["shadowAge", "futureOffset", "coalesced", "error"] },
+    observe: ["shadowAge", "futureOffset", "coalesced", "error", "coalescingState"] },
   setup: range(3).map(scope => ({ op: "openScope", id: String(scope), instance: scope === 2 ? "1" : "0" }))
     .concat([{ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } }]),
   actions: {
@@ -49,6 +49,7 @@ export const darkLayersProfile = {
     seed: { choices: range(12), input: seed },
     invalidate: { choices: range(4), input: choice => ({ op: "invalidate", key: String(Math.floor(choice / 2)), futureBufferMs: (choice % 2) * 20 }) },
     closeScope: { choices: range(3), input: choice => ({ op: "closeScope", id: String(choice) }) },
+    inspect: { choices: [0, 1], input: instance => ({ op: "inspectCoalescing", instance: String(instance) }) },
     rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) },
     readFault: fault("read"), loadFault: fault("load"), dumpFault: fault("dump"), writeFault: fault("write"),
   },

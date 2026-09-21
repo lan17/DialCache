@@ -1027,23 +1027,23 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "1a32de36ca3bc4d30a74cb70587930e3491d545af3d00a2fef747816b3a92109",
+      "sha256": "60e5be41f3219b22153831af72d0ae96a4723806e9f60c2b988c9504558bcb38",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
         {"line":36,"title":"Optional observed events"},
-        {"line":50,"title":"Fixture"},
-        {"line":62,"title":"Inputs and completion boundaries"},
-        {"line":82,"title":"Additional composition profiles"},
-        {"line":135,"title":"Observations"},
-        {"line":147,"title":"Additional fixed-scenario inputs"},
-        {"line":153,"title":"Generated pending-effect profile"},
-        {"line":206,"title":"Generated feature profiles"},
-        {"line":311,"title":"Generated independent-caller profile"},
-        {"line":332,"title":"Generated layer-composition profile"},
-        {"line":366,"title":"Generated request-scope profile"},
-        {"line":389,"title":"Generated served-hit shadow admission profile"},
-        {"line":413,"title":"Port workflow and limits"}
+        {"line":51,"title":"Fixture"},
+        {"line":63,"title":"Inputs and completion boundaries"},
+        {"line":84,"title":"Additional composition profiles"},
+        {"line":137,"title":"Observations"},
+        {"line":149,"title":"Additional fixed-scenario inputs"},
+        {"line":155,"title":"Generated pending-effect profile"},
+        {"line":208,"title":"Generated feature profiles"},
+        {"line":313,"title":"Generated independent-caller profile"},
+        {"line":334,"title":"Generated layer-composition profile"},
+        {"line":368,"title":"Generated request-scope profile"},
+        {"line":391,"title":"Generated served-hit shadow admission profile"},
+        {"line":415,"title":"Port workflow and limits"}
       ],
       "review": {
         "kind": "contract-guide",
@@ -1154,7 +1154,7 @@
     },
     {
       "path": "formal/CONTRACTS.md",
-      "sha256": "5dd880c3ca427206a3c28fd0e26c4f0ff202e37a053f0b10ea050c3a5869b267",
+      "sha256": "022a0f5ad14944f3cdfd34ef0bf4ed7a621fd3d16bdfcc97a809ff89515707cf",
       "entries": [
         {"line":1,"title":"Portable contract inventory"},
         {"line":11,"title":"Where the boundary lies"},
@@ -1293,13 +1293,13 @@
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
         {"line":45,"title":"Shared coordinator protocol"},
-        {"line":88,"title":"Trace and observation contract"},
-        {"line":189,"title":"Observation contract"},
-        {"line":287,"title":"Generated fixtures and fast local tests"},
-        {"line":322,"title":"Complete corpus and reusable acceptance checks"},
-        {"line":430,"title":"Witness evidence"},
-        {"line":520,"title":"Current limitations for a third port"},
-        {"line":542,"title":"New-port acceptance"}
+        {"line":95,"title":"Trace and observation contract"},
+        {"line":196,"title":"Observation contract"},
+        {"line":294,"title":"Generated fixtures and fast local tests"},
+        {"line":329,"title":"Complete corpus and reusable acceptance checks"},
+        {"line":437,"title":"Witness evidence"},
+        {"line":527,"title":"Current limitations for a third port"},
+        {"line":549,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",

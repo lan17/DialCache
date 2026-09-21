@@ -65,7 +65,7 @@ module dialcache_dark_layers_conformance {
     keysPerInstance: KEYS, keysPerScope: KEYS, persistentContexts: SCOPES, operationsPerEntity: 1, probeSourceScope: true, policyProvider: true
   }
 
-  type Channel = { configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str], futureOffsets: List[Diagnostics::FutureOffset] }
+  type Channel = { inspections: List[Flights::Inspection], configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str], futureOffsets: List[Diagnostics::FutureOffset] }
   type State = {
     o: Observation, d: Channel, io: RemoteIO::IO,
     now: int, skew: int, remoteAvailable: bool, tracked: bool, capacity: int,
@@ -78,7 +78,8 @@ module dialcache_dark_layers_conformance {
     reads: List[RemoteIO::HeldRead], loads: List[RemoteIO::HeldLoad], loaders: List[int], retained: List[Recovery::Snapshot],
     sourceBudget: int, deadlines: List[Deadlines::Due], drained: List[bool], sourceLayers: List[str],
     dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite], jobs: List[Shadow::Job],
-    callerInstances: List[int], callerKeys: List[int]
+    callerInstances: List[int], callerKeys: List[int],
+    inspectionStarted: List[int], inspectionJoins: List[str]
   }
   var s: State
   var input: { name: str, choice: int }
@@ -126,7 +127,7 @@ module dialcache_dark_layers_conformance {
   pure def invalidationBuffer(choice: int): int = (choice % 2) * FUTURE_BUFFER_MS
 
   pure val INITIAL: State = {
-    o: empty, d: { configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List() },
+    o: empty, d: { inspections: List(), configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List() },
     io: RemoteIO::NO_IO,
     now: 0, skew: WALL_ORIGIN_MS, remoteAvailable: true, tracked: true, capacity: KEYS,
     readFailed: false, dumpFailed: false, writeFailed: false, loadFailed: false,
@@ -138,7 +139,7 @@ module dialcache_dark_layers_conformance {
     reads: List(), loads: List(), loaders: List(), retained: List(),
     sourceBudget: SOURCE_BUDGET_MS, deadlines: List(), drained: List(), sourceLayers: List(),
     dumps: List(), writes: List(), jobs: List(),
-    callerInstances: List(), callerKeys: List()
+    callerInstances: List(), callerKeys: List(), inspectionStarted: List(), inspectionJoins: List()
   }
   action init = all { input' = { name: "init", choice: -1 }, s' = INITIAL }
 
@@ -146,8 +147,8 @@ module dialcache_dark_layers_conformance {
   action beginAt(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLS,
     input' = { name: "beginCall", choice: choice },
-    s' = Flights::recordIdentity(
-      Shadow::beginDark(s, LAYOUT, call(choice), s.resolved, s.ttls, READ_BUDGET_MS, shadowing(s.selected), Shadow::WELL_FORMED, 0), call(choice))
+    s' = Flights::recordInspectionAdmission(s, Flights::recordIdentity(
+      Shadow::beginDark(s, LAYOUT, call(choice), s.resolved, s.ttls, READ_BUDGET_MS, shadowing(s.selected), Shadow::WELL_FORMED, 0), call(choice)))
   }
   action beginCall = { nondet choice = 0.to(CONTEXTS * KEYS - 1).oneOf(); beginAt(choice) }
   val heldReads = s.reads.indices().map(i => s.reads.nth(i).read)
@@ -219,6 +220,13 @@ module dialcache_dark_layers_conformance {
     s' = Serving::closeScope(s, LAYOUT, context)
   }
   action closeScope = { nondet choice = 0.to(SCOPES - 1).oneOf(); closeContext(choice) }
+  // A public point-in-time copy; it neither acquires nor releases work.
+  action inspectInstance(instance: int): bool = all {
+    0.to(INSTANCES - 1).contains(instance),
+    input' = { name: "inspect", choice: instance },
+    s' = Flights::inspectProcess(s, instance, KEYS)
+  }
+  action inspect = { nondet choice = 0.to(INSTANCES - 1).oneOf(); inspectInstance(choice) }
   action rollbackWall = all {
     input' = { name: "rollbackWall", choice: -1 },
     s' = Clock::shiftWall(s, -WALL_ROLLBACK_MS)
@@ -236,8 +244,33 @@ module dialcache_dark_layers_conformance {
     beginCall, releaseRead, releaseLoad,
     any { resolveLoader, rejectLoader },
     any { releaseDump, releaseWrite },
-    any { advance, policy, seed, invalidate, closeScope },
+    any { advance, policy, seed, invalidate, closeScope, inspect },
     any { rollbackWall, any { readFault, loadFault, dumpFault, writeFault } }
+  }
+
+  // Inspection invariants independently select pending shared sources from
+  // source ownership rather than the snapshot helper's registry walk.
+  val inspectionReceiptsCoverAdmissions = s.inspectionStarted.length() == s.sources.length()
+    and s.inspectionJoins.length() == s.o.calls.length()
+  val inspectionsDescribeLiveLeaders = input.name != "inspect" or {
+    val latest = s.d.inspections.nth(s.d.inspections.length() - 1)
+    val live = s.sources.indices().filter(i => s.sources.nth(i).shared and s.sources.nth(i).result == CALL_PENDING
+      and s.sources.nth(i).instance == input.choice)
+    latest.activeLeaders == live.size()
+  }
+  val inspectionsCountOnlyProcessFollowers = input.name != "inspect" or {
+    val latest = s.d.inspections.nth(s.d.inspections.length() - 1)
+    val followers = s.o.calls.indices().filter(c => s.o.calls.nth(c) == CALL_PENDING and s.inspectionJoins.nth(c) == "process"
+      and s.sources.nth(s.owners.nth(c)).instance == input.choice)
+    latest.activeFollowers == followers.size()
+  }
+  val inspectionAgeUsesTheOldestLiveMonotonicStart = input.name != "inspect" or {
+    val latest = s.d.inspections.nth(s.d.inspections.length() - 1)
+    val live = s.sources.indices().filter(i => s.sources.nth(i).shared and s.sources.nth(i).result == CALL_PENDING
+      and s.sources.nth(i).instance == input.choice)
+    if (live.size() == 0) latest.oldestLeaderAgeMs == -1
+    else live.exists(i => latest.oldestLeaderAgeMs == s.now - s.inspectionStarted.nth(i))
+      and live.forall(i => latest.oldestLeaderAgeMs >= s.now - s.inspectionStarted.nth(i))
   }
 
   // Invariants over the library records ---------------------------------------
@@ -579,4 +612,57 @@ module dialcache_dark_layers_conformance {
   run transientRequestOnlySourceFailureIsAttributedToRequestLayerTest = init
     .then(setPolicy(DARK_REQUEST)).then(beginAt(6)).then(readAt(0)).then(rejectAt(0))
     .expect(s.o.calls == List(SOURCE_ERROR) and s.o.shadow == List("source_error") and s.d.fallbackErrors == List("request_local"))
+
+  // Process followers exclude same-scope request followers. Resolving the
+  // oldest key changes the reported age to the remaining key; rejecting it
+  // then clears counts and the nullable age.
+  run inspectionTracksKeysFollowersAndOldestLeaderTest = init.then(setPolicy(DARK_ALL_NO_SHADOW))
+    .then(beginAt(0)).then(beginAt(0)).then(beginAt(2)).then(beginAt(2)).then(advanceBy(1))
+    .then(beginAt(1)).then(inspectInstance(0))
+    .expect(s.d.inspections == List({ instance: 0, activeLeaders: 2, activeFollowers: 1, oldestLeaderAgeMs: 1 }))
+    .then(resolveWith(1)).then(inspectInstance(0))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE, CALL_PENDING)
+      and s.d.inspections.nth(1) == { instance: 0, activeLeaders: 1, activeFollowers: 0, oldestLeaderAgeMs: 0 })
+    .then(advanceBy(1)).then(rejectAt(1)).then(inspectInstance(0))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE, SOURCE_ERROR)
+      and s.d.inspections.nth(2) == { instance: 0, activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: -1 })
+  run inspectionIsPerInstanceAndUsesMonotonicTimeTest = init.then(setPolicy(DARK_ALL_NO_SHADOW))
+    .then(beginAt(0)).then(advanceBy(1)).then(beginAt(4)).then(rollbackWall)
+    .then(inspectInstance(0))
+    .expect(s.d.inspections == List({ instance: 0, activeLeaders: 1, activeFollowers: 0, oldestLeaderAgeMs: 1 }))
+    .then(inspectInstance(1))
+    .expect(s.d.inspections == List(
+      { instance: 0, activeLeaders: 1, activeFollowers: 0, oldestLeaderAgeMs: 1 },
+      { instance: 1, activeLeaders: 1, activeFollowers: 0, oldestLeaderAgeMs: 0 }))
+    .then(resolveWith(1)).then(inspectInstance(0)).then(inspectInstance(1))
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING)
+      and s.d.inspections.nth(2) == { instance: 0, activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: -1 }
+      and s.d.inspections.nth(3) == { instance: 1, activeLeaders: 1, activeFollowers: 0, oldestLeaderAgeMs: 0 })
+  run inspectionExcludesRequestOnlyAndUncoalescedWorkTest = init.then(setPolicy(DARK_REQUEST))
+    .then(beginAt(0)).then(beginAt(0)).then(inspectInstance(0))
+    .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 1
+      and s.d.inspections == List({ instance: 0, activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: -1 }))
+    .then(setPolicy(DARK_LOCAL_UNCOALESCED)).then(beginAt(2)).then(beginAt(2)).then(inspectInstance(0))
+    .expect(s.o.loaders == 3 and s.o.calls == List(CALL_PENDING, CALL_PENDING, CALL_PENDING, CALL_PENDING)
+      and s.d.inspections.nth(1) == { instance: 0, activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: -1 })
+  run inspectionClearsTimedOutCallersWhileRawWorkRemainsTest = init.then(beginAt(0)).then(beginAt(2))
+    .then(inspectInstance(0))
+    .expect(s.d.inspections == List({ instance: 0, activeLeaders: 1, activeFollowers: 1, oldestLeaderAgeMs: 0 }))
+    .then(advanceBy(10)).then(inspectInstance(0))
+    .expect(s.o.calls == List(DEADLINE_ERROR, DEADLINE_ERROR) and s.o.shadow == List("timeout")
+      and s.d.inspections.nth(1) == { instance: 0, activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: -1 })
+    .then(beginAt(0)).then(inspectInstance(0))
+    .expect(s.o.loaders == 2 and s.o.calls == List(DEADLINE_ERROR, DEADLINE_ERROR, CALL_PENDING)
+      and s.d.inspections.nth(2) == { instance: 0, activeLeaders: 1, activeFollowers: 0, oldestLeaderAgeMs: 0 })
+    .then(resolveWith(1)).then(readAt(0)).then(inspectInstance(0))
+    .expect(s.o.calls == List(DEADLINE_ERROR, DEADLINE_ERROR, CALL_PENDING)
+      and s.d.inspections.nth(3) == { instance: 0, activeLeaders: 1, activeFollowers: 0, oldestLeaderAgeMs: 0 })
+  run inspectionExcludesUnfinishedShadowAfterCallerSuccessTest = init.then(beginAt(0)).then(readAt(0))
+    .then(resolveWith(1)).then(inspectInstance(0))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 1 and s.o.writes == 0 and s.o.shadow == List()
+      and s.d.inspections == List({ instance: 0, activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: -1 }))
+    .then(releaseDumpAt(0)).then(inspectInstance(0))
+    .expect(s.o.writes == 1 and s.o.shadow == List()
+      and s.d.inspections.nth(1) == { instance: 0, activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: -1 })
+
 }

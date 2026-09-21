@@ -1,7 +1,8 @@
 import type { Observation, Input } from "../../test/formal/behavior-driver.js";
 import type { Profile } from "../../test/formal/feature-profile.js";
 export type Projected = Omit<Observation, "calls"> & { calls: number[] };
-export interface Diagnostics { warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[]; configErrors?: number; futureOffsets?: Array<{ layer: string; offsetMs: number }> }
+export interface Inspection { instance: number; activeLeaders: number; activeFollowers: number; oldestLeaderAgeMs: number | null }
+export interface Diagnostics { inspections?: Inspection[]; warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[]; configErrors?: number; futureOffsets?: Array<{ layer: string; offsetMs: number }> }
 export interface ReadIO { budgets: number[]; aborted: number[]; sourceErrors: number[] }
 export interface Marker { cutoffMs: number; ttlMs: number }
 export interface Step { policyErrors?: Array<{ layer: string; errorType: string }>; compression?: string[]; markers?: Marker[]; io?: ReadIO; action: string; choice: number; expected: Projected; diagnostics?: Diagnostics }

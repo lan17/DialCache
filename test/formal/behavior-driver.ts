@@ -23,7 +23,7 @@ export type Recovery = "allow" | "deny" | "error";
 export type EventName = "readContext" | "readAbort" | "request" | "miss" | "disabled" | "error"
   | "coalesced" | "invalidation" | "shadowAge" | "recoveryAge" | "futureOffset"
   | "size" | "storedSize" | "compression" | "get" | "fallback" | "serialization"
-  | "mismatchWarning" | "writeDispatch" | "marker";
+  | "mismatchWarning" | "writeDispatch" | "marker" | "coalescingState";
 export interface ObservedEvent { event: EventName; [field: string]: string | number | boolean | null }
 // JSON-shaped adapter observations deliberately include malformed replies. A
 // strongly typed port can reject these at its adapter boundary instead.
@@ -60,6 +60,7 @@ export type Input =
   | { op: "seed"; useCase?: string; key?: string; value?: Value; ageMs?: number; frameHex?: string; payloadText?: string; payloadHex?: string; ttlMs?: number }
   | { op: "invalidate"; key?: string; futureBufferMs?: number }
   | { op: "observeMarker"; key?: string }
+  | { op: "inspectCoalescing"; instance?: string }
   | { op: "adapterReply"; value: AdapterReply }
   | { op: "policy"; value: Policy | null }
   | { op: "faults"; value: Partial<Faults> }
@@ -380,6 +381,12 @@ export class BehaviorDriver {
           else throw error;
         }
         break;
+      case "inspectCoalescing": {
+        const instance = input.instance ?? "default";
+        const state = this.instance(instance).getCoalescingState().process;
+        this.record("coalescingState", { instance, ...state });
+        break;
+      }
       case "observeMarker": {
         // Observe the controlled Redis environment, never DialCache's internal
         // state. The fixed origin makes the timestamp portable across runtimes.

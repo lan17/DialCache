@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { record } from "../itf.mjs";
 import { decodeIntegers, explicitInput, witnessCommand } from "./trace.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
@@ -9,7 +10,7 @@ export const publicPrefixRule = (name, regression, commands, ...checkpoints) =>
   ({ name, regression, commands, checkpoints });
 
 function contains(observed, expected) {
-  return Object.entries(expected).every(([key, value]) => JSON.stringify(observed[key]) === JSON.stringify(value));
+  return Object.entries(expected).every(([key, value]) => isDeepStrictEqual(observed[key], value));
 }
 
 // Read declared inputs and public observations only. A rule requires every

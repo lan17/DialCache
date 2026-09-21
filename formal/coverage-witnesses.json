@@ -471,6 +471,11 @@
     "abandoned-source-cannot-replace-successful-retry"
   ],
   "dark-layers": [
+    "inspection-counts-process-followers-and-oldest",
+    "inspection-isolates-instances-and-wall-shifts",
+    "inspection-excludes-request-and-uncoalesced",
+    "inspection-clears-timeout-before-raw-settlement",
+    "inspection-excludes-unfinished-shadow",
     "rejected-dark-source-seeds-no-layer",
     "uncoalesced-publication-keeps-dark-leader",
     "held-dark-fill-keeps-captured-retention",
