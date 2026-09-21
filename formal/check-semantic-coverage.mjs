@@ -23,7 +23,7 @@ export function checkProfiles(registry = parse('formal/profiles.json')) {
   read(registry.normativeDefinition);
   if (registry.behavioralAuthority?.kind !== 'quint' || registry.behavioralAuthority.executionManifest !== 'formal/execution.json' || !registry.behavioralAuthority.conflictPolicy) throw new Error('Quint behavioral authority must be explicit');
   for (const profile of registry.profiles) {
-    const supportedVersion = ["policy", "shadow"].includes(profile.id) ? 3 : ["effects", "scope", "shadow", "layers", "independent"].includes(profile.id) ? 2 : 1;
+    const supportedVersion = ["effects", "policy", "shadow"].includes(profile.id) ? 3 : ["scope", "layers", "independent"].includes(profile.id) ? 2 : 1;
     if (profile.version !== supportedVersion) throw new Error(`${profile.id}: unsupported profile version`);
     read(profile.definition); read(profile.model);
     for (const path of profile.witnessSources ?? []) read(path);

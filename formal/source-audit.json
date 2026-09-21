@@ -1027,7 +1027,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "1fb9b67e1ff16e6f529ff1995441416f25ba4efe7c625da8c2d46874fa60212b",
+      "sha256": "1a32de36ca3bc4d30a74cb70587930e3491d545af3d00a2fef747816b3a92109",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1038,12 +1038,12 @@
         {"line":135,"title":"Observations"},
         {"line":147,"title":"Additional fixed-scenario inputs"},
         {"line":153,"title":"Generated pending-effect profile"},
-        {"line":204,"title":"Generated feature profiles"},
-        {"line":309,"title":"Generated independent-caller profile"},
-        {"line":330,"title":"Generated layer-composition profile"},
-        {"line":364,"title":"Generated request-scope profile"},
-        {"line":387,"title":"Generated served-hit shadow admission profile"},
-        {"line":411,"title":"Port workflow and limits"}
+        {"line":206,"title":"Generated feature profiles"},
+        {"line":311,"title":"Generated independent-caller profile"},
+        {"line":332,"title":"Generated layer-composition profile"},
+        {"line":366,"title":"Generated request-scope profile"},
+        {"line":389,"title":"Generated served-hit shadow admission profile"},
+        {"line":413,"title":"Port workflow and limits"}
       ],
       "review": {
         "kind": "contract-guide",

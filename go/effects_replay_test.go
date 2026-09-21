@@ -161,7 +161,7 @@ func TestEffectsConformance(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("specification=0.1.0 effectsProfile=2 traces=%d", len(paths))
+	t.Logf("specification=0.1.0 effectsProfile=3 traces=%d", len(paths))
 }
 func TestEffectsParserRejectsMissingDiagnostics(t *testing.T) {
 	coordinator := newReplayCoordinator(t)

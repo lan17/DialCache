@@ -23,7 +23,7 @@
     },
     {
       "id": "effects",
-      "version": 2,
+      "version": 3,
       "definition": "formal/BEHAVIOR.md",
       "model": "formal/dialcache-effects-conformance.qnt",
       "smoke": "formal/effects-smoke.itf.json",

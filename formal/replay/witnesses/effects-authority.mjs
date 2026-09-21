@@ -14,7 +14,18 @@ const publishedAndRead = o => same(o.calls, [1, 1]) && o.reads === 2 && o.loads 
 // history's `expected`: counters, caller codes and events in callback
 // seconds); no phase, private timestamp, stored value or model authorization
 // predicate enters these rules.
+const noMiss = o => !o.events.some(e => e.event === "miss");
+const expiredOnly = o => same(o.events.filter(e => e.event === "miss"),
+  [{ event: "miss", location: "remote", detail: "expired", amount: 0 }])
+  && !o.events.some(e => e.event === "futureOffset");
+
 export const effectsAuthorityRules = [
+  { name: "adapter-frame-last-fresh-millisecond-hits", regression: "frameReplyAtLastFreshMillisecondHitsTest",
+    commands: [init, cmd("adapterReply", 15), cmd("advanceWall", 59999), begin, read, load],
+    consequence: o => hit(o) && o.dumps === 0 && noMiss(o) },
+  { name: "adapter-frame-exact-expiry-refills-and-reuses", regression: "staleFrameReplyExpiresRefillsAndIsReadableTest",
+    commands: [init, cmd("adapterReply", 15), cmd("advanceWall", 60000), begin, read, resolve, dump, write, begin, cmd("releaseRead", 1), load],
+    consequence: o => publishedAndRead(o) && expiredOnly(o) && same(o.writeTtls, [60000]) },
   { name: "observer-failure-hit", regression: "observerFailuresCannotPreventCacheHitTest",
     commands: [init, fault, cmd("seedRemote"), begin, read, load], consequence: hit },
   { name: "observer-failure-publication", regression: "observerFailuresCannotPreventPublicationTest",

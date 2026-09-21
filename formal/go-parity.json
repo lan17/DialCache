@@ -8,32 +8,32 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "a45957182706f68898bad021f9bed6062216cfbeba131f4b3e870c5b83051f9a",
-    "executionSha256": "46c58ff280cd1b52533ac53210799c8d962ffa3bcfe558373ec144e8c3ce62ff",
-    "sourceAuditSha256": "9475d0c4224ba5e17d0a01fcabae2ce084c54587dbd72e25ccc608eff363f91a",
-    "featureCoverageSha256": "7139414ac2e69e352f245d0c326336deaf5e885ca60ff231130146a42415845e",
-    "coverageWitnessesSha256": "354d958606e5e0bbccd9fcfdfeda7d6f6a6fe4839a1f0c9535608896d89ceb7f",
-    "profilesSha256": "e8c4aa5d218f20203a5f3173430f9a99af2103c2536e823fa3785806612a9135"
+    "semanticCasesSha256": "82d0495493d418c0d150fdec733d698a89568ffbe67b87075bd68245b6b67619",
+    "executionSha256": "6e973341bba2ecfe47596ce0f76275da424c1b53145b07707af919cdcdd2160b",
+    "sourceAuditSha256": "864a17b3b09d18ce205c7e1b8c270fba565c57ff899220e33ff9ef30e522273b",
+    "featureCoverageSha256": "9a5ffdf30e1e39f9739f678580cfafc80225b24c870d49bb7a5141fcafdc93d6",
+    "coverageWitnessesSha256": "6070c8d04863c0281fcde0ea703c5023401d8fe2ea287b527973174f018a80b7",
+    "profilesSha256": "5770441b15c9e615ce27cd524322c9bf8c3ad01788595d5e9622786d0e505e72"
   },
   "inventory": {
-    "behavioralCases": 242,
-    "withRequiredGeneratedWitnesses": 242,
+    "behavioralCases": 243,
+    "withRequiredGeneratedWitnesses": 243,
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
     "sourceDeclarations": 772,
-    "casesWithScheduledChecks": 264,
-    "requiredWitnesses": 484,
-    "casesWithQuintRegressionReplay": 188,
+    "casesWithScheduledChecks": 265,
+    "requiredWitnesses": 486,
+    "casesWithQuintRegressionReplay": 189,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 31,
-    "scheduledInvariants": 242,
-    "scheduledRegressions": 444,
+    "scheduledInvariants": 243,
+    "scheduledRegressions": 446,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 330,
-    "exportedRegressionHistories": 341
+    "caseReferencedWitnesses": 332,
+    "exportedRegressionHistories": 343
   },
   "cases": [
     {
@@ -3222,6 +3222,18 @@
         "go": ".formal-traces/go-replay.jsonl",
         "nativeGo": [],
         "scope": "A later served-hit shadow job rejects within its own ten-millisecond budget and reports source_error, preserving the acquired caller value; both native ports replay the exact generated schedule."
+      }
+    },
+    {
+      "id": "C22.adapter-frame-expiry",
+      "kind": "portable-behavior",
+      "group": "frame-age-and-retention",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "The same exported adapter frame histories establish last-fresh hit and exact-expiry miss, source refill, later reuse and expired diagnostic in both ports."
       }
     }
   ],

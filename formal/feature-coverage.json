@@ -92,7 +92,7 @@
         "C22.freshness-boundary",
         "C22.physical-vs-logical",
         "C06.absent-distinct-from-text",
-        "C22.freshness-after-read",
+        "C22.adapter-frame-expiry", "C22.freshness-after-read",
         "C05.request-hit-stops-traversal",
         "C05.local-hit-stops-traversal",
         "C09.fractional-clock-grid"

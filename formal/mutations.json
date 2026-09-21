@@ -1844,6 +1844,38 @@
           "portable"
         ]
       }
+    },
+    {
+      "id": "M57",
+      "case": "C22.adapter-frame-expiry",
+      "description": "Report a frame at its maximum age as an unclassified miss instead of expired",
+      "rationale": "TypeScript src/internal/redis-cache.ts getWithResolvedConfig and Go go/engine.go readServing change the first maximum-age guard's miss diagnostic from expired to unclassified. Source fallback, refill authority and later reuse remain unchanged; the generated held-adapter history distinguishes the diagnostic at exactly 60000ms, before any source settlement.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "src/internal/redis-cache.ts",
+            "before": "if (frameAge.ageMs >= maximumAgeMs) {\n        this.recordMiss(key, metricLayer, \"expired\");",
+            "after": "if (frameAge.ageMs >= maximumAgeMs) {\n        this.recordMiss(key, metricLayer, \"unclassified\");"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/engine.go",
+            "before": "if age >= maxAge {\n\t\tx.event(\"miss\", \"remote\", map[string]any{\"reason\": \"expired\"})",
+            "after": "if age >= maxAge {\n\t\tx.event(\"miss\", \"remote\", map[string]any{\"reason\": \"unclassified\"})"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
     }
   ]
 }

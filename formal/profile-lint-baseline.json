@@ -48,6 +48,7 @@
         "clock::shiftWall",
         "metrics::advance",
         "metrics::begin",
+        "metrics::frameReadReceipt",
         "metrics::invalidate",
         "metrics::releaseDump",
         "metrics::releaseWrite",

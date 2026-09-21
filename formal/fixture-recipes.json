@@ -2734,6 +2734,16 @@
           "id": "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
           "regression": "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
           "projection": "effects"
+        },
+        {
+          "id": "frameReplyAtLastFreshMillisecondHitsTest",
+          "regression": "frameReplyAtLastFreshMillisecondHitsTest",
+          "projection": "effects"
+        },
+        {
+          "id": "staleFrameReplyExpiresRefillsAndIsReadableTest",
+          "regression": "staleFrameReplyExpiresRefillsAndIsReadableTest",
+          "projection": "effects"
         }
       ]
     },

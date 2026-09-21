@@ -279,6 +279,8 @@
     "late-dark-read-reports-offset-without-reviving-job"
   ],
   "effects": [
+    "adapter-frame-last-fresh-millisecond-hits",
+    "adapter-frame-exact-expiry-refills-and-reuses",
     "event:request",
     "event:disabled",
     "event:miss",

@@ -107,7 +107,8 @@
         "registeredReadOwnsFlight",
         "effectCountsMatchRecords",
         "writeRequiresAcceptedSource",
-        "acceptedSourcesSettledBeforeTheirDeadline"
+        "acceptedSourcesSettledBeforeTheirDeadline",
+        "staleFrameRepliesReportExpired"
       ],
       "profile": "effects",
       "differential": {
@@ -2830,6 +2831,53 @@
         "kind": "mapped",
         "mutant": "M58",
         "text": "M58 removes the shadow registration when the whole-job timeout is reported in both ports, while raw read/decode/dump/write work can still be pending. The kernel expireJob edit frees the same held-work capacity at timeout. The exported held-dump history detects the premature admission at its competing-key public checkpoint; companion histories cover C0 read, decode, C1 read and write."
+      }
+    },
+    {
+      "id": "effects-stale-frame-reply-unclassified",
+      "contract": "C58",
+      "source": "formal/kernel/metrics.qnt",
+      "model": "formal/dialcache-effects-conformance.qnt",
+      "invariant": "staleFrameRepliesReportExpired",
+      "before": "if (Replies::isFrame(state.reply)) declinedFrameReason(state.replyAt, Clock::wallOf(state))",
+      "after": "if (Replies::isFrame(state.reply)) \"unclassified\"",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "staleFrameReplyExpiresRefillsAndIsReadableTest",
+        "failure": "missReasons == List(\"expired\") and s.o.loads == 0 and s.o.loaders == 1",
+        "family": "expired-frame-reply-category",
+        "profiles": [
+          "effects"
+        ],
+        "exclusions": {
+          "core": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "scope": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "recovery": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "policy": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "shadow": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "admission": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "layers": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "independent": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "recovery-read": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "local-failure": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "runtime-boundaries": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "shadow-layers": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "local-clock": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "source-budgets": "Does not import metrics; the changed frame-reply miss classification is outside this profile.",
+          "dark-layers": "Does not import metrics; the changed frame-reply miss classification is outside this profile."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M57",
+        "text": "M57 is the native twin of a stale queued frame reply losing its expired miss category: both ports report unclassified at the maximum-age guard while the ordinary source and refill still proceed.",
+        "evidence": {
+          "history": "effects/staleFrameReplyExpiresRefillsAndIsReadableTest",
+          "step": 4,
+          "fields": [
+            "events"
+          ]
+        }
       }
     }
   ],

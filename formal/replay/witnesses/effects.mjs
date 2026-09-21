@@ -119,6 +119,7 @@ function advanceShadow(before, step, previous, o) {
       break;
     }
     case "jumpClock": s.now += CLOCK_STEP_MS; s.wall += CLOCK_STEP_MS; break;
+    case "advanceWall": s.wall += step.choice; break;
     case "rollbackWall": s.wall -= WALL_ROLLBACK_MS; break;
     case "invalidate": s.watermark = Math.max(s.watermark, s.wall); break;
     case "futureFence": s.watermark = Math.max(s.watermark, s.wall + FUTURE_BUFFER_MS); break;

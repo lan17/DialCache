@@ -95,6 +95,9 @@ module dialcache_effects_conformance {
     readBudget: int, baseReadBudget: int
   }
   var s: State
+  // Immutable raw inputs from the latest successful adapter read. The invariant
+  // checks its diagnostic independently; no cache transition reads this receipt.
+  var frameReceipt: Metrics::FrameReadReceipt
   var input: { name: str, choice: int }
 
   // Initial fixture: nothing stored, the zero watermark, the fixture's read budget.
@@ -115,6 +118,7 @@ module dialcache_effects_conformance {
   }
   action initialized(mode: int): bool = all {
     (FIXTURE_LIBRARY_BUDGET.to(FIXTURE_UNTRACKED)).contains(mode),
+    frameReceipt' = Metrics::NO_FRAME_READ_RECEIPT,
     input' = { name: "init", choice: mode }, s' = initial(mode)
   }
   action init = {
@@ -133,6 +137,7 @@ module dialcache_effects_conformance {
   // Call admission: the read is dispatched under the budget in force, or the
   // caller joins the registered flight. --------------------------------------
   action beginCall = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "beginCall", choice: -1 },
     s.o.calls.length() < MAX_CALLS,
     s' = Metrics::begin(s, LAYOUT, CALL, REMOTE_SHARED, TTLS, s.readBudget)
@@ -142,6 +147,7 @@ module dialcache_effects_conformance {
   // write; the loader by its ordinal. -------------------------------------------
   action readAt(index: int): bool = all {
     RemoteIO::holdsRead(s, index),
+    frameReceipt' = Metrics::frameReadReceipt(s, index),
     input' = { name: "releaseRead", choice: index },
     s' = Metrics::settleRead(s, LAYOUT, index, false, Recovery::NONE, FUTURE_BUFFER_MS)
   }
@@ -151,6 +157,7 @@ module dialcache_effects_conformance {
   }
   action failReadAt(index: int): bool = all {
     RemoteIO::holdsRead(s, index),
+    frameReceipt' = frameReceipt,
     input' = { name: "failRead", choice: index },
     s' = Metrics::settleRead(s, LAYOUT, index, true, Recovery::NONE, FUTURE_BUFFER_MS)
   }
@@ -159,11 +166,13 @@ module dialcache_effects_conformance {
     failReadAt(choice)
   }
   action releaseLoad = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "releaseLoad", choice: -1 },
     s.loads.length() > 0,
     s' = Metrics::settleLoad(s, LAYOUT, RemoteIO::latestLoad(s).load, false)
   }
   action failLoad = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "failLoad", choice: -1 },
     s.loads.length() > 0,
     s' = Metrics::settleLoad(s, LAYOUT, RemoteIO::latestLoad(s).load, true)
@@ -171,6 +180,7 @@ module dialcache_effects_conformance {
   action resolveAt(index: int): bool = all {
     index < s.loaders.length(),
     Deadlines::pending(s, index),
+    frameReceipt' = frameReceipt,
     input' = { name: "resolveLoader", choice: index },
     s' = Metrics::settleLoader(s, LAYOUT, index, VALUE_ONE, false)
   }
@@ -181,6 +191,7 @@ module dialcache_effects_conformance {
   action rejectAt(index: int): bool = all {
     index < s.loaders.length(),
     Deadlines::pending(s, index),
+    frameReceipt' = frameReceipt,
     input' = { name: "rejectLoader", choice: index },
     s' = Metrics::settleLoader(s, LAYOUT, index, SOURCE_ERROR, false)
   }
@@ -189,21 +200,25 @@ module dialcache_effects_conformance {
     rejectAt(choice)
   }
   action releaseDump = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "releaseDump", choice: -1 },
     s.dumps.length() > 0,
     s' = Metrics::releaseDump(s, LAYOUT, Writes::latestDump(s).dump, false, PAYLOAD_BYTES)
   }
   action failDump = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "failDump", choice: -1 },
     s.dumps.length() > 0,
     s' = Metrics::releaseDump(s, LAYOUT, Writes::latestDump(s).dump, true, PAYLOAD_BYTES)
   }
   action releaseWrite = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "releaseWrite", choice: -1 },
     s.writes.length() > 0,
     s' = Metrics::releaseWrite(s, LAYOUT, Writes::latestWrite(s).write, false)
   }
   action failWrite = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "failWrite", choice: -1 },
     s.writes.length() > 0,
     s' = Metrics::releaseWrite(s, LAYOUT, Writes::latestWrite(s).write, true)
@@ -211,28 +226,46 @@ module dialcache_effects_conformance {
 
   // Environmental clock, storage, policy, and failure inputs ------------------
   action tick = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "tick", choice: -1 },
     s' = Metrics::advance(s, LAYOUT, CLOCK_STEP_MS)
   }
   // Clock observation without timer delivery also exercises settlement guards.
   action jumpClock = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "jumpClock", choice: -1 },
     tenMillisecondReadOrNone,
     s' = Clock::advance(s, CLOCK_STEP_MS)
   }
   action rollbackWall = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "rollbackWall", choice: -1 },
     s' = Clock::shiftWall(s, -WALL_ROLLBACK_MS)
   }
+  // Wall-only shifts reach logical frame expiry without spending the read or
+  // source's monotonic budget. Version 3 explicitly adds this finite domain.
+  action advanceWallBy(ms: int): bool = all {
+    Set(1, 59999, 60000).contains(ms),
+    frameReceipt' = frameReceipt,
+    input' = { name: "advanceWall", choice: ms },
+    s' = Clock::shiftWall(s, ms)
+  }
+  action advanceWall = {
+    nondet choice = Set(1, 59999, 60000).oneOf()
+    advanceWallBy(choice)
+  }
   action seedRemote = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "seedRemote", choice: -1 },
     s' = Remote::seedFrame(s, KEY, VALUE_ONE, REMOTE_TTL_MS)
   }
   action invalidate = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "invalidate", choice: -1 },
     s' = Metrics::invalidate(s, ENTITY, 0)
   }
   action futureFence = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "futureFence", choice: -1 },
     s' = Metrics::invalidate(s, ENTITY, FUTURE_BUFFER_MS)
   }
@@ -240,6 +273,7 @@ module dialcache_effects_conformance {
   // including abandoned reads. A second cannot be queued until the first is consumed.
   action replyWith(code: int): bool = all {
     (1.to(16)).contains(code),
+    frameReceipt' = frameReceipt,
     input' = { name: "adapterReply", choice: code },
     not(Replies::queued(s)),
     s' = Replies::queue(s, code)
@@ -251,11 +285,13 @@ module dialcache_effects_conformance {
   // Choice zero inherits the fixture's resolved base; 1..4 override it: two
   // wrappers guarded on the input alone.
   action inheritReadBudget = all {
+    frameReceipt' = frameReceipt,
     input' = { name: "readBudgetPolicy", choice: 0 },
     s' = { readBudget: s.baseReadBudget, ...s }
   }
   action overrideReadBudgetWith(choice: int): bool = all {
     (1.to(4)).contains(choice),
+    frameReceipt' = frameReceipt,
     input' = { name: "readBudgetPolicy", choice: choice },
     s' = { readBudget: runtimeBudgetOf(choice), ...s }
   }
@@ -267,6 +303,7 @@ module dialcache_effects_conformance {
   // cache rule, so the model records the input and nothing else.
   action observerFaultWith(code: int): bool = all {
     (Set(0, 1)).contains(code),
+    frameReceipt' = frameReceipt,
     input' = { name: "observerFault", choice: code }, s' = s
   }
   action observerFault = {
@@ -282,13 +319,23 @@ module dialcache_effects_conformance {
     // Favor the narrow second-fence check as well as unrestricted clock changes.
     all { s.dumps.length() > 0 and Writes::latestDump(s).fence > NO_FENCE, rollbackWall },
     any {
-      tick, jumpClock, seedRemote,
+      tick, jumpClock, seedRemote, advanceWall,
       any { rollbackWall, invalidate, futureFence, observerFault, readBudgetPolicy, adapterReply }
     }
   }
 
   // Invariants: independent checks over the public channels and the library records.
   // Over the public channels, verbatim from the former text.
+  // A held, timely frame reply that reaches its freshness ceiling is an
+  // expired miss. This uses the acquired raw stamp and sampled clocks, not
+  // the miss-classification or freshness helper it challenges.
+  val staleFrameRepliesReportExpired = not(frameReceipt.frame and frameReceipt.owns
+      and frameReceipt.elapsed < frameReceipt.due
+      and frameReceipt.wall - frameReceipt.stamp >= frameReceipt.freshMs) or {
+    val misses = s.events.select(e => e.event == "miss")
+    misses.length() > frameReceipt.missesBefore
+      and misses.nth(frameReceipt.missesBefore).detail == "expired"
+  }
   val oneRequestPerRead = s.events.select(e => e.event == "request").length() == s.o.reads
   val measurementsAreNonnegative = s.events.select(e => e.amount < 0).length() == 0
   val futureOffsetsArePositiveAtObservingLayer = s.events.indices().forall(i => {
@@ -355,6 +402,22 @@ module dialcache_effects_conformance {
   run missDiscriminatorWinsOverFrameFieldsTest = tenMillisecondFixture.then(beginCall)
     .then(replyWith(Replies::MISS_WITH_FRAME_FIELDS)).then(readAt(0))
     .expect(s.o.loads == 0 and s.o.loaders == 1)
+  // The same queued adapter bytes are fresh one millisecond before F, then
+  // expired at F. A wall shift alone leaves both source/read budgets intact.
+  run frameReplyAtLastFreshMillisecondHitsTest = tenMillisecondFixture
+    .then(replyWith(Replies::FRAME_WITH_MISS_FIELDS)).then(advanceWallBy(59999))
+    .then(beginCall).then(readAt(0)).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.loads == 1 and s.o.loaders == 0
+      and s.o.dumps == 0 and s.o.writes == 0 and missReasons == List())
+  run staleFrameReplyExpiresRefillsAndIsReadableTest = tenMillisecondFixture
+    .then(replyWith(Replies::FRAME_WITH_MISS_FIELDS)).then(advanceWallBy(60000))
+    .then(beginCall).then(readAt(0))
+    .expect(missReasons == List("expired") and s.o.loads == 0 and s.o.loaders == 1)
+    .then(resolveAt(0)).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(readAt(1)).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loads == 1 and s.o.loaders == 1
+      and s.o.dumps == 1 and s.o.writes == 1 and s.o.writeTtls == List(REMOTE_TTL_MS)
+      and missReasons == List("expired") and amounts("futureOffset") == List())
   run frameWithoutMissDiscriminatorIgnoresMetadataTest = tenMillisecondFixture.then(beginCall)
     .then(replyWith(Replies::FRAME_WITH_MISS_FIELDS)).then(readAt(0)).then(releaseLoad)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 0)
