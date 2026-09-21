@@ -15,7 +15,7 @@ Use [CONTRACTS.md](./CONTRACTS.md) for the obligations and
 
 ## What is accounted for
 
-The current catalogs give all **240 behavioral cases** a checked Quint
+The current catalogs give every cataloged behavioral case a checked Quint
 reference and Quint-driven implementation evidence. Wire obligations have
 separate generated primitive artifacts and complementary fixed vectors; native
 cases remain separate API, value, clock, exporter and adapter obligations.

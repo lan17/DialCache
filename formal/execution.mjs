@@ -343,6 +343,9 @@ export function evidenceOf(challenge, models, publicOnly, { readSource = read, s
     const vector = resolveVectorEvidence(written.vector, model, readSource);
     return { ...base, history: `vector/${reproducer.run}`, step: 0, fields: [...vector.fields], origin: 'vector', vector };
   }
+  if (reproducer?.kind === 'model-run') {
+    throw new Error(`${challenge.id}: mapped native mutant requires an exported-regression or an exported-vector model-run reproducer`);
+  }
   if (reproducer?.kind !== 'exported-regression') {
     if (written !== undefined) throw new Error(`${challenge.id}: written boundary evidence requires an exported-regression reproducer`);
     return { ...base, state: 'unreproduced' };

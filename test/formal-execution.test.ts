@@ -612,7 +612,10 @@ describe("formal execution schedule", () => {
     effects.reproducer = { ...effects.reproducer!, kind: "exported-regression", run: "patchedBudgetTest", failure: budget };
     expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
     effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "patchedBudgetTest", failure: budget, scope: "Patches the read budget directly." };
-    expect(validate(patching, { readSource: withPatchingRun })).toMatchObject({ reproducers: liveReproducers(), reproducerBacklog: manifest().reproducerBacklog.length });
+    // Supplying a deterministic model run must not downgrade a mapped native
+    // fault to an unreproduced boundary while leaving both backlogs unchanged.
+    expect(() => validate(patching, { readSource: withPatchingRun }))
+      .toThrow(/mapped native mutant requires an exported-regression or an exported-vector model-run reproducer/);
     effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "lateSourceResultIsADeadlineErrorTest", failure: manifest().challenges.find(challenge => challenge.id === "effects-late-source-accepted")!.reproducer!.failure, scope: "Not a model-only run." };
     expect(() => validate(patching)).toThrow(/lateSourceResultIsADeadlineErrorTest is exported; cite it as an exported-regression reproducer/);
     expect(() => validate(modelRun(r => { delete r.scope; }))).toThrow(/model-run reproducer needs a scope/);
@@ -628,6 +631,20 @@ describe("formal execution schedule", () => {
       failure: "s.origin == RemoteValue and s.localReads == 1 and s.remoteReads == 1 and s.sourceCalls == 0 and s.localWrites == 0" };
     expect(() => validate(verification)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-core\.qnt/);
   }, 60_000);
+
+  it("retains vector boundaries and native-free model reproducers", () => {
+    const current = manifest();
+    const vector = current.challenges.find(challenge => challenge.id === "envelope-strips-unknown-zero-prefix")!;
+    expect(vector).toMatchObject({ reproducer: { kind: "model-run" }, nativeMutants: { kind: "mapped" } });
+    expect(boundaryEvidence(current).find(entry => entry.challenge === vector.id))
+      .toMatchObject({ origin: "vector", step: 0 });
+    for (const kind of ["model-only", "unobservable"]) {
+      const challenge = current.challenges.find(item => item.nativeMutants?.kind === kind && item.reproducer)!;
+      expect(challenge, kind).toBeDefined();
+      expect(boundaryEvidence(current).some(entry => entry.challenge === challenge.id), kind).toBe(false);
+    }
+    expect(validate(current)).toMatchObject({ reproducers: liveReproducers(), reproducerBacklog: current.reproducerBacklog.length });
+  });
 
   it("keeps vector artifacts separate from profile histories and validates their provenance boundary", () => {
     for (const changed of [

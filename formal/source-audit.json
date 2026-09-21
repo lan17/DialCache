@@ -1257,7 +1257,7 @@
     },
     {
       "path": "formal/FEATURE-COVERAGE.md",
-      "sha256": "54d4078122d376f0bcd73db7a54dc1b39990de049770121ba84433d0ab5cefa2",
+      "sha256": "7fd6d5342cade1c22661461377cc7efa8e493e4b96d34f0b9580e9beac260329",
       "entries": [
         {"line":1,"title":"DialCache features and known behavioral corners"},
         {"line":16,"title":"What is accounted for"},
@@ -1502,15 +1502,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "93b217d0d9158179bffa90d7f1ebbaae65f56bc8ff123b617fbb483d08aa8ef7",
+      "sha256": "02fe31f090cf9daefe24227c3ecc3b95dfc3fe7bf1c09e098225f2aec0a54e47",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":72,"title":"Reading a completion report"},
         {"line":90,"title":"Mutation evidence"},
-        {"line":199,"title":"Exploratory runs"},
-        {"line":247,"title":"A retained sampling regression"},
-        {"line":284,"title":"Historical results"}
+        {"line":203,"title":"Exploratory runs"},
+        {"line":251,"title":"A retained sampling regression"},
+        {"line":288,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

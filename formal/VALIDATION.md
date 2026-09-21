@@ -95,15 +95,18 @@ and records the differing fields at every step; it preserves the normal driver
 and settlement checks. `confirmed` means the intended checkpoint differs on a
 consequential field or a newly differing counter; `side-effect-only` means other
 observations differ, and `not-divergent` means the history still agrees.
-`unreached` records an incomplete history, missing recording, or driver failure;
-`vector` identifies a model-run with exported vectors, and `unreproduced` names
-a mapping without a portable reproducer. Clean boundary baselines must complete
-without divergences. The mutation gate requires `confirmed` for every mapping
-with an exported reproducer in both ports, alongside the required-cohort gate.
+`unreached` records an incomplete history, missing recording, or driver failure.
+Exported-vector model runs carry `origin: vector`; both ports execute the named
+native API against the exact vector samples and must earn `confirmed` on the
+declared fields. Clean boundary baselines must complete without divergences.
+The mutation gate requires `confirmed` for every mapping with an exported
+history or vector reproducer in both ports, alongside the required-cohort gate.
 It recomputes verdicts from current declarations and recordings: missing
 mapping entries, stale checkpoints and absent clean baselines fail, even when
-the report claims confirmation. `vector` and `unreproduced` remain explicit
-limits to boundary coverage.
+the report claims confirmation. `unreproduced` names a grandfathered mapping
+that still lacks a reproducer; the execution audit reports that backlog and
+forbids adding to it. A mapped fault cannot replace its portable evidence with
+a model run that exports no vector.
 
 Read the evidence with `node formal/mutation-reports.mjs boundary --report
 <report.json>`. Optional `--cohorts <directory>` reads historical assertion
@@ -114,8 +117,9 @@ it does not validate the current checkout. `--gate` additionally requires a
 complete report whose catalog, measured source inputs, recorded configuration
 and exact corpus fingerprints match the checkout. Keep the measured corpus
 artifact when checking a downloaded report; regenerating it may change its
-bytes. A missing fingerprint or any reported boundary gap other than `vector`
-or `unreproduced` fails the gated command.
+bytes. Missing fingerprints fail the gated command, as does any exported
+history or vector boundary that is not `confirmed`. Historical `vector` gap
+states remain readable but do not satisfy current vector declarations.
 
 Model mutations challenge the specification's independent properties.
 Implementation mutations challenge the assertions that connect generated
