@@ -280,6 +280,13 @@ module dialcache_runtime_boundaries_conformance {
     .then(beginCall).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
 
+  // Stop before either independent source settles, so a wrong inherited
+  // sharing decision is visible without requiring a source it never started.
+  run inheritedFalseStartsBothSourcesBeforeSettlementTest = initialize(REQUEST_LAYER)
+    .then(beginCall).then(releasePolicy)
+    .then(beginCall).then(releasePolicy)
+    .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2)
+
   run localCohortEqualityBypassesBeforeAboveSampleCachesTest = initialize(LOCAL_LAYER)
     .then(changePolicy(AT_SAMPLE * 3 + ENABLE_SHARING))
     .then(beginCall).then(releasePolicy).then(finishSource(0, 0))
@@ -287,6 +294,15 @@ module dialcache_runtime_boundaries_conformance {
     .then(beginCall).then(releasePolicy).then(finishSource(1, 1))
     .then(beginCall).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.o.loaders == 2)
+
+  // A bypass at equality must leave no local value for the above-sample call.
+  // Its pending result exposes the difference before settling the new source.
+  run localCohortEqualityLeavesNoValueForLaterAdmissionTest = initialize(LOCAL_LAYER)
+    .then(changePolicy(AT_SAMPLE * 3 + ENABLE_SHARING))
+    .then(beginCall).then(releasePolicy).then(finishSource(0, 0))
+    .then(changePolicy(ABOVE_SAMPLE * 3 + ENABLE_SHARING))
+    .then(beginCall).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
 
   run remoteCohortEqualityBypassesBeforeAboveSampleCachesTest = initialize(REMOTE_LAYER)
     .then(changePolicy(AT_SAMPLE * 3 + ENABLE_SHARING))

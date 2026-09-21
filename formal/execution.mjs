@@ -649,12 +649,8 @@ function validateBacklog(challenges, ids, { name, listed, present, grandfathered
 // shrink: a new challenge must carry a reproducer, and listing it here instead
 // is a reviewed change to this constant, never a manifest edit.
 export const grandfatheredReproducerBacklog = Object.freeze([
-  'recovery-inclusive-maximum',
-  'recovery-future-candidate',
   'local-precise-grid',
-  'source-inclusive-deadline',
   'profile-source-wrong-owner',
-  'independent-source-wrong-clock',
   'independent-source-wrong-owner',
   'core-unhealthy-local-read-hits',
   'core-tracked-fallback-warms-local',
@@ -666,13 +662,9 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'redis-protocol-untracked-fence',
   'invalidation-transition-cutoff-moves-backwards',
   'invalidation-transition-inclusive-buffer-limit',
-  'cohort-inclusive-threshold',
   'scope-late-source-repopulates-closed-memo',
   'layers-late-memo-into-closed-scope',
   'independent-fresh-frame-retained',
-  'runtime-boundaries-inclusive-cohort',
-  'runtime-boundaries-inherited-sharing-ignores-default',
-  'source-budgets-settled-flight-stays-registered',
 ]);
 
 // Compiling semantic faults, checked against independent model obligations.

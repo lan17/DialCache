@@ -611,6 +611,34 @@
         "kind": "mapped",
         "mutant": "M01",
         "text": "M01 is the observable native site of cache-rules.qnt ageBeforeCeiling becoming inclusive, as measured by dialcache-rule-checks.qnt recoveryBoundaryIsExclusive: the post-decode serving check in both ports accepts a retained candidate at exactly the maximum age. Earlier ceiling sites are masked by the post-decode recheck because ages only grow, so this is the one single-site inclusive edit; recovery/maximumAgeAfterDecodePreservesSourceTest already detects it in both ports."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "maximumAgeAfterDecodeFromStrictlyStaleFrameTest",
+        "model": "formal/dialcache-recovery-conformance.qnt",
+        "failure": "s.o.calls == List(SOURCE_ERROR) and s.o.loads == 1 and s.o.recovery == List(\"miss\") and s.d.ages == List() and s.o.writes == 0",
+        "family": "inclusive-maximum-boundary",
+        "profiles": [
+          "formal/dialcache-rule-checks.qnt",
+          "recovery",
+          "policy",
+          "independent",
+          "recovery-read",
+          "shadow-layers",
+          "shadow",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "scope": "The request-only projection has no frames and no clock, so no age judgment is evaluated.",
+          "source-budgets": "The local projection has no remote frames; local expiry is localEntryLiveAt, not ageBeforeCeiling.",
+          "layers": "Frames are seeded at age 0 under a 60 s freshness and the clock moves 1 ms per tick, so no history reaches an age boundary.",
+          "core": "No scheduled history reaches an exact age boundary: every regression passes under the mutant.",
+          "effects": "Frames are stamped at the wall clock and read within 600 ms under a 60 s freshness, and classifier NONE retains no snapshot, so no age judgment meets a boundary.",
+          "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
+          "local-failure": "Composes the remote freshness judgment (ageBeforeCeiling), but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets a ceiling (re-measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
+          "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated (re-measured 2026-09-20 over the composed text).",
+          "runtime-boundaries": "No scheduled history reaches an exact age boundary: every regression passes under the mutant."
+        }
       }
     },
     {
@@ -626,6 +654,34 @@
         "mutant": "M40",
         "text": "M40 is the native twin of cache-rules.qnt ageBeforeCeiling losing its created-before-observed clause, as measured by dialcache-rule-checks.qnt recoveryBoundaryIsExclusive: both ports classify a frame dated after the reader clock as a valid frame of age zero instead of rejecting it as future. The future clause is implemented once and shared by serving, recovery and shadow reads, so a recovery-only edit is not expressible and the shared edit is the faithful twin.",
         "crossContract": "M40 sits on C40.future-rejected because the shared frameAge future clause is the cache-rules ageBeforeCeiling rule; C45's replay rollbackDuringRetainedDecodeRejectsFutureSnapshotTest and witness rollback-rejects-retained-future detect the same edit on the recovery path."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "wallRollbackRejectsFutureRemoteFrameTest",
+        "model": "formal/dialcache-policy-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2",
+        "family": "future-timestamp-accepted",
+        "profiles": [
+          "formal/dialcache-rule-checks.qnt",
+          "recovery",
+          "policy",
+          "shadow",
+          "recovery-read",
+          "effects",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "scope": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "admission": "Composes the remote freshness judgment, but every frame is stamped at a wall clock that only advances and is read within 600 ms under a 60 s freshness, so no read meets an age boundary or observes a future stamp.",
+          "layers": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
+          "independent": "Seeds stamp frames at the wall minus a non-negative age and the clock only advances, so no history observes a future stamp.",
+          "local-failure": "Composes the remote freshness judgment (ageBeforeCeiling through freshAgeAllowed), but its wall clock never moves and every frame is stamped at the current instant, so no history observes a future stamp.",
+          "runtime-boundaries": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
+          "shadow-layers": "Frames are stamped with the wall clock at write release (remote_writes.dispatch) or seeded at a non-negative age; the skew is 0 and never shifts, so no history observes a future stamp.",
+          "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated.",
+          "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated."
+        }
       }
     },
     {
@@ -737,6 +793,34 @@
         "kind": "mapped",
         "mutant": "M35",
         "text": "M35 is the native twin of cache-rules.qnt deadlinePendingAt becoming inclusive, as measured by dialcache-rule-checks.qnt sourceBoundaryIsExclusive: both ports accept a settlement observed at exactly the elapsed deadline. Timer-delivered regressions do not distinguish it from the unchanged timer path, so the effects jumpClock histories (effects/lateReadCannotBecomeHitTest, lateReadRejectionUsesDeadlineCategoryTest and the late-resolve and late-reject witnesses) are the expected evidence."
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "lateSourceResultIsADeadlineErrorTest",
+        "failure": "s.o.calls == List(DEADLINE_ERROR) and s.o.dumps == 0 and errorReasons == List(\"fallback\") and amounts(\"fallback\") == List(10)",
+        "family": "inclusive-deadline-boundary",
+        "profiles": [
+          "formal/dialcache-rule-checks.qnt",
+          "source-budgets",
+          "independent",
+          "shadow-layers",
+          "recovery",
+          "admission",
+          "shadow",
+          "effects",
+          "dark-layers",
+          "policy",
+          "recovery-read"
+        ],
+        "exclusions": {
+          "core": "This profile does not import cache-rules.qnt and has no timed source or read operation.",
+          "scope": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
+          "layers": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
+          "local-failure": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
+          "runtime-boundaries": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
+          "local-clock": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry."
+        },
+        "model": "formal/dialcache-effects-conformance.qnt"
       }
     },
     {
@@ -1117,7 +1201,42 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M33",
-        "text": "Same native fault as source-deadline-epoch: M33 judges a source settlement against a budget anchored at the clock origin rather than the source start, which is kernel/deadlines.qnt due registering a deadline at the bare budget instead of the current instant plus the budget, so every read and loader deadline is measured from the origin. independent/staggeredSourceStartsKeepIndependentBudgetsTest is the expected evidence in both ports."
+        "text": "M33 judges a source settlement against the clock origin instead of the source start. kernel/deadlines.qnt due makes the same origin mistake when registering a deadline; independentSourceOriginsMatchContract independently checks held-read/loader origins. The shared held-policy history exposes the consequence: a source starting after 100 ms keeps its full 10 ms budget and both callers return its accepted value.",
+        "evidence": {
+          "history": "source-budgets/heldPolicyDoesNotSpendSourceBudgetTest",
+          "step": 7,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "heldPolicyDoesNotSpendSourceBudgetTest",
+        "model": "formal/dialcache-source-budgets-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1",
+        "family": "source-budget-starts-with-source",
+        "profiles": [
+          "formal/dialcache-independent-connection.qnt",
+          "effects",
+          "recovery",
+          "shadow",
+          "independent",
+          "shadow-layers",
+          "source-budgets"
+        ],
+        "exclusions": {
+          "core": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "policy": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "layers": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "recovery-read": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "local-failure": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "runtime-boundaries": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "local-clock": "This profile does not import formal/kernel/deadlines.qnt; the mutation is outside its executable closure.",
+          "scope": "Request-only sources have no deadline or elapsed clock; diagnostics imports the deadline module without invoking its registration transition. All 14 named runs and all six scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps.",
+          "admission": "Only served-hit shadow jobs are budgeted. The named timeout histories time jobs admitted at elapsed zero, then check retained capacity; the invariants check ownership and lifecycle, not each later job's deadline origin. All eight named runs and all nine scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps.",
+          "dark-layers": "The named source/job timeout history starts both at elapsed zero. The scheduled checks validate deadline ownership, cleanup and failure attribution, without independently comparing registration time with the work's own start. All 18 named runs and all 18 scheduled invariants pass with the wrong-origin fault at 2000 samples by 40 steps."
+        }
       }
     },
     {
@@ -1557,7 +1676,42 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M51",
-        "text": "M51 is the native twin of cohort-boundaries.qnt cohortAdmits becoming inclusive: both ports admit a key whose cohort sample equals the configured ramp. The rampVectors pin hash samples, not admission, so detection is behavioral through runtime-boundaries/localCohortEqualityBypassesBeforeAboveSampleCachesTest and remoteCohortEqualityBypassesBeforeAboveSampleCachesTest, whose fixture ramps equal the driver key's FNV numerators."
+        "text": "M51 is the native twin of cohort-boundaries.qnt cohortAdmits becoming inclusive: both ports admit a key whose cohort sample equals the configured ramp. The rampVectors pin hash samples, not admission, so detection is behavioral through runtime-boundaries/localCohortEqualityBypassesBeforeAboveSampleCachesTest and remoteCohortEqualityBypassesBeforeAboveSampleCachesTest, whose fixture ramps equal the driver key's FNV numerators.",
+        "evidence": {
+          "history": "runtime-boundaries/localCohortEqualityLeavesNoValueForLaterAdmissionTest",
+          "step": 7,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "localCohortEqualityLeavesNoValueForLaterAdmissionTest",
+        "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2",
+        "family": "strict-cohort-equality",
+        "profiles": [
+          "formal/dialcache-key-protocol.qnt",
+          "runtime-boundaries",
+          "shadow-layers"
+        ],
+        "exclusions": {
+          "core": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "effects": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "recovery": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "policy": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "shadow": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "scope": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "admission": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "independent": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "recovery-read": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "local-failure": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "local-clock": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "source-budgets": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison.",
+          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/cohort-boundaries.qnt; its configured layer policy has no affected comparison."
+        }
       }
     },
     {
@@ -2278,7 +2432,40 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M51",
-        "text": "Same native fault as cohort-inclusive-threshold: M51 makes the serving-layer cohort comparison inclusive in both ports, which is kernel/runtime-policy.qnt admits inlining an inclusive comparison in place of cohortAdmits. runtime-boundaries/localCohortEqualityBypassesBeforeAboveSampleCachesTest and remoteCohortEqualityBypassesBeforeAboveSampleCachesTest are the expected evidence in both ports."
+        "text": "Same native fault as cohort-inclusive-threshold: M51 makes the serving-layer cohort comparison inclusive in both ports, which is kernel/runtime-policy.qnt admits inlining an inclusive comparison in place of cohortAdmits. runtime-boundaries/localCohortEqualityBypassesBeforeAboveSampleCachesTest and remoteCohortEqualityBypassesBeforeAboveSampleCachesTest are the expected evidence in both ports.",
+        "evidence": {
+          "history": "runtime-boundaries/localCohortEqualityLeavesNoValueForLaterAdmissionTest",
+          "step": 7,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "localCohortEqualityLeavesNoValueForLaterAdmissionTest",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2",
+        "family": "strict-cohort-equality",
+        "profiles": [
+          "runtime-boundaries"
+        ],
+        "exclusions": {
+          "core": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "effects": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "recovery": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "policy": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "shadow": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "scope": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "admission": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "independent": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "recovery-read": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "local-failure": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "shadow-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "local-clock": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "source-budgets": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison."
+        }
       }
     },
     {
@@ -2292,7 +2479,40 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M27",
-        "text": "M27 is the native twin of kernel/runtime-policy.qnt resolve dropping the baseline coalesce condition from its inherit-sharing disjunct: both ports capture the operation's coalesce default as true, so an omitted runtime leaf or a null provider inherits sharing over a configured false. runtime-boundaries/inheritedFalseKeepsIndependentMemoizingSourcesTest and the independent profile replays whose fixture sets coalesce false are the expected evidence."
+        "text": "M27 is the native twin of kernel/runtime-policy.qnt resolve dropping the baseline coalesce condition from its inherit-sharing disjunct: both ports capture the operation's coalesce default as true, so an omitted runtime leaf or a null provider inherits sharing over a configured false. runtime-boundaries/inheritedFalseKeepsIndependentMemoizingSourcesTest and the independent profile replays whose fixture sets coalesce false are the expected evidence.",
+        "evidence": {
+          "history": "runtime-boundaries/inheritedFalseStartsBothSourcesBeforeSettlementTest",
+          "step": 4,
+          "fields": [
+            "o.loaders"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "inheritedFalseStartsBothSourcesBeforeSettlementTest",
+        "failure": "s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2",
+        "family": "inherited-sharing-policy",
+        "profiles": [
+          "runtime-boundaries"
+        ],
+        "exclusions": {
+          "core": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "effects": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "recovery": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "policy": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "shadow": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "scope": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "admission": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "independent": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "recovery-read": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "local-failure": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "shadow-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "local-clock": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "source-budgets": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison.",
+          "dark-layers": "This profile does not evaluate the runtime cohort/sharing resolver from formal/kernel/runtime-policy.qnt; its configured layer policy has no affected comparison."
+        }
       }
     },
     {
@@ -2517,7 +2737,40 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M26",
-        "text": "M26 is the native twin of kernel/flights.qnt forgetSource leaving processFlights unchanged instead of clearing the settled index: neither port removes a settled process flight from the registry, so later same-key callers join finished work. Joiners get the settled flight's stale outcome rather than stranding, since a blocked follower would deadlock synctest; source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest and policy/independentCompletionKeepsRegisteredLeaderTest are the evidence."
+        "text": "M26 is the native twin of kernel/flights.qnt forgetSource leaving processFlights unchanged instead of clearing the settled index: neither port removes a settled process flight from the registry, so later same-key callers join finished work. Joiners get the settled flight's stale outcome rather than stranding, since a blocked follower would deadlock synctest; source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest and policy/independentCompletionKeepsRegisteredLeaderTest are the evidence.",
+        "evidence": {
+          "history": "source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest",
+          "step": 7,
+          "fields": [
+            "o.calls"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "defaultSourceBudgetExpiresAtSixtySecondsTest",
+        "failure": "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2",
+        "family": "settled-process-flight-cleanup",
+        "profiles": [
+          "effects",
+          "recovery",
+          "policy",
+          "admission",
+          "layers",
+          "recovery-read",
+          "local-failure",
+          "runtime-boundaries",
+          "local-clock",
+          "source-budgets",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "core": "The core model does not import the flights library.",
+          "scope": "Only request flights are registered; processFlights stays empty, so removing process-flight cleanup changes no state.",
+          "shadow": "This single-execution projection cannot admit a second source after its one source/job lifetime; its scheduled properties do not observe the settled process registry.",
+          "independent": "Every caller has coalesce false and registers no process flight, so processFlights remains empty.",
+          "shadow-layers": "Coalescing is disabled for its independent-source fixture, so no process flight is registered."
+        }
       }
     },
     {
@@ -3032,12 +3285,8 @@
     }
   ],
   "reproducerBacklog": [
-    "recovery-inclusive-maximum",
-    "recovery-future-candidate",
     "local-precise-grid",
-    "source-inclusive-deadline",
     "profile-source-wrong-owner",
-    "independent-source-wrong-clock",
     "independent-source-wrong-owner",
     "core-unhealthy-local-read-hits",
     "core-tracked-fallback-warms-local",
@@ -3049,13 +3298,9 @@
     "redis-protocol-untracked-fence",
     "invalidation-transition-cutoff-moves-backwards",
     "invalidation-transition-inclusive-buffer-limit",
-    "cohort-inclusive-threshold",
     "scope-late-source-repopulates-closed-memo",
     "layers-late-memo-into-closed-scope",
-    "independent-fresh-frame-retained",
-    "runtime-boundaries-inclusive-cohort",
-    "runtime-boundaries-inherited-sharing-ignores-default",
-    "source-budgets-settled-flight-stays-registered"
+    "independent-fresh-frame-retained"
   ],
   "nativeMutantBacklog": [
     "invalidation-transition-cutoff-moves-backwards",
