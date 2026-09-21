@@ -21,10 +21,11 @@ jobs:
   exploration:
     if: (github.event_name == 'schedule' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.exploration)
     runs-on: ubuntu-latest
-    # Run 34660598461 took 28 minutes. Hosted runners vary by about 2x between
-    # runs (run 34666226055 was 1.8x slower on every Quint phase), so every
-    # budget in this workflow leaves that headroom.
-    timeout-minutes: 60
+    # Run 35568655690 exhausted the old hour inside the expanded challenge
+    # campaign, before generation or native replay. Allow the model job's
+    # budget below plus time for the fresh corpus and both ports; individual
+    # evaluator and replay commands retain their own hang bounds.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -52,10 +53,10 @@ jobs:
     runs-on: ubuntu-latest
     # Shared-library challenges now execute the importing profiles' partitions,
     # including clean baselines and mutant checks cached by exact source closure.
-    # The earlier partition workload already approaches 60 minutes on hosted
-    # runners. Allow 120 minutes for the added profiles and shared faults while
-    # preserving every scheduled model check and partition measurement.
-    timeout-minutes: 120
+    # The expanded partition campaign was still running after an hour in
+    # run 35568655690. Leave room for the full campaign on slower runners
+    # without reducing models, histories or partitions.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
