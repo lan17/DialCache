@@ -27,7 +27,7 @@
     "formal/dialcache-shadow-layers-conformance.qnt": "76a1219307e707b713acc20998c0d9852fa64f782bf18c7c2c634eab74b1e5c9",
     "formal/dialcache-shadow-read-deadlines-conformance.qnt": "b43373789a9cbfd907b50c5ebb49dec738e3621eab8132d16a4101634ed0d9f2",
     "formal/dialcache-source-budgets-conformance.qnt": "fb9707785725add09358fb8c0c7cb764f86cd42e659ed1f4cc459fd5afe93574",
-    "formal/fixture-recipes.json": "e878149874c9afbc4a8eddfdb44458ec1246b37cb3fd94ff81a1676b203910f3",
+    "formal/fixture-recipes.json": "594d29610c37333f816846a3d8afebc0f8c0ae2726e343e2809db7d0dc57ec6e",
     "formal/generated-fixtures.mjs": "f73a527cbbc0178be167c11ff8ff21985f05976379ae4054d5f61caa889e34c2",
     "formal/kernel/adapter-replies.qnt": "490e1d65552a174f728aae973f92525ff616b0cf26253873c9fe1804aef7da7d",
     "formal/kernel/calls.qnt": "1fd63856061a9fa9c419b88a736b0d07bce9702eab8b347c936eaaf11f7b4eb3",

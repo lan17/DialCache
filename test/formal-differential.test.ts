@@ -221,7 +221,7 @@ describe("corpus differential comparison", () => {
   }, 30_000);
 
   it("selects the composed profiles by their kernel imports in either revision, following helper libraries, and lists every Quint source", () => {
-    expect(differential.composedProfiles(readExecution())).toEqual(["effects", "recovery", "policy", "shadow", "scope", "admission", "layers", "independent", "recovery-read", "local-failure", "runtime-boundaries", "shadow-layers", "local-clock", "source-budgets", "dark-layers"]);
+    expect(differential.composedProfiles(readExecution())).toEqual(["effects", "recovery", "policy", "shadow", "scope", "admission", "layers", "independent", "recovery-read", "local-failure", "runtime-boundaries", "shadow-layers", "local-clock", "source-budgets", "dark-layers", "shadow-read-deadlines"]);
     // A profile composed only at the reference (a rewrite off the library) is still selected.
     const referenceTree = mkdtempSync(join(tmpdir(), "differential-reference-"));
     const candidateTree = mkdtempSync(join(tmpdir(), "differential-candidate-"));
