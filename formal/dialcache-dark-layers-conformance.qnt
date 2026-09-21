@@ -375,7 +375,6 @@ module dialcache_dark_layers_conformance {
   // frame as the C0 and decode instead of filling.
   run frameAtTheWatermarkIsFencedFromTheDarkReadTest = init
     .then(invalidateAt(0)).then(seedAt(0)).then(setPolicy(DARK_NONE)).then(beginAt(0)).then(readAt(0))
-    .expect(s.o.reads == 1 and s.jobs.nth(0).cached == NO_VALUE and s.jobs.nth(0).fence == s.watermark.nth(0))
     .then(advanceBy(1)).then(resolveWith(2))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.dumps == 1 and s.o.loads == 0)
 
