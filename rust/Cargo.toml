@@ -21,6 +21,7 @@ prometheus = ["dep:prometheus"]
 [dependencies]
 futures = "0.3"
 parking_lot = "0.12"
+slab = "0.4"
 lru = "0.18"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }

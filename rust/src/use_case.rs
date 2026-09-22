@@ -13,8 +13,8 @@ use crate::engine::DialCache;
 use crate::error::{BoxError, ConfigError, Error};
 use crate::identity::{normalize_args, ArgValue, Identity, IntoKeyId};
 use crate::operation::{
-    downcast_value, erase_load, Comparator, ErasedOperation, Operation, Preview, RecoveryPredicate,
-    SourceBudget,
+    downcast_value, erase_load, Comparator, ErasedOperation, Operation, OperationMetadata, Preview,
+    RecoveryPredicate, SourceBudget,
 };
 use crate::policy::Policy;
 use crate::scope::Scope;
@@ -277,18 +277,21 @@ where
             }
         }
         self.cache.register_use_case(&self.use_case)?;
+        let (identity, metadata) = Operation {
+            identity: Identity::new(self.key_type, "", self.use_case).tracked(self.tracked),
+            policy: self.policy,
+            budget: self.budget,
+            codec,
+            comparator,
+            should_recover: self.should_recover,
+            preview,
+        }
+        .erase();
         Ok(UseCase {
             inner: Arc::new(UseCaseInner {
                 cache: self.cache,
-                key_type: self.key_type,
-                use_case: self.use_case,
-                tracked: self.tracked,
-                policy: self.policy,
-                budget: self.budget,
-                codec,
-                comparator,
-                should_recover: self.should_recover,
-                preview,
+                identity,
+                metadata,
                 key,
                 source,
             }),
@@ -335,15 +338,8 @@ where
 
 struct UseCaseInner<Args, T> {
     cache: DialCache,
-    key_type: String,
-    use_case: String,
-    tracked: bool,
-    policy: Policy,
-    budget: SourceBudget,
-    codec: Arc<dyn Codec<T>>,
-    comparator: Comparator<T>,
-    should_recover: Option<RecoveryPredicate>,
-    preview: Option<Preview<T>>,
+    identity: Identity,
+    metadata: Arc<OperationMetadata>,
     key: KeyFn<Args>,
     source: SourceFn<Args, T>,
 }
@@ -368,8 +364,8 @@ impl<Args, T> Clone for UseCase<Args, T> {
 impl<Args, T> std::fmt::Debug for UseCase<Args, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UseCase")
-            .field("key_type", &self.inner.key_type)
-            .field("use_case", &self.inner.use_case)
+            .field("key_type", &self.inner.identity.key_type)
+            .field("use_case", &self.inner.identity.use_case)
             .finish()
     }
 }
@@ -381,35 +377,19 @@ where
 {
     /// The operation name given at registration.
     pub fn use_case(&self) -> &str {
-        &self.inner.use_case
+        &self.inner.identity.use_case
     }
 
     /// The entity type given at registration.
     pub fn key_type(&self) -> &str {
-        &self.inner.key_type
+        &self.inner.identity.key_type
     }
 
     /// Get the value for `args` through the configured layers.
     pub async fn get(&self, scope: &Scope, args: Args) -> Result<Arc<T>, Error> {
         let inner = self.inner.clone();
-        let identity = Identity {
-            namespace: inner.cache.core.namespace.to_string(),
-            key_type: inner.key_type.clone(),
-            id: String::new(),
-            use_case: inner.use_case.clone(),
-            tracked: inner.tracked,
-            args: Vec::new(),
-        };
-        let parts = Operation {
-            identity: identity.clone(),
-            policy: inner.policy.clone(),
-            budget: inner.budget,
-            codec: inner.codec.clone(),
-            comparator: inner.comparator.clone(),
-            should_recover: inner.should_recover.clone(),
-            preview: inner.preview.clone(),
-        }
-        .erase();
+        let identity = inner.identity.clone();
+        let provider_identity = identity.clone();
         let provider_args = args.clone();
         let provider_inner = inner.clone();
         let identity_provider = Arc::new(move || -> Result<Identity, BoxError> {
@@ -418,20 +398,15 @@ where
             Ok(Identity {
                 id: spec.id,
                 args,
-                ..identity.clone()
+                ..provider_identity.clone()
             })
         });
         let source_inner = inner.clone();
         let load = erase_load(move |scope: Scope| (source_inner.source)(scope, args.clone()));
         let erased = ErasedOperation {
-            identity: parts.identity,
+            identity,
             identity_provider: Some(identity_provider),
-            policy: parts.policy,
-            budget: parts.budget,
-            codec: parts.codec,
-            compare: parts.compare,
-            should_recover: parts.should_recover,
-            preview: parts.preview,
+            metadata: inner.metadata.clone(),
             load,
         };
         let value = inner.cache.execute(scope, erased).await?;

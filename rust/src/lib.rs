@@ -10,9 +10,12 @@
 #![warn(missing_debug_implementations)]
 #![warn(missing_docs)]
 
+mod blocking;
 pub mod cancel;
 pub mod clock;
 pub mod codec;
+#[cfg(test)]
+mod cpu_tests;
 pub mod datadog;
 mod deadline;
 mod engine;

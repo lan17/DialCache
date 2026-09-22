@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use futures::FutureExt;
 use parking_lot::Mutex;
+use slab::Slab;
 
 use crate::error::Error;
 use crate::local::StoredValue;
@@ -17,7 +18,7 @@ use crate::runtime::Runtime;
 
 struct SettledState<T> {
     value: Option<T>,
-    wakers: Vec<Waker>,
+    wakers: Slab<Waker>,
 }
 
 /// A value that is set at most once and observed by any number of waiters.
@@ -38,7 +39,7 @@ impl<T: Clone> Settled<T> {
         Settled {
             inner: Arc::new(Mutex::new(SettledState {
                 value: None,
-                wakers: Vec::new(),
+                wakers: Slab::new(),
             })),
         }
     }
@@ -53,7 +54,7 @@ impl<T: Clone> Settled<T> {
             state.value = Some(value);
             std::mem::take(&mut state.wakers)
         };
-        for waker in wakers {
+        for (_, waker) in wakers {
             waker.wake();
         }
         true
@@ -67,26 +68,54 @@ impl<T: Clone> Settled<T> {
     pub(crate) fn wait(&self) -> Wait<T> {
         Wait {
             settled: self.clone(),
+            registration: None,
         }
     }
 }
 
 pub(crate) struct Wait<T> {
     settled: Settled<T>,
+    registration: Option<usize>,
 }
 
 impl<T: Clone> Future for Wait<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
-        let mut state = self.settled.inner.lock();
+        let this = self.get_mut();
+        let mut state = this.settled.inner.lock();
         if let Some(value) = &state.value {
             return Poll::Ready(value.clone());
         }
-        if !state.wakers.iter().any(|w| w.will_wake(cx.waker())) {
-            state.wakers.push(cx.waker().clone());
-        }
+        let replaced = match this.registration {
+            Some(slot) => Some(std::mem::replace(
+                &mut state.wakers[slot],
+                cx.waker().clone(),
+            )),
+            None => {
+                this.registration = Some(state.wakers.insert(cx.waker().clone()));
+                None
+            }
+        };
+        drop(state);
+        drop(replaced);
         Poll::Pending
+    }
+}
+
+impl<T> Drop for Wait<T> {
+    fn drop(&mut self) {
+        let removed = {
+            let mut state = self.settled.inner.lock();
+            if state.value.is_none() {
+                self.registration
+                    .take()
+                    .map(|slot| state.wakers.remove(slot))
+            } else {
+                None
+            }
+        };
+        drop(removed);
     }
 }
 
@@ -189,5 +218,62 @@ impl Flight {
 
     pub(crate) fn followers(&self) -> usize {
         self.followers.load(Ordering::Relaxed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+    use std::task::Wake;
+
+    #[derive(Default)]
+    struct Counter(AtomicUsize);
+    impl Wake for Counter {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn many_waiters_replace_and_remove_their_own_registration() {
+        let cell = Settled::new();
+        let mut waiters: Vec<_> = (0..10_000).map(|_| cell.wait()).collect();
+        let counters: Vec<_> = (0..10_000).map(|_| Arc::new(Counter::default())).collect();
+        for (wait, counter) in waiters.iter_mut().zip(&counters) {
+            let waker = Waker::from(counter.clone());
+            for _ in 0..3 {
+                assert!(Pin::new(&mut *wait)
+                    .poll(&mut Context::from_waker(&waker))
+                    .is_pending());
+            }
+        }
+        let replacement = Arc::new(Counter::default());
+        let waker = Waker::from(replacement.clone());
+        assert!(Pin::new(&mut waiters[0])
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending());
+        // Cancellation frees slots; the surviving waiter must not remove a reused slot.
+        waiters.truncate(5_000);
+        let mut later = cell.wait();
+        assert!(Pin::new(&mut later)
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending());
+        assert!(cell.settle(7));
+        assert!(!cell.settle(8));
+        assert_eq!(replacement.0.load(Ordering::SeqCst), 2);
+        for (i, counter) in counters.iter().enumerate() {
+            assert_eq!(
+                counter.0.load(Ordering::SeqCst),
+                usize::from(i > 0 && i < 5_000)
+            );
+        }
+        for mut wait in waiters {
+            assert_eq!(
+                Pin::new(&mut wait).poll(&mut Context::from_waker(&waker)),
+                Poll::Ready(7)
+            );
+        }
+        drop(later); // Settlement removed registrations; stale indices must be ignored.
     }
 }

@@ -1,6 +1,6 @@
 //! Operations: the typed description of one cached call and its erased form.
 
-use std::any::Any;
+use std::any::TypeId;
 use std::sync::Arc;
 
 use futures::future::BoxFuture;
@@ -48,7 +48,7 @@ pub type Preview<T> = Arc<dyn Fn(&T) -> Option<String> + Send + Sync>;
 
 /// One inline cached call: its identity, static policy, budget and codecs.
 ///
-/// Registered use cases build this for every call; use it directly with
+/// Use it directly with
 /// [`DialCache::get_or_load`](crate::DialCache::get_or_load) when a stable use
 /// case is declared at the call site instead of being registered.
 pub struct Operation<T> {
@@ -159,12 +159,12 @@ impl<T: Send + Sync + 'static> Operation<T> {
         self
     }
 
-    pub(crate) fn erase(self) -> ErasedParts {
+    pub(crate) fn erase(self) -> (Identity, Arc<OperationMetadata>) {
         let codec = self.codec;
         let comparator = self.comparator;
         let preview = self.preview;
-        ErasedParts {
-            identity: self.identity,
+        let metadata = OperationMetadata {
+            value_type: TypeId::of::<T>(),
             policy: self.policy,
             budget: self.budget,
             codec: Arc::new(TypedCodec { codec }),
@@ -180,7 +180,8 @@ impl<T: Send + Sync + 'static> Operation<T> {
                     value.downcast_ref::<T>().and_then(|v| preview(v))
                 }) as Arc<dyn Fn(&StoredValue) -> Option<String> + Send + Sync>
             }),
-        }
+        };
+        (self.identity, Arc::new(metadata))
     }
 }
 
@@ -192,8 +193,9 @@ pub(crate) type ErasedCompare =
 pub(crate) type ErasedPreview = Arc<dyn Fn(&StoredValue) -> Option<String> + Send + Sync>;
 pub(crate) type IdentityProvider = Arc<dyn Fn() -> Result<Identity, BoxError> + Send + Sync>;
 
-pub(crate) struct ErasedParts {
-    pub identity: Identity,
+/// Immutable adapters and policy, shared by every registered invocation.
+pub(crate) struct OperationMetadata {
+    pub value_type: TypeId,
     pub policy: Policy,
     pub budget: SourceBudget,
     pub codec: Arc<dyn ErasedCodec>,
@@ -206,12 +208,7 @@ pub(crate) struct ErasedParts {
 pub(crate) struct ErasedOperation {
     pub identity: Identity,
     pub identity_provider: Option<IdentityProvider>,
-    pub policy: Policy,
-    pub budget: SourceBudget,
-    pub codec: Arc<dyn ErasedCodec>,
-    pub compare: ErasedCompare,
-    pub should_recover: Option<RecoveryPredicate>,
-    pub preview: Option<ErasedPreview>,
+    pub metadata: Arc<OperationMetadata>,
     pub load: ErasedLoad,
 }
 
@@ -265,6 +262,3 @@ pub(crate) fn downcast_value<T: Send + Sync + 'static>(
         )))
     })
 }
-
-#[allow(dead_code)]
-fn _assert_any(_: &dyn Any) {}

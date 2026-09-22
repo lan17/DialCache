@@ -595,7 +595,15 @@ impl DialCache {
         self.invalidate_identity(identity, future_buffer_ms).await
     }
 
-    async fn invalidate_identity(
+    /// Advance the watermark for the entity named by `identity` after its
+    /// source mutation commits. An empty namespace inherits this instance's;
+    /// an explicit namespace is preserved, exactly as in `get_or_load`.
+    ///
+    /// All use cases and argument variants share the entity's watermark.
+    /// `tracked` is ignored: this operation always invalidates tracked remote
+    /// values. Local entries and already acquired snapshots retain their lifetimes.
+    /// Requires a remote adapter; mutation failures are returned to the caller.
+    pub async fn invalidate_identity(
         &self,
         mut identity: Identity,
         future_buffer_ms: u64,
@@ -685,16 +693,11 @@ impl DialCache {
         F: Fn(Scope) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<T, BoxError>> + Send + 'static,
     {
-        let parts = operation.erase();
+        let (identity, metadata) = operation.erase();
         let erased = ErasedOperation {
-            identity: parts.identity,
+            identity,
             identity_provider: None,
-            policy: parts.policy,
-            budget: parts.budget,
-            codec: parts.codec,
-            compare: parts.compare,
-            should_recover: parts.should_recover,
-            preview: parts.preview,
+            metadata,
             load: erase_load(load),
         };
         let value = self.execute(scope, erased).await?;
@@ -740,10 +743,11 @@ impl DialCache {
 
 pub(crate) fn validate_operation(operation: &ErasedOperation) -> Result<(), Error> {
     operation
+        .metadata
         .policy
         .validate()
         .map_err(|e| ConfigError::invalid(e.to_string()))?;
-    if let crate::operation::SourceBudget::Millis(ms) = operation.budget {
+    if let crate::operation::SourceBudget::Millis(ms) = operation.metadata.budget {
         if !(1..=MAX_DEADLINE_MS).contains(&ms) {
             return Err(ConfigError::invalid(format!(
                 "DialCache source budget must be a positive integer no greater than {MAX_DEADLINE_MS} ms"

@@ -29,6 +29,7 @@ use crate::protocol::{
 };
 use crate::remote::{Frame, ReadContext, ReadRequest, ReadResult, WriteRequest};
 use crate::scope::{Owner, Scope};
+use crate::shadow::ShadowWork;
 
 /// The raw outcome of one adapter read.
 pub(crate) type RawRead = Result<ReadResult, SharedError>;
@@ -204,7 +205,7 @@ pub(crate) async fn run(core: Arc<Core>, scope: Scope, op: Arc<ErasedOperation>)
     };
     let resolved = overlay.and_then(|overlay| {
         resolve_policy(
-            &op.policy,
+            &op.metadata.policy,
             overlay.as_ref(),
             &keys.logical,
             PolicyDefaults {
@@ -327,7 +328,7 @@ async fn source_with_budget(
 ) -> ValueResult {
     let clock = core.clock.clone();
     let start = clock.elapsed();
-    let budget = op.budget.millis();
+    let budget = op.metadata.budget.millis();
     let pending: Settled<ValueResult> = start_pending(
         core.runtime.as_ref(),
         {
@@ -423,18 +424,22 @@ impl Execution {
             labels: self.labels(Layer::RequestLocal),
             seconds: self.seconds_since(start),
         });
-        if let (true, Some(value)) = (live, memo) {
-            return Ok(value);
-        }
+        let reason = match (live, memo) {
+            (true, Some(value)) if value.as_ref().type_id() == self.op.metadata.value_type => {
+                return Ok(value);
+            }
+            (true, Some(_)) => MissReason::Unclassified,
+            _ => MissReason::ValueAbsent,
+        };
         self.emit(Event::Miss {
             labels: self.labels(Layer::RequestLocal),
-            reason: MissReason::ValueAbsent,
+            reason,
         });
         let result = self.clone().shared(Layer::RequestLocal).await;
         if let Ok(value) = &result {
             let displaced = {
                 let mut state = owner.state.lock();
-                if state.live {
+                if state.live && value.as_ref().type_id() == self.op.metadata.value_type {
                     state.memo.insert(self.keys.logical.clone(), value.clone())
                 } else {
                     None
@@ -578,13 +583,17 @@ impl Execution {
                         labels: self.labels(Layer::Local),
                         seconds: self.seconds_since(start),
                     });
-                    if let Some(value) = found {
-                        return Ok(value);
-                    }
+                    let reason = match found {
+                        Some(value) if value.as_ref().type_id() == self.op.metadata.value_type => {
+                            return Ok(value);
+                        }
+                        Some(_) => MissReason::Unclassified,
+                        None => MissReason::ValueAbsent,
+                    };
                     local_miss = true;
                     self.emit(Event::Miss {
                         labels: self.labels(Layer::Local),
-                        reason: MissReason::ValueAbsent,
+                        reason,
                     });
                 }
             }
@@ -801,7 +810,7 @@ impl Execution {
                         });
                         RemoteValue::Retained { frame }
                     } else {
-                        match self.decode(&frame, Layer::Remote).await {
+                        match self.decode(&frame, Layer::Remote, None).await {
                             Ok(value) => RemoteValue::Hit { value, frame },
                             Err(_) => {
                                 self.emit(Event::Miss {
@@ -827,9 +836,29 @@ impl Execution {
         &self,
         frame: &Frame,
         layer: Layer,
+        shadow: Option<&ShadowWork>,
     ) -> Result<StoredValue, BoxError> {
         let decompress_started = self.elapsed();
-        let expanded = decompress_payload(frame.payload.clone(), MAX_DECOMPRESSED_BYTES);
+        let payload = frame.payload.clone();
+        let expanded = if payload.binary && matches!(payload.bytes.first(), Some(1 | 2)) {
+            let shadow = shadow.cloned();
+            match crate::blocking::run(self.core.runtime.as_ref(), move || {
+                if shadow.as_ref().is_some_and(ShadowWork::expired) {
+                    return Err("shadow deadline elapsed before decompression".into());
+                }
+                Ok(decompress_payload(payload, MAX_DECOMPRESSED_BYTES))
+            })
+            .await
+            {
+                Ok(expanded) => expanded,
+                Err(error) => {
+                    self.error_event(layer, ErrorKind::Compression, false);
+                    return Err(error);
+                }
+            }
+        } else {
+            decompress_payload(payload, MAX_DECOMPRESSED_BYTES)
+        };
         if let Some(outcome) = expanded.outcome {
             self.emit(Event::Compression {
                 labels: self.labels(layer),
@@ -841,8 +870,11 @@ impl Execution {
                 seconds: self.seconds_since(decompress_started),
             });
         }
+        if shadow.is_some_and(ShadowWork::expired) {
+            return Err("shadow deadline elapsed after decompression".into());
+        }
         let start = self.elapsed();
-        let codec = self.op.codec.clone();
+        let codec = self.op.metadata.codec.clone();
         let decoded = match AssertUnwindSafe(async { codec.decode(expanded.payload).await })
             .catch_unwind()
             .await
@@ -871,13 +903,13 @@ impl Execution {
     }
 
     /// Prepare and dispatch one remote write. `Ok(false)` means the write was
-    /// fenced or refused by `allowed`; `Ok(true)` means it was dispatched.
+    /// fenced or its shadow deadline expired; `Ok(true)` means it was dispatched.
     pub(crate) async fn put_remote(
         &self,
         value: &StoredValue,
         fence: Option<u64>,
         layer: Layer,
-        allowed: Option<&(dyn Fn() -> bool + Send + Sync)>,
+        shadow: Option<&ShadowWork>,
     ) -> Result<bool, BoxError> {
         let fence = if self.identity.tracked { fence } else { None };
         if let Some(fence) = fence {
@@ -887,7 +919,7 @@ impl Execution {
             }
         }
         let start = self.elapsed();
-        let codec = self.op.codec.clone();
+        let codec = self.op.metadata.codec.clone();
         let encoded = match AssertUnwindSafe(async { codec.encode(value).await })
             .catch_unwind()
             .await
@@ -904,6 +936,9 @@ impl Execution {
             seconds: self.seconds_since(start),
         });
         let mut payload = encoded?;
+        if shadow.is_some_and(ShadowWork::expired) {
+            return Ok(false);
+        }
         self.emit(Event::Size {
             labels: self.labels(layer),
             bytes: payload.len() as u64,
@@ -911,11 +946,28 @@ impl Execution {
         match &self.core.compression {
             Some(config) => {
                 let compress_started = self.elapsed();
-                let compressed = match compress_payload(payload, config, MAX_DECOMPRESSED_BYTES) {
+                let config = *config;
+                let offload = payload.len() >= 64 * 1024
+                    || (config.level >= 10 && payload.len() >= config.threshold_bytes);
+                let result = if offload {
+                    let shadow = shadow.cloned();
+                    crate::blocking::run(self.core.runtime.as_ref(), move || {
+                        if shadow.as_ref().is_some_and(ShadowWork::expired) {
+                            return Err("shadow deadline elapsed before compression".into());
+                        }
+                        compress_payload(payload, &config, MAX_DECOMPRESSED_BYTES)
+                            .map_err(|e| Box::new(e) as BoxError)
+                    })
+                    .await
+                } else {
+                    compress_payload(payload, &config, MAX_DECOMPRESSED_BYTES)
+                        .map_err(|e| Box::new(e) as BoxError)
+                };
+                let compressed = match result {
                     Ok(compressed) => compressed,
                     Err(error) => {
                         self.error_event(layer, ErrorKind::Compression, false);
-                        return Err(Box::new(error));
+                        return Err(error);
                     }
                 };
                 payload = compressed.payload;
@@ -947,10 +999,8 @@ impl Execution {
             labels: self.labels(layer),
             bytes: payload.len() as u64,
         });
-        if let Some(allowed) = allowed {
-            if !allowed() {
-                return Ok(false);
-            }
+        if shadow.is_some_and(ShadowWork::expired) {
+            return Ok(false);
         }
         let stamp = self.write_timestamp(layer)?;
         if let Some(fence) = fence {
@@ -1002,6 +1052,7 @@ impl Execution {
     pub(crate) fn can_recover(&self, error: &Error) -> bool {
         let predicate = self
             .op
+            .metadata
             .should_recover
             .clone()
             .or_else(|| self.core.should_recover.clone());
@@ -1046,7 +1097,7 @@ impl Execution {
             self.recovery_event(RecoveryOutcome::Miss, None);
             return None;
         }
-        let value = match self.decode(frame, Layer::Remote).await {
+        let value = match self.decode(frame, Layer::Remote, None).await {
             Ok(value) => value,
             Err(error) => {
                 self.core.log(LogEvent::RecoveryDecodeFailed(error));

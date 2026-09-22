@@ -69,6 +69,17 @@ impl Runtime for InvocationRuntime {
             .defer(Box::pin(InvocationFuture::new(current_invocation(), task)));
     }
 
+    fn spawn_blocking(
+        &self,
+        task: Box<dyn FnOnce() + Send + 'static>,
+    ) -> Result<(), dialcache::BoxError> {
+        let owner = current_invocation();
+        self.0.spawn_blocking(Box::new(move || {
+            let _restore = RestoreInvocation(INVOCATION.replace(owner));
+            task();
+        }))
+    }
+
     fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
         self.0.sleep(duration)
     }

@@ -502,23 +502,43 @@ impl LogEvent {
 impl fmt::Display for LogEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LogEvent::KeyConstructionFailed(e) => write!(f, "Could not construct DialCache key: {e}"),
-            LogEvent::PolicyResolutionFailed(e) => write!(f, "Could not resolve DialCache key config: {e}"),
+            LogEvent::KeyConstructionFailed(e) => {
+                write!(f, "Could not construct DialCache key: {e}")
+            }
+            LogEvent::PolicyResolutionFailed(e) => {
+                write!(f, "Could not resolve DialCache key config: {e}")
+            }
             LogEvent::LocalReadFailed(e) => write!(f, "Error getting value from local cache: {e}"),
             LogEvent::LocalWriteFailed(e) => write!(f, "Error putting value in local cache: {e}"),
             LogEvent::RemoteReadFailed(e) => write!(f, "Error getting value from Redis cache: {e}"),
             LogEvent::RemoteWriteFailed(e) => write!(f, "Error putting value in Redis cache: {e}"),
             LogEvent::RecoveryPredicateFailed(e) => {
-                write!(f, "DialCache stale recovery predicate failed; recovery was denied: {e}")
+                write!(
+                    f,
+                    "DialCache stale recovery predicate failed; recovery was denied: {e}"
+                )
             }
-            LogEvent::RecoveryDecodeFailed(e) => write!(f, "Error using retained Redis value during stale recovery: {e}"),
-            LogEvent::ShadowFillFailed(e) => write!(f, "Error populating Redis from DialCache shadow work: {e}"),
-            LogEvent::ShadowMismatch(d) => write!(
+            LogEvent::RecoveryDecodeFailed(e) => write!(
                 f,
-                "DialCache shadow validation mismatch: namespace={} useCase={} keyType={} cacheKey={}",
-                d.namespace, d.use_case, d.key_type, d.cache_key
+                "Error using retained Redis value during stale recovery: {e}"
             ),
-            LogEvent::InvalidationFailed(e) => write!(f, "Error writing DialCache invalidation watermark: {e}"),
+            LogEvent::ShadowFillFailed(e) => {
+                write!(f, "Error populating Redis from DialCache shadow work: {e}")
+            }
+            LogEvent::ShadowMismatch(d) => {
+                write!(f, "DialCache shadow validation mismatch: namespace={} useCase={} keyType={} cacheKey={}",
+                    d.namespace, d.use_case, d.key_type, d.cache_key)?;
+                if let Some(value) = &d.cached_value_json {
+                    write!(f, " cachedValue={value}")?;
+                }
+                if let Some(value) = &d.source_value_json {
+                    write!(f, " sourceValue={value}")?;
+                }
+                Ok(())
+            }
+            LogEvent::InvalidationFailed(e) => {
+                write!(f, "Error writing DialCache invalidation watermark: {e}")
+            }
         }
     }
 }

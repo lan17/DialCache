@@ -19,6 +19,20 @@ pub trait Runtime: Send + Sync + 'static {
     fn defer(&self, task: BoxFuture<'static, ()>) {
         self.spawn(task)
     }
+    /// Admit synchronous CPU work without blocking the async executor.
+    ///
+    /// The default uses a process-wide pool of two threads and two queued jobs.
+    /// A full queue or thread-creation failure returns an error; cache plumbing
+    /// fails open. Once admitted, a job owns its resources until execution or
+    /// destruction, independently of the future waiting for its result.
+    /// Custom runtimes may override this with their own bounded CPU executor.
+    /// A controlled test runtime may queue the job for deterministic execution.
+    fn spawn_blocking(
+        &self,
+        task: Box<dyn FnOnce() + Send + 'static>,
+    ) -> Result<(), crate::BoxError> {
+        crate::blocking::submit(task)
+    }
     /// A timer that completes once `duration` has passed.
     fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()>;
 }

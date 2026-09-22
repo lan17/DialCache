@@ -49,7 +49,10 @@ async fn main() -> Result<(), BoxError> {
 A policy enables no cache layers by default. The example opts into request
 caching and a 30-second process-local cache; register the use case once at
 startup and create a scope for each request. `Arc<T>` shares one cached value
-without requiring `T: Clone`.
+without requiring `T: Clone`. Settled memory entries holding another Rust type
+are misses; compatible remote JSON may still decode into the requested type.
+Simultaneous calls sharing a key also share one source result, so an incompatible
+coalesced follower returns a type error. Use a consistent value type per key.
 
 Run the complete [basic example](./examples/basic.rs), which demonstrates a
 structured value, an asynchronous source and reuse across two request scopes:
@@ -142,7 +145,19 @@ writes and surfaced invalidation errors. Writes are one native `SET`;
 invalidation dispatches `EVALSHA` and retries once with `EVAL`. No value write
 creates or extends a watermark. `DialCache::invalidate` affects shared remote
 authority; other processes' local entries and already acquired snapshots
-retain the documented lifetime rules.
+retain the documented lifetime rules. Inline operations with an explicit namespace
+can invalidate that same entity through `invalidate_identity`:
+
+```rust,ignore
+let identity = Identity::new("user", 42, "displayName")
+    .namespace("tenant-b").tracked(true);
+// After committing the source mutation:
+cache.invalidate_identity(identity, 0).await?;
+```
+
+An empty namespace inherits the cache instance's namespace. Invalidation covers
+all tracked use cases and argument variants for that namespace, entity type and
+ID; the identity's `tracked` flag does not restrict the maintenance operation.
 
 `Clock` separates wall time from elapsed time; `Runtime` supplies detached
 task admission and timers. The defaults are `SystemClock` (aligned to the
@@ -171,7 +186,20 @@ sentinel decodes as JSON `null`, so `Option<T>` destinations read it as
 `None`. Compression defaults to a 4,096-byte threshold and zstd level 3;
 `disable_compression` stores payloads raw while reads still accept compressed
 entries. The wire contract requires interoperable decompression, not identical
-compressed bytes.
+compressed bytes. The async engine dispatches payload compression at 64 KiB or
+larger (and compression at levels 10–22 once the configured threshold is met)
+and every zstd decompression through `Runtime::spawn_blocking`. Small raw
+payloads remain inline; synchronous protocol helpers remain synchronous.
+
+The default CPU executor is shared across cache instances: two worker threads
+and two queued jobs. Admission never waits for queue space. Saturation or worker
+creation failure fails open: a read falls through to the source, and a failed
+compression skips the write while preserving the source result. Custom runtimes
+may supply their own bounded CPU executor. `StepRuntime` queues these jobs on its
+controlled executor for deterministic tests. A shadow job retains its capacity
+until its admitted CPU work finishes or is discarded, including after a deadline
+or async runtime shutdown. Codecs supplied by the application still choose their
+own scheduling; `FromSync` does not offload application serialization.
 
 `Observer` receives every public diagnostic as a typed `Event`. Shadow
 validation exists only to be observed, so a job is admitted only when the

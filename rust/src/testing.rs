@@ -237,6 +237,14 @@ impl Runtime for StepRuntime {
         self.queues.lock().deferred.push(task);
     }
 
+    fn spawn_blocking(
+        &self,
+        task: Box<dyn FnOnce() + Send + 'static>,
+    ) -> Result<(), crate::BoxError> {
+        self.spawn(Box::pin(async move { task() }));
+        Ok(())
+    }
+
     fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
         self.clock.sleep(duration)
     }

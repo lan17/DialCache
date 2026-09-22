@@ -242,3 +242,54 @@ fn string_invalidation_preserves_explicit_entity_text() {
     assert_invalidation_matches_registered_id("001e+21", "001e%2B21");
     assert_invalidation_matches_registered_id(String::from("-0"), "-0");
 }
+
+#[test]
+fn identity_invalidation_matches_explicit_and_inherited_namespaces_and_all_variants() {
+    let mut executor = TestExecutor::new(WALL_EPOCH_MS);
+    let remote = Arc::new(RecordingRemote::default());
+    let cache = DialCache::builder()
+        .namespace("tenant-a")
+        .clock_arc(executor.clock.clone())
+        .runtime_arc(executor.runtime.clone())
+        .remote_arc(remote.clone())
+        .build()
+        .unwrap();
+    executor.block_on(async move {
+        let request = cache.enable_guard();
+        for namespace in ["", "tenant-b"] {
+            for use_case in ["summary", "details"] {
+                let mut identity = Identity::new("thing", 42, use_case)
+                    .namespace(namespace)
+                    .tracked(true);
+                identity.args = vec![("variant".to_owned(), use_case.to_owned())];
+                cache
+                    .get_or_load(
+                        request.scope(),
+                        Operation::<u64>::new(identity.clone())
+                            .policy(Policy::default().remote_ttl_sec(60)),
+                        |_| async { Ok(7) },
+                    )
+                    .await
+                    .unwrap();
+                cache.invalidate_identity(identity, 17).await.unwrap();
+            }
+        }
+    });
+    let reads = remote.reads.lock();
+    let invalidations = remote.invalidations.lock();
+    assert_eq!(reads.len(), 4);
+    assert_eq!(invalidations.len(), 4);
+    for (i, (read, invalidation)) in reads.iter().zip(invalidations.iter()).enumerate() {
+        assert_eq!(
+            read.watermark_key.as_ref(),
+            Some(&invalidation.watermark_key)
+        );
+        let namespace = if i < 2 { "tenant-a" } else { "tenant-b" };
+        assert_eq!(
+            invalidation.watermark_key,
+            format!("{{{namespace}:thing:42}}#watermark")
+        );
+        assert_eq!(invalidation.future_buffer_ms, 17);
+    }
+    assert_ne!(reads[0].value_key, reads[1].value_key);
+}

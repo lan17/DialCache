@@ -68,6 +68,25 @@ impl ShadowFlight {
     }
 }
 
+/// The deadline and owned capacity of one shadow job. CPU closures retain a
+/// clone so runtime teardown cannot release capacity while raw work continues.
+#[derive(Clone)]
+pub(crate) struct ShadowWork {
+    flight: Arc<ShadowFlight>,
+    slot: Arc<ShadowSlot>,
+    started: Duration,
+    budget: Duration,
+}
+
+impl ShadowWork {
+    pub(crate) fn expired(&self) -> bool {
+        if since(self.slot.core.clock.as_ref(), self.started) >= self.budget {
+            self.flight.abandon();
+        }
+        self.flight.is_abandoned()
+    }
+}
+
 #[derive(Clone)]
 struct Verdict {
     outcome: ShadowOutcome,
@@ -171,7 +190,7 @@ impl Execution {
         }
         if verdict.outcome == ShadowOutcome::Mismatch && self.policy.shadow.log_mismatches {
             let preview = |value: &StoredValue| -> Option<String> {
-                let preview = self.op.preview.as_ref()?;
+                let preview = self.op.metadata.preview.as_ref()?;
                 catch_unwind(AssertUnwindSafe(|| preview(value)))
                     .ok()
                     .flatten()
@@ -209,23 +228,28 @@ impl Execution {
         };
         let budget_ms = self
             .op
+            .metadata
             .budget
             .millis()
             .unwrap_or(DEFAULT_FALLBACK_TIMEOUT_MS);
+        let slot = Arc::new(slot);
+        let work = ShadowWork {
+            flight: flight.clone(),
+            slot: slot.clone(),
+            started,
+            budget: Duration::from_millis(budget_ms),
+        };
         let reads: Arc<Mutex<Vec<Settled<RawRead>>>> = Arc::new(Mutex::new(Vec::new()));
         let validation: Settled<Verdict> = start_pending(
             self.core.runtime.as_ref(),
             {
                 let x = self.clone();
-                let flight = flight.clone();
                 let reads = reads.clone();
                 async move {
                     let verdict = match AssertUnwindSafe(x.clone().validate(
-                        flight.clone(),
+                        work,
                         frame,
                         source,
-                        started,
-                        budget_ms,
                         reads.clone(),
                     ))
                     .catch_unwind()
@@ -319,21 +343,12 @@ impl Execution {
 
     async fn validate(
         self: Arc<Self>,
-        flight: Arc<ShadowFlight>,
+        work: ShadowWork,
         mut frame: Option<Frame>,
         source: Option<Settled<ValueResult>>,
-        started: Duration,
-        budget_ms: u64,
         reads: Arc<Mutex<Vec<Settled<RawRead>>>>,
     ) -> Verdict {
-        let clock = self.core.clock.clone();
-        let budget = Duration::from_millis(budget_ms);
-        let expired = || {
-            if since(clock.as_ref(), started) >= budget {
-                flight.abandon();
-            }
-            flight.is_abandoned()
-        };
+        let expired = || work.expired();
         if expired() {
             return Verdict::of(ShadowOutcome::Timeout);
         }
@@ -360,7 +375,7 @@ impl Execution {
         }
         let value: ValueResult = match &source {
             Some(source) => {
-                let result = match select(source.wait(), flight.stop.wait()).await {
+                let result = match select(source.wait(), work.flight.stop.wait()).await {
                     Either::Left((result, _)) => result,
                     Either::Right(((), _)) => return Verdict::of(ShadowOutcome::Timeout),
                 };
@@ -386,9 +401,8 @@ impl Execution {
             return Verdict::of(ShadowOutcome::Timeout);
         }
         if fill {
-            let allowed = || !expired();
             let filled = self
-                .put_remote(&value, fence, Layer::RemoteShadow, Some(&allowed))
+                .put_remote(&value, fence, Layer::RemoteShadow, Some(&work))
                 .await;
             if expired() {
                 return Verdict::of(ShadowOutcome::Timeout);
@@ -405,14 +419,18 @@ impl Execution {
         let Some(frame) = frame else {
             return Verdict::of(ShadowOutcome::Timeout);
         };
-        let cached = match self.decode(&frame, Layer::RemoteShadow).await {
+        let decoded = self.decode(&frame, Layer::RemoteShadow, Some(&work)).await;
+        if expired() {
+            return Verdict::of(ShadowOutcome::Timeout);
+        }
+        let cached = match decoded {
             Ok(cached) => cached,
             Err(_) => return Verdict::of(ShadowOutcome::DeserializationError),
         };
         if expired() {
             return Verdict::of(ShadowOutcome::Timeout);
         }
-        let compare = self.op.compare.clone();
+        let compare = self.op.metadata.compare.clone();
         let matches = match catch_unwind(AssertUnwindSafe(|| compare(&cached, &value))) {
             Ok(Ok(matches)) => matches,
             _ => return Verdict::of(ShadowOutcome::ComparisonError),
