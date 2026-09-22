@@ -10,6 +10,8 @@ export default defineConfig({
     "DialCache organizes caching into use cases, with runtime control and observability for each one. Reference for the read path, runtime policies, and the API.",
   lang: "en-US",
   base: "/DialCache/",
+  // Account for both sticky header rows on small screens and the page menu.
+  scrollOffset: { selector: ".VPNav", padding: 72 },
   vite: {
     build: { target: browserTargets },
     optimizeDeps: { esbuildOptions: { target: browserTargets } },
