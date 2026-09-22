@@ -203,19 +203,20 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "54aa6788bf26f9513a4395ba8d6efea5d685104c1ef5ea0abe2dc0671029df7d",
+      "sha256": "686786249843c24a82e05fcfde0197e22fcd97fb75e231019e9afde0afe27e5d",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
         {"line":61,"title":"Maintaining the reference","contracts":["E05","B01"]},
         {"line":107,"title":"Run the documentation site","contracts":["B01"]},
         {"line":134,"title":"Publish to GitHub Pages","contracts":["B01"]},
-        {"line":150,"title":"Cache-path benchmark","contracts":["X02"]},
-        {"line":172,"title":"Redis write benchmark","contracts":["X02"]},
-        {"line":195,"title":"Stale-on-error benchmark","contracts":["X02"]},
-        {"line":223,"title":"Releasing","contracts":["B01","E05"]},
-        {"line":299,"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
-        {"line":327,"title":"Retry a Rust publication","contracts":["B01","E05"]}
+        {"line":150,"title":"Shared port benchmarks","contracts":["X02"]},
+        {"line":173,"title":"Cache-path benchmark","contracts":["X02"]},
+        {"line":195,"title":"Redis write benchmark","contracts":["X02"]},
+        {"line":218,"title":"Stale-on-error benchmark","contracts":["X02"]},
+        {"line":246,"title":"Releasing","contracts":["B01","E05"]},
+        {"line":322,"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
+        {"line":350,"title":"Retry a Rust publication","contracts":["B01","E05"]}
       ]
     },
     {

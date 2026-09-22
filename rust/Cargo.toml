@@ -63,3 +63,9 @@ required-features = ["tokio"]
 [[example]]
 name = "redis"
 required-features = ["redis", "tokio"]
+
+[[bench]]
+name = "dialcache"
+path = "benches/dialcache/main.rs"
+harness = false
+required-features = ["tokio", "redis"]

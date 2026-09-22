@@ -147,6 +147,29 @@ GitHub's short-lived token and OIDC; no deployment secret is needed.
 The published reference follows `main` independently of npm releases. Use the
 Markdown at a release tag when reading about an older installed version.
 
+## Shared port benchmarks
+
+Run equivalent public API workloads across TypeScript, Go and Rust from the
+repository root:
+
+```bash
+corepack pnpm benchmark --suite core
+corepack pnpm benchmark --suite redis
+```
+
+The shared suite covers source/disabled/uncached baselines, request-local and
+process-local hits, local eviction, concurrent coalescing bursts, and live Redis
+hits and writes. It validates behavior counters before saving timing results.
+Normal runs build optimized native workers, warm each workload and collect
+repeated samples sequentially on the same machine. Redis runs provision a
+disposable Docker server by default. CI uses small `--smoke` runs to validate
+execution; their timings are not performance evidence.
+
+See the [benchmark guide](https://github.com/lan17/DialCache/blob/main/benchmarks/README.md)
+for workload definitions, per-port selection, recorded metadata and comparing
+saved results against each port's own baseline. The TypeScript-specific tools
+below retain their existing diagnostic cases.
+
 ## Cache-path benchmark
 
 From a repository checkout, run the semantic microbenchmark after installing
