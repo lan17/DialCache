@@ -244,13 +244,16 @@ this policy; change it and this guide together so the documented release table
 cannot drift from automation.
 
 The workflow opens a `release: <version>` pull request containing only the
-matching versions in `typescript/package.json`, `rust/Cargo.toml` and the root crate entry
-in `rust/Cargo.lock`. The release helper preserves dependency versions and
+matching versions in `typescript/package.json`, `rust/Cargo.toml`, the root crate entry
+in `rust/Cargo.lock`, and `python/pyproject.toml`. The release helper preserves dependency versions and
 rejects any other content or file changes. It uses Python 3.11 or later, included
 on GitHub's Ubuntu runners. `release` is a reserved Conventional Commit type
 configured not to request another release, so the version-control commit does
 not cause an extra bump. Before opening or reusing the PR, Cargo packages the
 committed candidate and builds the extracted archive with every feature enabled.
+Python builds a source distribution and then a wheel from that archive, checks
+their metadata with Twine, and installs the wheel with its Redis extra in a fresh
+environment to exercise the installed public API.
 
 GitHub marks workflow runs for a pull request opened with `GITHUB_TOKEN` as
 approval-required. Approve those runs, review the pull request, and squash-merge
@@ -260,26 +263,26 @@ The merge triggers the publish job. Before any release side effect, it verifies:
 
 - current `main`;
 - the release commit subject;
-- the exact version-only changes in all three version files;
-- the matching npm, Cargo manifest and Cargo lockfile versions;
+- the exact version-only changes in all four version files;
+- the matching npm, Cargo manifest, Cargo lockfile and Python versions;
 - the absent npm and Go tags;
 - the Go module path for the release major; and
 - Semantic Release's independently calculated version and commit.
 
-It then reruns the npm checks and Rust package verification before asking Semantic Release to:
+It then reruns the npm checks and Rust/Python package verification, retaining
+the verified Python distributions for 90 days, before asking Semantic Release to:
 
 1. create the matching Git tag;
 2. publish the public npm package with provenance; and
 3. publish the GitHub release.
 
-The workflow tags the same commit `go/vX.Y.Z` for the Go module, then a separate
-`publish-rust` job publishes `dialcache` version `X.Y.Z` to crates.io. That job
-checks out the captured release commit and verifies both tags point to it.
-TypeScript, Go and Rust therefore use one selected version and release commit;
-the first Rust registry release need not start at `0.1.0`.
-
-Python is currently unpublished and is installed from a checkout; its CI builds
-a wheel but does not publish to PyPI.
+The workflow tags the same commit `go/vX.Y.Z` for the Go module, then separate
+`publish-rust` and `publish-python` jobs publish `dialcache` version `X.Y.Z` to
+crates.io and PyPI. Both jobs check out the captured release commit and verify
+both tags point to it. Python uploads the original verified wheel and source
+distribution from that workflow run. TypeScript, Go, Rust and Python therefore
+use one selected version and release commit; a port's first registry release
+need not start at `0.1.0`.
 
 Go has no package registry. A module version is a Git tag that `go get`
 resolves through the public module proxy, and a module in a subdirectory
@@ -344,10 +347,47 @@ retry accepts the existing version only when its SHA-256 checksum matches that
 exact archive and it is not yanked. Conflicting bytes fail the job; published
 versions are never overwritten. Resolve a content conflict with a new release.
 
+### Set up PyPI publishing once
+
+Sign in to PyPI with a verified email and two-factor authentication. Under
+**Account settings → Publishing**, add a pending trusted publisher for project
+`dialcache`, GitHub owner `lan17`, repository `DialCache`, workflow filename
+`release.yaml`, and environment `pypi`. Create the matching `pypi` GitHub
+environment and restrict its deployment branches to `main`. Existing projects
+configure the same publisher under their project's publishing settings.
+
+The pinned official `pypa/gh-action-pypi-publish` action uses the publishing
+job's `id-token: write` permission for short-lived credentials and generates
+publication attestations. No PyPI API token or bootstrap upload is needed.
+A pending publisher creates the project on first successful upload, then
+becomes a normal publisher. It does not reserve the name before that upload.
+See [PyPI's pending publisher guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
+
+The package checks do not verify PyPI account ownership or the publisher
+configuration. Until the first successful publication, install from a checkout
+as described in the [Python guide](languages/python.md). Afterwards use
+`python -m pip install 'dialcache[redis]'` (omit the extra for local-only use).
+
+### Retry a Python publication
+
+If only `publish-python` fails, fix the publisher configuration or transient
+failure and choose **Re-run failed jobs** in the original workflow run. Do not
+rerun all jobs: the npm/Go publisher intentionally rejects existing tags.
+The Python job uses the original release commit and retained distributions,
+even when `main` has advanced. Artifact retention is 90 days; recover those
+exact verified files if retention has expired instead of silently rebuilding.
+
+Before uploading, the job compares PyPI filenames and SHA-256 checksums with
+both original distributions. Identical existing files are accepted, missing
+files are uploaded, and conflicting, unexpected or yanked files fail the job.
+This handles a partial wheel/source upload or an upload whose acknowledgement
+was lost. It verifies both files through PyPI's API afterwards. Published
+artifacts are immutable; resolve content conflicts with a new release.
+
 The repository must enable **Allow GitHub Actions to create and approve pull
 requests** under Actions workflow permissions.
 
 The workflow uses that capability only to create the version pull request. It
 never approves or merges one, and no ruleset bypass actor is required. Once
-crates.io trusted publishing is configured, neither registry needs a persistent
+crates.io trusted publishing is configured, none of the registries needs a persistent
 publishing credential in this workflow.

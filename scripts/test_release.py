@@ -17,7 +17,7 @@ import release
 
 
 NEXT_VERSION = "0.24.0"
-PATHS = ("typescript/package.json", "rust/Cargo.toml", "rust/Cargo.lock")
+PATHS = ("typescript/package.json", "rust/Cargo.toml", "rust/Cargo.lock", "python/pyproject.toml")
 WORKSPACE_FILES = {
     "package.json": (
         '{\n  "name": "dialcache-workspace",\n  "private": true,\n'
@@ -27,8 +27,8 @@ WORKSPACE_FILES = {
 }
 
 
-def version_files(npm="0.23.4", rust="0.1.0", lock=None):
-    """A first Rust release may begin with a different npm version.
+def version_files(npm="0.23.4", rust="0.1.0", lock=None, python="0.1.0"):
+    """A first Rust or Python release may begin with a different npm version.
 
     Unrelated versions deliberately equal package versions so a broad text
     replacement or lockfile regeneration cannot silently pass these checks.
@@ -62,6 +62,15 @@ def version_files(npm="0.23.4", rust="0.1.0", lock=None):
             'source = "registry+https://github.com/rust-lang/crates.io-index"\n'
             f'checksum = "{"b" * 64}"\n'
         ),
+        "python/pyproject.toml": (
+            '# Keep this comment and table ordering.\n'
+            '[build-system]\nrequires = ["fixture==0.1.0"]\n\n'
+            '[project]\nname = "dialcache"\n'
+            f'version = "{python}"\n'
+            'description = "Keep 0.1.0 in this text."\n'
+            'dependencies = ["fixture==0.1.0"]\n\n'
+            '[tool.fixture]\nversion = "0.1.0"\n'
+        ),
     }
 
 
@@ -75,7 +84,7 @@ def write_files(root, contents):
 class VersionUpdateTests(unittest.TestCase):
     def test_one_selected_version_preserves_all_other_content(self):
         before = version_files()
-        expected = version_files(npm=NEXT_VERSION, rust=NEXT_VERSION)
+        expected = version_files(npm=NEXT_VERSION, rust=NEXT_VERSION, python=NEXT_VERSION)
         actual = release.versioned_files(before, NEXT_VERSION)
         self.assertEqual(actual, expected)
         self.assertEqual(before, version_files(), "Planning must not mutate its input")
@@ -86,6 +95,10 @@ class VersionUpdateTests(unittest.TestCase):
         after_lock = tomllib.loads(actual["rust/Cargo.lock"])["package"]
         self.assertEqual(before_lock[0], after_lock[0])
         self.assertEqual(before_lock[2], after_lock[2])
+        before_python = tomllib.loads(before["python/pyproject.toml"])
+        after_python = tomllib.loads(actual["python/pyproject.toml"])
+        self.assertEqual(before_python["build-system"], after_python["build-system"])
+        self.assertEqual(before_python["tool"], after_python["tool"])
 
     def test_update_writes_only_the_expected_version_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -93,7 +106,7 @@ class VersionUpdateTests(unittest.TestCase):
             write_files(root, version_files())
             (root / "README.md").write_bytes(b"Keep this file unchanged.\n")
             release.update_versions(root, NEXT_VERSION)
-            expected = version_files(npm=NEXT_VERSION, rust=NEXT_VERSION)
+            expected = version_files(npm=NEXT_VERSION, rust=NEXT_VERSION, python=NEXT_VERSION)
             for name, text in expected.items():
                 self.assertEqual((root / name).read_bytes(), text.encode("utf-8"))
             self.assertEqual((root / "README.md").read_bytes(), b"Keep this file unchanged.\n")
@@ -107,7 +120,7 @@ class VersionUpdateTests(unittest.TestCase):
             release.update_versions(root, NEXT_VERSION)
             for name, text in WORKSPACE_FILES.items():
                 self.assertEqual((root / name).read_bytes(), text.encode("utf-8"))
-            expected = version_files(npm=NEXT_VERSION, rust=NEXT_VERSION)
+            expected = version_files(npm=NEXT_VERSION, rust=NEXT_VERSION, python=NEXT_VERSION)
             for name, text in expected.items():
                 self.assertEqual((root / name).read_bytes(), text.encode("utf-8"))
 
@@ -127,7 +140,7 @@ class VersionUpdateTests(unittest.TestCase):
         before = {name: text.replace("\n", "\r\n") for name, text in version_files().items()}
         expected = {
             name: text.replace("\n", "\r\n")
-            for name, text in version_files(npm=NEXT_VERSION, rust=NEXT_VERSION).items()
+            for name, text in version_files(npm=NEXT_VERSION, rust=NEXT_VERSION, python=NEXT_VERSION).items()
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -147,12 +160,50 @@ class VersionUpdateTests(unittest.TestCase):
                 release.versioned_files(version_files(), version)
 
     def test_unrelated_package_names_cannot_be_prepared_as_dialcache(self):
-        for name in ("typescript/package.json", "rust/Cargo.toml"):
+        for name in ("typescript/package.json", "rust/Cargo.toml", "python/pyproject.toml"):
             with self.subTest(path=name):
                 contents = version_files()
                 contents[name] = contents[name].replace('"dialcache"', '"another-crate"', 1)
                 with self.assertRaises(ValueError):
                     release.versioned_files(contents, NEXT_VERSION)
+
+    def test_python_version_must_be_static_before_any_file_is_written(self):
+        original = version_files()["python/pyproject.toml"]
+        invalid = (
+            original.replace('version = "0.1.0"\n', '', 1),
+            original.replace('version = "0.1.0"\n', 'dynamic = ["version"]\n', 1),
+            original.replace('version = "0.1.0"\n', 'version = "0.1.0"\ndynamic = ["version"]\n', 1),
+            original.replace('version = "0.1.0"\n', 'version = 1\n', 1),
+            original.replace('version = "0.1.0"\n', 'version = ""\n', 1),
+            original.replace('version = "0.1.0"\n', 'version = "0.1.0"\ndynamic = "version"\n', 1),
+        )
+        for manifest in invalid:
+            with self.subTest(manifest=manifest), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                before = {**version_files(), "python/pyproject.toml": manifest}
+                write_files(root, before)
+                with self.assertRaises(ValueError):
+                    release.update_versions(root, NEXT_VERSION)
+                for name, text in before.items():
+                    self.assertEqual((root / name).read_bytes(), text.encode("utf-8"))
+
+    def test_python_dynamic_fields_other_than_version_are_preserved(self):
+        before = version_files()
+        expected = version_files(npm=NEXT_VERSION, rust=NEXT_VERSION, python=NEXT_VERSION)
+        for contents in (before, expected):
+            contents["python/pyproject.toml"] = contents["python/pyproject.toml"].replace(
+                'dependencies = ["fixture==0.1.0"]', 'dynamic = ["dependencies"]'
+            )
+        self.assertEqual(release.versioned_files(before, NEXT_VERSION), expected)
+
+    def test_python_version_like_text_cannot_replace_the_real_version(self):
+        before = version_files()
+        before["python/pyproject.toml"] = before["python/pyproject.toml"].replace(
+            'version = "0.1.0"\ndescription = "Keep 0.1.0 in this text."',
+            'version = \'0.1.0\'\ndescription = \'\'\'\nversion = "0.1.0"\n\'\'\'',
+        )
+        with self.assertRaises(ValueError):
+            release.versioned_files(before, NEXT_VERSION)
 
 
 class VersionCommitTests(unittest.TestCase):
@@ -187,7 +238,7 @@ class VersionCommitTests(unittest.TestCase):
     def candidate(self, version=NEXT_VERSION):
         # Construct the expected candidate independently of the updater: a
         # shared updater/verifier bug must not manufacture its own evidence.
-        write_files(self.root, version_files(npm=version, rust=version))
+        write_files(self.root, version_files(npm=version, rust=version, python=version))
 
     def assert_rejected(self, version=NEXT_VERSION):
         head = self.commit()
@@ -227,9 +278,12 @@ class VersionCommitTests(unittest.TestCase):
         release.verify_version_commit(self.root, "0.100.0", self.base, head)
 
     def test_rejects_a_file_missing_from_the_version_update(self):
-        self.candidate()
-        (self.root / "rust/Cargo.lock").write_text(version_files()["rust/Cargo.lock"])
-        self.assert_rejected()
+        for name in PATHS:
+            with self.subTest(path=name):
+                self.git("reset", "--hard", self.base)
+                self.candidate()
+                (self.root / name).write_text(version_files()[name])
+                self.assert_rejected()
 
     def test_rejects_an_extra_changed_file(self):
         self.candidate()
@@ -265,6 +319,7 @@ class VersionCommitTests(unittest.TestCase):
             "typescript/package.json": ('"fixture": "0.23.4"', '"fixture": "0.23.5"'),
             "rust/Cargo.toml": ('fixture = "0.1.0"', 'fixture = "0.2.0"'),
             "rust/Cargo.lock": ('checksum = "' + "a" * 64 + '"', 'checksum = "' + "c" * 64 + '"'),
+            "python/pyproject.toml": ('dependencies = ["fixture==0.1.0"]', 'dependencies = ["fixture==0.2.0"]'),
         }
         for name, (old, new) in mutations.items():
             with self.subTest(path=name):

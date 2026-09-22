@@ -3,10 +3,15 @@
 An asyncio port of DialCache for Python 3.11 and later. Each use case declares
 its identity and policy; an enabled request scope opts into request memoization,
 local storage, Redis, and concurrent request sharing. The behavioral contract is
-the repository's [portable specification](../formal/SPEC.md).
+the repository's [portable specification](https://github.com/lan17/DialCache/blob/main/formal/SPEC.md).
 
-This package is developed in this repository and has not been published to PyPI.
-Install it from a checkout:
+Once the first PyPI release is available, install it with:
+
+```sh
+python3 -m pip install 'dialcache[redis]'
+```
+
+Until that release is published, install from the root of a repository checkout:
 
 ```sh
 python3 -m pip install './python[redis]'
@@ -194,7 +199,7 @@ The Python API takes inspiration from [Galileo gcache](https://github.com/rungal
 decorated functions, argument-based identity, explicit context managers, and
 pluggable serializers. DialCache follows its own portable
 specification for behavior and wire compatibility.
-The [API design notes](API-DESIGN.md) record the source-reviewed gcache revision
+The [API design notes](https://github.com/lan17/DialCache/blob/main/python/API-DESIGN.md) record the source-reviewed gcache revision
 and the native API choices made for this port.
 
 This binding exposes awaitable operations. It does not introduce a global
@@ -219,6 +224,6 @@ local expiry, cancellation, and wire boundaries. Shared replay runs the real
 Python API through the repository's Node coordinator. Its inputs and expected
 observations come from the same Quint-generated histories used by the other
 ports; Node is a development dependency, not a runtime dependency of the
-Python library. See [the porting guide](../formal/PORTING.md) for the completion
-and settlement requirements and [the feature map](../formal/FEATURE-COVERAGE.md)
+Python library. See [the porting guide](https://github.com/lan17/DialCache/blob/main/formal/PORTING.md) for the completion
+and settlement requirements and [the feature map](https://github.com/lan17/DialCache/blob/main/formal/FEATURE-COVERAGE.md)
 for portable behavior versus native adapter obligations.
