@@ -33,10 +33,15 @@ watch(() => route.path, () => {
     </div>
     <a :href="withBase(selectedPort.reference)" target="_self">API reference</a>
   </div>
+  <p class="language-status">
+    <strong>TypeScript</strong> is the reference implementation.
+    <strong>Go and Rust</strong> are experimental.
+  </p>
 </template>
 
 <style scoped>
-.language-selector { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem .9rem; margin-bottom: 1.5rem; font-size: .9rem; color: var(--vp-c-text-2); }
+.language-selector { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem .9rem; margin-bottom: .65rem; font-size: .9rem; color: var(--vp-c-text-2); }
+.language-status { margin: 0 0 1.5rem; font-size: .85rem; line-height: 1.5; color: var(--vp-c-text-2); }
 .language-options { display: inline-flex; gap: .2rem; padding: .2rem; border: 1px solid var(--vp-c-divider); border-radius: 9px; background: var(--vp-c-bg-soft); }
 button { min-height: 36px; padding: .35rem .8rem; border-radius: 6px; color: var(--vp-c-text-2); font: inherit; font-weight: 600; cursor: pointer; }
 button:hover { color: var(--vp-c-text-1); background: var(--vp-c-default-soft); }
