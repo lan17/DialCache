@@ -1009,18 +1009,25 @@ impl Execution {
             },
             ttl_ms: ttl,
         };
-        let pending: Settled<Result<(), SharedError>> = start_pending(
+        let shadow = shadow.cloned();
+        let pending: Settled<Result<bool, SharedError>> = start_pending(
             self.core.runtime.as_ref(),
             async move {
+                // Task admission can precede its first poll. Keep the raw task's
+                // shadow ownership and check again at the adapter boundary.
+                if shadow.as_ref().is_some_and(ShadowWork::expired) {
+                    return Ok(false);
+                }
                 remote
                     .write(request)
                     .await
+                    .map(|()| true)
                     .map_err(|e| Arc::from(e) as SharedError)
             },
             |message| Err(Arc::new(PanicError(message)) as SharedError),
         );
         match pending.wait().await {
-            Ok(()) => Ok(true),
+            Ok(dispatched) => Ok(dispatched),
             Err(error) => {
                 self.error_event(layer, ErrorKind::CacheWrite, false);
                 Err(Box::new(SharedErrorWrapper(error)))

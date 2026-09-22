@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use futures::future::{select, Either};
 use futures::FutureExt;
-use parking_lot::Mutex;
 
 use crate::deadline::{await_deadline, since};
 use crate::engine::Core;
@@ -254,33 +253,27 @@ impl Execution {
             budget: Duration::from_millis(budget_ms),
         };
         let log_slot = slot.clone();
-        let reads: Arc<Mutex<Vec<Settled<RawRead>>>> = Arc::new(Mutex::new(Vec::new()));
         let validation: Settled<Verdict> = start_pending(
             self.core.runtime.as_ref(),
             {
                 let x = self.clone();
-                let reads = reads.clone();
                 async move {
-                    let verdict = match AssertUnwindSafe(x.clone().validate(
-                        work,
-                        frame,
-                        source,
-                        reads.clone(),
-                    ))
-                    .catch_unwind()
-                    .await
-                    {
-                        Ok(verdict) => verdict,
-                        Err(_) => Verdict::of(ShadowOutcome::Timeout),
-                    };
+                    let mut reads = Vec::new();
+                    let verdict =
+                        match AssertUnwindSafe(x.clone().validate(work, frame, source, &mut reads))
+                            .catch_unwind()
+                            .await
+                        {
+                            Ok(verdict) => verdict,
+                            Err(_) => Verdict::of(ShadowOutcome::Timeout),
+                        };
                     // Reads keep the slot after a read timeout; owned source, codec and
                     // write work already keeps this operation running until raw completion.
                     // Dropping the slot frees it, whether the reads settled or the
                     // runtime dropped this task first.
-                    let pending = std::mem::take(&mut *reads.lock());
                     let runtime = x.core.runtime.clone();
                     runtime.spawn(Box::pin(async move {
-                        for read in pending {
+                        for read in reads {
                             let _ = read.wait().await;
                         }
                         drop(slot);
@@ -308,7 +301,7 @@ impl Execution {
 
     async fn shadow_read(
         &self,
-        reads: &Mutex<Vec<Settled<RawRead>>>,
+        reads: &mut Vec<Settled<RawRead>>,
         max_age: bool,
         retain_future: bool,
     ) -> RawRead {
@@ -317,7 +310,7 @@ impl Execution {
             labels: self.labels(Layer::RemoteShadow),
         });
         let (bounded, raw) = self.raw_read();
-        reads.lock().push(raw);
+        reads.push(raw);
         let result = bounded.await;
         let result = match result {
             Err(error) => {
@@ -362,7 +355,7 @@ impl Execution {
         work: ShadowWork,
         mut frame: Option<Frame>,
         source: Option<Settled<ValueResult>>,
-        reads: Arc<Mutex<Vec<Settled<RawRead>>>>,
+        reads: &mut Vec<Settled<RawRead>>,
     ) -> Verdict {
         let expired = || work.expired();
         if expired() {
@@ -371,7 +364,7 @@ impl Execution {
         let mut fill = false;
         let mut fence: Option<u64> = None;
         if source.is_some() {
-            let read = match self.shadow_read(&reads, true, false).await {
+            let read = match self.shadow_read(reads, true, false).await {
                 Ok(read) => read,
                 Err(_) => return Verdict::of(ShadowOutcome::RedisError),
             };
@@ -462,7 +455,7 @@ impl Execution {
                 compared: None,
             };
         }
-        let confirmation = match self.shadow_read(&reads, false, true).await {
+        let confirmation = match self.shadow_read(reads, false, true).await {
             Ok(confirmation) => confirmation,
             Err(_) => return Verdict::of(ShadowOutcome::ConfirmationError),
         };

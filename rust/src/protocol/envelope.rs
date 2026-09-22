@@ -86,14 +86,17 @@ pub struct CompressionReadResult {
     pub outcome: Option<CompressionOutcome>,
 }
 
-/// Prefix raw binary output whose first byte would collide with the envelope.
-pub fn escape_raw_payload(payload: Payload) -> Payload {
-    if payload.binary
+fn needs_raw_escape(payload: &Payload) -> bool {
+    payload.binary
         && payload
             .bytes
             .first()
             .is_some_and(|first| *first <= MARKER_ZSTD_BINARY)
-    {
+}
+
+/// Prefix raw binary output whose first byte would collide with the envelope.
+pub fn escape_raw_payload(payload: Payload) -> Payload {
+    if needs_raw_escape(&payload) {
         let mut escaped = Vec::with_capacity(payload.bytes.len() + 1);
         escaped.push(MARKER_ESCAPED_RAW);
         escaped.extend_from_slice(&payload.bytes);
@@ -125,36 +128,37 @@ pub fn compress_payload(
         }
     };
     let original_bytes = payload.len();
-    let raw = escape_raw_payload(payload.clone());
-    let mut result = CompressionWriteResult {
+    let outcome = if original_bytes < config.threshold_bytes {
+        CompressionOutcome::BelowThreshold
+    } else if original_bytes > max_decompressed_bytes {
+        CompressionOutcome::WriteOverLimit
+    } else {
+        let compressed = zstd_compress(&payload.bytes, config.level)?;
+        let raw_bytes = original_bytes + usize::from(needs_raw_escape(&payload));
+        if compressed.len() + 1 < raw_bytes {
+            let mut marked = Vec::with_capacity(compressed.len() + 1);
+            marked.push(if payload.binary {
+                MARKER_ZSTD_BINARY
+            } else {
+                MARKER_ZSTD_UTF8
+            });
+            marked.extend_from_slice(&compressed);
+            return Ok(CompressionWriteResult {
+                stored_bytes: marked.len(),
+                payload: Payload::binary(marked),
+                outcome: CompressionOutcome::Compressed,
+                original_bytes,
+            });
+        }
+        CompressionOutcome::NotSmaller
+    };
+    let raw = escape_raw_payload(payload);
+    Ok(CompressionWriteResult {
         stored_bytes: raw.len(),
         payload: raw,
-        outcome: CompressionOutcome::BelowThreshold,
+        outcome,
         original_bytes,
-    };
-    if original_bytes < config.threshold_bytes {
-        return Ok(result);
-    }
-    if original_bytes > max_decompressed_bytes {
-        result.outcome = CompressionOutcome::WriteOverLimit;
-        return Ok(result);
-    }
-    let compressed = zstd_compress(&payload.bytes, config.level)?;
-    if compressed.len() + 1 >= result.stored_bytes {
-        result.outcome = CompressionOutcome::NotSmaller;
-        return Ok(result);
-    }
-    let mut marked = Vec::with_capacity(compressed.len() + 1);
-    marked.push(if payload.binary {
-        MARKER_ZSTD_BINARY
-    } else {
-        MARKER_ZSTD_UTF8
-    });
-    marked.extend_from_slice(&compressed);
-    result.stored_bytes = marked.len();
-    result.payload = Payload::binary(marked);
-    result.outcome = CompressionOutcome::Compressed;
-    Ok(result)
+    })
 }
 
 /// Reverse of [`compress_payload`], applied to every read.

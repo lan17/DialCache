@@ -5,75 +5,13 @@
 //! the WHATWG UTF-8 decoder with replacement error handling and without BOM
 //! removal, so every maximal ill-formed subpart becomes exactly one U+FFFD.
 
-/// The UTF-8 encoding of U+FFFD.
-const REPLACEMENT: [u8; 3] = [0xEF, 0xBF, 0xBD];
-
 /// Decode bytes as UTF-8 with one U+FFFD per maximal ill-formed subpart and
 /// no BOM removal (the WHATWG decoder with replacement error handling).
 ///
 /// The result is always valid UTF-8. Well-formed input is returned unchanged,
 /// so valid text costs one validation pass and one copy.
 pub fn replacement_utf8(bytes: &[u8]) -> Vec<u8> {
-    if std::str::from_utf8(bytes).is_ok() {
-        return bytes.to_vec();
-    }
-    let mut out = Vec::with_capacity(bytes.len() + REPLACEMENT.len());
-    let mut rest = bytes;
-    while !rest.is_empty() {
-        match std::str::from_utf8(rest) {
-            Ok(_) => {
-                out.extend_from_slice(rest);
-                break;
-            }
-            Err(error) => {
-                let valid = error.valid_up_to();
-                out.extend_from_slice(&rest[..valid]);
-                rest = &rest[valid..];
-                let consumed = ill_formed_subpart_len(rest);
-                out.extend_from_slice(&REPLACEMENT);
-                rest = &rest[consumed..];
-            }
-        }
-    }
-    out
-}
-
-/// Length of the maximal ill-formed subpart at the start of `bytes`, whose
-/// first byte is known not to begin a well-formed sequence.
-///
-/// A lead in `C2..DF`, `E0..EF` or `F0..F4` swallows the continuation bytes
-/// that are valid *in their position* (including the narrowed second-byte
-/// ranges after `E0`, `ED`, `F0` and `F4`); the first byte that is not valid
-/// there is left to be reprocessed as the next lead. Any other first byte is a
-/// one-byte subpart.
-fn ill_formed_subpart_len(bytes: &[u8]) -> usize {
-    let lead = bytes[0];
-    let wanted = match lead {
-        0xC2..=0xDF => 2,
-        0xE0..=0xEF => 3,
-        0xF0..=0xF4 => 4,
-        _ => return 1,
-    };
-    let mut consumed = 1;
-    while consumed < wanted && consumed < bytes.len() {
-        let byte = bytes[consumed];
-        let (lower, upper) = if consumed == 1 {
-            match lead {
-                0xE0 => (0xA0, 0xBF),
-                0xED => (0x80, 0x9F),
-                0xF0 => (0x90, 0xBF),
-                0xF4 => (0x80, 0x8F),
-                _ => (0x80, 0xBF),
-            }
-        } else {
-            (0x80, 0xBF)
-        };
-        if byte < lower || byte > upper {
-            break;
-        }
-        consumed += 1;
-    }
-    consumed
+    String::from_utf8_lossy(bytes).into_owned().into_bytes()
 }
 
 #[cfg(test)]
