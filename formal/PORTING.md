@@ -8,7 +8,7 @@ The specification is experimental and versioned in [profiles.json](./profiles.js
 Pin a repository commit and corpus when developing a port.
 
 Start with the [worked walkthrough](./WALKTHROUGH.md) to follow one source
-deadline contract from a Quint regression to its TypeScript and Go assertions.
+deadline contract from a Quint regression to its TypeScript, Go and Rust assertions.
 Then use this guide to implement the remaining profiles and completion reports.
 
 ## What a port supplies
@@ -17,11 +17,12 @@ Supply a native implementation, a controlled test environment, a driver for the
 shared commands, and assertion results in the completion format below.
 The shared [replay coordinator](./replay/coordinator.mjs) owns profile parsing,
 action mappings and observation assertions. TypeScript imports those same
-modules; Go uses one persistent Node process over JSON lines. A new port can
+modules; Go and Rust use a persistent Node process over JSON lines. A new port can
 reuse that protocol instead of translating every profile's tables.
 Existing implementations
-are examples: [the TypeScript driver](../test/formal/behavior-driver.ts) and
-[the Go driver](../go/behavior_driver_test.go). A port need not copy their public
+are examples: [the TypeScript driver](../test/formal/behavior-driver.ts),
+[the Go driver](../go/behavior_driver_test.go) and
+[the Rust driver](../rust/tests/formal/driver.rs). A port need not copy their public
 API names, threading model, internal storage, or scheduling implementation.
 
 | Driver operation | Required behavior |
@@ -373,20 +374,26 @@ The shared inventory contains stable language-neutral IDs:
 Scenario/vector name components use URI percent encoding. The manifest drives
 the exact inventory; a passing smoke test cannot substitute for a scheduled
 history. Witness gates establish reachability across the corpus and are
-separate from implementation assertions. Every port evaluates them with the
-shared `node formal/witnesses.mjs evaluate` command described under
-[Witness evidence](#witness-evidence); Go validation consumes that evidence
-after checking its exact corpus and definition hashes, and independently
-executes and asserts every history.
+separate from implementation assertions. `make formal-generate` evaluates them
+once with the shared `node formal/witnesses.mjs evaluate` command described under
+[Witness evidence](#witness-evidence). Go and Rust consume that evidence after
+checking its exact corpus and definition hashes; TypeScript checks the same
+witness gate. Each port independently executes and asserts every history.
 
-Prepare each port immediately before its native tests. For TS, the low-level
-command is `node formal/conformance.mjs prepare typescript .formal-traces/ts-context.json`.
-Run its complete native suite, evaluate the shared witness evidence, and
-validate its completion before using
-`node formal/conformance.mjs prepare go .formal-traces/go-context.json` or
-`node formal/conformance.mjs prepare rust .formal-traces/rust-context.json`.
-Go and Rust preparation bind the witness evidence the shared evaluator just
-produced. Do not prepare two contexts consecutively before running either suite.
+Generate the corpus and shared witness evidence before preparing any port.
+Then prepare a separate context before each port's native tests:
+
+```sh
+node formal/conformance.mjs prepare typescript .formal-traces/ts-context.json
+node formal/conformance.mjs prepare go .formal-traces/go-context.json
+node formal/conformance.mjs prepare rust .formal-traces/rust-context.json
+```
+
+Each port can prepare, replay and validate independently once those shared
+inputs exist; no port waits for another's completion. Keep the recorded sources,
+corpus and witness evidence unchanged between preparation and completion. Hosted
+CI runs the lanes in separate jobs; a local checkout must also keep their output
+paths distinct and avoid regenerating shared inputs while replays are running.
 
 TypeScript, Go and Rust have built-in default source inventories. For another
 language, supply a JSON array containing every repository-relative
@@ -430,9 +437,10 @@ and test execution use the native language. Reuse the supplied checker.
 Every required ID must pass exactly once. Missing, duplicate, unknown, skipped,
 failed and incomplete results are rejected. So are changed source/corpus bytes
 and native runs predating preparation. Keep contexts, corpus, original reports
-and completion JSON together under `.formal-traces/`. Mutation targets validate
-the relevant full reports against current source and corpus fingerprints before
-starting: TS mutations need TS completion, and Go mutations need TS and Go completion.
+and completion JSON together under `.formal-traces/`. Mutation targets consume
+the generated corpus and shared witness evidence and run their own unmodified
+baselines; they do not require a port's completion report. Full acceptance still
+requires every port's replay and every required mutation campaign to pass.
 Supplied adapters verify actual native
 assertion records before producing completion results. A completion document
 is test evidence, not cryptographic attestation that an untrusted driver behaved

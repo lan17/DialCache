@@ -58,7 +58,7 @@ formal/                 # Quint behavioral source of truth, contracts and portab
 - Public exports belong in the root or an explicit integration entry point such as `src/node-redis.ts`, `src/prometheus.ts`, or `src/redis-protocol.ts`.
 - Use `corepack pnpm` for project commands.
 - Start formal work at `formal/README.md`. `formal/WALKTHROUGH.md` follows one
-  contract through Quint, generated inputs and both language replays;
+  contract through Quint, generated inputs and all three language replays;
   `formal/AUTHORING.md` explains how to extend that chain. Read the relevant
   model and profile bindings before opening large generated JSON artifacts.
 - For formal specification changes, follow `formal/AUTHORING.md`: keep models
@@ -67,6 +67,11 @@ formal/                 # Quint behavioral source of truth, contracts and portab
 - Define portable behavior in Quint first. Require consequential generated
   witnesses and replay the same histories in TypeScript, Go and Rust; keep
   native API, wire and integration tests for their explicit boundaries.
+- Use the shared behavioral testbed for portable features and bug fixes, with
+  TypeScript as the executable reference. Follow the workflow in
+  `formal/AUTHORING.md` and preserve discovered bugs as deterministic regressions.
+  Extend formal infrastructure when it closes a concrete coverage gap, corrects
+  misleading evidence, or makes tests easier to author, understand or run.
 
 ## Validation
 

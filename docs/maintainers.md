@@ -7,8 +7,8 @@ benchmarks, and the existing release process.
 
 ## Validation
 
-Use Node.js 24 and the repository's pinned pnpm through Corepack. Go checks
-use the CI-pinned Go toolchain; full formal checks also require the pinned
+Use Node.js 24 and the repository's pinned pnpm through Corepack. Go and Rust
+checks use their CI-pinned toolchains; full formal checks also require the pinned
 Quint executable. Run `make help` for targets and prerequisites:
 
 ```bash
@@ -18,18 +18,20 @@ make integration
 ```
 
 `make check` runs strict TypeScript checks and coverage, bundles/declarations,
-packed ESM/CJS consumer checks, Go vet/formatting/race tests, documentation
-builds, and evidence inventories. Both implementations replay the committed
+packed ESM/CJS consumer checks, Go vet/formatting/race tests, Rust formatting,
+Clippy and native tests, documentation builds, and evidence inventories.
+TypeScript, Go and Rust replay the committed
 Quint smoke fixtures and protocol cases. Integration tests require a
 Docker-compatible runtime for Redis, Valkey, and Redis Cluster and exercise
-both language bindings.
+all three language bindings.
 
 `make formal` checks the scheduled Quint models, generates the complete corpus,
-and requires full TypeScript and Go replay with matching evidence fingerprints.
+and requires full TypeScript, Go and Rust replay with matching evidence fingerprints.
 `make model-check` runs the separate finite symbolic checks; it needs Java 21,
 `tar` and a checksummed Apalache release and is the only lane that does.
 `make mutations` challenges the tests with the catalogued implementation
-faults over that generated corpus; it does not depend on either replay report.
+faults over that generated corpus and shared witness evidence; it does not depend
+on a port's replay report. Each port's mutation catalog defines its measured scope.
 `make ci NODE22_BIN=/path/to/node22/bin/node` runs the complete pipeline,
 including integrations, mutations and the exact Node 22.15.0 package floor.
 See the repository's
