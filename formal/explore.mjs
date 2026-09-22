@@ -355,7 +355,13 @@ async function executeExploration(seed, { directory = root, environment = proces
       const validation = await import(pathToFileURL(resolve(workspace, 'formal/validation.mjs')).href);
       validation.checkPrerequisites('explore', { directory: workspace, environment: cleanEnvironment(runtimeEnvironment) });
     }
-    report.native = await snapshot.runExplorationSteps(snapshot.explorationPlan(workspace, selectedSeed, { environment: runtimeEnvironment }), {
+    const plan = snapshot.explorationPlan(workspace, selectedSeed, { environment: runtimeEnvironment });
+    // The copied plan owns its port inventory, just as it owns execution. A
+    // newer caller must not require a language absent from a saved snapshot.
+    const requiredLanguages = plan.filter(step => step.nativeReport !== undefined).map(step => step.nativeReport).sort();
+    if (!requiredLanguages.length || requiredLanguages.some(language => typeof language !== 'string' || !language)
+      || new Set(requiredLanguages).size !== requiredLanguages.length) throw new Error('Exploration plan has an empty or invalid native port inventory.');
+    report.native = await snapshot.runExplorationSteps(plan, {
       directory: workspace, environment: cleanEnvironment(runtimeEnvironment), onResult: results => { report.native = results; save(); },
       // The evaluator step is tolerated so both ports replay; its failure is
       // still part of the record so a missing report explains itself.
@@ -363,7 +369,7 @@ async function executeExploration(seed, { directory = root, environment = proces
     });
     verifyHashes(workspace, [report.sources]);
     report.sourcesUnchanged = true;
-    if (report.native.map(result => result.language).sort().join() !== Object.keys(reportPaths).sort().join()
+    if (JSON.stringify(report.native.map(result => result.language).sort()) !== JSON.stringify(requiredLanguages)
       || report.native.some(result => !['passed', 'native-failure', 'witness-check-failure'].includes(result.status))) {
       throw new Error('Exploration did not finish every native port.');
     }

@@ -240,3 +240,21 @@ def test_unknown_size_decode_allocates_for_output_instead_of_ceiling(corrupt):
     # This small output used to allocate the 512 MiB decompression ceiling.
     # Keep generous headroom for interpreter/dependency allocation differences.
     assert peak < 8 * 1024 * 1024
+
+
+def test_known_oversized_decode_does_not_retain_unusable_output():
+    import tracemalloc
+
+    maximum = 8 * 1024 * 1024
+    payload = b"\x02" + zstandard.ZstdCompressor().compress(b"a" * (maximum + 1))
+    tracemalloc.start()
+    try:
+        result = decompress_payload(payload, maximum)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert result.outcome == "read_over_limit"
+    assert result.payload is payload
+    # The frame header already rules out returning decoded bytes. Classification
+    # must use bounded chunks rather than retaining approximately the full cap.
+    assert peak < 2 * 1024 * 1024

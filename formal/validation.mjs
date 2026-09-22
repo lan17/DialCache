@@ -120,6 +120,10 @@ let code;
 try { z.zstdDecompressSync(bytes, { maxOutputLength: 4 }); } catch (error) { code = error.code; }
 if (code !== 'ERR_BUFFER_TOO_LARGE') throw new Error('zstd output cap not enforced at floor: ' + code);`;
 
+function pythonSourceEnvironment(directory, environment) {
+  return { PYTHONPATH: [resolve(directory, 'python'), environment.PYTHONPATH].filter(Boolean).join(delimiter) };
+}
+
 export function validationPlan(target, { directory = root, environment = process.env, runnerNode = process.execPath, nodeVersion = process.version } = {}) {
   const node = (label, ...args) => ({ label, command: runnerNode, args });
   const pnpm = (label, ...args) => ({ label, command: 'corepack', args: ['pnpm', ...args] });
@@ -128,7 +132,8 @@ export function validationPlan(target, { directory = root, environment = process
   // crate's tests locate the repository through CARGO_MANIFEST_DIR, not cwd.
   const cargo = (label, subcommand, ...args) => ({ label, command: 'cargo', args: [subcommand, ...args], cwd: 'rust' });
   const pythonExecutable = environment.PYTHON ?? resolve(directory, 'python/.venv/bin/python');
-  const python = (label, ...args) => ({ label, command: pythonExecutable, args, env: { NODE: runnerNode } });
+  const python = (label, ...args) => ({ label, command: pythonExecutable, args,
+    env: { NODE: runnerNode, ...pythonSourceEnvironment(directory, environment) } });
   const reportPath = (language, suffix) => `.formal-traces/${language}-${suffix}.json`;
   const completion = language => ({ ...node(`Validate current ${language} completion`, 'formal/conformance.mjs', 'check', reportPath(language, 'completion'), reportPath(language, 'context')),
     failureHint: 'A current complete replay is required. Run make formal first; missing or stale reports cannot be reused.' });
@@ -268,7 +273,8 @@ export function checkPrerequisites(target, { directory = root, environment = pro
     const version = probe(executable, ['--version'], { directory, environment });
     const parsed = /^Python (\d+)\.(\d+)(?:\.|\s|$)/.exec(version);
     if (!parsed || Number(parsed[1]) !== 3 || Number(parsed[2]) < 11) throw new Error(`Python validation requires Python 3.11 or later; found ${version}. Set PYTHON or create python/.venv and install './python[test,redis]'.`);
-    probe(executable, ['-c', 'import dialcache, pytest, pytest_asyncio, jsonschema, zstandard, redis'], { directory, environment });
+    probe(executable, ['-c', 'import dialcache, pytest, pytest_asyncio, jsonschema, zstandard, redis'],
+      { directory, environment: { ...environment, ...pythonSourceEnvironment(directory, environment) } });
   }
   if (targets.some(name => ['formal-check', 'formal-generate', 'fixtures-check', 'explore', 'model-check', 'differential'].includes(name))) {
     const requiredQuint = JSON.parse(readFileSync(resolve(directory, 'formal/generated-fixtures.lock.json'), 'utf8')).quintVersion;

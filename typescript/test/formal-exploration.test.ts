@@ -99,7 +99,7 @@ function writeWitnessInventory(directory: string, profiles: readonly string[]) {
   writeFileSync(join(directory, "formal/coverage-witnesses.json"), JSON.stringify(Object.fromEntries(profiles.map(profile => [profile, ["required"]]))));
 }
 
-function savedFixture(directory: string) {
+function savedFixture(directory: string, languages: readonly unknown[] = ["typescript", "go", "rust"], results: readonly unknown[] = languages) {
   const saved = join(directory, "saved"), workspace = join(saved, "workspace");
   mkdirSync(join(workspace, "formal"), { recursive: true });
   mkdirSync(join(directory, "node_modules"));
@@ -115,12 +115,12 @@ function savedFixture(directory: string) {
     "formal/execution.json": JSON.stringify({ models: [{ profile: "effects" }] }),
     "formal/coverage-witnesses.json": JSON.stringify({ effects: ["required"] }),
     "formal/explore.mjs": `import { writeFileSync } from 'node:fs';
-      export const explorationPlan = (directory, seed) => [{ directory, seed, runner: 'saved' }];
+      export const explorationPlan = (directory, seed) => ${JSON.stringify(languages)}.map(nativeReport => ({ directory, seed, runner: 'saved', nativeReport }));
       export async function runExplorationSteps(plan, options) {
         writeFileSync(options.directory + '/.formal-traces/saved-runner.json', JSON.stringify(plan));
         // A saved run's evaluator also has to leave a completed witness report behind.
         writeFileSync(options.directory + '/.formal-traces/witness-report.json', ${JSON.stringify(JSON.stringify(completedWitnessReport("0x2a", ["effects"])))});
-        return [{ language: 'typescript', status: 'passed' }, { language: 'go', status: 'passed' }, { language: 'rust', status: 'passed' }, { language: 'python', status: 'passed' }];
+        return ${JSON.stringify(results)}.map(language => ({ language, status: 'passed' }));
       }`,
     "formal/validation.mjs": `import { mkdirSync, writeFileSync } from 'node:fs';
       export function checkPrerequisites(target, { directory }) {
@@ -312,33 +312,60 @@ describe("isolated exploratory validation", () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
-  it("replays saved bytes with their own runner and prerequisites without Git, preserving original evidence", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-reproduce-"));
+  it.each([{ languages: ["typescript", "go", "rust"] }, { languages: ["typescript", "go", "rust", "python"] }])(
+    "replays saved $languages bytes with their own runner and prerequisites without Git, preserving original evidence", async ({ languages }) => {
+      const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-reproduce-"));
+      try {
+        const saved = savedFixture(directory, languages), original = readFileSync(saved.path, "utf8");
+        mkdirSync(join(directory, "formal"));
+        writeFileSync(join(directory, "formal/explore.mjs"), 'throw new Error("new checkout runner must not execute")');
+        writeFileSync(join(directory, "formal/validation.mjs"), 'throw new Error("new checkout prerequisites must not execute")');
+        const output = await replayExploration(saved.path, { directory });
+        const report = JSON.parse(readFileSync(join(output, "report.json"), "utf8"));
+        expect(report).toMatchObject({ status: "passed", acceptance: false, seed: "0x2a", baseRevision: saved.report.baseRevision,
+          sources: saved.report.sources, replayOrigin: { path: realpathSync(saved.path),
+            reportSha256: createHash("sha256").update(original).digest("hex") } });
+        expect(JSON.parse(readFileSync(join(output, "workspace/.formal-traces/saved-runner.json"), "utf8"))).toEqual(
+          languages.map(nativeReport => ({ directory: join(output, "workspace"), seed: "0x2a", runner: "saved", nativeReport })),
+        );
+        expect(report.native.map((result: Result) => result.language)).toEqual(languages);
+        expect(readFileSync(join(output, "workspace/.formal-traces/saved-prerequisites.txt"), "utf8")).toBe("explore");
+        // The saved inventory has one profile while this checkout schedules many:
+        // the replay was judged against the snapshot's inventory, not the checkout's.
+        expect(selectedProfiles("all").length).toBeGreaterThan(1);
+        expect(Object.keys(report.witnesses.profiles)).toEqual(["effects"]);
+        expect(readFileSync(saved.path, "utf8")).toBe(original);
+        expect(readFileSync(join(saved.workspace, ".formal-traces/original-evidence.txt"), "utf8")).toBe("retain original native evidence");
+        for (const [path, content] of Object.entries(saved.sources)) expect(readFileSync(join(saved.workspace, path), "utf8")).toBe(content);
+        expect(existsSync(join(output, "workspace/node_modules"))).toBe(false);
+        expect(existsSync(join(output, "workspace/typescript/node_modules"))).toBe(false);
+      } finally { rmSync(directory, { recursive: true, force: true }); }
+    },
+  );
+
+  it.each([
+    { name: "missing", results: ["typescript", "go"] },
+    { name: "duplicate", results: ["typescript", "go", "go"] },
+    { name: "unexpected", results: ["typescript", "go", "rust", "python"] },
+  ])("rejects $name results against the saved plan's port inventory", async ({ results }) => {
+    const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-port-results-"));
     try {
-      const saved = savedFixture(directory), original = readFileSync(saved.path, "utf8");
-      mkdirSync(join(directory, "formal"));
-      writeFileSync(join(directory, "formal/explore.mjs"), 'throw new Error("new checkout runner must not execute")');
-      writeFileSync(join(directory, "formal/validation.mjs"), 'throw new Error("new checkout prerequisites must not execute")');
-      const output = await replayExploration(saved.path, { directory });
-      const report = JSON.parse(readFileSync(join(output, "report.json"), "utf8"));
-      expect(report).toMatchObject({ status: "passed", acceptance: false, seed: "0x2a", baseRevision: saved.report.baseRevision,
-        sources: saved.report.sources, replayOrigin: { path: realpathSync(saved.path),
-          reportSha256: createHash("sha256").update(original).digest("hex") } });
-      expect(JSON.parse(readFileSync(join(output, "workspace/.formal-traces/saved-runner.json"), "utf8"))).toEqual([
-        { directory: join(output, "workspace"), seed: "0x2a", runner: "saved" },
-      ]);
-      expect(readFileSync(join(output, "workspace/.formal-traces/saved-prerequisites.txt"), "utf8")).toBe("explore");
-      // The saved inventory has one profile while this checkout schedules many:
-      // the replay was judged against the snapshot's inventory, not the checkout's.
-      expect(selectedProfiles("all").length).toBeGreaterThan(1);
-      expect(Object.keys(report.witnesses.profiles)).toEqual(["effects"]);
-      expect(readFileSync(saved.path, "utf8")).toBe(original);
-      expect(readFileSync(join(saved.workspace, ".formal-traces/original-evidence.txt"), "utf8")).toBe("retain original native evidence");
-      for (const [path, content] of Object.entries(saved.sources)) expect(readFileSync(join(saved.workspace, path), "utf8")).toBe(content);
-      expect(existsSync(join(output, "workspace/node_modules"))).toBe(false);
-      expect(existsSync(join(output, "workspace/typescript/node_modules"))).toBe(false);
+      const saved = savedFixture(directory, ["typescript", "go", "rust"], results);
+      await expect(replayExploration(saved.path, { directory })).rejects.toThrow(/did not finish every native port/);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
+
+  it.each([{ languages: [] }, { languages: ["go", "go"] }, { languages: [""] }, { languages: [42] }])(
+    "rejects invalid saved port inventory $languages before native execution", async ({ languages }) => {
+      const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-port-plan-"));
+      try {
+        const saved = savedFixture(directory, languages);
+        await expect(replayExploration(saved.path, { directory })).rejects.toThrow(/invalid native port inventory/);
+        const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
+        expect(existsSync(join(output, "workspace/.formal-traces/saved-runner.json"))).toBe(false);
+      } finally { rmSync(directory, { recursive: true, force: true }); }
+    },
+  );
 
   it.each(["changed", "deleted"])("rejects a %s saved source before rerunning", async change => {
     const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-drift-"));

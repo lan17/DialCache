@@ -261,7 +261,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     const native = validationPlan("check-python", { directory, environment });
     expect(native).toEqual([{
       label: "Run Python native, wire, scenario and smoke tests", command: environment.PYTHON,
-      args: ["-m", "pytest", "python/tests", "-m", "not integration"], env: { NODE: process.execPath },
+      args: ["-m", "pytest", "python/tests", "-m", "not integration"], env: { NODE: process.execPath, PYTHONPATH: [join(directory, "python"), environment.PYTHONPATH].filter(Boolean).join(delimiter) },
     }]);
     const plan = validationPlan("formal-python", { directory, environment });
     expect(plan[0]!.remove).toEqual([".formal-traces/python-completion.json"]);
@@ -271,6 +271,18 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(plan.at(-1)!.args).toEqual(["formal/conformance.mjs", "check", ".formal-traces/python-completion.json", ".formal-traces/python-context.json"]);
     expect(validationPlan("smoke", { directory, environment }).at(-1)!.args).toEqual(["-m", "pytest", "python/tests/test_conformance.py"]);
     expect(validationPlan("integration-python", { directory, environment })[0]!.args).toEqual(["formal/run-python-integration.mjs"]);
+  });
+
+  it("prepends the selected Python sources for both native commands and prerequisite imports", () => {
+    environment.PYTHONPATH = ["/foreign/checkout/python", "/caller/dependencies"].join(delimiter);
+    const expected = [join(directory, "python"), environment.PYTHONPATH].join(delimiter);
+    for (const target of ["check-python", "smoke"]) {
+      const step = validationPlan(target, { directory, environment }).find(item => item.command === environment.PYTHON)!;
+      expect(step.env).toEqual({ NODE: process.execPath, PYTHONPATH: expected });
+    }
+    environment.PYTHON = fakeTool("python", `if (process.argv.includes("--version")) console.log("Python 3.14.7");
+else if (process.env.PYTHONPATH !== ${JSON.stringify(expected)}) throw new Error("wrong checkout import path");`);
+    expect(() => checkPrerequisites("check-python", { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
   });
 
   it("requires the Python floor and dependencies only for the Python lanes", () => {

@@ -8,6 +8,7 @@ to publish a value or cancels another caller's shared source.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import functools
 import inspect
 import json
@@ -381,9 +382,20 @@ class DialCache:
         except Exception:
             pass
 
-    def _discard_awaitable(self, value: Any) -> None:
-        if inspect.isawaitable(value):
-            self._spawn(_await(value))
+    @staticmethod
+    def _discard_awaitable(value: Any) -> None:
+        # Recovery predicates are synchronous. A rejected result must not
+        # start work or take ownership of an application's existing task.
+        if inspect.iscoroutine(value):
+            if inspect.getcoroutinestate(value) == inspect.CORO_CREATED:
+                value.close()
+        elif asyncio.isfuture(value):
+
+            def consume(done: asyncio.Future[Any]) -> None:
+                if not done.cancelled():
+                    done.exception()
+
+            value.add_done_callback(consume, context=contextvars.Context())
 
     def _labels(self, key: Key | _Operation, layer: str | None = None) -> dict[str, Any]:
         labels = {"cacheNamespace": self.namespace, "useCase": key.use_case, "keyType": key.key_type}
@@ -1119,8 +1131,10 @@ class DialCache:
         if "age" in details and outcome in ("match", "mismatch"):
             self._emit("shadowAge", self._labels(key), outcome=outcome, seconds=details.pop("age"))
         if outcome == "mismatch" and log:
-            self._emit("mismatchWarning", self._labels(key), outcome=outcome, **details)
-            self._log("DialCache shadow validation mismatch: %s", {**self._labels(key), **details})
+            self._log(
+                "DialCache shadow validation mismatch: %s",
+                {**self._labels(key), "outcome": outcome, **details},
+            )
 
     @staticmethod
     def _payload_bytes(value: str | bytes) -> bytes:

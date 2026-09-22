@@ -184,6 +184,12 @@ class Logger:
         self.owner = owner
 
     def warning(self, *args, **kwargs):
+        if (
+            len(args) == 2
+            and args[0] == "DialCache shadow validation mismatch: %s"
+            and isinstance(args[1], dict)
+        ):
+            self.owner.record("mismatchWarning", **args[1])
         if self.owner.fixture.get("observerFailure") or self.owner.faults.get("observer"):
             raise RuntimeError("Controlled observer failure")
 

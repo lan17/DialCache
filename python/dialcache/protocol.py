@@ -274,7 +274,10 @@ def decompress_payload(payload: Payload, maximum: int = MAX_DECOMPRESSED_BYTES) 
                     total += len(chunk)
                     if total > maximum:
                         return DecompressionResult(payload, "read_over_limit")
-                    chunks.append(chunk)
+                    # Known oversized frames can only return the raw input;
+                    # validate their stream without retaining unusable output.
+                    if unknown_size:
+                        chunks.append(chunk)
             except zstandard.ZstdError:
                 chunks.clear()
                 outcome = (
