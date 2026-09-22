@@ -1,14 +1,15 @@
 # DialCache
 
+[![npm version](https://img.shields.io/npm/v/dialcache.svg)](https://www.npmjs.com/package/dialcache)
+[![crates.io](https://img.shields.io/crates/v/dialcache.svg)](https://crates.io/crates/dialcache)
+[![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
+
 Read the [shared behavior guides](https://lan17.github.io/DialCache/) with a
 language selector for TypeScript, Go and Rust. Native examples in those guides
 are imported from source files that CI executes.
 
 **TypeScript is the reference implementation. Go and Rust are experimental.**
-
-[![npm version](https://img.shields.io/npm/v/dialcache.svg)](https://www.npmjs.com/package/dialcache)
-[![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
 DialCache organizes caching into use cases, with runtime control and
 observability for each one. Its TypeScript, Go and Rust implementations share
@@ -32,7 +33,7 @@ behavioral contracts and documentation.
 | --- | --- | --- |
 | TypeScript | [`typescript/`](typescript/) — reference implementation | [TypeScript and npm](typescript/README.md) |
 | Go | [`go/`](go/) — experimental | [Go guide](go/README.md) |
-| Rust | [`rust/`](rust/) — experimental | [Rust guide](rust/README.md) |
+| Rust | [`rust/`](rust/) — experimental | [Rust guide](rust/README.md) · [crates.io](https://crates.io/crates/dialcache) |
 
 Shared contracts and portable test histories live in [`formal/`](formal/).
 Run repository validation from the root; see the
