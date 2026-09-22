@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { scanDeclarationBodies } from '../formal/execution.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: 'inherit' });
@@ -34,11 +35,20 @@ const inventory = JSON.parse(readFileSync(resolve(root, 'formal/semantic-cases.j
 const profiles = JSON.parse(readFileSync(resolve(root, 'formal/profiles.json'), 'utf8'));
 const md = text => escape(text).replaceAll('|', '&#124;').replaceAll('\n', ' ');
 const link = (label, path) => `[${md(label)}](${source(path)})`;
+const models = new Map();
 const modelLink = ref => {
   const [path, name] = ref.split(':');
-  const lines = readFileSync(resolve(root, path), 'utf8').split('\n');
-  const line = lines.findIndex(text => new RegExp(`\\b${name}\\b`).test(text)) + 1;
-  return link(name ?? path, path + (line ? `#L${line}` : ''));
+  if (!models.has(path)) {
+    const text = readFileSync(resolve(root, path), 'utf8');
+    models.set(path, { text, declarations: scanDeclarationBodies(text) });
+  }
+  const { text, declarations } = models.get(path);
+  // The scanner skips comments and references. Anchor inside the definition,
+  // including when its signature spans several lines.
+  const offset = declarations.get(name)?.spans[0]?.[0];
+  if (offset === undefined) throw new Error(`Missing Quint declaration: ${ref}`);
+  const line = text.slice(0, offset).split('\n').length;
+  return link(name, `${path}#L${line}`);
 };
 const pages = ['---', 'editLink: false', '---', '', '# Behavior catalogue', '',
   'Generated from the reviewed [semantic case inventory](' + source('formal/semantic-cases.json') + '). ' + inventory.scope, '',

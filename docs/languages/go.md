@@ -72,7 +72,9 @@ insertion order. These binding details do not change sorted cache-key arguments.
 ## Integrations
 
 `NewRedisAdapter` wraps an application-owned go-redis standalone, Sentinel or
-Cluster client; supply it with `WithRemote`. Tracked reads target primaries.
+Cluster client; supply it with `WithRemote`. Tracked reads override replica routing
+for direct `*redis.ClusterClient` clients. Standalone/Sentinel clients must target
+the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false.
 See [Redis and Valkey](../redis.md) and [invalidation](../invalidation.md).
 
 `WithObserver` receives typed diagnostic events and `WithMetrics` connects

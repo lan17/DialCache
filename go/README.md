@@ -109,11 +109,14 @@ disables the deadline), compression on, and shadow capacity one. Invalid
 operation configuration returns an error wrapping `ErrInvalidPolicy` or
 `ErrInvalidOperation` before execution.
 
-`WithRemote` supplies atomic primary snapshots, complete client-stamped frame
+`WithRemote` requires atomic primary snapshots, complete client-stamped frame
 writes, and surfaced invalidation errors. The bundled `RedisAdapter` uses
-go-redis with standalone, Sentinel or Cluster clients. Tracked reads select
-the slot primary even if replica reads were enabled on the client. Writes use
-one native `SET`. Invalidation first dispatches `EVALSHA`; any command rejection
+go-redis with standalone, Sentinel or Cluster clients. For a direct
+`*redis.ClusterClient`, tracked reads select the slot primary even when replica
+reads are enabled. Standalone and Sentinel `*redis.Client` handles must already
+target the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false so replica
+lag cannot hide an invalidation watermark. Writes use one native `SET`.
+Invalidation first dispatches `EVALSHA`; any command rejection
 triggers one retry with `EVAL` using identical logical arguments. A successful
 command with an invalid reply does not trigger a retry. No value write creates
 or extends a watermark. `Invalidate` needs a remote (`ErrNoRemote` otherwise)

@@ -1,9 +1,29 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { checkDocsLinks, checkDocsSources } from './check-docs.mjs';
+
+test('catalogue evidence links land on test definitions rather than earlier comments', () => {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  execFileSync(process.execPath, ['scripts/generate-docs.mjs', '--catalogue-only'], { cwd: root });
+  const catalogue = readFileSync(join(root, 'docs/generated/behavior.md'), 'utf8');
+  for (const [model, name] of [
+    ['shadow', 'explicitInequalityRequiresConfirmationTest'],
+    ['independent', 'staggeredSourceStartsKeepIndependentBudgetsTest'],
+    ['local-failure', 'localReadFailureFallsThroughAndPreservesOldLocalTest'],
+  ]) {
+    const path = `formal/dialcache-${model}-conformance.qnt`;
+    const link = catalogue.split('\n').find(line => line.includes(`[${name}](`));
+    const target = link?.match(new RegExp(`\\[${name}\\]\\([^)]*#L(\\d+)\\)`));
+    assert.ok(target, `${name}: missing source line link`);
+    const definition = readFileSync(join(root, path), 'utf8').split('\n')[Number(target[1]) - 1];
+    assert.ok(definition.trimStart().startsWith(`run ${name} =`), `${name}: linked to ${definition}`);
+  }
+});
 
 test('rejects missing regions instead of letting VitePress silently show the whole file', t => {
   const root = mkdtempSync(join(tmpdir(), 'dialcache-docs-'));

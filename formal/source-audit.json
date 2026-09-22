@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "d4dd35c4993b5c9342945c0aeca8304e31f6b66350cd8d734601e5e1bcfb98c9",
+      "sha256": "d011de5bf43a253a0d3d2cd5d2cfdaa43926322ea65eba1781c5e8809a3c10c6",
       "entries": [
         {"line":1,"title":"Go integration","contracts":["B01"]},
         {"line":8,"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -173,12 +173,12 @@
         {"line":37,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
         {"line":55,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
         {"line":72,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
-        {"line":88,"title":"Conformance","contracts":["B01"]}
+        {"line":90,"title":"Conformance","contracts":["B01"]}
       ]
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "b81b604b0e6683fd502157d6067ed3c1be5d49ddde6f82a80aa9cc96159060a8",
+      "sha256": "c79462b736c463722d5fe1769650a4de6af751f2eceac649d3537e9eae585cc4",
       "entries": [
         {"line":1,"title":"Rust integration","contracts":["B01"]},
         {"line":8,"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -186,7 +186,7 @@
         {"line":50,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
         {"line":68,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
         {"line":86,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
-        {"line":107,"title":"Conformance","contracts":["B01"]}
+        {"line":109,"title":"Conformance","contracts":["B01"]}
       ]
     },
     {
@@ -242,24 +242,24 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "e33678fe09ed7b67bbdf8aa7327a67f7374da5ca887a06ea737ada94572b0dc4",
+      "sha256": "c059a113b938dc349b190553ba072b6170b0e242cdd5c0e1b259c1dacad42b25",
       "entries": [
         {"line":1,"title":"Redis and Valkey","contracts":["E01"]},
-        {"line":14,"title":"Install a client","contracts":["B01"]},
-        {"line":160,"title":"Remote-read deadlines and async liveness","contracts":["C23","C56"]},
-        {"line":202,"title":"Lifecycle ownership","contracts":["E03","X02"]},
-        {"line":239,"title":"Serialization","contracts":["W06","B03"]},
-        {"line":248,"title":"Default JSON behavior","contracts":["B03","C27","C45","C52"]},
-        {"line":365,"title":"Compression","contracts":["W06","W07","W08","X02"]},
-        {"line":442,"title":"Bundled Redis operations","contracts":["E01"]},
-        {"line":444,"title":"Reads","contracts":["E01","W04"]},
-        {"line":468,"title":"Writes","contracts":["E01","W04","W05"]},
-        {"line":492,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
-        {"line":527,"title":"Redis compatibility and ACLs","contracts":["E01"]},
-        {"line":538,"title":"Custom-client contract","contracts":["C55","C56","E01","E04"]},
-        {"line":616,"title":"Advanced wire protocol","contracts":["W04"]},
-        {"line":663,"title":"Read decoding and validation order","contracts":["W04"]},
-        {"line":737,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
+        {"line":14,"title":"Install a client","contracts":["B01","E01"]},
+        {"line":166,"title":"Remote-read deadlines and async liveness","contracts":["C23","C56"]},
+        {"line":208,"title":"Lifecycle ownership","contracts":["E03","X02"]},
+        {"line":245,"title":"Serialization","contracts":["W06","B03"]},
+        {"line":254,"title":"Default JSON behavior","contracts":["B03","C27","C45","C52"]},
+        {"line":371,"title":"Compression","contracts":["W06","W07","W08","X02"]},
+        {"line":448,"title":"Bundled Redis operations","contracts":["E01"]},
+        {"line":450,"title":"Reads","contracts":["E01","W04"]},
+        {"line":474,"title":"Writes","contracts":["E01","W04","W05"]},
+        {"line":498,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
+        {"line":533,"title":"Redis compatibility and ACLs","contracts":["E01"]},
+        {"line":544,"title":"Custom-client contract","contracts":["C55","C56","E01","E04"]},
+        {"line":622,"title":"Advanced wire protocol","contracts":["W04"]},
+        {"line":669,"title":"Read decoding and validation order","contracts":["W04"]},
+        {"line":743,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
       ]
     },
     {
@@ -1583,17 +1583,17 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "1bb906b7bf07e623c4102032cec787680c85112249fe45eeace833202efef3e8",
+      "sha256": "dcef48b1acaea88d04dd2ea49ed09f7ce7ea17a019f41b9df257a31b6560bebf",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
         {"line":23,"title":"Use"},
         {"line":89,"title":"Configuration and effects"},
-        {"line":144,"title":"Values, codecs and observability"},
-        {"line":190,"title":"Validation and reproducing a trace"}
+        {"line":147,"title":"Values, codecs and observability"},
+        {"line":193,"title":"Validation and reproducing a trace"}
       ],
       "review": {
         "kind": "contract-guide",
-        "scope": "Go API/context/policy/error bindings and native codec domains. Updated test prerequisites and shared coordinator ownership: command mapping/assertions use Node while the cache implementation and environment remain native Go; full evidence differs from smoke.",
+        "scope": "Go API/context/policy/error bindings and native codec domains. Updated test prerequisites and shared coordinator ownership: command mapping/assertions use Node while the cache implementation and environment remain native Go; full evidence differs from smoke. Redis routing review distinguishes the concrete ClusterClient primary override from the application requirement that standalone/Sentinel handles target the primary with ReplicaOnly disabled.",
         "contracts": [
           "B01",
           "B02",

@@ -121,10 +121,13 @@ go get github.com/lan17/DialCache/go@latest
 ```
 
 Create the appropriate `redis.UniversalClient` in your application, then pass
-`dialcache.NewRedisAdapter(client)` to `dialcache.WithRemote`. Tracked reads
-select the primary even if the client permits replica reads. Set connection,
-read/write and retry budgets on the native client; close it only after application
-work is drained. The [executed invalidation example](invalidation.md#configure-a-tracked-use-case)
+`dialcache.NewRedisAdapter(client)` to `dialcache.WithRemote`. For a direct
+`*redis.ClusterClient`, tracked reads select the primary even when replica reads
+are enabled. Standalone and Sentinel `*redis.Client` handles must already target
+the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false. Reading a replica
+can hide an invalidation watermark. Set connection, read/write and retry budgets
+on the native client; close it only after application work is drained. The
+[executed invalidation example](invalidation.md#configure-a-tracked-use-case)
 links to complete connection setup.
 
 </LanguageContent>
@@ -142,7 +145,10 @@ redis = { version = "1", features = ["tokio-comp", "connection-manager"] }
 The path points to a checkout because the crate is unpublished. `RedisAdapter`
 implements `Remote` for connection managers, multiplexed connections and Cluster
 connections. Pass an adapter through the cache builder's `remote` method.
-Tracked reads route to slot primaries. The complete
+For `ClusterConnection`, tracked reads explicitly route to slot primaries.
+Standalone and Sentinel-managed connection handles must already target the
+primary; the adapter cannot distinguish a replica or redirect those reads.
+The complete
 [Redis example](https://github.com/lan17/DialCache/blob/main/rust/examples/redis.rs)
 configures client connection and command timeouts:
 
@@ -191,9 +197,9 @@ Redis command stopped or free the application from bounding retries and queues.
 
 <LanguageContent language="rust">
 
-The adapter applies its native read budget, while the async engine bounds its
-own wait. A dropped or timed-out future does not establish server-side
-cancellation. Keep native connection and command budgets finite.
+The engine bounds its read wait, and the adapter observes its cancellation token.
+Configure native connection, response and retry budgets on the application-owned
+client. Cancellation does not guarantee that a dispatched server command stops.
 
 </LanguageContent>
 

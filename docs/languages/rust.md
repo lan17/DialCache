@@ -87,7 +87,9 @@ surrogates. Custom async `Codec<T>` implementations handle other domains;
 
 Enable the `redis` feature for `RedisAdapter`, which wraps caller-owned `redis`
 crate connections, including connection managers, multiplexed connections and
-Cluster connections. See [Redis and Valkey](../redis.md) for lifecycle requirements.
+Cluster connections. Tracked reads explicitly select a primary for
+`ClusterConnection`; standalone/Sentinel handles must already target the primary.
+See [Redis and Valkey](../redis.md) for connection and lifecycle requirements.
 
 `Observer` receives typed events. Bundled `PrometheusObserver` (feature
 `prometheus`) and `DatadogObserver` provide the shared metrics. Clone one
