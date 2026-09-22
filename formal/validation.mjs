@@ -19,7 +19,7 @@ export const targetDescriptions = {
   'check-ts': 'Typecheck, unit coverage, build and packed-package checks on Node 24',
   'check-go': 'Go vet, formatting check and default tests with race detection',
   'check-rust': 'Rust formatting check, clippy with warnings denied and default tests including the smoke conformance run',
-  docs: 'Build the documentation site',
+  docs: 'Check shared examples and links; generate native API references and the documentation site (Go and Rust required)',
   audit: 'Check source, behavior, feature, Go and generated-fixture freshness inventories',
   smoke: 'Replay committed Quint-derived fixtures in TypeScript, Go and Rust; no full completion claim',
   formal: 'Check every scheduled Quint model, generate the complete corpus and shared witness evidence, then complete TypeScript, Go and Rust replay',
@@ -155,7 +155,7 @@ export function validationPlan(target, { directory = root, environment = process
   // report can keep rejecting every actual skip, including required cases.
   const nativeGo = full => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
     'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m',
-      '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver)$'] : []), './...'),
+      '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver|TestDocsTrackedInvalidation)$'] : []), './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   // The Rust conformance harness is one cargo test target. Without directory
   // selectors it replays the committed smoke histories; with them it replays
@@ -242,11 +242,11 @@ export function checkPrerequisites(target, { directory = root, environment = pro
   const requiredPnpm = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')).packageManager?.replace(/^pnpm@/, '');
   const pnpm = probe('corepack', ['pnpm', '--version'], { directory, environment });
   if (!requiredPnpm || pnpm !== requiredPnpm) throw new Error(`Expected pinned pnpm ${requiredPnpm}; found ${pnpm}. Use corepack pnpm and install the frozen lockfile.`);
-  if (targets.some(name => ['check-go', 'smoke', 'formal-go', 'mutations-go', 'integration-go', 'explore'].includes(name))) {
+  if (targets.some(name => ['check-go', 'docs', 'smoke', 'formal-go', 'mutations-go', 'integration-go', 'explore'].includes(name))) {
     const version = probe('go', ['version'], { directory, environment });
     if (!/^go version go1\.27\.1\s/.test(version)) throw new Error(`Validation requires Go 1.27.1; found ${version}. Put the pinned Go toolchain on PATH.`);
   }
-  if (targets.some(name => ['check-rust', 'smoke', 'formal-rust', 'integration-rust', 'mutations-rust', 'explore'].includes(name))) {
+  if (targets.some(name => ['check-rust', 'docs', 'smoke', 'formal-rust', 'integration-rust', 'mutations-rust', 'explore'].includes(name))) {
     const version = probe('cargo', ['--version'], { directory: resolve(directory, 'rust'), environment });
     if (!/^cargo 1\.98\.1(?:\s|$)/.test(version)) throw new Error(`Validation requires cargo 1.98.1; found ${version}. Install Rust 1.98.1 (rustup reads rust/rust-toolchain.toml) and put it on PATH.`);
   }

@@ -12,18 +12,13 @@ const fallbackTimeoutMarker = "dialcache-fallback-timeout-delivered";
 const nodeInvalidationMarker = "dialcache-node-invalidation-retry-verified";
 const observerIsolationMarker = "dialcache-observer-rejections-isolated";
 const shadowPayloadReleaseMarker = "dialcache-shadow-payload-released";
-// Run the actual first TypeScript block from each onboarding page, without a
-// separately maintained copy that could keep passing after the docs break.
+// The landing README is standalone Markdown. Shared site guides import the
+// executable source registered in docs/ports.json, checked below with peers.
 const documentationExamples = [
   {
     source: "README.md",
     filename: "readme-example.mts",
     stdout: "Loading from source: 123\nLoading from source: 123\n",
-  },
-  {
-    source: "docs/getting-started.md",
-    filename: "getting-started-example.mts",
-    stdout: "1\n2\n",
   },
 ];
 const packedInvalidationCheckSource = String.raw`
@@ -1983,6 +1978,16 @@ void (async () => {
     ["--project", join(workspace, "tsconfig.json")],
     { cwd: workspace },
   );
+  const ports = JSON.parse(await readFile(join(root, "docs/ports.json"), "utf8"));
+  const documentationSource = ports.find((port) => port.id === "typescript").example;
+  await writeFile(join(workspace, "docs.mts"), await readFile(join(root, documentationSource), "utf8"));
+  await writeFile(join(workspace, "tsconfig.docs.json"), typescriptConfig(["docs.mts"]));
+  await exec(join(workspace, "node_modules", ".bin", "tsc"), ["--project", "tsconfig.docs.json"], { cwd: workspace });
+  const { stdout: docsOutput } = await exec(process.execPath, ["--experimental-strip-types", "docs.mts"], {
+    cwd: workspace, timeout: 30_000,
+  });
+  if (!docsOutput.includes("dialcache-docs-examples-passed")) throw new Error("Shared documentation examples did not complete");
+  process.stdout.write(docsOutput);
 } finally {
   await rm(workspace, { recursive: true, force: true });
 }

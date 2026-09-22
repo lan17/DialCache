@@ -15,15 +15,15 @@ deletion, refresh, or expiry cannot revoke the retained snapshot.
 
 | Symbol | Configuration | Meaning |
 | --- | --- | --- |
-| `F` | `ttlSec.remote` | Exclusive fresh age ceiling for ordinary Redis reads |
-| `M` | `staleOnErrorMaxAgeSec` | Exclusive recovery age ceiling, measured from the same frame timestamp |
+| `F` | Remote TTL | Exclusive fresh age ceiling for ordinary Redis reads |
+| `M` | Maximum recovery age | Exclusive recovery age ceiling, measured from the same frame timestamp |
 
 `M` is total age, not extra time after `F`. Positive configuration must satisfy
 `0 < F < M <= 31_536_000` seconds. Both ages must be safe-integer numbers.
 Omission leaves recovery off, or inherits it in a sparse runtime overlay.
 Explicit `0` disables inherited recovery.
 
-Invalid static defaults throw. Invalid runtime recovery policy records
+Invalid static defaults fail validation. Invalid runtime recovery policy records
 `config_resolution`, disables only recovery, and preserves valid ordinary Redis
 serving. A remote ramp of zero bypasses the caller-serving Redis path, including
 recovery.
@@ -32,32 +32,35 @@ recovery.
 
 Use a remote TTL for ordinary freshness and a larger maximum age for recovery:
 
-```ts
-import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
+<LanguageContent language="typescript">
 
-const dialcache = new DialCache({
-  redis: { client: dialCacheRedisClient },
-});
+Set `ttlSec.remote: 60` and `staleOnErrorMaxAgeSec: 300` in
+`DialCacheKeyConfig`, with a connected Redis adapter. The per-operation
+`fallbackTimeoutMs` controls the source deadline; it is separate from both ages.
 
-const getUser = dialcache.cached(
-  (userId: string) => db.fetchUser(userId),
-  {
-    keyType: "user_id",
-    useCase: "GetUserWithRecovery",
-    cacheKey: (userId) => userId,
-    fallbackTimeoutMs: 2_000,
-    defaultConfig: new DialCacheKeyConfig({
-      ttlSec: { [CacheLayer.REMOTE]: 60 },
-      staleOnErrorMaxAgeSec: 300,
-    }),
-  },
-);
-```
+</LanguageContent>
 
-This assumes a configured semantic Redis client and application `db`. Inside
-`enable()`, a frame younger than 60 seconds can serve normally. From 60 seconds
-until strictly before 300 seconds, it can serve only after an authorized source
-rejection. The built-in classifier accepts `FallbackTimeoutError` only.
+<LanguageContent language="go">
+
+Set `Policy.RemoteTTL` to `60 * time.Second` and `Policy.StaleOnErrorMaxAge`
+to `dialcache.Ptr(300 * time.Second)`. A nil recovery pointer omits recovery;
+a pointer to zero explicitly disables an inherited setting. Supply `WithRemote`
+for the Redis adapter.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Use `Policy::default().remote_ttl_sec(60).stale_on_error_max_age_sec(300)`
+with a connected `Remote`. The operation's `SourceBudget` controls the source
+deadline separately from both ages.
+
+</LanguageContent>
+
+Inside an enabled scope, a frame younger than 60 seconds serves normally. From
+60 seconds until strictly before 300 seconds, it can serve only after an eligible
+source failure. The built-in classifier accepts the native fallback-timeout
+error only.
 
 ## Follow one invocation
 
@@ -80,45 +83,78 @@ accepted rejection authorizes a recovery check, even when no candidate exists.
 
 With a candidate, DialCache checks `0 <= age < M`, deserializes/decompresses lazily,
 and checks the age again before returning. Crossing `M` during asynchronous
-`load` prevents serving. A missing, expired, or undecodable candidate preserves
-the **exact original source rejection**.
+decoding prevents serving. A missing, expired, or undecodable candidate preserves
+the **exact original source error**.
 
 ## Choose which errors permit recovery
 
-The synchronous `shouldAttemptStaleRecovery(error)` classifier has this
-precedence:
+The synchronous error classifier resolves in this order:
 
 ```text
-operation option → instance option → error instanceof FallbackTimeoutError
+operation classifier → instance classifier → native fallback-timeout error
 ```
 
 An override replaces the lower policy. Include the timeout case yourself if an
-application classifier should preserve it:
+application classifier should preserve it.
 
-```ts
-import { FallbackTimeoutError } from "dialcache";
+<LanguageContent language="typescript">
 
-const cache = new DialCache({
-  redis: { client: dialCacheRedisClient },
-  shouldAttemptStaleRecovery: (error) =>
-    error instanceof FallbackTimeoutError || isRetriableDatabaseError(error),
-});
-```
+Use `shouldAttemptStaleRecovery` on the operation or instance. A common policy
+accepts `error instanceof FallbackTimeoutError` plus a narrow application-defined
+transient-error predicate such as `isRetriableDatabaseError(error)`.
 
-`isRetriableDatabaseError` is your application's narrow classification of
-transient infrastructure failures. Deny authoritative outcomes such as
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Use `Operation.ShouldRecover` or instance `WithStaleRecovery`. The predicate
+accepts the source error; use native `errors.Is`/`errors.As` checks for the narrow
+set of recoverable failures, including `FallbackTimeoutError` if desired.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Use the operation or builder's `should_recover` predicate. Match
+`Error::FallbackTimeout` if preserving default timeout recovery, and inspect
+application source errors for any additional transient failure cases.
+
+</LanguageContent>
+
+An application transient-error predicate should classify infrastructure failures
+narrowly. Deny authoritative outcomes such as
 permission or entitlement failures, revocation, deletion/not-found, validation,
 and programmer errors. Use an operation override for data requiring a stricter
-policy; `() => false` denies recovery for that operation.
+policy; a classifier that always returns false denies recovery for that operation.
 
-The built-in policy also accepts a `FallbackTimeoutError` propagated from a
+The built-in policy also accepts a fallback-timeout error propagated from a
 nested/source operation. It is not limited to the current wrapper's own timer.
 
-A supplied policy must be a function. Runtime throws, thenables, and non-boolean
-returns deny recovery, log the classifier failure, and preserve the original
-source rejection. Rejecting thenables are consumed. Calls outside `enable()`
-never invoke the classifier. `cached()` captures it at registration;
-`getOrLoad()` captures it per invocation.
+A failing classifier denies recovery and preserves the original source error.
+Disabled-scope calls never run the classifier. Registered readers capture it at
+registration; inline operations capture it per invocation.
+
+<LanguageContent language="typescript">
+
+The classifier must return a synchronous boolean. Throws, thenables and
+non-boolean values deny recovery and log the classifier failure; rejecting
+thenables are consumed.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+The native predicate returns `(bool, error)`. A returned error or callback panic
+is isolated and denies recovery; it does not replace the original source failure.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+The native predicate returns a boolean. A callback panic is isolated and denies
+recovery; it does not authorize a retained value.
+
+</LanguageContent>
 
 ## Snapshot and invalidation boundaries
 
@@ -151,18 +187,18 @@ see the [application clock contract](invalidation.md#application-clock-contract)
 
 Earlier local layers retain their own lifetimes. A nearly expired Redis hit can
 warm process-local storage with a full local TTL. For each invocation to make a
-new remote frame-age check, disable both earlier layers and set `coalesce: false`.
+new remote frame-age check, disable both earlier layers and disable coalescing.
 Otherwise, a follower can reuse the leader's earlier age check and snapshot.
 
 Coalesced callers share one initial read, raw candidate, source attempt, and
-recovery decision. With `coalesce: false`, each caller retains its own bytes and
+recovery decision. With coalescing disabled, each caller retains its own bytes and
 runs independently. Across distinct in-flight keys, delayed source calls can
 retain substantial raw payload memory until they settle. Use application
 admission controls and finite source budgets.
 
 ## Observability
 
-Each classifier-authorized check emits one optional `staleRecovery` outcome:
+Each classifier-authorized check emits one optional stale-recovery outcome:
 `served`, `miss`, or `deserialization_error`. Only `served` additionally reports
 value age, measured at actual return time. Classifier denial emits no recovery
 outcome.

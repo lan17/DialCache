@@ -1,12 +1,16 @@
 # DialCache for Go
 
+Read the [shared behavior guides](https://lan17.github.io/DialCache/) and
+[Go integration guide](https://lan17.github.io/DialCache/languages/go).
+The site uses one explanation per feature with selected native examples and notes.
+
 Go implements the same portable behavior as TypeScript: explicit request
 enablement, request/local/Redis layers, deterministic rollout, sparse runtime
 policy, request and process coalescing, tracked invalidation, source/read
 deadlines, stale recovery, dark and served-hit shadow validation, compression,
 and failure-isolated observability.
 
-The [Quint models](../formal/README.md) are the behavioral source of truth. Both
+The [Quint models](../formal/README.md) are the behavioral source of truth. All three
 implementations replay the same sampled histories and named public-action
 regressions, plus fixed scenarios and Quint-derived protocol vectors. The current
 inventory comes from [execution.json](../formal/execution.json); real integration
@@ -204,7 +208,7 @@ make mutations-go  # Go fault catalog over the generated corpus and witness evid
 make integration-go
 ```
 
-`make check` runs both languages' fast checks.
+`make check` runs all three languages' fast checks.
 `make ci NODE22_BIN=/path/to/node22/bin/node` runs all local lanes in order,
 including symbolic checks and the exact Node 22.15.0 packed-package floor. After
 `make formal-generate`, `make formal-go` prepares Go with the shared witness

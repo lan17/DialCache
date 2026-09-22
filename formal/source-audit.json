@@ -3,264 +3,312 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "73fd3028635e25c046ff3af486f58ea18b2754038b60c58e12c7d9cc2624bfa5",
+      "sha256": "88b949faf32080edf479242e9999719b3ba83d5c30e90a2004b52ee3fd240dff",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01"]},
-        {"line":24,"title":"Install","contracts":["B01"]},
-        {"line":37,"title":"Usage","contracts":["C01","C05","W01"]},
-        {"line":81,"title":"How reads work","contracts":["C05","C31"]},
-        {"line":105,"title":"Runtime control","contracts":["C16","C18"]},
-        {"line":124,"title":"Documentation","contracts":["B01"]}
+        {"line":28,"title":"Install","contracts":["B01"]},
+        {"line":41,"title":"Usage","contracts":["C01","C05","W01"]},
+        {"line":85,"title":"How reads work","contracts":["C05","C31"]},
+        {"line":109,"title":"Runtime control","contracts":["C16","C18"]},
+        {"line":128,"title":"Documentation","contracts":["B01"]}
       ]
     },
     {
       "path": "docs/api.md",
-      "sha256": "418e4d6709aab1b045f3bc6ee766cd8e006693f93a49a713904f916229e0160e",
+      "sha256": "9116750dd7fa64277ff78673f8963ecb6dac0f864408aa2d1aa2e527e0619e42",
       "entries": [
-        {"line":1,"title":"API reference","contracts":["B01"]},
-        {"line":9,"title":"Imports","contracts":["B01"]},
-        {"line":23,"title":"Constructor","contracts":["B01"]},
-        {"line":44,"title":"`RedisConfig`","contracts":["C23","E01","B01"]},
-        {"line":59,"title":"Scope methods","contracts":["C01","C02","C03","B01"]},
-        {"line":80,"title":"`cached`","contracts":["B01"]},
-        {"line":97,"title":"`getOrLoad`","contracts":["C11","C18","B01"]},
-        {"line":116,"title":"Operation options","contracts":["C18","C23","C42","B01"]},
-        {"line":144,"title":"`DialCacheKeyConfig`","contracts":["C16","B01"]},
-        {"line":173,"title":"Validation and snapshots","contracts":["C18","C20","B01"]},
-        {"line":208,"title":"`invalidateRemote`","contracts":["C29","C32","C39","B01"]},
-        {"line":224,"title":"`getCoalescingState`","contracts":["X01","B01"]},
-        {"line":241,"title":"Keys and serializers","contracts":["W01","W02","B03"]},
-        {"line":258,"title":"Constructing keys directly","contracts":["W01","B01"]},
-        {"line":302,"title":"Errors","contracts":["C27","B01"]},
-        {"line":320,"title":"Custom integrations","contracts":["E01","B01","X01"]}
+        {"line":5,"title":"API reference","contracts":["B01"]},
+        {"line":46,"title":"Imports","contracts":["B01"]},
+        {"line":60,"title":"Constructor","contracts":["B01"]},
+        {"line":81,"title":"`RedisConfig`","contracts":["C23","E01","B01"]},
+        {"line":96,"title":"Scope methods","contracts":["C01","C02","C03","B01"]},
+        {"line":117,"title":"`cached`","contracts":["B01"]},
+        {"line":134,"title":"`getOrLoad`","contracts":["C11","C18","B01"]},
+        {"line":153,"title":"Operation options","contracts":["C18","C23","C42","B01"]},
+        {"line":181,"title":"`DialCacheKeyConfig`","contracts":["C16","B01"]},
+        {"line":210,"title":"Validation and snapshots","contracts":["C18","C20","B01"]},
+        {"line":245,"title":"`invalidateRemote`","contracts":["C29","C32","C39","B01"]},
+        {"line":261,"title":"`getCoalescingState`","contracts":["X01","B01"]},
+        {"line":278,"title":"Keys and serializers","contracts":["W01","W02","B03"]},
+        {"line":295,"title":"Constructing keys directly","contracts":["W01","B01"]},
+        {"line":339,"title":"Errors","contracts":["C27","B01"]},
+        {"line":357,"title":"Custom integrations","contracts":["E01","B01","X01"]}
+      ]
+    },
+    {
+      "path": "docs/authoring.md",
+      "sha256": "c35d73efa5ce269767b7d604110ac279e15c45e268eba34219a2d43ff3ca65e5",
+      "entries": [
+        {"line":1,"title":"Writing shared documentation","contracts":["B01"]},
+        {"line":8,"title":"Change a feature guide","contracts":["B01"]},
+        {"line":21,"title":"Import tested examples","contracts":["B01"]},
+        {"line":60,"title":"Run the checks","contracts":["B01"]},
+        {"line":98,"title":"Generated references and evidence","contracts":["B01"]},
+        {"line":112,"title":"Add a port","contracts":["B01"]}
       ]
     },
     {
       "path": "docs/coalescing.md",
-      "sha256": "3534f49eb8632cbeea039c67727e0fc76d5344c5630409afe644c393ba6500e6",
+      "sha256": "da42893a0cd6bf938821fa31bf513a46e971a4f34afe23d94813da98da87ab8e",
       "entries": [
         {"line":1,"title":"Coalescing and liveness","contracts":["C11"]},
         {"line":20,"title":"Request coalescing","contracts":["C11"]},
         {"line":35,"title":"Request-local scope","contracts":["C07","C12"]},
         {"line":44,"title":"Process scope","contracts":["C11","C12"]},
-        {"line":75,"title":"What followers inherit","contracts":["C18","C24"]},
-        {"line":101,"title":"Per-use-case opt-out","contracts":["C13"]},
-        {"line":159,"title":"When calls do not coalesce","contracts":["C01","C14"]},
-        {"line":187,"title":"Shadow work does not enable caller coalescing","contracts":["C49"]},
-        {"line":207,"title":"Stale recovery shares the flight","contracts":["C43"]},
-        {"line":215,"title":"Fallback deadlines","contracts":["C23"]},
-        {"line":252,"title":"When the timer runs","contracts":["C23","C26"]},
-        {"line":267,"title":"Application-owned budgets","contracts":["C26","E03"]},
-        {"line":286,"title":"Event-loop behavior","contracts":["C25","B02"]},
-        {"line":302,"title":"Timeout does not cancel the source","contracts":["C25"]},
-        {"line":329,"title":"Shadow deadlines are separate","contracts":["C54"]},
-        {"line":349,"title":"Inspecting process-scoped flights","contracts":["X01"]},
-        {"line":378,"title":"Admission control remains application-owned","contracts":["E03","X02"]}
+        {"line":67,"title":"What followers inherit","contracts":["C18","C24"]},
+        {"line":93,"title":"Per-use-case opt-out","contracts":["C13"]},
+        {"line":153,"title":"When calls do not coalesce","contracts":["C01","C14"]},
+        {"line":181,"title":"Shadow work does not enable caller coalescing","contracts":["C49"]},
+        {"line":201,"title":"Stale recovery shares the flight","contracts":["C43"]},
+        {"line":209,"title":"Fallback deadlines","contracts":["C23"]},
+        {"line":240,"title":"When the timer runs","contracts":["C23","C26"]},
+        {"line":255,"title":"Application-owned budgets","contracts":["C26","E03"]},
+        {"line":274,"title":"Event-loop behavior","contracts":["C25","B02"]},
+        {"line":309,"title":"Timeout does not cancel the source","contracts":["C25"]},
+        {"line":336,"title":"Shadow deadlines are separate","contracts":["C54"]},
+        {"line":356,"title":"Inspecting process-scoped flights","contracts":["X01"]},
+        {"line":398,"title":"Admission control remains application-owned","contracts":["E03","X02"]}
       ]
     },
     {
       "path": "docs/concepts.md",
-      "sha256": "ca6b937b43779e735c844814a44b2d24e469cd956f70b5fafb4041fff34fa30e",
+      "sha256": "d243554cf4cd78d0dd0d214060d5af0c56b794fd834199ff8f020d3d94f05097",
       "entries": [
         {"line":1,"title":"How DialCache works","contracts":["C01"]},
         {"line":9,"title":"Identity governs reuse","contracts":["W01","E04"]},
         {"line":22,"title":"The read path","contracts":["C05","C11"]},
         {"line":50,"title":"Enable and disable scopes","contracts":["C01","C02","C03"]},
-        {"line":70,"title":"Three lifetimes","contracts":["C07","C08"]},
-        {"line":82,"title":"Request-local cache","contracts":["C06","C07"]},
-        {"line":90,"title":"Process-local cache","contracts":["C08","C09"]},
-        {"line":101,"title":"What gets stored after a miss?","contracts":["C05","C31"]},
-        {"line":123,"title":"Freshness boundaries","contracts":["C09","C22","C36"]},
-        {"line":146,"title":"Fail-open and liveness","contracts":["C23","C25","C27","C28"]},
-        {"line":163,"title":"Value ownership","contracts":["E04","B03"]},
-        {"line":170,"title":"Where to go next","contracts":["B01"]}
+        {"line":92,"title":"Three lifetimes","contracts":["C07","C08"]},
+        {"line":104,"title":"Request-local cache","contracts":["C06","C07"]},
+        {"line":111,"title":"Process-local cache","contracts":["C08","C09"]},
+        {"line":122,"title":"What gets stored after a miss?","contracts":["C05","C31"]},
+        {"line":145,"title":"Freshness boundaries","contracts":["C09","C22","C36"]},
+        {"line":168,"title":"Fail-open and liveness","contracts":["C23","C25","C27","C28"]},
+        {"line":185,"title":"Value ownership","contracts":["E04","B03"]},
+        {"line":217,"title":"Where to go next","contracts":["B01"]}
       ]
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "39522c6c43320f4ff509e75ee856c8c869b9e319b7ec409c7e9fabfcd84246db",
+      "sha256": "b1c46085d6874f132bdab3948eea7736014c0c95d90d4a619f7d1450d2552e3a",
       "entries": [
         {"line":1,"title":"Configuration and rollout","contracts":["C16"]},
         {"line":11,"title":"What belongs where","contracts":["C16","B01"]},
         {"line":26,"title":"Baseline and overlay precedence","contracts":["C16"]},
-        {"line":78,"title":"Turning features off","contracts":["C17"]},
-        {"line":97,"title":"Stable key cohorts","contracts":["W03"]},
-        {"line":121,"title":"Changing policy on a running service","contracts":["C18","C22"]},
-        {"line":146,"title":"Provider behavior","contracts":["C20","C21"]},
-        {"line":159,"title":"Deadlines","contracts":["C23"]},
-        {"line":175,"title":"Related reference","contracts":["B01"]}
+        {"line":106,"title":"Turning features off","contracts":["C17"]},
+        {"line":125,"title":"Stable key cohorts","contracts":["W03"]},
+        {"line":149,"title":"Changing policy on a running service","contracts":["C18","C22"]},
+        {"line":174,"title":"Provider behavior","contracts":["C20","C21"]},
+        {"line":186,"title":"Deadlines","contracts":["C23"]},
+        {"line":198,"title":"Related reference","contracts":["B01"]}
       ]
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "175dc57b450bee0d26c5ef207cb774b723da82722c4e4a2676bfaefda2fd609c",
+      "sha256": "6398f11ab7014788c16d556d1a35e61a6a8cff90b57d80227af43ddbc776064d",
       "entries": [
         {"line":1,"title":"Getting started","contracts":["B01"]},
-        {"line":8,"title":"Install","contracts":["B01"]},
-        {"line":17,"title":"Wrap a reader","contracts":["C01","C05","W01"]},
-        {"line":86,"title":"Choose the enabled scope","contracts":["C01","C02"]},
-        {"line":108,"title":"Keep a calculation inline","contracts":["C11","B01"]},
-        {"line":127,"title":"Introduce runtime policy","contracts":["C16","C18"]},
-        {"line":166,"title":"Add shared caching when needed","contracts":["E01"]}
+        {"line":13,"title":"Install","contracts":["B01"]},
+        {"line":56,"title":"Wrap a reader","contracts":["C01","C05","W01"]},
+        {"line":101,"title":"Choose the enabled scope","contracts":["C01","C02"]},
+        {"line":139,"title":"Keep a calculation inline","contracts":["C11","B01"]},
+        {"line":166,"title":"Introduce runtime policy","contracts":["C16","C18"]},
+        {"line":178,"title":"Add shared caching when needed","contracts":["E01"]}
       ]
     },
     {
       "path": "docs/index.md",
-      "sha256": "fa87ab915f2121961d12e7567ac98a2517b3ed6ff52bd5ad62752806a60000de",
+      "sha256": "186d51bc831587d99f757d4defdfdf7871b55814484c523b32a2e8e878f46c52",
       "entries": [
         {"line":1,"title":"DialCache documentation","contracts":["B01"]},
-        {"line":9,"title":"Learn the model","contracts":["B01"]},
-        {"line":19,"title":"Feature guides","contracts":["B01"]},
-        {"line":30,"title":"Reference and integrations","contracts":["B01"]},
-        {"line":40,"title":"Find an answer","contracts":["B01"]}
+        {"line":11,"title":"Learn the model","contracts":["B01"]},
+        {"line":21,"title":"Feature guides","contracts":["B01"]},
+        {"line":32,"title":"Reference and integrations","contracts":["B01"]},
+        {"line":42,"title":"Language guides","contracts":["B01"]},
+        {"line":54,"title":"Find an answer","contracts":["B01"]}
       ]
     },
     {
       "path": "docs/invalidation.md",
-      "sha256": "115bef8d2529176319f1685179e380b9742ea465a7aaf6e82a8f71a695227a59",
+      "sha256": "50e7285a64dcd2ab7eda3da84935fc92213274c0ac7049355e041946dabf31f4",
       "entries": [
         {"line":1,"title":"Targeted invalidation","contracts":["C32"]},
         {"line":10,"title":"Watermarks: an entity-wide cutoff","contracts":["C32","C33"]},
         {"line":53,"title":"Configure a tracked use case","contracts":["C31","B01"]},
-        {"line":91,"title":"Choosing `futureBufferMs`","contracts":["E02","E03"]},
-        {"line":120,"title":"Reuse boundaries","contracts":["C36"]},
-        {"line":132,"title":"Independent fence checks","contracts":["C34","C35"]},
-        {"line":148,"title":"Application clock contract","contracts":["E03"]},
-        {"line":163,"title":"Watermark durability","contracts":["E02"]},
-        {"line":174,"title":"Protocol reference","contracts":["W09"]},
-        {"line":176,"title":"Read and write behavior","contracts":["C33","C35"]},
-        {"line":186,"title":"Conditional refills","contracts":["C34"]},
-        {"line":215,"title":"In-memory publication","contracts":["C31","C36"]},
-        {"line":226,"title":"Shadow reads and fills","contracts":["C53"]},
-        {"line":237,"title":"Identity and Redis Cluster placement","contracts":["W01"]},
-        {"line":262,"title":"Watermark lifetime","contracts":["C37","C38","C39"]},
-        {"line":290,"title":"Failure behavior and telemetry","contracts":["C29","C58"]}
+        {"line":119,"title":"Choosing `futureBufferMs`","contracts":["E02","E03"]},
+        {"line":147,"title":"Reuse boundaries","contracts":["C36"]},
+        {"line":159,"title":"Independent fence checks","contracts":["C34","C35"]},
+        {"line":175,"title":"Application clock contract","contracts":["E03"]},
+        {"line":190,"title":"Watermark durability","contracts":["E02"]},
+        {"line":201,"title":"Protocol reference","contracts":["W09"]},
+        {"line":203,"title":"Read and write behavior","contracts":["C33","C35"]},
+        {"line":213,"title":"Conditional refills","contracts":["C34"]},
+        {"line":242,"title":"In-memory publication","contracts":["C31","C36"]},
+        {"line":253,"title":"Shadow reads and fills","contracts":["C53"]},
+        {"line":264,"title":"Identity and Redis Cluster placement","contracts":["W01"]},
+        {"line":289,"title":"Watermark lifetime","contracts":["C37","C38","C39"]},
+        {"line":317,"title":"Failure behavior and telemetry","contracts":["C29","C58"]}
       ]
     },
     {
       "path": "docs/keys.md",
-      "sha256": "dd79d199a8feb07e5c652513195ffaef21caecbad9f90efbf2d89e4434ac0237",
+      "sha256": "6e59640019afabfbff89b2aa0daaf8c5b57e9484f3b2ad903db0d1c4ae22d342",
       "entries": [
         {"line":1,"title":"Keys and identity","contracts":["W01"]},
         {"line":14,"title":"Anatomy of a key","contracts":["W01"]},
         {"line":42,"title":"Define a result identity","contracts":["W01","E04"]},
-        {"line":85,"title":"Normalization and encoding","contracts":["W02"]},
-        {"line":111,"title":"Namespace","contracts":["W01"]},
-        {"line":118,"title":"Changing a namespace","contracts":["W01","E05"]},
-        {"line":135,"title":"The key passed to runtime policy","contracts":["C16","B01"]}
+        {"line":110,"title":"Normalization and encoding","contracts":["W02"]},
+        {"line":162,"title":"Namespace","contracts":["W01"]},
+        {"line":169,"title":"Changing a namespace","contracts":["W01","E05"]},
+        {"line":186,"title":"The key passed to runtime policy","contracts":["C16","B01"]}
+      ]
+    },
+    {
+      "path": "docs/languages/go.md",
+      "sha256": "d4dd35c4993b5c9342945c0aeca8304e31f6b66350cd8d734601e5e1bcfb98c9",
+      "entries": [
+        {"line":1,"title":"Go integration","contracts":["B01"]},
+        {"line":8,"title":"Installation and runtime","contracts":["B01","B02"]},
+        {"line":23,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
+        {"line":37,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
+        {"line":55,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
+        {"line":72,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
+        {"line":88,"title":"Conformance","contracts":["B01"]}
+      ]
+    },
+    {
+      "path": "docs/languages/rust.md",
+      "sha256": "b81b604b0e6683fd502157d6067ed3c1be5d49ddde6f82a80aa9cc96159060a8",
+      "entries": [
+        {"line":1,"title":"Rust integration","contracts":["B01"]},
+        {"line":8,"title":"Installation and runtime","contracts":["B01","B02"]},
+        {"line":38,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
+        {"line":50,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
+        {"line":68,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
+        {"line":86,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
+        {"line":107,"title":"Conformance","contracts":["B01"]}
+      ]
+    },
+    {
+      "path": "docs/languages/typescript.md",
+      "sha256": "d70b582af357505d4a67073c9b72e2a385c4993a4cc858ce0716ae6740ae7641",
+      "entries": [
+        {"line":1,"title":"TypeScript integration","contracts":["B01"]},
+        {"line":9,"title":"Installation and runtime","contracts":["B01","B02"]},
+        {"line":23,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
+        {"line":35,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
+        {"line":51,"title":"Values and codecs","contracts":["W02","E04","B03"]},
+        {"line":64,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]}
       ]
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "59fadbc08eebcb4866fc8325b1b2b733294381606743567a946e5dad3f75beab",
+      "sha256": "ef9c0a2efe6ab64a40078fe6e19a1f4dd4d381189e9188268d66b3c3f7ee008f",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
         {"line":61,"title":"Maintaining the reference","contracts":["E05","B01"]},
-        {"line":83,"title":"Run the documentation site","contracts":["B01"]},
-        {"line":110,"title":"Publish to GitHub Pages","contracts":["B01"]},
-        {"line":126,"title":"Cache-path benchmark","contracts":["X02"]},
-        {"line":148,"title":"Redis write benchmark","contracts":["X02"]},
-        {"line":171,"title":"Stale-on-error benchmark","contracts":["X02"]},
-        {"line":199,"title":"Releasing","contracts":["B01","E05"]}
+        {"line":85,"title":"Run the documentation site","contracts":["B01"]},
+        {"line":112,"title":"Publish to GitHub Pages","contracts":["B01"]},
+        {"line":128,"title":"Cache-path benchmark","contracts":["X02"]},
+        {"line":150,"title":"Redis write benchmark","contracts":["X02"]},
+        {"line":173,"title":"Stale-on-error benchmark","contracts":["X02"]},
+        {"line":201,"title":"Releasing","contracts":["B01","E05"]}
       ]
     },
     {
       "path": "docs/observability.md",
-      "sha256": "f017e16dc9f22ef0873c372ab2ae1d46b7d1d481dad305296a684cb8378ba7a6",
+      "sha256": "909d500472340c70fc3a2ae4ffc01ce59da63dc232606b87c77d5985435978d5",
       "entries": [
         {"line":1,"title":"Observability","contracts":["C30","X01"]},
-        {"line":17,"title":"Reading the signals","contracts":["C58"]},
-        {"line":38,"title":"Miss reasons","contracts":["C55","C58"]},
-        {"line":54,"title":"Prometheus","contracts":["X01"]},
-        {"line":97,"title":"Histogram buckets","contracts":["X01"]},
-        {"line":109,"title":"Prometheus metrics","contracts":["X01"]},
-        {"line":113,"title":"Datadog","contracts":["X01"]},
-        {"line":168,"title":"Distribution or histogram","contracts":["X01"]},
-        {"line":188,"title":"Datadog namespaces","contracts":["X01"]},
-        {"line":209,"title":"Datadog metrics","contracts":["X01"]},
-        {"line":246,"title":"Metric catalog","contracts":["C58","C59"]},
-        {"line":299,"title":"Shadow outcomes","contracts":["C50","C51","C52","C53","C54"]},
-        {"line":327,"title":"Stale recovery outcomes","contracts":["C41","C45"]},
-        {"line":343,"title":"Value ages and clock offsets","contracts":["C57"]},
-        {"line":366,"title":"Compression metrics","contracts":["W06","W07","C58","C59","X02"]},
-        {"line":423,"title":"Confirmed mismatch warnings","contracts":["C60","X01"]},
-        {"line":440,"title":"Error categories","contracts":["C58"]},
-        {"line":491,"title":"Custom adapters","contracts":["C30","X01"]}
+        {"line":16,"title":"Reading the signals","contracts":["C58"]},
+        {"line":37,"title":"Miss reasons","contracts":["C55","C58"]},
+        {"line":53,"title":"Prometheus","contracts":["X01"]},
+        {"line":127,"title":"Histogram buckets","contracts":["X01"]},
+        {"line":139,"title":"Prometheus metrics","contracts":["X01"]},
+        {"line":143,"title":"Datadog","contracts":["X01"]},
+        {"line":223,"title":"Distribution or histogram","contracts":["X01"]},
+        {"line":243,"title":"Datadog namespaces","contracts":["X01"]},
+        {"line":281,"title":"Datadog metrics","contracts":["X01"]},
+        {"line":337,"title":"Metric catalog","contracts":["C58","C59"]},
+        {"line":390,"title":"Shadow outcomes","contracts":["C50","C51","C52","C53","C54"]},
+        {"line":418,"title":"Stale recovery outcomes","contracts":["C41","C45"]},
+        {"line":434,"title":"Value ages and clock offsets","contracts":["C57"]},
+        {"line":456,"title":"Compression metrics","contracts":["W06","W07","C58","C59","X02"]},
+        {"line":512,"title":"Confirmed mismatch warnings","contracts":["C60","X01"]},
+        {"line":529,"title":"Error categories","contracts":["C58"]},
+        {"line":579,"title":"Custom adapters","contracts":["C30","X01"]}
       ]
     },
     {
       "path": "docs/redis.md",
-      "sha256": "4bca768199d9300fede38405ed525402f343ac6dadca533172594fde4ce23237",
+      "sha256": "e33678fe09ed7b67bbdf8aa7327a67f7374da5ca887a06ea737ada94572b0dc4",
       "entries": [
         {"line":1,"title":"Redis and Valkey","contracts":["E01"]},
         {"line":14,"title":"Install a client","contracts":["B01"]},
-        {"line":28,"title":"node-redis","contracts":["E01","B01"]},
-        {"line":63,"title":"Valkey GLIDE","contracts":["E01","B01"]},
-        {"line":98,"title":"Remote-read deadlines and async liveness","contracts":["C23","C56"]},
-        {"line":126,"title":"Lifecycle ownership","contracts":["E03","X02"]},
-        {"line":142,"title":"Serialization","contracts":["W06","B03"]},
-        {"line":148,"title":"Default JSON behavior","contracts":["B03","C27","C45","C52"]},
-        {"line":178,"title":"Typed serializer requirement","contracts":["B01","B03"]},
-        {"line":220,"title":"Compression","contracts":["W06","W07","W08","X02"]},
-        {"line":260,"title":"Bundled Redis operations","contracts":["E01"]},
-        {"line":262,"title":"Reads","contracts":["E01","W04"]},
-        {"line":285,"title":"Writes","contracts":["E01","W04","W05"]},
-        {"line":308,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
-        {"line":325,"title":"Redis compatibility and ACLs","contracts":["E01"]},
-        {"line":336,"title":"Custom-client contract","contracts":["C55","C56","E01","E04"]},
-        {"line":377,"title":"Advanced wire protocol","contracts":["W04"]},
-        {"line":404,"title":"Read decoding and validation order","contracts":["W04"]},
-        {"line":431,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
+        {"line":160,"title":"Remote-read deadlines and async liveness","contracts":["C23","C56"]},
+        {"line":202,"title":"Lifecycle ownership","contracts":["E03","X02"]},
+        {"line":239,"title":"Serialization","contracts":["W06","B03"]},
+        {"line":248,"title":"Default JSON behavior","contracts":["B03","C27","C45","C52"]},
+        {"line":365,"title":"Compression","contracts":["W06","W07","W08","X02"]},
+        {"line":442,"title":"Bundled Redis operations","contracts":["E01"]},
+        {"line":444,"title":"Reads","contracts":["E01","W04"]},
+        {"line":468,"title":"Writes","contracts":["E01","W04","W05"]},
+        {"line":492,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
+        {"line":527,"title":"Redis compatibility and ACLs","contracts":["E01"]},
+        {"line":538,"title":"Custom-client contract","contracts":["C55","C56","E01","E04"]},
+        {"line":616,"title":"Advanced wire protocol","contracts":["W04"]},
+        {"line":663,"title":"Read decoding and validation order","contracts":["W04"]},
+        {"line":737,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
       ]
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "cce3d8468164483cec29162fcb860246e44c3b0a2a5a657bcad4f0d78c7cb4a2",
+      "sha256": "c38dfa6cb65d72921202f83c723723cbeb328d2b674437c26a7a34dbd9e5ff24",
       "entries": [
         {"line":1,"title":"Shadow validation","contracts":["C47"]},
         {"line":15,"title":"What a check establishes","contracts":["C50","C51"]},
         {"line":28,"title":"Caller paths","contracts":["C48","C49"]},
         {"line":40,"title":"Configure a shadow cohort","contracts":["W03","C47"]},
-        {"line":78,"title":"Eligibility","contracts":["C47"]},
-        {"line":96,"title":"Serving-hit and ramped-down paths","contracts":["C48","C49"]},
-        {"line":110,"title":"The `C0` / `S` / `C1` algorithm","contracts":["C50","C51"]},
-        {"line":124,"title":"Clean-miss fill","contracts":["C52","C53"]},
-        {"line":149,"title":"Comparison and confirmation","contracts":["C50","C51"]},
-        {"line":168,"title":"Comparison semantics","contracts":["C50","B03"]},
-        {"line":199,"title":"Data ownership and custom integrations","contracts":["E04"]},
-        {"line":213,"title":"Capacity, deadlines, and detachment","contracts":["C54","E03"]},
-        {"line":237,"title":"Consistency modes and race boundaries","contracts":["C36","C51"]},
-        {"line":253,"title":"Command amplification","contracts":["C49","C51","C52"]},
-        {"line":266,"title":"Confirmed mismatch logging","contracts":["C60","B03","X01"]},
-        {"line":291,"title":"Metrics and shutdown","contracts":["C57","C58","C59","E03"]}
+        {"line":105,"title":"Eligibility","contracts":["C47"]},
+        {"line":123,"title":"Serving-hit and ramped-down paths","contracts":["C48","C49"]},
+        {"line":137,"title":"The `C0` / `S` / `C1` algorithm","contracts":["C50","C51"]},
+        {"line":151,"title":"Clean-miss fill","contracts":["C52","C53"]},
+        {"line":176,"title":"Comparison and confirmation","contracts":["C50","C51"]},
+        {"line":195,"title":"Comparison semantics","contracts":["C50","B03"]},
+        {"line":254,"title":"Data ownership and custom integrations","contracts":["E04"]},
+        {"line":267,"title":"Capacity, deadlines, and detachment","contracts":["C54","E03"]},
+        {"line":313,"title":"Consistency modes and race boundaries","contracts":["C36","C51"]},
+        {"line":329,"title":"Command amplification","contracts":["C49","C51","C52"]},
+        {"line":342,"title":"Confirmed mismatch logging","contracts":["C60","B03","X01"]},
+        {"line":392,"title":"Metrics and shutdown","contracts":["C57","C58","C59","E03"]}
       ]
     },
     {
       "path": "docs/stale-on-error.md",
-      "sha256": "98d2013b48fe5db881d88b10c41f6d70bc6e00ba36a341dc828578e4413836d2",
+      "sha256": "66930473b06ccb007974815394c60032687916d784926c21749477187eb4e6d1",
       "entries": [
         {"line":1,"title":"Stale-on-error","contracts":["C40"]},
         {"line":14,"title":"Fresh age and maximum age","contracts":["C40"]},
         {"line":31,"title":"Configure the ages","contracts":["C37","C40"]},
-        {"line":62,"title":"Follow one invocation","contracts":["C41","C43","C45"]},
-        {"line":86,"title":"Choose which errors permit recovery","contracts":["C42"]},
-        {"line":123,"title":"Snapshot and invalidation boundaries","contracts":["C44"]},
-        {"line":140,"title":"Retention, clocks, and memory","contracts":["C37","E03","E04"]},
-        {"line":163,"title":"Observability","contracts":["C57","C58"]}
+        {"line":65,"title":"Follow one invocation","contracts":["C41","C43","C45"]},
+        {"line":89,"title":"Choose which errors permit recovery","contracts":["C42"]},
+        {"line":159,"title":"Snapshot and invalidation boundaries","contracts":["C44"]},
+        {"line":176,"title":"Retention, clocks, and memory","contracts":["C37","E03","E04"]},
+        {"line":199,"title":"Observability","contracts":["C57","C58"]}
       ]
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "bca1249189fabc3267c9349eb782f093523adade00f441b0d8435b8f0d831d6b",
+      "sha256": "ac71a12ac4a237b14d1eba389d127ac04eb0c3b3dbeabc2803a8811c40f6cdc7",
       "entries": [
         {"line":1,"title":"Upgrading","contracts":["E05"]},
         {"line":13,"title":"Tracked protocol cutover","contracts":["E05","W09"]},
         {"line":47,"title":"Removed configuration fields","contracts":["B01"]},
-        {"line":64,"title":"Custom Redis adapters","contracts":["E01","C55"]},
-        {"line":93,"title":"Stale retention and downgrades","contracts":["E05","C37"]},
-        {"line":112,"title":"Compression and value schemas","contracts":["E05","W06","W08"]},
-        {"line":142,"title":"Metric migrations","contracts":["X01"]}
+        {"line":85,"title":"Custom Redis adapters","contracts":["E01","C55"]},
+        {"line":141,"title":"Stale retention and downgrades","contracts":["E05","C37"]},
+        {"line":160,"title":"Compression and value schemas","contracts":["E05","W06","W08"]},
+        {"line":190,"title":"Metric migrations","contracts":["X01"]}
       ]
     },
     {
@@ -1473,12 +1521,12 @@
     },
     {
       "path": "formal/TEST-AUDIT.md",
-      "sha256": "9a3e8a2697f551b08acf7abf9d4bb78e64f9497ae04ed0d6f8a6c28039e43bce",
+      "sha256": "f47b807c67457895122a24fa3a57cafc11738320ff9675e446d65f1a00430cf5",
       "entries": [
         {"line":1,"title":"Docs and test behavior audit"},
         {"line":13,"title":"Keeping the audit current"},
-        {"line":32,"title":"Formal and Go guide review"},
-        {"line":55,"title":"Claim boundary"}
+        {"line":41,"title":"Formal and Go guide review"},
+        {"line":64,"title":"Claim boundary"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1535,13 +1583,13 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "6f5e6f576990718ae212092a42dc1a3d3f62d2d88e8999ed06d21ac9a0dde98c",
+      "sha256": "1bb906b7bf07e623c4102032cec787680c85112249fe45eeace833202efef3e8",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
-        {"line":19,"title":"Use"},
-        {"line":85,"title":"Configuration and effects"},
-        {"line":140,"title":"Values, codecs and observability"},
-        {"line":186,"title":"Validation and reproducing a trace"}
+        {"line":23,"title":"Use"},
+        {"line":89,"title":"Configuration and effects"},
+        {"line":144,"title":"Values, codecs and observability"},
+        {"line":190,"title":"Validation and reproducing a trace"}
       ],
       "review": {
         "kind": "contract-guide",

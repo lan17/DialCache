@@ -1,5 +1,9 @@
 # DialCache for Rust
 
+Read the [shared behavior guides](https://lan17.github.io/DialCache/) and
+[Rust integration guide](https://lan17.github.io/DialCache/languages/rust).
+The site uses one explanation per feature with selected native examples and notes.
+
 Rust implements the same portable behavior as the TypeScript library and the
 Go port: explicit request enablement, request/local/Redis layers,
 deterministic rollout, sparse runtime policy, request and process coalescing,

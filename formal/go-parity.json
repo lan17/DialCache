@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "faa768fbf06eddc03dc4f26570094b1df066fb075f898043b40c6ce9d8c952a1",
     "executionSha256": "3df06c53eb69f02fb6eafabd51c6cc7a306c6739e04ab3fa521b53389da559f2",
-    "sourceAuditSha256": "32f77e4045e0dee1aa3707ee34f6dc832631f19e893ca3dc791e36cc5ba7150d",
+    "sourceAuditSha256": "110c4bfe81c003820ec1acf6d1e92859b295e9959b3e36454e76ae6961bfcc87",
     "featureCoverageSha256": "91723cc5398c8fff102d2beb199ebcab82af137e11f1cb9771b8d16d0304a95c",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "2ebb3ba9c9b71334bcbbaa1e2d9c1d539664ed69e826942ff829a2c31fe9434b"
@@ -4386,6 +4386,19 @@
         "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings."
       },
       {
+        "path": "docs/authoring.md",
+        "goFiles": [
+          "go/docs_examples_test.go",
+          "go/feature_replay_test.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "B03"
+        ],
+        "rationale": "Shared documentation authoring, native example execution and generated reference workflows use the public Go API tests; the guide does not create new portable behavior or claim fresh conformance evidence."
+      },
+      {
         "path": "docs/coalescing.md",
         "goFiles": [
           "go/cache.go",
@@ -4495,6 +4508,54 @@
           "B03"
         ],
         "rationale": "Key and argument contracts apply to Identity, NormalizeArgs and typed wrapper key selection, with exact protocol vectors. Go exposes normalized strings/ordered pairs and an explicit scalar-map helper; JavaScript prototypes, coercion beyond that domain and package exports remain native binding choices."
+      },
+      {
+        "path": "docs/languages/go.md",
+        "goFiles": [
+          "go/api.go",
+          "go/bindings.go",
+          "go/policy.go",
+          "go/codec.go",
+          "go/docs_examples_test.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "B03"
+        ],
+        "rationale": "The native setup and binding guide explains request lifetime, sparse policy, errors, codec domains and integrations relative to the same shared behavior. Go API and codec artifacts establish the relevant native distinctions; documentation itself is not execution evidence."
+      },
+      {
+        "path": "docs/languages/rust.md",
+        "goFiles": [
+          "go/api.go",
+          "go/bindings.go",
+          "go/policy.go",
+          "go/codec.go",
+          "go/docs_examples_test.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "B03"
+        ],
+        "rationale": "The native setup and binding guide explains request lifetime, sparse policy, errors, codec domains and integrations relative to the same shared behavior. Go API and codec artifacts establish the relevant native distinctions; documentation itself is not execution evidence."
+      },
+      {
+        "path": "docs/languages/typescript.md",
+        "goFiles": [
+          "go/api.go",
+          "go/bindings.go",
+          "go/policy.go",
+          "go/codec.go",
+          "go/docs_examples_test.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "B03"
+        ],
+        "rationale": "The native setup and binding guide explains request lifetime, sparse policy, errors, codec domains and integrations relative to the same shared behavior. Go API and codec artifacts establish the relevant native distinctions; documentation itself is not execution evidence."
       },
       {
         "path": "docs/maintainers.md",

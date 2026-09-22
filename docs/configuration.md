@@ -2,9 +2,9 @@
 
 <a id="configuration"></a>
 
-[Documentation](index.md) · [API reference](api.md#dialcachekeyconfig)
+[Documentation](index.md) · [API reference](api.md)
 
-An `enable()` scope permits caching. The effective policy selects which layers
+An enabled request scope permits caching. The effective policy selects which layers
 participate and how long they can reuse values. Configure resources once,
 define a baseline per operation, and use a provider for runtime changes.
 
@@ -12,9 +12,9 @@ define a baseline per operation, and use a provider for runtime changes.
 
 | Level | Responsibility | Examples |
 | --- | --- | --- |
-| Instance: `new DialCache(...)` | Shared resources and instance defaults | Namespace, Redis client and compression, local capacity, metrics, shadow capacity |
-| Operation: `cached()` or `getOrLoad()` options | Result identity and execution contract | Key, serializer, invalidation tracking, source deadline, `defaultConfig` |
-| Runtime: `cacheConfigProvider(key)` | Policy for one enabled invocation | Layer TTLs and ramps, request-local, coalescing, remote-read deadline, recovery age, shadow policy |
+| Instance | Shared resources and instance defaults | Namespace, Redis client and compression, local capacity, metrics, shadow capacity |
+| Operation definition | Result identity and execution contract | Key, serializer, invalidation tracking, source deadline, Policy defaults |
+| Runtime provider | Policy for one enabled invocation | Layer TTLs and ramps, request-local, coalescing, remote-read deadline, recovery age, shadow policy |
 
 Keep operation definitions stable. Their policy defaults are snapshotted when
 registered or invoked; mutating the original config does not change that
@@ -25,11 +25,11 @@ for key design and [the read model](concepts.md) for scopes and layer lifetimes.
 
 ## Baseline and overlay precedence
 
-`defaultConfig` is the operation's baseline. A provider result overrides only
+The operation's static policy is its baseline. A provider result overrides only
 the fields it supplies, including individual entries in nested maps:
 
 ```text
-runtime field → defaultConfig field → library default
+runtime field → operation field → library default
 ```
 
 For example, a rollout can change the local ramp without repeating the TTL:
@@ -39,41 +39,69 @@ For example, a rollout can change the local ramp without repeating the TTL:
 | `ttlSec.local` | `60` | omitted | `60` seconds |
 | `ramp.local` | `100` | `10` | 10% key cohort |
 
-```ts
-import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
+The following executed example starts with request-local and process-local
+caching, overrides only coalescing, then explicitly disables both layers. The
+assertions check source calls, so a sparse overlay that accidentally discards
+inherited defaults fails the example.
 
-// Your configuration system updates this map.
-const policies = new Map<string, DialCacheKeyConfig>();
-const dialcache = new DialCache({
-  cacheConfigProvider: (key) => policies.get(key.useCase) ?? null,
-});
+<LanguageContent language="typescript">
 
-const getUser = dialcache.cached(
-  (userId: string) => db.fetchUser(userId),
-  {
-    keyType: "user_id",
-    useCase: "GetUser",
-    cacheKey: (userId) => userId,
-    defaultConfig: new DialCacheKeyConfig({
-      ttlSec: { [CacheLayer.LOCAL]: 60 },
-    }),
-  },
-);
+<<< @/../examples/typescript/docs.mts#runtime-policy{typescript}
 
-policies.set("GetUser", new DialCacheKeyConfig({
-  ramp: { [CacheLayer.LOCAL]: 10 },
-}));
-await dialcache.enable(() => getUser("123"));
-```
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/examples/typescript/docs.mts)
 
-This example assumes an application `db`. The omitted baseline ramp is `100`
-because a TTL exists. Without a TTL, a local or remote layer is off.
-Request-local caching and shadow work are off by default. Coalescing defaults
-to `true`, but does not start a flight when all cache layers are inactive.
+</LanguageContent>
 
-A provider result of `null` (or defensive `undefined`), an empty config, and
-omitted fields all inherit. Local and remote map entries merge separately,
-as do `shadow.ramp` and `shadow.logMismatches`.
+<LanguageContent language="go">
+
+<<< @/../go/docs_examples_test.go#runtime-policy{go}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/go/docs_examples_test.go)
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+<<< @/../rust/tests/docs_examples.rs#runtime-policy{rust}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/rust/tests/docs_examples.rs)
+
+</LanguageContent>
+
+<LanguageContent language="typescript">
+
+`defaultConfig` accepts `DialCacheKeyConfig`; `cacheConfigProvider` returns a
+sparse config or `null`. Defensive `undefined` also inherits. An empty config
+inherits all fields. Nested local/remote maps and `shadow` leaves merge separately.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+`Operation.Policy` uses `time.Duration` for TTLs and deadlines.
+`WithPolicyProvider` can return `*PolicyOverlay`, `JSONPolicy` or `RawPolicy`.
+Nil overlay leaves inherit; use pointers such as `Ptr(false)` and `Ptr(0.0)` to
+supply explicit false and zero. TTLs use whole seconds, deadlines whole
+milliseconds. See the [Go guide](languages/go.md#policy-and-errors).
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Operations use `Policy`; `policy_provider` returns `Option<RuntimePolicy>`.
+`Ok(None)` inherits. Converting a `Policy` into a runtime overlay preserves its
+omitted leaves. TTL builders use whole seconds and deadline builders use
+milliseconds. See the [Rust guide](languages/rust.md#policy-and-errors).
+
+</LanguageContent>
+
+The policy names in the tables below use the shared JSON configuration shape,
+also accepted by the Go and Rust policy parsers. Native names and units differ;
+use the selected language's API reference when constructing typed policy.
+A configured TTL implies a 100% serving ramp unless overridden. Without a TTL,
+a local or remote layer is off. Request-local caching and shadow work are off
+by default. Coalescing defaults to true, but starts no flight when all serving
+layers are inactive.
 
 ## Turning features off
 
@@ -82,17 +110,17 @@ Use explicit values to disable inherited policy:
 | Overlay | Effect on new invocations |
 | --- | --- |
 | `requestLocal: false` | Bypass request-local lookup and storage |
-| `ramp: { [CacheLayer.LOCAL]: 0 }` | Bypass process-local serving |
-| `ramp: { [CacheLayer.REMOTE]: 0 }` | Bypass remote serving; shadow admission remains independent |
+| `ramp.local: 0` | Bypass process-local serving |
+| `ramp.remote: 0` | Bypass remote serving; shadow admission remains independent |
 | `shadow: { ramp: 0 }` | Stop new shadow work; inherit the logging preference |
 | `staleOnErrorMaxAgeSec: 0` | Disable stale recovery |
 | `coalesce: false` | Use independent cache paths and source deadlines; settled cache hits still apply |
-| `DialCacheKeyConfig.disabled()` | Disable request-local, recovery, and mismatch logging; set both serving ramps and the shadow ramp to `0` |
+| Disabled-policy overlay | Disable request-local, recovery, and mismatch logging; set both serving ramps and the shadow ramp to `0` |
 
-The disabled helper leaves TTLs and `coalesce` unset. Inherited TTLs remain
+The disabled-policy overlay leaves TTLs and `coalesce` unset. Inherited TTLs remain
 inactive under the zero ramps. Replacing that overlay with a later ramp-up
 coalesces unless another field opts out. Disabling does not cancel admitted
-work, evict values, or disable maintenance such as `invalidateRemote()`.
+work, evict values, or disable explicit invalidation.
 
 ## Stable key cohorts
 
@@ -109,7 +137,7 @@ guarantee 10% of calls, especially for a small or skewed key population.
 DialCache keeps the assignment stable across releases.
 
 Applications that need an externally coordinated cohort can use
-`cacheConfigProvider` to return a sparse per-key ramp override of `0` or `100`.
+the runtime provider to return a sparse per-key ramp override of `0` or `100`.
 
 `shadow.ramp` selects its own stable exact-key cohort, independent of both
 serving ramps. Shadowing additionally needs a valid remote TTL and a metrics
@@ -131,7 +159,7 @@ values or rewrite their stored expiration times:
 | Set a serving ramp to `0` | Bypass that layer without evicting its entries. A later ramp-up can reuse values that remain valid. |
 | Set `requestLocal: false` | Bypass the current request's memoized values without deleting them. Re-enabling it in that scope can reuse them. |
 | Change TTLs, deadlines, or recovery while a flight is active | An eligible follower can still join the existing flight and inherit its leader's execution; admitted work is not reconfigured. |
-| Return `DialCacheKeyConfig.disabled()` | Stop new cache use and shadow admission. Existing flights and detached jobs can finish and publish. |
+| Return Disabled-policy overlay | Stop new cache use and shadow admission. Existing flights and detached jobs can finish and publish. |
 
 For example, reducing a local TTL from 60 seconds to 5 seconds does not make a
 20-second-old local entry miss: it keeps its original 60-second lifetime. A
@@ -153,24 +181,19 @@ configuration reads inside it and give asynchronous work a finite deadline.
 Provider errors run the loader uncached and record `config_error`; they do not
 activate defaults. Invalid runtime fields fail open at the affected boundary:
 for example, an invalid local TTL disables that layer while valid layers can
-continue. [Validation and snapshots](api.md#validation-and-snapshots) specifies
-the exact behavior for each field.
+continue. The [native API reference](api.md) specifies validation and error types.
 
 ## Deadlines
 
-The remote-read deadline has an instance fallback:
+The remote-read deadline resolves from the runtime overlay, then the operation,
+then the instance, then the library default of 50 ms. It bounds the semantic
+Redis read and cannot be disabled. The source deadline belongs to the operation
+and defaults to 60 seconds.
 
-```text
-runtime remoteReadTimeoutMs
-  → defaultConfig.remoteReadTimeoutMs
-  → redis.readTimeoutMs
-  → 50 ms
-```
-
-It bounds the semantic Redis read and cannot be disabled. The source deadline,
-`fallbackTimeoutMs`, is an operation option. Neither is a total-call budget;
-config resolution, serializers, and writes need their own settlement bounds.
-See [application-owned budgets](coalescing.md#application-owned-budgets).
+Neither is a total-call budget: config resolution, codecs and writes need their
+own settlement bounds. See [application-owned budgets](coalescing.md#application-owned-budgets)
+and the [native API reference](api.md) for duration types and disabling the source
+deadline intentionally.
 
 ## Related reference
 
@@ -178,7 +201,7 @@ See [application-owned budgets](coalescing.md#application-owned-budgets).
 <a id="defining-cache-operations"></a>
 <a id="validation-and-snapshots"></a>
 
-[Operation definitions](api.md#cached) and [validation](api.md#validation-and-snapshots)
+[Operation definitions and validation](api.md)
 are in the API reference.
 
 <a id="keys-ids-and-extra-dimensions"></a>
@@ -192,7 +215,7 @@ provider input.
 
 <a id="constructing-keys-directly"></a>
 
-[Direct key construction](api.md#constructing-keys-directly) is in the API reference.
+[Direct key construction](api.md) is in the API reference.
 
 <a id="enable-and-disable-scopes"></a>
 <a id="request-local-cache"></a>

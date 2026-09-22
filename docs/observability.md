@@ -2,9 +2,8 @@
 
 [Documentation](index.md) · [API reference](api.md)
 
-Metrics are disabled unless a `DialCacheMetricsAdapter` is passed to the
-constructor. `new DialCache()` does not import a metrics backend, register
-collectors, or emit metrics.
+Metrics require an explicitly configured observer or metrics adapter. Creating
+a cache does not connect a metrics backend or register collectors by itself.
 
 DialCache provides first-party adapters for Prometheus and Datadog. Both use
 caller-created, caller-owned clients and preserve one backend-neutral set of
@@ -28,7 +27,7 @@ repeat the leader's full read/miss trail.
 | Errors and fallback duration | Dependency failures and source cost, including recovered source failures |
 | Shadow outcomes and value ages | Comparison verdicts, fill activity, drops, and detached failures |
 | Recovery outcomes and value ages | How often an older snapshot serves during eligible source failures |
-| Compression size, ratio, and duration | Prepared payload savings versus synchronous CPU cost |
+| Compression size, ratio, and duration | Prepared payload savings versus CPU and scheduling cost |
 | Future timestamp offset | Observed frames ahead of the reader clock; an incomplete clock-health signal |
 
 Durations and ages use seconds; sizes use bytes. Namespace, use case, and key
@@ -37,8 +36,8 @@ ids, arguments, payloads, or raw error text.
 
 ## Miss reasons
 
-`miss()` receives `MissMetricLabels` with one required reason. Both bundled
-backends emit the same bounded values:
+Miss observations carry one required reason. Bundled backends in every port
+emit the same bounded values:
 
 | `reason` | Meaning |
 | --- | --- |
@@ -53,14 +52,16 @@ carry a valid fence.
 
 ## Prometheus
 
+<LanguageContent language="typescript">
+
 Install `prom-client` separately:
 
 ```bash
 npm install prom-client@^15.1.3
 ```
 
-Create the registry your application owns, then pass an explicit adapter to
-DialCache:
+This API excerpt assumes an application HTTP router named `app`. It creates
+an application-owned registry and passes an explicit adapter to DialCache:
 
 ```ts
 import { Registry } from "prom-client";
@@ -94,6 +95,35 @@ collector has an incompatible schema. Use a unique prefix or separate registry
 to resolve a collision. DialCache's collectors do not enable exemplars, so an
 exemplar-enabled collector with the same name is incompatible.
 
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Create an application-owned `prometheus.Registry`, then call
+`dialcache.NewPrometheusMetrics(registry, prefix)` and supply the result with
+`WithMetrics`. Existing compatible collectors created by the DialCache adapter
+are reused. For externally registered collectors, use
+`NewPrometheusMetricsWithBindings` with their actual instances and schemas;
+native Go registries cannot expose every empty histogram detail for validation.
+
+Shadow admission also needs `WithShadowOutcomes`. When `WithMetrics` already
+forwards every event to the exporter, that hook should only enable admission;
+forwarding the outcome again would double-count it. See the [Go API](api.md).
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Enable the `prometheus` feature and create a `PrometheusObserver` using an
+application-owned `prometheus::Registry`. Attach it through the cache builder's
+`observer` method. Clone one observer for caches sharing a registry/prefix:
+the native registry cannot return an existing collector, so creating another
+observer with the same names returns `PrometheusError::Conflict`.
+
+The bundled observer opts into shadow outcomes. See the [Rust API](api.md).
+
+</LanguageContent>
+
 ### Histogram buckets
 
 Bucket boundaries are fixed; the adapter has no bucket customization option:
@@ -112,14 +142,16 @@ See the [metric catalog](#metric-catalog) for names, types, labels, and meanings
 
 ## Datadog
 
+<LanguageContent language="typescript">
+
 Install `hot-shots` separately:
 
 ```bash
 npm install hot-shots@^17.0.0
 ```
 
-Create the DogStatsD client your application owns, then pass it to the Datadog
-adapter:
+This API excerpt assumes an application `logger`. It creates a caller-owned
+DogStatsD client and passes it to the Datadog adapter:
 
 ```ts
 import StatsD from "hot-shots";
@@ -165,9 +197,32 @@ DialCache does not:
 - close sockets; or
 - otherwise own the client lifecycle.
 
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Supply an application-owned `DogStatsDClient` to `NewDatadogMetrics` through
+`DatadogMetricsOptions`, then connect it using `WithMetrics`. The client must
+implement `Increment`, `Histogram` and `Distribution`; choose an observation
+mode explicitly. The application owns buffering, transport errors, flushing and
+shutdown. Shadow admission separately requires `WithShadowOutcomes`, as in the
+Prometheus setup. See the [Go API](api.md).
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Construct a `DatadogObserver` with an application-owned `DogStatsdClient` and
+`DatadogOptions`. Choose histogram or distribution and a metric namespace.
+Attach it through the cache builder's `observer` method. The bundled observer
+opts into shadow outcomes. The application owns delivery, flushing and transport
+shutdown. See the [Rust API](api.md).
+
+</LanguageContent>
+
 ### Distribution or histogram
 
-`observationMetricType` is required.
+The observation mode is required.
 
 Choose `"distribution"` when latency and size percentiles must aggregate across
 hosts. Enable the desired distribution percentiles and aggregations in
@@ -187,9 +242,8 @@ never mixes histogram and distribution points.
 
 ### Datadog namespaces
 
-`DatadogMetricsOptions.namespace` is the metric-name namespace and defaults to
-`dialcache`. It is separate from `DialCacheConfig.namespace`, the logical cache
-namespace emitted as the `cache_namespace` tag.
+The metric-name namespace defaults to `dialcache`. It is separate from the
+logical cache namespace emitted as the `cache_namespace` tag.
 
 The Datadog metric namespace must:
 
@@ -201,10 +255,28 @@ The Datadog metric namespace must:
 The adapter rejects invalid namespaces and overlong final names instead of
 relying on client-side normalization.
 
+<LanguageContent language="typescript">
+
 A `hot-shots` `prefix` is applied after the adapter constructs the name. Include
 that prefix when checking final length, and avoid accidentally combining it
 with the adapter namespace. Client-level `globalTags` are appended by
 `hot-shots`; the table below lists only tags added by DialCache.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Any client-added prefixes or global tags are application configuration. Account
+for them when checking final name length and series cardinality.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Any client-added prefixes or global tags are application configuration. Account
+for them when checking final name length and series cardinality.
+
+</LanguageContent>
 
 ### Datadog metrics
 
@@ -235,6 +307,8 @@ and bytes without unit conversion:
 
 Labels and meanings are shared with the [metric catalog](#metric-catalog).
 
+<LanguageContent language="typescript">
+
 Synchronous client throws are isolated when DialCache invokes the adapter.
 DialCache also consumes thenables returned by adapter hooks, but this adapter does
 not forward every client return value: only `shadowValidation` and
@@ -242,6 +316,23 @@ not forward every client return value: only `shadowValidation` and
 handle its own asynchronous delivery failures, including rejected promises.
 Direct adapter calls do not have DialCache's observer guard. Configure client error
 handling and shutdown as part of application ownership.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Errors and panics in metrics callbacks are isolated when DialCache invokes
+its observer. A custom client still owns asynchronous delivery errors and
+shutdown after a callback returns.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Observer failures are isolated from cache and source results. A custom client
+still owns delivery errors and shutdown after a callback returns.
+
+</LanguageContent>
 
 ## Metric catalog
 
@@ -272,12 +363,12 @@ This table uses Prometheus names and types, without the optional prefix.
 
 `policy_disabled` means that a process-local or remote layer has no effective
 TTL after runtime overlays. This is an intentional policy result, including the
-default when `defaultConfig` is omitted, rather than a configuration-loading
+default when operation policy is omitted, rather than a configuration-loading
 failure.
 
 Every metric includes `cache_namespace`, even disabled-context,
 key-construction, coalescing, and invalidation paths that do not have a
-constructed key. Its value is `DialCacheConfig.namespace`, which defaults to
+constructed key. Its value is the instance namespace, which defaults to
 `urn`.
 
 The `layer` label is:
@@ -313,7 +404,7 @@ outcomes through `dialcache.shadow.count`:
 | `redis_error` | The initial detached Redis read failed. |
 | `source_error` | The source-of-truth read failed. |
 | `deserialization_error` | The retained Redis payload could not be deserialized for comparison. |
-| `comparison_error` | The comparator threw or did not return a synchronous boolean. |
+| `comparison_error` | The native comparator failed (including a TypeScript non-boolean result). |
 | `confirmation_error` | The confirmation Redis read failed. |
 | `timeout` | The shadow deadline expired. |
 | `dropped` | Per-key deduplication or the instance flight cap rejected the job. |
@@ -354,10 +445,9 @@ ahead of the observer clock. Ordinary and initial-shadow reads then miss;
 confirmation can retain the frame only for comparison. Invalid timestamps never
 enter histogram sums. Repeated reads can observe the same future frame.
 
-For direct adapter callers, Prometheus additionally discards nonfinite or
-nonpositive `observeFutureTimestampOffset` values. Datadog forwards those
-observations without that extra guard; normal DialCache calls supply positive finite
-offsets to both.
+Normal cache calls supply positive finite clock offsets. Directly calling a
+backend adapter bypasses parts of the cache observer boundary; follow that
+adapter's native input contract.
 
 Use external fleet clock monitoring as well: workload observations cannot detect
 every skew direction or determine which node is wrong. Its dedicated histogram
@@ -414,18 +504,17 @@ read becomes a refreshable miss; shadow comparison reports
 `deserialization_error` without repair, and retained recovery preserves the
 original source rejection. See [Serialization](redis.md#serialization).
 
-zstd work is synchronous on the Node.js event loop. Use the duration, ratio,
-and pre/post-size series together when changing the threshold or level; a good
-space ratio does not make an event-loop stall acceptable. See
-[Redis payload compression](redis.md#compression) for the envelope, limits,
-and mixed-version rollout contract.
+Use duration, ratio and pre/post-size series together when changing threshold
+or level. A good compression ratio does not establish acceptable runtime cost.
+The [compression guide](redis.md#compression) explains native execution (including
+Rust's bounded CPU executor), the envelope and mixed-version rollout.
 
 ## Confirmed mismatch warnings
 
 Shadow metrics remain bounded and contain no cache ids or values. A use case can
 separately set `shadow.logMismatches: true` to emit one warning after a terminal
 `mismatch` is confirmed. Logging is default-off, does not replace the outcome
-metric, and does not activate shadow work without the `shadowValidation` hook.
+metric, and does not activate shadow work without an enabled shadow-outcome hook.
 
 The warning contains stable metadata, the logical cache key capped at 2 KiB,
 and independently generated native-JSON strings for the cached and source
@@ -440,11 +529,11 @@ and data-handling considerations.
 ## Error categories
 
 The `error` label reports the operation that failed instead of copying the
-thrown value's class or `Error.name`:
+native error type or message:
 
 | `error` | Meaning |
 | --- | --- |
-| `key_construction` | The cache-key selector or `DialCacheKey` construction failed |
+| `key_construction` | The cache-key selector or identity construction failed |
 | `config_resolution` | Runtime or layer configuration validation or resolution failed |
 | `cache_read` | A process-local read or non-timeout remote read failed |
 | `cache_read_timeout` | A remote read exceeded its effective DialCache deadline |
@@ -459,18 +548,17 @@ thrown value's class or `Error.name`:
 
 DialCache defines these values itself, so they are identical for every adapter.
 
-A valid `invalidateRemote()` call without a configured Redis client is still an
-invalidation attempt: DialCache records `dialcache_invalidation_counter` (or
-`dialcache.invalidation.count`), logs the failure, records
-`error="invalidation"`, and rejects with the original focused `TypeError`.
-Invalid `futureBufferMs` input is rejected before these observers run.
+A valid explicit invalidation without a configured remote adapter is still an
+invalidation attempt: it emits the invalidation count and `error="invalidation"`
+then returns the native missing-remote error. Invalid buffer inputs fail before
+these observers run.
 
 Caller-serving remote-read timeouts use `layer="remote"` and
 `in_fallback="false"`. They are
 errors rather than misses, and the remote get-duration observation includes
 the wait. Coalesced followers do not multiply the timeout error. Deadline
-details remain out of labels and are available on the logged
-`RedisReadTimeoutError`.
+details remain out of labels and are available on the native
+read-timeout error.
 
 Detached initial and confirmation reads attribute their operational metrics to
 `remote_shadow`. Read failures, including read timeouts, can report `redis_error`
@@ -489,6 +577,8 @@ log and does not alter the metric schema.
 application fallback failures.
 
 ## Custom adapters
+
+<LanguageContent language="typescript">
 
 Implement `DialCacheMetricsAdapter` and pass it through
 `new DialCache({ metrics })` for another telemetry backend.
@@ -539,19 +629,48 @@ telemetry cannot change cache correctness, fallback results, or shadow outcomes.
 This guard applies when DialCache invokes the observer, not to direct calls to an
 adapter or to asynchronous work whose promise the hook does not return.
 
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Implement `MetricsAdapter.ObserveEvent(Event) error` and register it with
+`WithMetrics`, or use `WithObserver` for a callback. The adapter receives every
+backend-neutral diagnostic event. Panics and adapter errors are isolated.
+
+`WithShadowOutcomes` explicitly permits shadow jobs and receives terminal
+outcomes; `WithRecoveryOutcomes` is an optional recovery observer. Missing the
+recovery hook does not disable recovery. Avoid forwarding an event both through
+`WithMetrics` and an outcome hook to the same exporter.
+
+Use the [generated Go API](api.md) for event and adapter types. Preserve the
+bounded metric names, labels and units in the catalogue above.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Implement `Observer` and attach it through the cache builder. It receives typed
+`Event` values; `MetricKind` maps them to the shared names, labels and units.
+Opt into shadow outcomes through `observes_shadow_outcomes` to admit jobs. The
+bundled exporters do this; merely logging mismatch warnings does not.
+
+A custom `Logger` receives structured `LogEvent`s. Observer/logger failures do
+not change cache results. Use the [generated Rust API](api.md) for exact native
+traits and event variants.
+
+</LanguageContent>
+
 A custom adapter may buffer or transmit asynchronously, but it owns delivery,
 flushing, resources, and shutdown after the call returns. Keep
 application-owned namespace, use-case, and key-type labels stable and
 low-cardinality, and preserve the seconds and bytes units shown above.
 
-Every backend-neutral label object exposes the logical namespace as camel-case
-`cacheNamespace`. Map it to the backend's `cache_namespace` label or tag. This
-field is present even when no key or cache layer was reached.
+Preserve the logical namespace as the backend's `cache_namespace` label or tag,
+including paths where key construction or cache traversal did not happen.
 
-Omit `metrics` to disable metrics entirely. Because shadow jobs require an
-observable terminal outcome, omitting metrics also disables shadow execution
-even when a key policy sets `shadow.ramp` or enables
-`shadow.logMismatches`.
+Without an observer that opts into terminal shadow outcomes, shadow work is
+disabled even if policy selects a shadow cohort or enables mismatch warnings.
+Ordinary cache behavior and stale recovery remain available without metrics.
 
 See [Metric migrations](upgrading.md#metric-migrations) when upgrading collectors,
 miss queries, or exhaustive outcome mappings.

@@ -56,7 +56,11 @@ function snapshot(paths, directory) {
 }
 
 export function sourceSnapshot(directory = root) {
-  const paths = ['README.md', ...readdirSync(resolve(directory, 'docs')).filter(p => p.endsWith('.md')).map(p => 'docs/' + p),
+  const documentation = (path) => readdirSync(resolve(directory, path), { withFileTypes: true }).flatMap(entry =>
+    ['.vitepress', 'public', 'generated'].includes(entry.name) ? []
+      : entry.isDirectory() ? documentation(`${path}/${entry.name}`)
+        : entry.name.endsWith('.md') ? [`${path}/${entry.name}`] : []);
+  const paths = ['README.md', ...documentation('docs'),
     ...readdirSync(resolve(directory, 'test')).filter(p => p.endsWith('.test.ts') && !p.startsWith('formal-')).map(p => 'test/' + p)];
   return snapshot(paths, directory);
 }

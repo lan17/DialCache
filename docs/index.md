@@ -2,7 +2,9 @@
 
 DialCache wraps application reads with explicit enablement, layered storage, and
 runtime policy. These guides explain its model and feature behavior; the API
-reference collects exact options and contracts.
+reference collects each port's native options and contracts. Choose TypeScript,
+Go or Rust in the site selector: shared behavior stays on the same page, while
+examples and integration notes follow your selection.
 
 <a id="start-here"></a>
 
@@ -37,6 +39,18 @@ reference collects exact options and contracts.
 | [Upgrading](upgrading.md) | Protocol cutovers, retention, serializers, and metric migrations |
 | [Maintainer guide](maintainers.md) | Validation, documentation, benchmarks, and releases |
 
+## Language guides
+
+| Port | Native integration details |
+| --- | --- |
+| [TypeScript](languages/typescript.md) | Node.js async context, serializers, optional client adapters |
+| [Go](languages/go.md) | Context propagation, generic operations, duration and overlay types |
+| [Rust](languages/rust.md) | Scope guards, `Arc<T>` values, runtime and feature flags |
+
+[Behavior catalogue](generated/behavior.md) connects shared contracts to the
+existing formal cases. [Documentation authoring](authoring.md) explains how to
+change shared prose, tested native examples and generated references together.
+
 ## Find an answer
 
 | Question | Start here |
@@ -48,11 +62,11 @@ reference collects exact options and contracts.
 | What can still wait after the source deadline? | [Application-owned budgets](coalescing.md#application-owned-budgets) |
 | Why is shadow validation doing no work? | [Shadow eligibility](shadow-validation.md#eligibility) |
 
-The published site follows `main`, which may be ahead of the npm package. For an
-installed version, consult its [release notes](https://github.com/lan17/DialCache/releases)
-and the README or reference at the matching
-[release tag](https://github.com/lan17/DialCache/tags). The package's TypeScript
-declarations are the exact type source.
+The published site and generated native API references follow `main`, which may
+be ahead of a released npm package or Go module. For an installed version, use
+its [release notes](https://github.com/lan17/DialCache/releases) and matching
+[release tag](https://github.com/lan17/DialCache/tags). Rust is currently
+unpublished and used from a checkout.
 
 [Project overview](https://github.com/lan17/DialCache#readme)
 · [npm package](https://www.npmjs.com/package/dialcache)

@@ -18,7 +18,6 @@ export default defineConfig({
     nav: [
       { text: "Documentation", link: "/" },
       { text: "API reference", link: "/api" },
-      { text: "npm", link: "https://www.npmjs.com/package/dialcache" },
     ],
     sidebar: [
       {
@@ -26,6 +25,9 @@ export default defineConfig({
         items: [
           { text: "Overview", link: "/" },
           { text: "Getting started", link: "/getting-started" },
+          { text: "TypeScript setup", link: "/languages/typescript" },
+          { text: "Go setup", link: "/languages/go" },
+          { text: "Rust setup", link: "/languages/rust" },
         ],
       },
       {
@@ -51,6 +53,7 @@ export default defineConfig({
           { text: "API reference", link: "/api" },
           { text: "Redis and Valkey", link: "/redis" },
           { text: "Observability", link: "/observability" },
+          { text: "Behavior catalogue", link: "/generated/behavior" },
         ],
       },
       {
@@ -58,6 +61,7 @@ export default defineConfig({
         items: [
           { text: "Upgrading", link: "/upgrading" },
           { text: "Maintainer guide", link: "/maintainers" },
+          { text: "Writing shared docs", link: "/authoring" },
         ],
       },
     ],

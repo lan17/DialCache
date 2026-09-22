@@ -23,7 +23,7 @@ Consider a tracked user lookup in two locales:
 
 These are different cached results for the same entity. Another operation,
 such as `GetPermissions`, has its own entries under that entity too.
-`invalidateRemote("user_id", "123", bufferMs)` advances one watermark covering
+Invalidating entity kind `user_id` and id `123` advances one watermark covering
 all of those tracked results within the instance's namespace.
 
 | Component | Role | Example |
@@ -41,9 +41,14 @@ to the logical keys shown here; see [storage format](redis.md#advanced-wire-prot
 
 ## Define a result identity
 
+A registered reader selects an entity id and additional arguments from its
+source inputs. An inline operation supplies that identity directly.
+
+<LanguageContent language="typescript">
+
 For `cached()`, `cacheKey` receives the loader's parameters and returns a bare id
 or `{ id, args }`. `getOrLoad()` accepts the same shape directly as `key`.
-Assuming an application `db`:
+This API excerpt assumes an application `db`:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -64,53 +69,99 @@ const getUser = dialcache.cached(
 await dialcache.enable(() => getUser("123", "en"));
 ```
 
+</LanguageContent>
+
+<LanguageContent language="go">
+
+`Cached` takes an `Operation[T]` and a key selector returning `Identity`.
+Set the entity kind and use case in `Operation.Identity`; return the entity id
+and normalized argument pairs from the selector. For a user-and-locale lookup,
+use the user id as `ID` and locale as an `Args` dimension. Use `NormalizeArgs`
+when constructing pairs from JSON-shaped scalars. See the [Go guide](languages/go.md).
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+The `use_case` builder supplies entity kind and use case. Its `key` callback
+returns a `KeySpec`; use `KeySpec::new(id).arg("locale", locale)` for a
+user-and-locale lookup. An inline `Operation<T>` carries an `Identity` directly.
+See the [Rust guide](languages/rust.md).
+
+</LanguageContent>
+
 Include every input that can change the result. Omitting an authorization scope,
 tenant, or locale can make callers reuse the wrong value. Disabling coalescing
-does not fix an incomplete key. The example uses process-local storage; add a
-Redis client, remote policy, and `trackForInvalidation: true` to use
+does not fix an incomplete key. Add a Redis client, remote policy and tracked identity to use
 [targeted invalidation](invalidation.md).
 
 All call sites sharing a key must agree on value meaning and serialization.
 Keep use-case names stable and bounded; put entity and request dimensions in
-`id` or `args`. `cached()` registers each name once per instance;
-`getOrLoad()` does not register names. Both reserve `"watermark"`.
+`id` or `args`. Registered readers reserve each name once per instance;
+inline operations do not register names. Both reserve `"watermark"`.
 
 Inputs omitted from the key still reach the loader, but a cache hit can skip
 that loader and a coalesced caller can inherit another caller's execution.
-For inputs such as a database handle or `AbortSignal`, make sure both value
+For inputs such as a database handle or cancellation signal, make sure both value
 reuse and [shared execution](coalescing.md#what-followers-inherit) are valid.
 Snapshot mutable arguments or captured state before invoking an operation whose
 [shadow loader](shadow-validation.md) may run after the caller continues.
 
 ## Normalization and encoding
 
-`cached()` and `getOrLoad()` stringify ids, omit undefined argument values, and
-sort argument names. Scalar identity is string-based:
+Normalized scalar identity is string-based. Argument names use UTF-16 ordering
+so ports construct the same key. Undefined/absent argument values are omitted:
 
 | Inputs, with other components equal | Identity |
 | --- | --- |
-| Id `1`, `"1"`, or `1n` | Same key |
-| Argument `null` or `"null"` | Same key |
-| Argument `-0` or `0` | Same key |
-| An undefined argument or no such argument | Same key |
-| Argument records with different property order | Same key |
+| Numeric id `1` or string id `"1"` | Same key |
+| Null argument or string `"null"` | Same key |
+| Argument negative zero or zero | Same key |
+| Absent argument or no such argument | Same key |
+| Argument records with different property order | Same normalized key |
 
 If a scalar's meaning changes, change an explicit identity dimension such as
-`keyType`, `useCase`, or an argument name or value.
+entity kind, use case or an argument name/value. Large integers must retain their
+exact spelling; do not pass an already-rounded floating-point number when the
+original integer matters.
 
-Components are encoded with `encodeURIComponent`, so delimiters inside values
-do not become structural separators. Namespace braces throw `TypeError`;
-tracked `keyType` and `id` reject braces with `Error`. Untracked `keyType` and
-`id` may contain braces, which are encoded. Automatic key-construction failures
+Components use percent encoding compatible with JavaScript `encodeURIComponent`,
+so delimiters inside values do not become structural separators. Namespace
+braces are rejected; tracked entity kinds and ids also reject braces. Untracked
+kinds and ids may contain encoded braces. Automatic key-construction failures
 follow the [fail-open path](concepts.md#fail-open-and-liveness).
 
-Custom integrations can use `DialCacheKey` and `normalizeArgs` directly. The
-direct constructor preserves supplied argument-pair order; it does not perform
-this normalization. See [direct key construction](api.md#constructing-keys-directly).
+<LanguageContent language="typescript">
+
+`cached` and `getOrLoad` normalize ids and args automatically. Direct
+`DialCacheKey` construction preserves supplied pair order; call `normalizeArgs`
+when needed. Bigint ids retain exact integer spelling. Namespace brace errors
+are `TypeError`; tracked kind/id brace errors are `Error`.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+`Identity` takes string ids and ordered argument pairs. `NormalizeArgs` applies
+the shared scalar spelling and sorting rules; `Absent` omits a dimension.
+Use normalized pairs consistently when constructing identities directly.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+`IntoKeyId` preserves exact primitive integer spelling, converts floats with
+JavaScript-compatible formatting and accepts string IDs. `KeySpec::arg` accepts
+primitive scalars; `normalize_args` handles the shared ordering and omission
+rules. `f32` is promoted to `f64` before formatting.
+
+</LanguageContent>
+
+See the [native API reference](api.md) for direct key construction.
 
 ## Namespace
 
-`DialCacheConfig.namespace` defaults to `"urn"`. Set an application-specific
+The instance namespace defaults to `"urn"`. Set an application-specific
 value when applications or environments share Redis. It partitions all cache
 layers, coalescing, ramp cohorts, and invalidation, and appears in metrics.
 Use a stable, bounded name.
@@ -134,17 +185,32 @@ expire by TTL.
 
 ## The key passed to runtime policy
 
-The provider receives a read-only `DialCacheKey` after normalization. Its
-identity fields are described above; the remaining fields are:
+The provider receives the normalized result identity before lookup or joining
+a flight. Select policy from the namespace, entity kind/id, use case and argument
+dimensions without mutating them.
 
-| Field | Meaning |
-| --- | --- |
-| `prefix` | Encoded entity prefix, with braces when tracking is enabled |
-| `urn` | Complete logical key; also returned by `toString()` |
-| `defaultConfig` | Snapshotted operation baseline, or `null` |
-| `serializer` | Operation-specific serializer, or `null` |
-| `trackForInvalidation` | Whether the key uses remote watermark tracking |
+<LanguageContent language="typescript">
 
-`id` is already a string and `args` contains sorted string pairs. Select policy
-from these fields without mutating the key; see
-[runtime overlays](configuration.md#baseline-and-overlay-precedence).
+The read-only `DialCacheKey` additionally exposes `prefix` (encoded entity
+prefix), `urn` (complete logical key), `defaultConfig`, `serializer`, and
+`trackForInvalidation`. Its id is already a string and its args are sorted pairs.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+The provider receives `context.Context` and a normalized `Identity`.
+`Identity` carries namespace, entity kind/id, use case, ordered args and tracking;
+the operation's baseline is already known to the cache during policy resolution.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+The provider receives the normalized `Identity`. It includes namespace, entity
+kind/id, use case, ordered args and tracking; return a sparse `RuntimePolicy`
+without rebuilding the operation's baseline.
+
+</LanguageContent>
+
+See [runtime overlays](configuration.md#baseline-and-overlay-precedence).

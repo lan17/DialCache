@@ -46,6 +46,8 @@ by deploying new constants alone.
 
 ## Removed configuration fields
 
+<LanguageContent language="typescript">
+
 Remove these legacy properties entirely; construction rejects their own-property
 presence even when the value is `undefined`:
 
@@ -61,7 +63,32 @@ presence even when the value is `undefined`:
 See [Runtime validation](api.md#validation-and-snapshots) for how an
 obsolete field in a provider result differs from invalid static configuration.
 
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Go's native option and policy types do not expose the legacy TypeScript names.
+When sharing JSON configuration, migrate obsolete fields to the current shared
+shape before rollout. See [configuration](configuration.md) for sparse overlays
+and the [Go API](api.md) for validation errors.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Rust's native builders do not expose the legacy TypeScript names. When parsing
+shared JSON configuration, migrate obsolete fields to the current shape before
+rollout. See [configuration](configuration.md) and the [Rust API](api.md).
+
+</LanguageContent>
+
 ## Custom Redis adapters
+
+A custom adapter must preserve complete-frame writes, classified primary reads,
+logical timestamps and observed-fence refill suppression. A wire-compatible
+payload alone does not establish that those behaviors match.
+
+<LanguageContent language="typescript">
 
 Migrate against the current [semantic interface](redis.md#custom-client-contract):
 
@@ -85,6 +112,27 @@ supplied `RedisWriteRequest.createdAtMs` exactly. Direct callers may omit that
 field; the adapter then samples real client time immediately before dispatch.
 All decoded frames need their real writer timestamp. Constants that older
 untracked adapters treated as informational fail current logical-age checks.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Migrate against the native `Remote` interface and shared protocol helpers. A
+tracked read must return the value and watermark from the same primary snapshot.
+Use classified `ReadResult` misses, preserve an observed valid fence separately
+from miss reason, and honor each write's application timestamp exactly. See
+[custom-client contract](redis.md#custom-client-contract).
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Migrate against `Remote` and its native request/result types. A tracked read
+must return one primary snapshot; preserve observed fences on misses and honor
+explicit write timestamps exactly. Use the public protocol helpers rather than
+inventing alternate framing. See [custom-client contract](redis.md#custom-client-contract).
+
+</LanguageContent>
 
 Invalidation is the only Lua script. It receives `[futureBufferMs,
 invalidatedAtMs]`; reuse the second argument across retries of one logical
@@ -143,8 +191,9 @@ each other's values while they overlap.
 
 Miss metrics carry a required bounded `reason`: `value_absent`, `expired`,
 `watermark_fenced`, or `unclassified`. Old Prometheus collectors with four miss
-labels cannot share the same in-process registry/prefix with the current
-five-label collector. The future-offset histogram also uses dedicated clock-skew
+labels cannot share the same in-process registry/prefix with a current
+five-label collector. Rust callers should clone their existing compatible
+observer instead of registering the same names a second time. The future-offset histogram also uses dedicated clock-skew
 buckets; an incompatible same-name collector fails adapter construction before
 partial registration. Use a separate registry or prefix where needed.
 
@@ -165,11 +214,32 @@ Reason dashboards should group explicitly by `reason`. In Datadog, the extra
 tag increases miss-series combinations by up to four per prior tuple; account
 for overlapping old/new tag sets and the selected metric aggregations.
 
+<LanguageContent language="typescript">
+
 Update exhaustive public-union mappings: `tracked_ttl_clamped` is a
 `MetricErrorKind`; `fill_blocked` is removed and `fill_fenced` is a
 `ShadowValidationOutcome`. Recovery has `served`, `miss`, and
 `deserialization_error` outcomes. Custom `miss` handlers now receive
 `MissMetricLabels`; broader handlers may ignore the additional reason, while
 exact label mappings and direct calls need to include it.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Update exhaustive event/outcome handling when the shared metric catalogue gains
+a variant. `tracked_ttl_clamped`, shadow `fill_fenced`, and recovery `served`,
+`miss`, `deserialization_error` must retain their shared meaning and bounded
+labels. Native Go adapter contracts are in the [API reference](api.md).
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Update exhaustive matches over public events, metric kinds and outcomes when
+upgrading. Preserve the shared `tracked_ttl_clamped`, `fill_fenced` and recovery
+outcomes, names and units. Native types are in the [API reference](api.md).
+
+</LanguageContent>
 
 See [Observability](observability.md) for current names, units, and hooks.

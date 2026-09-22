@@ -2,177 +2,187 @@
 
 [Documentation](index.md) · Next: [How DialCache works](concepts.md)
 
-Start with a process-local cache so you can see the behavior without running
-Redis. Then choose a request boundary and connect runtime policy.
+Create one long-lived cache instance and define reusable readers once. A reader's
+source function remains authoritative: DialCache calls it whenever the active
+layers cannot supply a value. Caching is disabled outside an enabled request
+scope, and each operation must also opt into at least one layer.
+
+Choose your language in the site selector. The behavioral explanation is shared;
+examples and native integration notes follow that choice.
 
 ## Install
+
+<LanguageContent language="typescript">
 
 ```bash
 npm install dialcache
 ```
 
-The supported Node.js range is `>=22.15.0 <23.0.0 || >=23.8.0`.
-The package provides ESM and CommonJS entry points and TypeScript declarations.
+The package provides ESM, CommonJS and TypeScript declarations. Supported Node.js
+versions are `>=22.15.0 <23.0.0 || >=23.8.0`. See the
+[TypeScript guide](languages/typescript.md) for native API and serializer details.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+```bash
+go get github.com/lan17/DialCache/go@latest
+```
+
+The module requires Go 1.25 or later. Pin the version selected by `go get` in your
+application's `go.mod`. See the [Go guide](languages/go.md) for contexts, durations
+and module-version details.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+The Rust crate is currently **unpublished**. From a repository checkout, use a
+path dependency pointing at its `rust/` directory:
+
+```toml
+[dependencies]
+dialcache = { path = "../DialCache/rust" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+```
+
+Adjust the path to your checkout. The core crate requires Rust 1.85; the `redis`
+feature currently requires Rust 1.88. See the [Rust guide](languages/rust.md) for
+runtime, feature and value-ownership details.
+
+</LanguageContent>
 
 ## Wrap a reader
 
-Create one long-lived instance for the service and register reusable readers
-once. The function you wrap is the source loader: DialCache invokes it whenever
-the active cache layers cannot supply a value. Save this as `example.mts`:
+Start with request-local caching so no Redis server or expiration timer is
+needed. This example proves three observable outcomes:
 
-```ts
-import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
+1. Two calls outside an enabled scope each invoke the source.
+2. Two same-key calls inside one enabled scope invoke the source once.
+3. A new request scope invokes the source again.
 
-const dialcache = new DialCache();
-let sourceReads = 0;
+The displayed region comes from a native test that CI executes. Its surrounding
+file supplies imports and test setup; the source link opens the complete file.
 
-async function fetchUser(userId: string) {
-  sourceReads += 1;
-  return { id: userId, name: "Ada" };
-}
+<LanguageContent language="typescript">
 
-const getUser = dialcache.cached(fetchUser, {
-  keyType: "user_id",
-  useCase: "GetUser",
-  cacheKey: (userId) => userId,
-  defaultConfig: new DialCacheKeyConfig({
-    ttlSec: { [CacheLayer.LOCAL]: 60 },
-  }),
-});
+<<< @/../examples/typescript/docs.mts#request-scope{typescript}
 
-await dialcache.enable(async () => {
-  await getUser("123");
-  await getUser("123");
-});
-console.log(sourceReads); // 1
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/examples/typescript/docs.mts)
 
-await getUser("123");
-console.log(sourceReads); // 2: caching is off outside enable().
-```
+</LanguageContent>
 
-Run it directly with Node; no TypeScript runner is needed:
+<LanguageContent language="go">
 
-```bash
-node --experimental-strip-types example.mts
-```
+<<< @/../go/docs_examples_test.go#request-scope{go}
 
-It prints:
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/go/docs_examples_test.go)
 
-```text
-1
-2
-```
+</LanguageContent>
 
-The `.mts` extension selects ESM, so top-level `await` works even in a project
-that otherwise uses CommonJS. The flag removes TypeScript annotations; use your
-project's TypeScript compiler for typechecking. Replace `fetchUser` with the
-real read when integrating the example into your service.
+<LanguageContent language="rust">
 
-If that read returns `Date`, `bigint`, or other non-JSON-compatible values,
-provide a [typed serializer](redis.md#typed-serializer-requirement). This is
-required even when caching only in local memory; the linked example shows how
-to preserve a `Date` through serialization.
+<<< @/../rust/tests/docs_examples.rs#request-scope{rust}
 
-The wrapper preserves the input parameters and always returns a `Promise`.
-`keyType` identifies the entity kind; `useCase` identifies the operation.
-`cacheKey` selects the result's identity. Include every input that can change
-the result, such as locale or tenant. [Keys and identity](keys.md) explains
-the components and how they group tracked results for invalidation.
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/rust/tests/docs_examples.rs)
 
-The example enables only process-local storage, with a 60-second TTL and an
-implicit 100% ramp. Its LRU holds up to 10,000 entries across all use cases on
-the instance. Neither request-local nor remote caching is enabled here.
+</LanguageContent>
+
+The example enables only request-local storage. It has no TTL or capacity limit
+and disappears when the outer scope closes. Keep requests and their key counts
+bounded. Add a process-local TTL when reuse across requests is appropriate;
+[the read model](concepts.md#three-lifetimes) explains all three layer lifetimes.
+
+Include every input that can change the result in the key, including tenant,
+locale or authorization dimensions. [Keys and identity](keys.md) explains how
+result identity also determines shared work and invalidation groups.
 
 ## Choose the enabled scope
 
-Wrap read-request handling in `enable()` so nested readers inherit the policy
-through Node's `AsyncLocalStorage`. Use `disable()` for nested uncached work:
+Put one enabled scope around each read request. Nested enabled scopes reuse the
+outer request memo; a disabled region bypasses caching without deleting entries.
+A scope's lifetime ends explicitly, so detached work must not assume a retained
+scope keeps caching enabled forever.
 
-```ts
-await dialcache.enable(async () => {
-  const cached = await getUser("123");
-  const fromSource = await dialcache.disable(() => getUser("123"));
-  return { cached, fromSource };
-});
-```
+<LanguageContent language="typescript">
 
-Nested scopes restore the preceding state when they settle. `disable()` bypasses
-caching; it does not remove old entries. After a mutation, freshness still
-depends on the reader's TTL or [invalidation policy](invalidation.md).
+`dialcache.enable(async () => ...)` propagates scope through Node's
+`AsyncLocalStorage`. Use `dialcache.disable(() => ...)` for nested uncached work.
+The outer callback settling closes its request-local memo. Registered readers
+return promises and preserve their source parameters.
 
-To memoize only within the outer enabled scope, use
-`new DialCacheKeyConfig({ requestLocal: true })`. That storage has no TTL or
-capacity limit and is released when the scope settles. Keep the scope and its
-key count bounded.
+</LanguageContent>
+
+<LanguageContent language="go">
+
+`ctx, done := cache.Enable(parent)` returns the context to pass to cached readers.
+Call `done()` when the request ends, usually with `defer done()`. Use
+`cache.Disable(ctx)` for nested uncached work. Contexts retained after `done()`
+no longer enable caching.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+`cache.enable_guard()` returns a guard; pass `request.scope()` to each reader.
+Dropping the guard closes the request memo, including retained scope clones.
+`enable_in` and `disable_in` derive nested scopes; `Scope::outside()` is the
+pass-through scope. Reader values are shared as `Arc<T>`.
+
+</LanguageContent>
+
+Disabling caching does not invalidate stored data. After a source mutation,
+freshness still depends on TTLs and [invalidation policy](invalidation.md).
+Treat reused in-memory values as immutable.
 
 ## Keep a calculation inline
 
-Use `getOrLoad()` when extracting a reusable reader would obscure the code:
+An inline operation uses the same cache path without registering a reusable
+reader. All call sites sharing an identity must agree on value meaning and
+serialization.
 
-```ts
-const userId = "456";
-const user = await dialcache.enable(() =>
-  dialcache.getOrLoad(() => fetchUser(userId), {
-    keyType: "user_id",
-    useCase: "InlineGetUser",
-    key: userId,
-    defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
-  }),
-);
-```
+<LanguageContent language="typescript">
 
-It uses the same cache path as `cached()`. The direct `key` replaces the selector,
-and the use case can be repeated at the call site without registration.
+Use `dialcache.getOrLoad(loader, options)` with a direct `key` instead of the
+`cacheKey` selector. See the [TypeScript API](api.md).
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Use `dialcache.GetOrLoad[T](ctx, cache, operation, loader)`. `Operation[T]` carries
+the identity, policy and codec. See the [Go API](api.md).
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Use `cache.get_or_load(scope, operation, loader)` with an `Operation<T>`.
+The result is still `Arc<T>`. See the [Rust API](api.md).
+
+</LanguageContent>
 
 ## Introduce runtime policy
 
-Keep stable defaults next to the reader. A `cacheConfigProvider` can return
-sparse overrides for each enabled invocation. The provider runs before cache
-lookup, so keep it inexpensive and bound any asynchronous work it starts.
+Keep stable defaults next to the reader and use a runtime provider for sparse
+overrides. Omitted fields inherit; explicit false and zero values disable their
+respective features. A provider runs once per enabled invocation before lookup,
+so keep it inexpensive and bound asynchronous work.
 
-```ts
-const policies = new Map<string, DialCacheKeyConfig>();
-const controlledCache = new DialCache({
-  cacheConfigProvider: (key) => policies.get(key.useCase) ?? null,
-});
-
-const readUser = controlledCache.cached(fetchUser, {
-  keyType: "user_id",
-  useCase: "ReadUser",
-  cacheKey: (userId) => userId,
-  defaultConfig: new DialCacheKeyConfig({
-    ttlSec: { [CacheLayer.LOCAL]: 60 },
-    ramp: { [CacheLayer.LOCAL]: 0 },
-  }),
-});
-
-policies.set("ReadUser", new DialCacheKeyConfig({
-  ramp: { [CacheLayer.LOCAL]: 10 },
-}));
-await controlledCache.enable(() => readUser("123"));
-
-policies.set("ReadUser", DialCacheKeyConfig.disabled());
-```
-
-The map stands in for your configuration system. The 10% ramp selects a stable
-cohort of keys and inherits the 60-second TTL. It is not a traffic percentage.
-The disabled overlay stops new cache use and shadow admission; it does not
-cancel work already in flight.
-
-Changing a TTL also has different effects on existing local and Redis entries.
-Read [Changing policy on a running service](configuration.md#changing-policy-on-a-running-service)
-before using a runtime change to tighten freshness.
+[Configuration and rollout](configuration.md) follows an executed example that
+inherits the local TTL through a sparse overlay, then explicitly disables
+both configured layers. A ramp selects a stable cohort of keys, not a percentage of requests.
+Policy changes do not cancel admitted work or evict existing entries.
 
 ## Add shared caching when needed
 
-Install a supported client, connect it, and pass its DialCache adapter in
-`redis.client`. Add a remote TTL to each participating reader. Start its remote
-serving ramp at zero while verifying the configuration and observability.
+Connect an application-owned Redis client and pass its native DialCache adapter.
+Add a remote TTL to participating readers; start remote serving at zero while
+checking configuration and observability.
 
-[Redis and Valkey](redis.md) provides setup for node-redis and GLIDE, including
-Cluster routing and connection ownership. [Observability](observability.md)
-shows the optional Prometheus and Datadog integrations.
-
+[Redis and Valkey](redis.md) covers adapters, serialization, Cluster routing and
+client ownership. [Observability](observability.md) covers Prometheus and Datadog.
 For mutable data, read [Targeted invalidation](invalidation.md) before enabling
-shared cache serving. For a rollout that compares Redis with the source first,
-continue to [Shadow validation](shadow-validation.md).
+remote serving. [Shadow validation](shadow-validation.md) compares Redis with the
+source during a rollout.
