@@ -3,14 +3,14 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "1d0274d140bd92908d92636aa7a08b298086f51c88d0b804ac98d7818d3d0e89",
+      "sha256": "09eb39cc17d84096040778bc02f2bdf2ce9a6074ab0d092d5ff22d498e0d3109",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01"]},
-        {"line":41,"title":"Install TypeScript","contracts":["B01"]},
-        {"line":54,"title":"Usage","contracts":["C01","C05","W01"]},
-        {"line":98,"title":"How reads work","contracts":["C05","C31"]},
-        {"line":122,"title":"Runtime control","contracts":["C16","C18"]},
-        {"line":141,"title":"Documentation","contracts":["B01"]}
+        {"line":42,"title":"Install TypeScript","contracts":["B01"]},
+        {"line":55,"title":"Usage","contracts":["C01","C05","W01"]},
+        {"line":99,"title":"How reads work","contracts":["C05","C31"]},
+        {"line":123,"title":"Runtime control","contracts":["C16","C18"]},
+        {"line":142,"title":"Documentation","contracts":["B01"]}
       ]
     },
     {
