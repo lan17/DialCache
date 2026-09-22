@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-/** Disposable real-server evidence; every required server run must have zero skips. */
+/** Disposable real-server evidence; the native launcher requires every assertion. */
 import { spawn } from 'node:child_process';
 import { randomInt, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -100,14 +100,12 @@ async function cluster() {
 async function testServer(label, url, clusterUrl, isolated) {
   console.log(`Python integration: ${label}, tracked primary reads on a six-node Redis Cluster, TypeScript interoperability`);
   const report = join(reports, `python-integration-${label}.xml`);
-  await run(python, ['-m', 'pytest', 'python/tests/test_redis_integration.py', 'python/tests/test_docs_examples.py', '-m', 'integration', '-q', `--junitxml=${report}`], {
+  await run(python, ['python/tests/run_integration.py', report], {
     env: { ...process.env, NODE: process.env.NODE ?? process.execPath,
       PYTHONPATH: [join(root, 'python'), process.env.PYTHONPATH].filter(Boolean).join(process.platform === 'win32' ? ';' : ':'),
-      TEST_REDIS_URL: url, TEST_REDIS_CLUSTER_URL: clusterUrl,
+      TEST_REDIS_URL: url, DOCS_REDIS_URL: url, TEST_REDIS_CLUSTER_URL: clusterUrl,
       DIALCACHE_TEST_CLUSTER_ISOLATED: isolated ? '1' : '0' },
   });
-  const xml = readFileSync(report, 'utf8');
-  if (/\bskipped="[1-9]\d*"/.test(xml)) throw new Error(`${label}: skipped integration cases earn no acceptance credit`);
 }
 
 try {

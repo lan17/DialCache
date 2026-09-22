@@ -14,7 +14,7 @@ from redis.exceptions import ResponseError
 from test_protocol_native import node_bridge
 
 from dialcache.key import Key
-from dialcache.protocol import Frame, Miss, encode_frame
+from dialcache.protocol import Frame, Miss, RedisProtocolError, encode_frame
 from dialcache.redis import (
     INVALIDATE_CACHE_SCRIPT,
     InvalidationRequest,
@@ -167,7 +167,7 @@ async def test_cluster_atomic_primary_snapshot_and_native_writes():
     if not url:
         pytest.skip("Set TEST_REDIS_CLUSTER_URL to test an actual Redis Cluster")
     client = redis.RedisCluster.from_url(
-        url, read_from_replicas=True, decode_responses=False, socket_timeout=5, socket_connect_timeout=5
+        url, decode_responses=False, socket_timeout=5, socket_connect_timeout=5
     )
     key = Key("dialcache-python-cluster-" + uuid4().hex, "entity", "1", "Get", tracked=True)
     adapter = RedisAdapter(client)
@@ -186,6 +186,15 @@ async def test_cluster_atomic_primary_snapshot_and_native_writes():
             "after", 1001
         )
         assert await client.execute_command("GET", key.watermark_key, target_nodes=primary) == b"1000"
+        replica_client = redis.RedisCluster.from_url(
+            url, read_from_replicas=True, decode_responses=False, socket_timeout=5, socket_connect_timeout=5
+        )
+        try:
+            await replica_client.initialize()
+            with pytest.raises(RedisProtocolError, match="primary-only RedisCluster"):
+                await RedisAdapter(replica_client).read(ReadRequest(key.value_key, key.watermark_key))
+        finally:
+            await replica_client.aclose()
     finally:
         try:
             await client.delete(key.value_key, key.watermark_key)

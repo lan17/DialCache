@@ -81,8 +81,13 @@ async def test_mutation_input_validation_precedes_dispatch():
     assert client.calls == []
 
 
-async def test_cluster_primary_routing_overrides_replica_reads():
+async def test_cluster_primary_routing_with_primary_only_connections():
     class Cluster(Client):
+        read_from_replicas = False
+
+        def get_connection_kwargs(self):
+            return {}
+
         async def initialize(self):
             self.initialized = True
 

@@ -171,7 +171,13 @@ Install the checkout with the Redis extra and borrow an application-owned
 `redis.asyncio.Redis` or `RedisCluster` client through
 `dialcache.redis.RedisAdapter`. Pass `redis=RedisAdapter(client)` to `DialCache`.
 Use `decode_responses=False` and finite connection, socket and retry budgets.
-Tracked Cluster reads explicitly select the primary.
+Tracked Cluster reads require a dedicated client constructed with primary-only
+defaults: `read_from_replicas=False`, `load_balancing_strategy=None` where supported, and no
+custom connection hook. Keep the routing configuration and connection mode
+unchanged while borrowed; do not send `READONLY` or repurpose a previously
+replica-enabled pool by resetting its flags. Create a new primary-only client.
+The adapter rejects unsafe tracked reads, and the cache fails open to the source.
+Untracked reads and maintenance remain available on replica-enabled clients.
 
 The [executed invalidation example](invalidation.md#configure-a-tracked-use-case)
 includes complete client setup and cleanup in its source.

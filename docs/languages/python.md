@@ -83,9 +83,13 @@ Shadow admission requires a metrics observer for terminal outcomes.
 `dialcache.redis.RedisAdapter` borrows a `redis.asyncio.Redis` or `RedisCluster`
 client configured with `decode_responses=False`. The application supplies
 finite connection, socket, and retry budgets and closes the client. The adapter
-routes tracked atomic reads to primaries even when the cluster client otherwise
-permits replica reads. `invalidate_remote()` and its `ainvalidate()` alias
-surface maintenance failures.
+requires a dedicated primary-only Cluster client for tracked atomic reads:
+construct it with `read_from_replicas=False`, `load_balancing_strategy=None` where supported,
+and no custom connection hook. Keep its configuration and connection mode
+unchanged; create a new client instead of repurposing a previously `READONLY`
+pool. Unsafe tracked reads fail open to the source. Replica-enabled clients
+remain usable for untracked reads and maintenance. `invalidate_remote()` and
+its `ainvalidate()` alias surface maintenance failures.
 
 Pass a synchronous `metrics` callable or an object with `observe(event)` to
 receive backend-neutral event dictionaries. Labels use the common names,

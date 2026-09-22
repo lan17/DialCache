@@ -141,9 +141,15 @@ async def update_profile(user_id, changes):
 The adapter borrows a `redis.asyncio.Redis` or `RedisCluster` client; close it
 with `await client.aclose()` when your application shuts down. Configure
 finite connection, socket, and retry budgets on the client. Tracked reads
-atomically read the value and watermark from a primary, including when a
-cluster client otherwise permits replica reads. Keys for one tracked entity
-share a Redis Cluster hash tag.
+atomically read the value and watermark from a primary. For tracked Cluster
+reads, use a dedicated client constructed with primary-only defaults:
+`read_from_replicas=False`, `load_balancing_strategy=None` where supported, and no custom
+connection hook. Keep its configuration and connection mode unchanged while
+borrowed. Do not repurpose a previously `READONLY` pool by resetting flags;
+create a new primary-only client. Unsafe tracked reads raise `RedisProtocolError`
+at the adapter boundary and ordinary cache calls fail open to the source.
+Replica-enabled clients remain usable for untracked reads and maintenance.
+Keys for one tracked entity share a Redis Cluster hash tag.
 
 Each write stores a complete version-1 frame using one native `SET`. A tracked
 frame is readable only if its writer timestamp is strictly greater than the

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -139,20 +139,46 @@ INVALIDATE_CACHE_SCRIPT_SHA1 = hashlib.sha1(INVALIDATE_CACHE_SCRIPT.encode()).he
 class RedisAdapter:
     """Borrow a redis.asyncio.Redis or RedisCluster with decode_responses=False.
 
-    Cluster reads explicitly select the key's primary, even when the supplied
-    cluster client uses replica reads. Tracked MGET is one atomic snapshot.
+    Tracked Cluster reads require a client constructed for primary-only reads,
+    with unchanged connection settings and no READONLY connection hook. A
+    replica-configured client remains usable for untracked reads and mutations.
+    Tracked MGET is one atomic snapshot, including through client redirects.
     ReadContext is informational; core owns its authoritative deadline.
     """
 
     def __init__(self, client: Any) -> None:
         self.client = client
 
-    async def _command(self, key: str, *arguments: object) -> Any:
+    def _require_primary_connections(self) -> None:
+        message = (
+            "Tracked reads require a dedicated primary-only RedisCluster with unchanged connection settings"
+        )
+        try:
+            configuration = self.client.get_connection_kwargs()
+            safe = (
+                not self.client.read_from_replicas
+                and getattr(self.client, "load_balancing_strategy", None) is None
+                and isinstance(configuration, Mapping)
+                and configuration.get("redis_connect_func") is None
+            )
+        except Exception as error:
+            raise RedisProtocolError(message) from error
+        if not safe:
+            raise RedisProtocolError(message)
+
+    async def _command(self, key: str, *arguments: object, tracked_read: bool = False) -> Any:
         options: dict[str, object] = {}
         if hasattr(self.client, "get_node_from_key"):
+            if tracked_read:
+                self._require_primary_connections()
             # RedisCluster initializes its topology lazily. Explicit routing
             # must wait for that initialization before looking up the primary.
             await self.client.initialize()
+            if tracked_read:
+                # Replica routing affects redirects too. Constructor-installed
+                # READONLY hooks survive flag changes and can serve a demoted
+                # primary without any redirect; never borrow those connections.
+                self._require_primary_connections()
             options["target_nodes"] = self.client.get_node_from_key(key, replica=False)
         return await self.client.execute_command(*arguments, **options)
 
@@ -161,7 +187,9 @@ class RedisAdapter:
             raise asyncio.CancelledError()
         if request.watermark_key is None:
             return decode_read(await self._command(request.value_key, "GET", request.value_key))
-        result = await self._command(request.value_key, "MGET", request.value_key, request.watermark_key)
+        result = await self._command(
+            request.value_key, "MGET", request.value_key, request.watermark_key, tracked_read=True
+        )
         if not isinstance(result, (list, tuple)) or len(result) != 2:
             raise RedisProtocolError("Invalid Redis MGET reply; expected two bulk strings")
         return decode_tracked_read(result[0], result[1])
