@@ -2,7 +2,7 @@
 
 ## Project overview
 
-DialCache has TypeScript, Go and Rust implementations with explicit request-scoped enablement, local and Redis layers, runtime rollout controls, request coalescing, targeted invalidation, and adapter-based observability.
+DialCache has TypeScript, Go, Rust and Python implementations with explicit request-scoped enablement, local and Redis layers, runtime rollout controls, request coalescing, targeted invalidation, and adapter-based observability.
 
 ## Structure
 
@@ -28,6 +28,7 @@ src/
 test/                   # Unit and Redis integration tests
 go/                     # Go module, public cache and adapters, shared-corpus replay
 rust/                   # Rust crate, public cache and adapters, shared-corpus replay (tests/conformance.rs)
+python/                 # Async Python package, borrowed Redis adapter, native tests and shared-corpus replay
 formal/                 # Quint behavioral source of truth, contracts and portable vectors
 ```
 
@@ -61,17 +62,17 @@ formal/                 # Quint behavioral source of truth, contracts and portab
   prose once, import executable native examples by named region, and keep real
   language differences in `LanguageContent` notes or the short native guides.
   `make docs` generates all native references and checks snippet sources and
-  internal links; it requires the pinned Go and Rust toolchains as well as Node.
+  internal links; it requires the pinned Go and Rust toolchains, Python and Node.
   Run changed native examples with assertions (including Redis when relevant).
 - Start formal work at `formal/README.md`. `formal/WALKTHROUGH.md` follows one
-  contract through Quint, generated inputs and all three language replays;
+  contract through Quint, generated inputs and the native language replays;
   `formal/AUTHORING.md` explains how to extend that chain. Read the relevant
   model and profile bindings before opening large generated JSON artifacts.
 - For formal specification changes, follow `formal/AUTHORING.md`: keep models
   readable as behavior definitions, share helpers with identical meaning, retain
   independent property checks, and register executable evidence in the catalogs.
 - Define portable behavior in Quint first. Require consequential generated
-  witnesses and replay the same histories in TypeScript, Go and Rust; keep
+  witnesses and replay the same histories in TypeScript, Go, Rust and Python; keep
   native API, wire and integration tests for their explicit boundaries.
 - Use the shared behavioral testbed for portable features and bug fixes, with
   TypeScript as the executable reference. Follow the workflow in
@@ -89,6 +90,13 @@ make integration
 
 `make check-rust` runs the Rust crate's fmt, clippy, unit, vector, scenario and
 smoke checks; `make formal-rust` completes its replay of the generated corpus.
+For Python, create `python/.venv` with Python 3.11 or later and install
+`python/.venv/bin/python -m pip install -e './python[test,redis]'`.
+`make check-python` runs native, wire and committed smoke tests;
+`make integration-python` provisions isolated Redis/Valkey/Cluster servers;
+`make formal-python` runs the prepared generated corpus and completion checks.
+Set `PYTHON` to use another prepared interpreter. Python's package has no Node
+runtime dependency; the shared replay and validation tools require Node 24.
 Use `make formal` for complete Quint model checks, corpus generation and every
 port's full replay, then `make mutations` for assertion-strength checks.
 `make ci` runs all validation in the required order. `make help` lists targets

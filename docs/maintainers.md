@@ -8,7 +8,10 @@ benchmarks, and the existing release process.
 ## Validation
 
 Use Node.js 24 and the repository's pinned pnpm through Corepack. Go and Rust
-checks use their CI-pinned toolchains; full formal checks also require the pinned
+checks use their CI-pinned toolchains. Prepare Python 3.11 or later with
+`python3 -m venv python/.venv` and
+`python/.venv/bin/python -m pip install -e './python[test,redis]'`.
+Full formal checks also require the pinned
 Quint executable. Run `make help` for targets and prerequisites:
 
 ```bash
@@ -19,14 +22,14 @@ make integration
 
 `make check` runs strict TypeScript checks and coverage, bundles/declarations,
 packed ESM/CJS consumer checks, Go vet/formatting/race tests, Rust formatting,
-Clippy and native tests, documentation builds, and evidence inventories.
-TypeScript, Go and Rust replay the committed
+Clippy and native tests, Python native tests, documentation builds, and evidence inventories.
+TypeScript, Go, Rust and Python replay the committed
 Quint smoke fixtures and protocol cases. Integration tests require a
 Docker-compatible runtime for Redis, Valkey, and Redis Cluster and exercise
-all three language bindings.
+all four language bindings.
 
 `make formal` checks the scheduled Quint models, generates the complete corpus,
-and requires full TypeScript, Go and Rust replay with matching evidence fingerprints.
+and requires full TypeScript, Go, Rust and Python replay with matching evidence fingerprints.
 `make model-check` runs the separate finite symbolic checks; it needs Java 21,
 `tar` and a checksummed Apalache release and is the only lane that does.
 `make mutations` challenges the tests with the catalogued implementation
@@ -268,7 +271,8 @@ git push origin go/vX.Y.Z
 
 Rust currently has `publish = false` and is not part of this registry release
 flow. Its site reference follows repository source, not a crates.io/docs.rs
-release.
+release. Python is also unpublished and is installed from a checkout; its CI
+builds a wheel but does not publish to PyPI.
 
 The repository must enable **Allow GitHub Actions to create and approve pull
 requests** under Actions workflow permissions.

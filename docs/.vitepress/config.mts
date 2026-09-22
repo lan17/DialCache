@@ -28,6 +28,7 @@ export default defineConfig({
           { text: "TypeScript setup", link: "/languages/typescript" },
           { text: "Go setup", link: "/languages/go" },
           { text: "Rust setup", link: "/languages/rust" },
+          { text: "Python setup", link: "/languages/python" },
         ],
       },
       {

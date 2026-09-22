@@ -64,6 +64,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     fakeTool("corepack", 'console.log("10.33.0")');
     fakeTool("go", 'console.log("go version go1.27.1 test/test")');
     fakeTool("cargo", 'console.log("cargo 1.98.1 (test 2026-08-05)")');
+    environment.PYTHON = fakeTool("python", 'if (process.argv.includes("--version")) console.log("Python 3.11.14")');
     fakeTool("quint", 'console.log("0.32.0")');
     fakeTool("java", 'console.log("openjdk 21.0.11")');
     fakeTool("tar", 'console.log("bsdtar 3.5.3")');
@@ -164,10 +165,10 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(plan.filter(step => step.args?.[0] === "formal/witnesses.mjs")).toHaveLength(1);
     expect(plan.some(step => step.args?.[0] === "formal/generate-artifacts.mjs")).toBe(false);
     expect(plan[0]!.args).toEqual(["formal/run-models.mjs", "check"]);
-    expect(plan.find(step => step.remove)!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json", ".formal-traces/rust-completion.json"]);
+    expect(plan.find(step => step.remove)!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json", ".formal-traces/rust-completion.json", ".formal-traces/python-completion.json"]);
     // The aggregate is exactly these lanes in order, so a CI job running
     // one lane executes the same steps as the local sequential run.
-    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go", "formal-rust"].flatMap(target => validationPlan(target, { directory })));
+    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go", "formal-rust", "formal-python"].flatMap(target => validationPlan(target, { directory })));
   });
 
   it("keeps the model check as its own lane that produces nothing the port lanes consume", () => {
@@ -182,7 +183,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     const generate = validationPlan("formal-generate", { directory });
     expect(generate.some(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toBe(false);
     expect(generate.some(step => step.args?.[0] === "formal/check-model-properties.mjs")).toBe(false);
-    for (const target of ["formal-ts", "formal-go", "formal-rust", "mutations"]) {
+    for (const target of ["formal-ts", "formal-go", "formal-rust", "formal-python", "mutations"]) {
       expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/run-models.mjs")).toBe(false);
     }
     // Every acceptance entry point keeps one complete campaign, after all
@@ -254,6 +255,32 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     const smoke = validationPlan("smoke", { directory }).find(step => step.command === "cargo")!;
     expect(smoke.args).toEqual(["test", "--all-features", "--test", "conformance"]);
     expect(smoke.env).toBeUndefined();
+  });
+
+  it("runs Python from its prepared interpreter and checks complete evidence after replay", () => {
+    const native = validationPlan("check-python", { directory, environment });
+    expect(native).toEqual([{
+      label: "Run Python native, wire, scenario and smoke tests", command: environment.PYTHON,
+      args: ["-m", "pytest", "python/tests", "-m", "not integration"], env: { NODE: process.execPath },
+    }]);
+    const plan = validationPlan("formal-python", { directory, environment });
+    expect(plan[0]!.remove).toEqual([".formal-traces/python-completion.json"]);
+    expect(plan[1]!.args).toEqual(["formal/conformance.mjs", "prepare", "python", ".formal-traces/python-context.json"]);
+    expect(plan[2]!.args).toEqual(["formal/run-python-replay.mjs", "--generated", "--scenarios", "--complete", "--report", ".formal-traces/python-replay.jsonl"]);
+    expect(plan[2]!.env).toEqual({ PYTHON: environment.PYTHON });
+    expect(plan.at(-1)!.args).toEqual(["formal/conformance.mjs", "check", ".formal-traces/python-completion.json", ".formal-traces/python-context.json"]);
+    expect(validationPlan("smoke", { directory, environment }).at(-1)!.args).toEqual(["-m", "pytest", "python/tests/test_conformance.py"]);
+    expect(validationPlan("integration-python", { directory, environment })[0]!.args).toEqual(["formal/run-python-integration.mjs"]);
+  });
+
+  it("requires the Python floor and dependencies only for the Python lanes", () => {
+    environment.PYTHON = fakeTool("python", 'console.log("Python 3.10.16")');
+    for (const target of ["check-python", "formal-python", "integration-python", "smoke", "check"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" }), target).toThrow(/Python 3.11 or later/);
+    }
+    expect(() => checkPrerequisites("formal-rust", { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
+    environment.PYTHON = fakeTool("python", 'if (process.argv.includes("--version")) console.log("Python 3.14.7"); else { console.error("missing pytest"); process.exit(1); }');
+    expect(() => checkPrerequisites("check-python", { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/missing pytest/);
   });
 
   it("lets Go parity and every mutation measurement run off the generated corpus without completion checks", () => {
@@ -382,7 +409,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     for (const target of ["check-ts", "formal", "formal-check", "formal-generate", "formal-ts", "explore"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
     }
-  });
+  }, 15_000);
 
   it("requires Docker for mutation measurements but not report merging", () => {
     fakeTool("docker", 'console.error("Docker not running"); process.exit(1)');
@@ -424,7 +451,7 @@ else {
 describe("full formal workflow shape", () => {
   type Step = { name?: string; run?: string; uses?: string; if?: string; env?: Record<string, string>; with?: Record<string, string | boolean> };
   type Job = { needs?: string | string[]; if?: string; env?: Record<string, string>; strategy?: { "fail-fast"?: boolean; matrix?: Record<string, unknown[]> }; "timeout-minutes"?: number; steps: Step[] };
-  const lanes = ["typescript-parity", "go-parity", "rust-parity", "typescript-mutations", "go-mutations", "rust-mutations"];
+  const lanes = ["typescript-parity", "go-parity", "rust-parity", "python-parity", "typescript-mutations", "go-mutations", "rust-mutations"];
   const needsOf = (job: Job) => (job.needs === undefined ? [] : [job.needs].flat());
   let jobs: Record<string, Job>;
 
@@ -534,6 +561,21 @@ describe("full formal workflow shape", () => {
     expect(summary.path).toContain("formal-summary/rust/rust-completion.json");
     expect(summary.path).toContain("formal-summary/rust/rust-context.json");
     expect(summary.path).toContain("formal-summary/rust/rust-replay-summary.json");
+  });
+
+  it("requires Python complete replay and retains its actual completion evidence", () => {
+    const parity = jobs["python-parity"]!;
+    expect(parity.steps.find(step => step.uses === "./.github/actions/setup-validation")!.with).toEqual({ python: "true" });
+    expect(parity.steps.map(step => step.run).filter(Boolean)).toEqual(["make formal-python"]);
+    const aggregate = jobs["formal-full"]!;
+    expect(needsOf(aggregate)).toContain("python-parity");
+    const gate = aggregate.steps.find(step => step.run?.includes("_RESULT"))!;
+    expect(gate.env).toMatchObject({ PYTHON_RESULT: "$" + "{{ needs.python-parity.result }}" });
+    expect(gate.run).toMatch(/test "\$PYTHON_RESULT" = success/);
+    const summary = aggregate.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!.with!;
+    expect(summary.path).toContain("formal-summary/python/python-completion.json");
+    expect(summary.path).toContain("formal-summary/python/python-context.json");
+    expect(summary.path).toContain("formal-summary/python/python-replay-summary.json");
   });
 
   it("requires the model check in the aggregate and retains its report in the long-lived summary", () => {

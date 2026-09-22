@@ -1,8 +1,8 @@
 # Writing shared documentation
 
 Maintain one feature guide for the portable behavior. Keep native setup and
-idioms in [TypeScript](languages/typescript.md), [Go](languages/go.md), and
-[Rust](languages/rust.md). The language selector changes examples, binding notes,
+idioms in [TypeScript](languages/typescript.md), [Go](languages/go.md),
+[Rust](languages/rust.md), and [Python](languages/python.md). The language selector changes examples, binding notes,
 and API links while preserving the shared explanation and feature URL.
 
 ## Change a feature guide
@@ -43,10 +43,17 @@ and `tracked-invalidation` in every port. A shared page includes all variants:
 <<< @/../rust/tests/docs_examples.rs#request-scope{rust}
 
 </LanguageContent>
+
+<LanguageContent language="python">
+
+<<< @/../python/tests/test_docs_examples.py#request-scope{python}
+
+</LanguageContent>
 ````
 
 Mark the source with `// #region request-scope` and
-`// #endregion request-scope`. Keep setup and assertions in the full executable
+`// #endregion request-scope`; Python uses `# region request-scope` and
+`# endregion request-scope`. Keep setup and assertions in the full executable
 file, even when the displayed region omits some of that setup. State any omitted
 prerequisite beside the snippet. The source check rejects missing files,
 missing/duplicate regions, mismatched language sections, and a shared scenario
@@ -59,8 +66,9 @@ fragments as excerpts; compilation of a different example does not validate them
 
 ## Run the checks
 
-Use the repository's pinned Node, pnpm, Go, and Rust versions. The full site
-build needs all three native toolchains because references come from this
+Use the repository's pinned Node, pnpm, Go, and Rust versions and Python 3.11 or
+later with the package's test dependencies. The full site build needs all four
+native toolchains because references come from this
 checkout. It does not need Redis or Quint exploration.
 
 ```sh
@@ -71,7 +79,8 @@ corepack pnpm docs:dev   # Generate references/catalogue, then serve with hot re
 
 Native examples execute in the existing language validation jobs. TypeScript
 is compiled and run against the packed npm package, Go examples are ordinary
-tests, and Rust examples are integration tests. Redis tests use a dedicated
+tests, Rust examples are integration tests, and Python examples run with pytest.
+Redis tests use a dedicated
 service in CI; locally point `DOCS_REDIS_URL` at a disposable Redis instance:
 
 ```sh
@@ -81,11 +90,16 @@ corepack pnpm test:package
 go -C go test -race -count=1 -run '^TestDocs' ./...
 cd rust
 cargo test --locked --all-features --test docs_examples -- --include-ignored
+# From the repository root, with Python dependencies installed:
+python/.venv/bin/python -m pytest python/tests/test_docs_examples.py
 ```
 
 Without the URL, TypeScript and Go explicitly skip the Redis scenario. Rust's
 Redis scenario is ignored by default and requires the explicit command above;
-running that ignored test without the URL fails. The request-scope and policy
+running that ignored test without the URL fails. Python's example is marked
+`integration` and runs in `make integration-python`; without either
+`DOCS_REDIS_URL` or `TEST_REDIS_URL`, a direct pytest run skips it.
+The request-scope and policy
 examples run without external services. The Redis scenarios use unique keys and
 clean up their own data.
 
@@ -98,7 +112,9 @@ the full validation requirements in the formal authoring guide.
 ## Generated references and evidence
 
 TypeDoc reads TypeScript's exported entry points, `go doc -all` reads Go's public
-package, and rustdoc reads the Rust crate with all features. Their output and the
+package, rustdoc reads the Rust crate with all features, and standard-library
+`pydoc` reads Python's public package and integration modules. Python uses the
+interpreter in `PYTHON`, or `python/.venv/bin/python` by default. Their output and the
 [behavior catalogue](generated/behavior.md) are generated on every site build,
 ignored by Git, and published with the site. Edit public doc comments or the
 underlying reviewed inventory to change them. The existing TypeScript API usage

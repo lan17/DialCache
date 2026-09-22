@@ -3,6 +3,7 @@ import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkGoReplay, loadGoReplayInventory } from './check-go-replay.mjs';
 import { checkRustReplay } from './check-rust-replay.mjs';
+import { checkPythonReplay } from './check-python-replay.mjs';
 import { root } from './execution.mjs';
 import { readJSON, digest, fingerprint, validateContext, checkCompletion } from './conformance.mjs';
 
@@ -62,11 +63,19 @@ export function parseRustReport(text, inventory) {
   return { startedAt, finishedAt, results: inventory.map(entry => ({ id: entry.id, status: 'passed' })) };
 }
 
+export function parsePythonReport(text, inventory, corpus) {
+  checkPythonReplay(text, inventory, { corpus });
+  const events = text.trim().split('\n').map(line => JSON.parse(line));
+  return { startedAt: events[0].startedAt, finishedAt: events.at(-1).finishedAt,
+    results: inventory.map(entry => ({ id: entry.id, status: 'passed' })) };
+}
+
 export function adaptReport(language, text, context) {
   validateContext(context);
   if (context.language !== language) throw new Error('Wrong port context');
   const parsed = language === 'typescript' ? parseTypeScriptReport(text, context.inventory) : language === 'go'
     ? parseGoReport(text, context.inventory) : language === 'rust' ? parseRustReport(text, context.inventory)
+    : language === 'python' ? parsePythonReport(text, context.inventory, context.corpus)
     : (() => { throw new Error('Unsupported native report adapter'); })();
   const report = { schemaVersion: 1, language, runId: context.runId, contextSha256: fingerprint(context),
     ...parsed, status: 'passed', nativeReportSha256: digest(text) };
@@ -75,6 +84,6 @@ export function adaptReport(language, text, context) {
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [language, nativePath, contextPath, ...extra] = process.argv.slice(2);
-  if (extra.length || !language || !nativePath || !contextPath) throw new Error('Usage: node formal/conformance-adapters.mjs <typescript|go|rust> <native-report> <context.json>');
+  if (extra.length || !language || !nativePath || !contextPath) throw new Error('Usage: node formal/conformance-adapters.mjs <typescript|go|rust|python> <native-report> <context.json>');
   console.log(JSON.stringify(adaptReport(language, readFileSync(resolve(root, nativePath), 'utf8'), readJSON(contextPath)), null, 2));
 }

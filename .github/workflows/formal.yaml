@@ -25,6 +25,7 @@ jobs:
         with:
           go: "true"
           rust: "true"
+          python: "true"
       - name: Audit contracts and replay committed Quint smoke in every port
         run: make audit smoke
       - name: Detect changes requiring fresh Quint artifact generation

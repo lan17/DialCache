@@ -116,6 +116,13 @@ policy to a sparse `RuntimePolicy` for the provider. Omitted leaves inherit.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Use `Policy(coalesce=False)` as the default or runtime overlay. Omitted
+`coalesce` leaves inherit; false disables sharing while preserving settled hits.
+
+</LanguageContent>
+
 Concurrent same-key callers then each perform:
 
 - their own active-layer reads with a full independent remote-read budget;
@@ -237,6 +244,13 @@ Set the operation's `SourceBudget::Millis(n)`; `Default` uses 60 seconds and
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Set `fallback_timeout_ms` on the operation. Omission uses 60,000 ms; `None`
+disables the deadline. A DialCache source deadline raises `FallbackTimeoutError`.
+
+</LanguageContent>
+
 ### When the timer runs
 
 The timer starts only when the fallback begins:
@@ -300,6 +314,15 @@ Keep the captured runtime alive while operations and their dependencies are
 active. Dropping a caller future does not cancel a source or its shared flight;
 a runtime shutdown can still terminate tasks. Avoid blocking async workers and
 use bounded native source I/O budgets.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Keep the event loop and application-owned dependencies alive while work settles.
+Canceling one awaiting task does not cancel a shared execution or another
+caller. Event-loop shutdown can still terminate tasks. Avoid blocking loaders
+and configure finite source I/O budgets.
 
 </LanguageContent>
 
@@ -376,6 +399,14 @@ snapshot fields and optional oldest-age representation.
 
 Call `cache.coalescing_state()`. See the [Rust API](api.md) for the native
 snapshot fields and optional oldest-age representation.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Call `cache.get_coalescing_state()`. The `process` dictionary reports
+`active_leaders`, `active_followers`, and `oldest_leader_age_ms`; idle age is
+`None`. See the [Python API](api.md).
 
 </LanguageContent>
 

@@ -1,0 +1,46 @@
+name: Python
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ./.github/actions/setup-validation
+        with:
+          python: "true"
+          python-version: ${{ matrix.python }}
+      - name: Check native behavior, portable wire vectors and shared smoke histories
+        run: make check-python
+      - name: Check Redis, Valkey, Cluster and TypeScript interoperability
+        run: make integration-python
+      - name: Build a distributable wheel
+        run: python/.venv/bin/python -m pip wheel --no-deps ./python --wheel-dir .formal-traces/python-dist
+      - name: Retain the built wheel and integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-${{ matrix.python }}-validation
+          path: |
+            .formal-traces/python-dist/
+            .formal-traces/python-integration*
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14

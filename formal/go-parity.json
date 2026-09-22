@@ -10,10 +10,10 @@
   "inputs": {
     "semanticCasesSha256": "faa768fbf06eddc03dc4f26570094b1df066fb075f898043b40c6ce9d8c952a1",
     "executionSha256": "3df06c53eb69f02fb6eafabd51c6cc7a306c6739e04ab3fa521b53389da559f2",
-    "sourceAuditSha256": "d1d7b67b16d64b2ca31da3b0632a2379760d024d265e3f581586e9d453c7a3d6",
+    "sourceAuditSha256": "eb346f5919cc0158afa8f0e565025bb7f03a81c5b231a7f6b1684c8c15afc7c3",
     "featureCoverageSha256": "91723cc5398c8fff102d2beb199ebcab82af137e11f1cb9771b8d16d0304a95c",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
-    "profilesSha256": "2ebb3ba9c9b71334bcbbaa1e2d9c1d539664ed69e826942ff829a2c31fe9434b"
+    "profilesSha256": "15fbdb476b5ee9f39ea017ef5668d9c26cb7d53ebc96a6b7c4f531cccfa8d897"
   },
   "inventory": {
     "behavioralCases": 244,
@@ -4525,6 +4525,23 @@
           "B03"
         ],
         "rationale": "The native setup and binding guide explains request lifetime, sparse policy, errors, codec domains and integrations relative to the same shared behavior. Go API and codec artifacts establish the relevant native distinctions; documentation itself is not execution evidence. The primary-read contract requires primary-backed standalone/Sentinel handles; the concrete Go ClusterClient adapter overrides replica routing, while Rust-specific connection types remain native binding guidance."
+      },
+      {
+        "path": "docs/languages/python.md",
+        "goFiles": [
+          "go/api.go",
+          "go/bindings.go",
+          "go/policy.go",
+          "go/codec.go",
+          "go/docs_examples_test.go",
+          "go/redis_adapter.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "B03"
+        ],
+        "rationale": "The Python binding guide explains shared request lifetime, policy inheritance, identities, deadlines, invalidation and observer boundaries. Those portable rules apply to Go through the referenced APIs and tests; Python decorators, contextvars, asyncio cancellation, native values and package installation are language-specific guidance, not claims about Go execution. The borrowed-client and primary-read requirements remain shared adapter obligations."
       },
       {
         "path": "docs/languages/rust.md",

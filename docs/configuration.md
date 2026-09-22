@@ -68,6 +68,14 @@ inherited defaults fails the example.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+<<< @/../python/tests/test_docs_examples.py#runtime-policy{python}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/python/tests/test_docs_examples.py)
+
+</LanguageContent>
+
 <LanguageContent language="typescript">
 
 `defaultConfig` accepts `DialCacheKeyConfig`; `cacheConfigProvider` returns a
@@ -95,8 +103,19 @@ milliseconds. See the [Rust guide](languages/rust.md#policy-and-errors).
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Operation defaults use `Policy`; the `policy_provider` returns a sparse `Policy`,
+mapping or `None`. A whole reply of `None` inherits; an explicit `None` leaf is
+invalid. TTLs use integer seconds and deadlines use integer milliseconds.
+Python names include `ttl_sec`, `request_local`, and `remote_read_timeout_ms`;
+mappings also accept the shared camelCase names. See the
+[Python guide](languages/python.md#identity-and-policy).
+
+</LanguageContent>
+
 The policy names in the tables below use the shared JSON configuration shape,
-also accepted by the Go and Rust policy parsers. Native names and units differ;
+also accepted by the Go, Rust and Python policy parsers. Native names and units differ;
 use the selected language's API reference when constructing typed policy.
 A configured TTL implies a 100% serving ramp unless overridden. Without a TTL,
 a local or remote layer is off. Request-local caching and shadow work are off

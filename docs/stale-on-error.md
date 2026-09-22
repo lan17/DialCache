@@ -57,6 +57,14 @@ deadline separately from both ages.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Use `Policy(ttl_sec={"remote": 60}, stale_on_error_max_age_sec=300)` with a
+configured Redis adapter. The operation's `fallback_timeout_ms` controls the
+source deadline separately from both ages.
+
+</LanguageContent>
+
 Inside an enabled scope, a frame younger than 60 seconds serves normally. From
 60 seconds until strictly before 300 seconds, it can serve only after an eligible
 source failure. The built-in classifier accepts the native fallback-timeout
@@ -121,6 +129,14 @@ timeouts, then add narrowly classified application source errors.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Set `should_attempt_stale_recovery` on the operation or instance. Preserve
+`isinstance(error, FallbackTimeoutError)` when extending the default to narrowly
+classified transient source errors.
+
+</LanguageContent>
+
 An application transient-error predicate should classify infrastructure failures
 narrowly. Deny authoritative outcomes such as
 permission or entitlement failures, revocation, deletion/not-found, validation,
@@ -153,6 +169,13 @@ is isolated and denies recovery; it does not replace the original source failure
 
 The native predicate returns a boolean. A callback panic is isolated and denies
 recovery; it does not authorize a retained value.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+The predicate must synchronously return a boolean. Exceptions, awaitables and
+non-boolean values deny recovery without replacing the original source error.
 
 </LanguageContent>
 

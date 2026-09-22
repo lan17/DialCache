@@ -28,6 +28,22 @@ if (!process.argv.includes('--catalogue-only')) {
   run('cargo', ['doc', '--locked', '--all-features', '--no-deps'], resolve(root, 'rust'));
   const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--format-version=1', '--no-deps'], { cwd: resolve(root, 'rust'), encoding: 'utf8' }));
   cpSync(resolve(metadata.target_directory, 'doc'), resolve(destination, 'rust'), { recursive: true });
+  const python = process.env.PYTHON ?? resolve(root, 'python/.venv/bin/python');
+  // Use this checkout even when PYTHON points at an editable installation in
+  // another directory. pydoc is part of the standard library.
+  const pythonModules = JSON.parse(execFileSync(python, ['-c', `import importlib, json, pydoc, sys
+sys.path.insert(0, sys.argv[1])
+names = ['dialcache', 'dialcache.cache', 'dialcache.config', 'dialcache.key', 'dialcache.serializer', 'dialcache.redis', 'dialcache.protocol', 'dialcache.metrics', 'dialcache.clock', 'dialcache.errors']
+print(json.dumps({name: pydoc.render_doc(importlib.import_module(name), renderer=pydoc.plaintext) for name in names}))
+`, resolve(root, 'python')], { cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }));
+  mkdirSync(resolve(destination, 'python'), { recursive: true });
+  writeFileSync(resolve(destination, 'python/index.html'), `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DialCache Python API</title><style>body{font:16px/1.6 system-ui;margin:2rem auto;padding:0 1rem;max-width:80rem}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}a{color:#3451b2}@media(prefers-color-scheme:dark){body{background:#1b1b1f;color:#dfdfd6}a{color:#a8b1ff}}</style></head>
+<body><nav><a href="../../api.html">All languages</a> · <a href="../../languages/python.html">Python guide</a></nav>
+<h1>DialCache Python API</h1><p>Generated with <code>pydoc</code> from <a href="${source('python')}">${revision.slice(0, 7)}</a>. Use your browser's Find command to locate a symbol.</p>
+<ul>${Object.keys(pythonModules).map(name => `<li><a href="#${name}">${name}</a></li>`).join('')}</ul>
+${Object.entries(pythonModules).map(([name, text]) => `<section><h2 id="${name}">${name}</h2><pre>${escape(text)}</pre></section>`).join('\n')}</body></html>\n`);
   writeFileSync(resolve(destination, 'revision.json'), JSON.stringify({ revision }, null, 2) + '\n');
 }
 
@@ -55,7 +71,7 @@ const pages = ['---', 'editLink: false', '---', '', '# Behavior catalogue', '',
   'These links describe registered evidence and its scope. They are not a fresh test result or a claim of exhaustive coverage. ' +
   'See the [validation guide](' + source('formal/VALIDATION.md') + ') for how a completed run is established.', '',
   'All supported ports replay the shared histories through their native drivers. ' +
-  [link('TypeScript replay tests', 'test/formal-features.test.ts'), link('Go replay tests', 'go/feature_replay_test.go'), link('Rust replay tests', 'rust/tests/conformance.rs')].join(' · ') + '.', '',
+  [link('TypeScript replay tests', 'test/formal-features.test.ts'), link('Go replay tests', 'go/feature_replay_test.go'), link('Rust replay tests', 'rust/tests/conformance.rs'), link('Python replay tests', 'python/tests/test_conformance.py')].join(' · ') + '.', '',
   '| Case | Behavior | Model and regression evidence | Shared replay evidence |',
   '| --- | --- | --- | --- |'];
 for (const item of inventory.cases) {

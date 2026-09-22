@@ -79,6 +79,15 @@ derive nested scopes. See the [Rust guide](languages/rust.md).
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Enabled state travels through `contextvars`. Enter `cache.enable()` with `with`
+or `async with`; nested `enable()` and `disable()` preserve the live outer
+memo. Calls from retained task contexts pass through after that outer scope
+closes. See the [Python guide](languages/python.md).
+
+</LanguageContent>
+
 After the outer scope closes, new invocations through retained context are
 pass-through. Already admitted cache operations can finish and publish to shared
 layers, but cannot repopulate closed request-local state. An invocation still
@@ -211,6 +220,14 @@ Results are `Arc<T>`, including coalesced results. Keep one value type per cache
 identity: a settled memory entry of another type misses, while an incompatible
 coalesced follower returns a type error. Interior mutation can affect other
 callers, even through a shared `Arc`.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Python memory entries and coalesced results share the same object references.
+Treat values as immutable or copy before mutation. `None` is a present value;
+custom serializers handle result types outside the default JSON domain.
 
 </LanguageContent>
 

@@ -8,26 +8,28 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const replayTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts',
   'test/formal-local-clock.test.ts', 'test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const aggregateTargets = {
-  check: ['check-ts', 'check-go', 'check-rust', 'docs', 'audit'],
-  formal: ['formal-check', 'formal-generate', 'formal-ts', 'formal-go', 'formal-rust'],
+  check: ['check-ts', 'check-go', 'check-rust', 'check-python', 'docs', 'audit'],
+  formal: ['formal-check', 'formal-generate', 'formal-ts', 'formal-go', 'formal-rust', 'formal-python'],
   mutations: ['mutations-ts', 'mutations-go', 'mutations-rust'],
-  integration: ['integration-ts', 'integration-go', 'integration-rust'],
+  integration: ['integration-ts', 'integration-go', 'integration-rust', 'integration-python'],
   ci: ['check', 'package-floor', 'formal', 'model-check', 'integration', 'mutations'],
 };
 export const targetDescriptions = {
-  check: 'TypeScript, Go and Rust checks, docs build and reviewed inventories; no Quint generation or Docker',
+  check: 'TypeScript, Go, Rust and Python checks, docs build and reviewed inventories; no Quint generation or Docker',
   'check-ts': 'Typecheck, unit coverage, build and packed-package checks on Node 24',
   'check-go': 'Go vet, formatting check and default tests with race detection',
   'check-rust': 'Rust formatting check, clippy with warnings denied and default tests including the smoke conformance run',
-  docs: 'Check shared examples and links; generate native API references and the documentation site (Go and Rust required)',
+  'check-python': 'Python native, protocol, scenario and committed smoke tests, excluding real Redis integrations',
+  docs: 'Check shared examples and links; generate native API references and the documentation site (Go, Rust and Python required)',
   audit: 'Check source, behavior, feature, Go and generated-fixture freshness inventories',
-  smoke: 'Replay committed Quint-derived fixtures in TypeScript, Go and Rust; no full completion claim',
-  formal: 'Check every scheduled Quint model, generate the complete corpus and shared witness evidence, then complete TypeScript, Go and Rust replay',
+  smoke: 'Replay committed Quint-derived fixtures in TypeScript, Go, Rust and Python; no full completion claim',
+  formal: 'Check every scheduled Quint model, generate the complete corpus and shared witness evidence, then replay TypeScript, Go, Rust and Python',
   'formal-check': 'Typecheck and run every scheduled Quint model, its public regressions and the model mutation challenges',
   'formal-generate': 'Generate/recompute artifacts and evaluate shared witness evidence over the complete corpus',
   'formal-ts': 'Complete prepared TypeScript replay of the generated corpus',
   'formal-go': 'Complete prepared Go replay of the generated corpus with race detection',
   'formal-rust': 'Complete prepared Rust replay of the generated corpus in release mode',
+  'formal-python': 'Replay the complete generated Python corpus, scenarios, protocol obligations and witnesses',
   'fixtures-check': 'Recompute every committed model-derived artifact with pinned Quint',
   'kernel-fixtures': 'Typecheck the kernel library fixtures (test/fixtures/kernel) and run every run they declare',
   differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions (DIFFERENTIAL_SHARD=<index>/<count> replays one shard balanced by estimated profile replay time, as the hosted lane does with four)',
@@ -40,10 +42,11 @@ export const targetDescriptions = {
   'mutations-merge-ts': 'Merge TypeScript mutation shards into the complete report; refuses inconsistent or missing shards',
   'mutations-merge-go': 'Merge Go mutation shards into the complete report; refuses inconsistent or missing shards',
   'mutations-merge-rust': 'Merge Rust mutation shards into the complete report; refuses inconsistent or missing shards',
-  integration: 'Run real TypeScript, Go and Rust Redis/Valkey/Cluster integration checks',
+  integration: 'Run real TypeScript, Go, Rust and Python Redis/Valkey/Cluster integration checks',
   'integration-ts': 'Run TypeScript real integration checks',
   'integration-go': 'Run Go real integration and interoperability checks with race detection',
   'integration-rust': 'Run Rust real Redis/Valkey/Cluster integration checks and invalidation vector replay',
+  'integration-python': 'Run Python real Redis/Valkey/Cluster integration checks, invalidation vectors and TypeScript interoperability',
   'package-floor': 'Check zstd and the packed package on exact Node 22.15.0 (NODE22_BIN)',
   ci: 'Run check, package-floor, formal, model-check, integration and mutations in dependency order',
 };
@@ -124,6 +127,8 @@ export function validationPlan(target, { directory = root, environment = process
   // Cargo runs inside rust/ so rustup resolves rust/rust-toolchain.toml; the
   // crate's tests locate the repository through CARGO_MANIFEST_DIR, not cwd.
   const cargo = (label, subcommand, ...args) => ({ label, command: 'cargo', args: [subcommand, ...args], cwd: 'rust' });
+  const pythonExecutable = environment.PYTHON ?? resolve(directory, 'python/.venv/bin/python');
+  const python = (label, ...args) => ({ label, command: pythonExecutable, args, env: { NODE: runnerNode } });
   const reportPath = (language, suffix) => `.formal-traces/${language}-${suffix}.json`;
   const completion = language => ({ ...node(`Validate current ${language} completion`, 'formal/conformance.mjs', 'check', reportPath(language, 'completion'), reportPath(language, 'context')),
     failureHint: 'A current complete replay is required. Run make formal first; missing or stale reports cannot be reused.' });
@@ -174,12 +179,14 @@ export function validationPlan(target, { directory = root, environment = process
     'check-rust': [cargo('Check Rust formatting', 'fmt', '--check'),
       cargo('Lint Rust with clippy', 'clippy', '--all-targets', '--all-features', '--', '-D', 'warnings'),
       cargo('Run Rust default tests', 'test', '--all-features')],
+    'check-python': [python('Run Python native, wire, scenario and smoke tests', '-m', 'pytest', 'python/tests', '-m', 'not integration')],
     docs: [pnpm('Build documentation', 'docs:build')],
     audit: ['execution', 'check-source-audit', 'check-semantic-coverage', 'check-feature-coverage', 'check-go-parity']
       .map(name => node(`Check ${name}`, `formal/${name}.mjs`))
       .concat(node('Verify committed fixture fingerprints', 'formal/generated-fixtures.mjs', '--verify'),
         node('Check conditional fixture regeneration scope', '--test', '.github/scripts/fixture-scope.test.mjs')),
-    smoke: [tsReplay(false), nativeGo(false), nativeRust(false)],
+    smoke: [tsReplay(false), nativeGo(false), nativeRust(false),
+      python('Replay committed Python fixtures and scenarios', '-m', 'pytest', 'python/tests/test_conformance.py')],
     'fixtures-check': [node('Recompute all committed Quint artifacts', 'formal/generate-artifacts.mjs', '--check')],
     'kernel-fixtures': [kernelFixtures],
     differential: [lintBaseline, kernelFixtures, node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${environment.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`, ...differentialShard)],
@@ -193,7 +200,7 @@ export function validationPlan(target, { directory = root, environment = process
     // Generation is the single shared producer: the corpus, wire artifacts and
     // witness evidence depend only on the models. Every port replay and mutation
     // measurement read that output and can run in parallel off it.
-    'formal-generate': [invalidate('ts', 'go', 'rust'),
+    'formal-generate': [invalidate('ts', 'go', 'rust', 'python'),
       node('Generate complete corpus and recompute wire artifacts', 'formal/run-models.mjs', 'generate'),
       node('Recompute committed Quint smoke and witness fixtures', 'formal/generated-fixtures.mjs', '--check'), witnesses],
     'formal-ts': [invalidate('ts'), node('Prepare TypeScript execution context', 'formal/conformance.mjs', 'prepare', 'typescript', reportPath('ts', 'context')),
@@ -209,6 +216,11 @@ export function validationPlan(target, { directory = root, environment = process
       node('Prepare Rust execution context', 'formal/conformance.mjs', 'prepare', 'rust', reportPath('rust', 'context')), nativeRust(true),
       { ...node('Check complete Rust native report', 'formal/check-rust-replay.mjs'), stdoutFile: '.formal-traces/rust-replay-summary.json' },
       { ...node('Adapt Rust native assertion report', 'formal/conformance-adapters.mjs', 'rust', '.formal-traces/rust-replay.jsonl', reportPath('rust', 'context')), stdoutFile: reportPath('rust', 'completion') }, completion('rust')],
+    'formal-python': [invalidate('python'),
+      node('Prepare Python execution context', 'formal/conformance.mjs', 'prepare', 'python', reportPath('python', 'context')),
+      { ...node('Replay complete Python corpus and obligations', 'formal/run-python-replay.mjs', '--generated', '--scenarios', '--complete', '--report', '.formal-traces/python-replay.jsonl'), env: { PYTHON: pythonExecutable } },
+      { ...node('Check complete Python native report', 'formal/check-python-replay.mjs'), stdoutFile: '.formal-traces/python-replay-summary.json' },
+      { ...node('Adapt Python native assertion report', 'formal/conformance-adapters.mjs', 'python', '.formal-traces/python-replay.jsonl', reportPath('python', 'context')), stdoutFile: reportPath('python', 'completion') }, completion('python')],
     'mutations-ts': [node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs', ...selection)],
     'mutations-go': [node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs', ...selection)],
     'mutations-rust': [node('Measure Rust semantic mutations', 'formal/measure-rust-semantics.mjs', ...selection)],
@@ -222,6 +234,7 @@ export function validationPlan(target, { directory = root, environment = process
     // The Rust integration tests are #[ignore]d, so a plain cargo test reports
     // them as ignored and never needs Docker; this lane runs exactly them.
     'integration-rust': [cargo('Run Rust Redis/Valkey/Cluster integrations', 'test', '--all-features', '--test', 'redis_integration', '--', '--ignored')],
+    'integration-python': [{ ...node('Run Python Redis/Valkey/Cluster integrations', 'formal/run-python-integration.mjs'), env: { PYTHON: pythonExecutable } }],
     'package-floor': [{ label: 'Require a built package for floor checks', requireFile: 'dist/index.js', failureHint: 'Build first with make check-ts, or run make ci with NODE22_BIN set.' },
       { label: 'Check Node 22.15 zstd round trip and output ceiling', command: node22, args: ['--eval', floorSmoke], env: { PATH: floorEnvironment(environment, node22).PATH } },
       { label: 'Check packed package on Node 22.15', command: node22, args: ['scripts/test-package.mjs'], env: { PATH: floorEnvironment(environment, node22).PATH } }],
@@ -249,6 +262,13 @@ export function checkPrerequisites(target, { directory = root, environment = pro
   if (targets.some(name => ['check-rust', 'docs', 'smoke', 'formal-rust', 'integration-rust', 'mutations-rust', 'explore'].includes(name))) {
     const version = probe('cargo', ['--version'], { directory: resolve(directory, 'rust'), environment });
     if (!/^cargo 1\.98\.1(?:\s|$)/.test(version)) throw new Error(`Validation requires cargo 1.98.1; found ${version}. Install Rust 1.98.1 (rustup reads rust/rust-toolchain.toml) and put it on PATH.`);
+  }
+  if (targets.some(name => ['check-python', 'smoke', 'formal-python', 'integration-python', 'explore', 'docs'].includes(name))) {
+    const executable = environment.PYTHON ?? resolve(directory, 'python/.venv/bin/python');
+    const version = probe(executable, ['--version'], { directory, environment });
+    const parsed = /^Python (\d+)\.(\d+)(?:\.|\s|$)/.exec(version);
+    if (!parsed || Number(parsed[1]) !== 3 || Number(parsed[2]) < 11) throw new Error(`Python validation requires Python 3.11 or later; found ${version}. Set PYTHON or create python/.venv and install './python[test,redis]'.`);
+    probe(executable, ['-c', 'import dialcache, pytest, pytest_asyncio, jsonschema, zstandard, redis'], { directory, environment });
   }
   if (targets.some(name => ['formal-check', 'formal-generate', 'fixtures-check', 'explore', 'model-check', 'differential'].includes(name))) {
     const requiredQuint = JSON.parse(readFileSync(resolve(directory, 'formal/generated-fixtures.lock.json'), 'utf8')).quintVersion;
@@ -411,7 +431,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (target === 'help') {
     const width = Math.max(...Object.keys(targetDescriptions).map(name => name.length));
     console.log(Object.entries(targetDescriptions).map(([name, description]) => `make ${name.padEnd(width)} ${description}`).join('\n'));
-    console.log('\nPrerequisites: frozen pnpm install; Node 24, pinned pnpm; Go 1.27.1 / cargo 1.98.1 / Docker where required; Quint 0.32.0 for formal-check, formal-generate, fixtures-check, explore and model-check; Java 21 and tar for model-check and ci.');
+    console.log('\nPrerequisites: frozen pnpm install; Node 24, pinned pnpm; Go 1.27.1 / cargo 1.98.1 / Python >=3.11 (PYTHON or python/.venv/bin/python, install ./python[test,redis]) / Docker where required; Quint 0.32.0 for formal-check, formal-generate, fixtures-check, explore and model-check; Java 21 and tar for model-check and ci.');
     console.log('formal-check is the Quint evidence lane (models, regressions, challenges); the port and mutation lanes read only the formal-generate output and do not wait for it.');
     console.log('Sharded mutation runs: MUTATION_SHARD=<index>/<count> make mutations-ts for every index, matching the workflow matrix, on any machines with the same corpus, then make mutations-merge-ts; the merged report is the only complete evidence.');
     console.log('One mutant locally: MUTATION_ONLY=M01,M02 make mutations-ts (or mutations-go / mutations-rust) writes a partial report under partial/ and leaves the complete report alone.');

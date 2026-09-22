@@ -58,8 +58,11 @@ export function checkDocsSources(directory = root) {
       if (!port) { failures.push(`${at}: snippet must use a registered, executed example file`); continue; }
       if (port.id !== selected) failures.push(`${at}: ${port.id} example requires its matching LanguageContent`);
       const code = readFileSync(path, 'utf8');
-      const starts = [...code.matchAll(new RegExp(`^\\s*//\\s*#region ${region}\\s*$`, 'gm'))];
-      const ends = [...code.matchAll(new RegExp(`^\\s*//\\s*#endregion ${region}\\s*$`, 'gm'))];
+      // Match VitePress's native region syntax. In Python the leading # is
+      // already the region marker: '# region', never '# #region'.
+      const regionMarker = path.endsWith('.py') ? '# ?' : '//\\s*#';
+      const starts = [...code.matchAll(new RegExp(`^\\s*${regionMarker}region ${region}\\s*$`, 'gm'))];
+      const ends = [...code.matchAll(new RegExp(`^\\s*${regionMarker}endregion ${region}\\s*$`, 'gm'))];
       if (starts.length !== 1 || ends.length !== 1 || starts[0].index >= ends[0].index) failures.push(`${at}: missing, duplicate or unclosed region ${region} in ${input}`);
       if (!regions.has(region)) regions.set(region, new Set());
       regions.get(region).add(port.id);

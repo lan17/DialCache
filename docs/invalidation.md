@@ -82,6 +82,14 @@ its own watermark observation.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+<<< @/../python/tests/test_docs_examples.py#tracked-invalidation{python}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/python/tests/test_docs_examples.py)
+
+</LanguageContent>
+
 The complete files provide the client, source and cleanup. The example uses a zero
 buffer because it has no overlapping stale writer. That is not a production
 recommendation: choose timing bounds using the next section.
@@ -109,6 +117,16 @@ Set the operation's tracked identity and call
 `cache.invalidate(key_type, id, future_buffer_ms).await` after the source commit.
 The buffer is milliseconds. `invalidate_identity` supports an explicit identity
 namespace. Handle the returned error as failed maintenance.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Set `track_for_invalidation=True` and call
+`await cache.invalidate_remote(key_type, id, future_buffer_ms)` after the source
+commit. `ainvalidate()` is an alias. The buffer uses integer milliseconds.
+Missing remote configuration raises `MissingRemoteError`; mutation failures
+propagate to the maintenance caller.
 
 </LanguageContent>
 

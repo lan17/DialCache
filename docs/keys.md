@@ -90,6 +90,16 @@ See the [Rust guide](languages/rust.md).
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+The `cached` decorator takes `key_type`, `use_case`, and either a `cache_key`
+callback or `id_arg`. `id_arg=(name, adapter)` extracts an ID from a native object;
+other bound arguments use `arg_adapters` and `ignore_args`. Inline calls accept
+a structured `Key` or an ID plus normalized argument mapping. See the
+[Python guide](languages/python.md#identity-and-policy).
+
+</LanguageContent>
+
 Include every input that can change the result. Omitting an authorization scope,
 tenant, or locale can make callers reuse the wrong value. Disabling coalescing
 does not fix an incomplete key. Add a Redis client, remote policy and tracked identity to use
@@ -157,6 +167,15 @@ rules. `f32` is promoted to `f64` before formatting.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Python primitive integers retain their exact digits, floats use the shared
+JavaScript-compatible spelling, and strings use the shared escaping rules.
+`normalize_args` sorts names by UTF-16 units; it omits `UNDEFINED` and preserves
+`None` as the literal null value.
+
+</LanguageContent>
+
 See the [native API reference](api.md) for direct key construction.
 
 ## Namespace
@@ -210,6 +229,14 @@ the operation's baseline is already known to the cache during policy resolution.
 The provider receives the normalized `Identity`. It includes namespace, entity
 kind/id, use case, ordered args and tracking; return a sparse `RuntimePolicy`
 without rebuilding the operation's baseline.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+The provider receives the normalized `Key`, including namespace, key type,
+ID, use case, ordered arguments and tracking. Return a sparse policy overlay
+without reconstructing the operation baseline.
 
 </LanguageContent>
 

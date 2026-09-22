@@ -1,5 +1,6 @@
 [
   { "id": "typescript", "label": "TypeScript", "guide": "/languages/typescript", "reference": "/reference/typescript/index.html", "example": "examples/typescript/docs.mts" },
   { "id": "go", "label": "Go", "guide": "/languages/go", "reference": "/reference/go/index.html", "example": "go/docs_examples_test.go" },
-  { "id": "rust", "label": "Rust", "guide": "/languages/rust", "reference": "/reference/rust/dialcache/index.html", "example": "rust/tests/docs_examples.rs" }
+  { "id": "rust", "label": "Rust", "guide": "/languages/rust", "reference": "/reference/rust/dialcache/index.html", "example": "rust/tests/docs_examples.rs" },
+  { "id": "python", "label": "Python", "guide": "/languages/python", "reference": "/reference/python/index.html", "example": "python/tests/test_docs_examples.py" }
 ]

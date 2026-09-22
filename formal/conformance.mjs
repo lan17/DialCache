@@ -60,6 +60,12 @@ export function defaultSources(language) {
     ...filesBelow('rust').filter(path => !path.startsWith('rust/target/') && /\.(rs|toml|lock)$/.test(path)),
     ...readExecution().models.filter(model => model.profile && model.profile !== 'core')
       .map(model => `.formal-traces/go-parity-witnesses/${model.profile}.json`)];
+  if (language === 'python') return [
+    ...filesBelow('python/dialcache').filter(path => path.endsWith('.py')),
+    ...filesBelow('python/tests').filter(path => path.endsWith('.py') || path.endsWith('.mjs')),
+    'python/pyproject.toml',
+    ...readExecution().models.filter(model => model.profile && model.profile !== 'core')
+      .map(model => `.formal-traces/go-parity-witnesses/${model.profile}.json`)];
   fail('New languages must supply an explicit JSON list of implementation and harness source paths');
 }
 function hashes(paths) {
@@ -106,7 +112,7 @@ export function validateContext(context, { current = true } = {}) {
     if (!isDeepStrictEqual(context.implementation, hashes(Object.keys(context.implementation)))) fail('Implementation inputs changed during run');
     // Default bindings must include new files too; custom port inventories are
     // an explicit, reviewable declaration of the complete execution inputs.
-    if (['typescript', 'go', 'rust'].includes(context.language) && !isDeepStrictEqual(Object.keys(context.implementation).sort(), defaultSources(context.language).sort())) fail('Implementation source inventory changed during run');
+    if (['typescript', 'go', 'rust', 'python'].includes(context.language) && !isDeepStrictEqual(Object.keys(context.implementation).sort(), defaultSources(context.language).sort())) fail('Implementation source inventory changed during run');
     if (!isDeepStrictEqual(context.corpus, corpusInputs(context.inventory))) fail('Shared corpus changed during run');
   }
   return context;

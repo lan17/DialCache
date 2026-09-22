@@ -82,6 +82,14 @@ rollout. See [configuration](configuration.md) and the [Rust API](api.md).
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Use current `Policy` snake_case fields or the accepted shared camelCase
+mapping names. Legacy `shadowRamp` is rejected; migrate it to `shadow.ramp`.
+See [configuration](configuration.md) and the [Python API](api.md).
+
+</LanguageContent>
+
 ## Custom Redis adapters
 
 A custom adapter must preserve complete-frame writes, classified primary reads,
@@ -131,6 +139,15 @@ Migrate against `Remote` and its native request/result types. A tracked read
 must return one primary snapshot; preserve observed fences on misses and honor
 explicit write timestamps exactly. Use the public protocol helpers rather than
 inventing alternate framing. See [custom-client contract](redis.md#custom-client-contract).
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Implement `dialcache.redis.RedisClient` with its request/result types. Return
+one primary snapshot for tracked reads, preserve observed fences on misses,
+and honor explicit write timestamps. Use `dialcache.protocol` helpers for wire
+framing; see the [custom-client contract](redis.md#custom-client-contract).
 
 </LanguageContent>
 
@@ -239,6 +256,14 @@ labels. Native Go adapter contracts are in the [API reference](api.md).
 Update exhaustive matches over public events, metric kinds and outcomes when
 upgrading. Preserve the shared `tracked_ttl_clamped`, `fill_fenced` and recovery
 outcomes, names and units. Native types are in the [API reference](api.md).
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Update event dictionary handling for new outcomes and labels. Preserve
+`tracked_ttl_clamped`, `fill_fenced` and recovery outcomes with their shared
+units. See the [Python API](api.md).
 
 </LanguageContent>
 

@@ -163,6 +163,19 @@ setup and cleanup.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Install the checkout with the Redis extra and borrow an application-owned
+`redis.asyncio.Redis` or `RedisCluster` client through
+`dialcache.redis.RedisAdapter`. Pass `redis=RedisAdapter(client)` to `DialCache`.
+Use `decode_responses=False` and finite connection, socket and retry budgets.
+Tracked Cluster reads explicitly select the primary.
+
+The [executed invalidation example](invalidation.md#configure-a-tracked-use-case)
+includes complete client setup and cleanup in its source.
+
+</LanguageContent>
+
 ## Remote-read deadlines and async liveness
 
 The read deadline resolves from the runtime overlay, operation defaults, instance
@@ -203,6 +216,14 @@ client. Cancellation does not guarantee that a dispatched server command stops.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+The cache bounds its remote-read wait and sends a cooperative abort signal.
+Configure finite socket, connection and retry budgets on the borrowed client;
+ending the Python wait cannot retract a dispatched Redis command.
+
+</LanguageContent>
+
 See [Coalescing and liveness](coalescing.md).
 
 ## Lifecycle ownership
@@ -234,6 +255,14 @@ source goroutines; use native contexts for that work.
 Keep the captured Tokio runtime alive while cache operations and native client
 work settle. Dropping a caller future is not a cache drain. Close or drop the
 application's connection owners only after draining dependent work.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Keep the asyncio event loop alive until dependent work settles. Close the
+application-owned client with `await client.aclose()` during application
+shutdown. The adapter never closes, flushes or disconnects it.
 
 </LanguageContent>
 
@@ -357,6 +386,16 @@ budgets and lifetime of work they start. See the
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+`JsonSerializer` supports JSON-like native values and the distinct `UNDEFINED`
+sentinel. It returns text or bytes through `dump` and native values through
+`load`. Supply synchronous or asynchronous serializer methods for other value
+domains. Custom serializers own their scheduling and budgets. Memory entries
+retain the native object rather than a serialized copy.
+
+</LanguageContent>
+
 A fresh frame whose `load` fails becomes a refreshable miss: DialCache records
 `serialization_load`, calls the source, and attempts replacement. The default
 codec validates JSON syntax, not your application schema. For incompatible
@@ -397,6 +436,14 @@ Invalid settings return `ConfigError` at build time.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Use `compression=True`, `False`, or an options mapping with `threshold_bytes`
+and `level`. The default threshold is 4,096 bytes and level is 3. Invalid static
+settings raise `ConfigError`.
+
+</LanguageContent>
+
 Payloads meeting the threshold are compressed with zstd only when the stored
 form is smaller. Reads always interpret the compression envelope, including
 when new-write compression is disabled. Binary payloads beginning with an
@@ -425,6 +472,15 @@ The async engine offloads compression for payloads at least 64 KiB and levels
 default CPU executor shares two workers and two queue slots across instances.
 Saturation fails open: reads fall through to the source, failed compression skips
 the write. Custom codecs still choose their own scheduling.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Compression and decompression use the `zstandard` package on the event loop.
+They enforce the shared 512 MiB decompressed-size bound. Custom serializer
+implementations can schedule their own CPU work; the library does not
+automatically move synchronous callbacks onto threads.
 
 </LanguageContent>
 
@@ -526,6 +582,14 @@ server command statistics can reveal unexpected `EVAL` activity.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+A failed retry raises its native error. A successful idempotent fallback
+retains the original invalidation timestamp. Track unexpected `EVAL` activity
+through server command statistics when operationally useful.
+
+</LanguageContent>
+
 A rejected or timed-out dispatched mutation does not prove that Redis remained
 unchanged. Native writes do not implement compare-and-set or deduplicate retries
 performed by an application or client.
@@ -616,6 +680,15 @@ ownership types.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Implement `dialcache.redis.RedisClient.read`, `write`, and `invalidate`; each
+method may return a value or awaitable. Use `ReadRequest`, `ReadContext`,
+`WriteRequest`, `InvalidationRequest`, `Frame` and `Miss`. The
+[Python API](api.md) documents their fields and the public protocol helpers.
+
+</LanguageContent>
+
 Bound connection, queue, dispatch, retries and settlement. The read deadline
 bounds DialCache's wait; it does not supply write or invalidation budgets.
 
@@ -654,6 +727,14 @@ wire layout and watermark rules below are shared across ports.
 The Rust `protocol` module exports frame codecs and protocol helpers. See the
 [Rust API reference](api.md) for their native signatures. The wire layout and
 watermark rules below are shared across ports.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+The `dialcache.protocol` module exports frame codecs, miss decoding, payload
+compression, and validation helpers. The [Python API](api.md) gives native
+signatures. The wire layout and watermark rules below are shared.
 
 </LanguageContent>
 
@@ -696,6 +777,14 @@ metadata into absence.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Python adapters use bytes or text payloads and `RedisProtocolError` subclasses.
+Preserve the shared decoding order; malformed present metadata must not be
+converted into an absent watermark.
+
+</LanguageContent>
+
 After reply validation, a null value is `value_absent`; a short frame or unknown
 version is `unclassified`. Either tracked miss can preserve a valid paired
 watermark. Watermark text must contain decimal digits only and represent a value
@@ -735,6 +824,13 @@ timestamp domain.
 Native integer representations can retain larger numbers, but interoperable
 writers and ordinary readers still enforce the shared JavaScript safe-integer
 timestamp domain.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Python integers can exceed the protocol domain. Timestamp validation still
+requires a nonnegative integer at most JavaScript's safe-integer ceiling.
 
 </LanguageContent>
 
