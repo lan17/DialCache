@@ -45,6 +45,17 @@ async def _await(value: Any) -> Any:
     return await value if inspect.isawaitable(value) else value
 
 
+async def _call_dependency(callback: Callable[..., Any], *args: Any) -> Any:
+    """Classify dependency cancellation without swallowing cancellation of this task."""
+    try:
+        return await _await(callback(*args))
+    except asyncio.CancelledError as error:
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            raise
+        raise RuntimeError("DialCache dependency was cancelled") from error
+
+
 def _valid_integer(value: Any, minimum: int = 0, maximum: int = MAX_SAFE) -> bool:
     return (
         isinstance(value, (int, float))
@@ -103,7 +114,7 @@ class AbortSignal:
         for callback in callbacks:
             try:
                 callback()
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 pass
 
 
@@ -379,7 +390,7 @@ class DialCache:
     def _log(self, message: str, error: Any = None) -> None:
         try:
             self.logger.warning(message, error) if error is not None else self.logger.warning(message)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             pass
 
     @staticmethod
@@ -435,7 +446,7 @@ class DialCache:
             if on_timeout is not None:
                 try:
                     on_timeout()
-                except Exception:
+                except (Exception, asyncio.CancelledError):
                     pass
             result.set_exception(error())
 
@@ -535,12 +546,16 @@ class DialCache:
                     normalize_args(spec.get("args", {})),
                     op.tracked,
                 )
-        except Exception as error:
+        except (Exception, asyncio.CancelledError) as error:
             self._error(op, "noop", "key_construction")
             self._log("Could not construct DialCache key: %s", error)
             return await self._source(op, "noop")
         try:
-            overlay = await _await(self.policy_provider(key)) if self.policy_provider is not None else None
+            overlay = (
+                await _call_dependency(self.policy_provider, key)
+                if self.policy_provider is not None
+                else None
+            )
             policy = merge_policy(op.policy, overlay) or Policy()
         except Exception as error:
             self._error(key, "noop", "config_resolution")
@@ -633,7 +648,7 @@ class DialCache:
                     if found:
                         return value
                     self._emit("miss", self._labels(key, "local"), reason="value_absent")
-                except Exception:
+                except (Exception, asyncio.CancelledError):
                     can_put = False
                     self._error(key, "local", "cache_read")
                     self._emit("disabled", self._labels(key, "local"), reason="config_error")
@@ -684,7 +699,7 @@ class DialCache:
         if local is not None:
             try:
                 self._local.put(key.logical, value, local.ttl_sec)
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 self._error(key, "local", "cache_write")
 
     def _read_budget(self, policy: Policy) -> int:
@@ -699,8 +714,8 @@ class DialCache:
 
         async def invoke() -> Any:
             invoked.set_result(self.clock.monotonic_ms())
-            return await _await(
-                self.redis.read(ReadRequest(key.value_key, key.watermark_key), ReadContext(budget, signal))
+            return await _call_dependency(
+                self.redis.read, ReadRequest(key.value_key, key.watermark_key), ReadContext(budget, signal)
             )
 
         pending = self._spawn(invoke())
@@ -750,7 +765,7 @@ class DialCache:
             self._emit("compression", self._labels(key, layer), outcome=decompressed.outcome)
         start = self.clock.monotonic_ms()
         try:
-            return await _await(op.serializer.load(decompressed.payload))
+            return await _call_dependency(op.serializer.load, decompressed.payload)
         except Exception:
             self._error(key, layer, "serialization_load")
             raise
@@ -808,7 +823,12 @@ class DialCache:
             maximum = remote.stale_on_error_max_age_sec
             if maximum and status in ("miss", "retained"):
                 try:
-                    allow = op.recovery(error)
+                    try:
+                        allow = op.recovery(error)
+                    except asyncio.CancelledError:
+                        # Only the synchronous predicate is isolated here;
+                        # caller cancellation during recovery must propagate.
+                        allow = False
                     if allow is True:
                         present, value = await self._recover(op, key, acquired, maximum)
                         if present:
@@ -866,7 +886,7 @@ class DialCache:
             return False
         start = self.clock.monotonic_ms()
         try:
-            payload = await _await(op.serializer.dump(value))
+            payload = await _call_dependency(op.serializer.dump, value)
             if not isinstance(payload, (str, bytes)):
                 raise TypeError("Serializer.dump must return str or bytes")
         except Exception:
@@ -879,17 +899,17 @@ class DialCache:
         try:
             if self.compression is False:
                 payload = escape_raw_payload(payload)
+                stored_size = len(utf8_bytes(payload) if isinstance(payload, str) else payload)
             else:
                 options = self.compression if isinstance(self.compression, Mapping) else {}
                 compressed = compress_payload(payload, **options)
                 payload = compressed.payload
+                stored_size = compressed.stored_bytes
                 self._emit("compression", labels, outcome=compressed.outcome)
         except Exception:
             self._error(key, layer, "compression")
             raise
-        self._emit(
-            "storedSize", labels, bytes=len(utf8_bytes(payload) if isinstance(payload, str) else payload)
-        )
+        self._emit("storedSize", labels, bytes=stored_size)
         if live is not None and not live():
             return False
         stamp = self.clock.wall_ms()
@@ -903,7 +923,7 @@ class DialCache:
             ttl_ms = 3_600_000
             self._error(key, layer, "tracked_ttl_clamped")
         try:
-            await _await(self.redis.write(WriteRequest(key.value_key, ttl_ms, payload, stamp)))
+            await _call_dependency(self.redis.write, WriteRequest(key.value_key, ttl_ms, payload, stamp))
         except Exception:
             self._error(key, layer, "cache_write")
             raise
@@ -954,7 +974,7 @@ class DialCache:
         try:
             if hasattr(self.metrics, "supports") and not self.metrics.supports("shadowValidation"):
                 return
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             return
         if ramp < 100 and ramp_sample(key, "shadow") >= ramp:
             return
@@ -1052,13 +1072,18 @@ class DialCache:
                         # This source belongs to the caller. A dark job stops
                         # waiting at its deadline without retaining capacity
                         # for an unbounded caller-owned operation.
-                        value = await self._deadline(
-                            source, job.budget, lambda: TimeoutError("shadow deadline"), started=job.started
+                        value = await _call_dependency(
+                            lambda: self._deadline(
+                                source,
+                                job.budget,
+                                lambda: TimeoutError("shadow deadline"),
+                                started=job.started,
+                            )
                         )
                         await self._await_delivery(op)
                     else:
                         with self.disable():
-                            value = await _await(op.load())
+                            value = await _call_dependency(op.load)
                 except Exception:
                     return (
                         "timeout" if not live() or (source is not None and op.did_timeout) else "source_error"
@@ -1082,10 +1107,13 @@ class DialCache:
                 if not live():
                     return "timeout"
                 try:
-                    matched = op.comparator(cached, value)
+                    try:
+                        matched = op.comparator(cached, value)
+                    except asyncio.CancelledError:
+                        return "comparison_error"
                     if type(matched) is not bool:
                         try:
-                            await _await(matched)
+                            await _call_dependency(lambda: matched)
                         except Exception:
                             pass
                         return "comparison_error" if live() else "timeout"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol, TypeAlias
@@ -34,5 +35,5 @@ def emit_metric(metrics: Metrics | None, event: str | Mapping[str, Any], **label
         # it, and avoid leaving an un-awaited coroutine warning behind.
         if inspect.iscoroutine(result):
             result.close()
-    except Exception:
+    except (Exception, asyncio.CancelledError):
         pass

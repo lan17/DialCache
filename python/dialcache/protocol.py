@@ -185,7 +185,8 @@ class DecompressionResult:
 
 
 def escape_raw_payload(payload: Payload) -> Payload:
-    _payload_bytes(payload)
+    if not isinstance(payload, (str, bytes)):
+        raise TypeError("DialCache serializer payload must be str or immutable bytes")
     return b"\x00" + payload if isinstance(payload, bytes) and payload and payload[0] <= 2 else payload
 
 
@@ -196,7 +197,7 @@ def compress_payload(
 
     raw = _payload_bytes(payload)
     escaped = escape_raw_payload(payload)
-    stored_size = len(_payload_bytes(escaped))
+    stored_size = len(escaped) if isinstance(escaped, bytes) else len(raw)
     if len(raw) < threshold_bytes:
         return CompressionResult(escaped, "below_threshold", len(raw), stored_size)
     if len(raw) > maximum:

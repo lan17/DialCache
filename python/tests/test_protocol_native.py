@@ -18,6 +18,7 @@ from dialcache.protocol import (
     Miss,
     RedisPayloadError,
     RedisProtocolError,
+    compress_payload,
     decode_read,
     decode_tracked_read,
     decompress_payload,
@@ -258,3 +259,40 @@ def test_known_oversized_decode_does_not_retain_unusable_output():
     # The frame header already rules out returning decoded bytes. Classification
     # must use bounded chunks rather than retaining approximately the full cap.
     assert peak < 2 * 1024 * 1024
+
+
+@pytest.mark.parametrize("text,normalized", [("雪", "雪"), ("\ud83d\ude00", "😀"), ("\ud800", "\ufffd")])
+def test_text_compression_uses_normalized_byte_sizes_without_changing_raw_text(text, normalized):
+    payload, decoded = text * 4096, normalized * 4096
+    size = len(decoded.encode("utf-8"))
+    result = compress_payload(payload, threshold_bytes=1, maximum=size)
+    assert result.outcome == "compressed"
+    assert result.original_bytes == size
+    assert result.stored_bytes == len(result.payload)
+    assert decompress_payload(result.payload).payload == decoded
+    for threshold, maximum, outcome in [
+        (size + 1, size, "below_threshold"),
+        (1, size - 1, "write_over_limit"),
+    ]:
+        result = compress_payload(payload, threshold_bytes=threshold, maximum=maximum)
+        assert result.outcome == outcome
+        assert result.payload is payload
+        assert result.original_bytes == result.stored_bytes == size
+
+
+def test_text_compression_does_not_allocate_redundant_full_payload_buffers():
+    import tracemalloc
+
+    payload = "abcd" * (1024 * 1024)
+    tracemalloc.start()
+    try:
+        result = compress_payload(payload)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert result.outcome == "compressed"
+    assert decompress_payload(result.payload).payload == payload
+    # Normalizing text needs temporary UTF-16/UTF-8 buffers. Re-encoding while
+    # retaining a previous full buffer used over 4x the input; allow headroom
+    # above one normalization's 3x peak without allowing that extra copy.
+    assert peak < len(payload) * 7 // 2
