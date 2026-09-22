@@ -32,6 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
+      - name: Check release version and publication guards
+        run: python3 -B -m unittest discover -s scripts -p test_release.py
       - name: Check TypeScript types, native tests, build and package
         run: make check-ts
       # push events only reach this workflow for main, so this uploads
@@ -104,6 +106,9 @@ jobs:
           rust: "true"
       - name: Check Rust formatting, clippy and native tests including the smoke conformance run
         run: make check-rust
+      - name: Verify the packaged Rust crate with every feature
+        working-directory: rust
+        run: cargo package --locked --all-features
       - name: Execute the documented Rust invalidation scenario against Redis
         run: cargo test --manifest-path rust/Cargo.toml --locked --all-features --test docs_examples -- --ignored
       - name: Check real Redis, Valkey and Cluster integrations and invalidation vectors

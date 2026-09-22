@@ -105,20 +105,20 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "35a931bc61ec183a9af7beeb5c72d61b7fa00828f33c88e2256a819113f40fe4",
+      "sha256": "912813dc308a0fb2b1953c02a991ca606879578d4589d48e2363b56f14299a4f",
       "entries": [
         {"line":1,"title":"Getting started","contracts":["B01"]},
         {"line":13,"title":"Install","contracts":["B01"]},
-        {"line":69,"title":"Wrap a reader","contracts":["C01","C05","W01"]},
-        {"line":122,"title":"Choose the enabled scope","contracts":["C01","C02"]},
-        {"line":169,"title":"Keep a calculation inline","contracts":["C11","B01"]},
-        {"line":204,"title":"Introduce runtime policy","contracts":["C16","C18"]},
-        {"line":216,"title":"Add shared caching when needed","contracts":["E01"]}
+        {"line":70,"title":"Wrap a reader","contracts":["C01","C05","W01"]},
+        {"line":123,"title":"Choose the enabled scope","contracts":["C01","C02"]},
+        {"line":170,"title":"Keep a calculation inline","contracts":["C11","B01"]},
+        {"line":205,"title":"Introduce runtime policy","contracts":["C16","C18"]},
+        {"line":217,"title":"Add shared caching when needed","contracts":["E01"]}
       ]
     },
     {
       "path": "docs/index.md",
-      "sha256": "c4df3d15901fcf38af024f2092d9b3b3edaaf36707775bdac13d3deb2cf5c871",
+      "sha256": "9ddc84d8985dd0699524893fd0aa802b71760b190f888a28c94fb0d40f15509a",
       "entries": [
         {"line":1,"title":"DialCache documentation","contracts":["B01"]},
         {"line":11,"title":"Learn the model","contracts":["B01"]},
@@ -191,15 +191,15 @@
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "c79462b736c463722d5fe1769650a4de6af751f2eceac649d3537e9eae585cc4",
+      "sha256": "bd24a8859958f816750c1c4ce70e05f4f366f56d50ea8b491586e9c6441f4215",
       "entries": [
         {"line":1,"title":"Rust integration","contracts":["B01"]},
         {"line":8,"title":"Installation and runtime","contracts":["B01","B02"]},
-        {"line":38,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
-        {"line":50,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
-        {"line":68,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
-        {"line":86,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
-        {"line":109,"title":"Conformance","contracts":["B01"]}
+        {"line":40,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
+        {"line":52,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
+        {"line":70,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
+        {"line":88,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
+        {"line":111,"title":"Conformance","contracts":["B01"]}
       ]
     },
     {
@@ -216,7 +216,7 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "38f1d5c7b07e87e3c333c40dde5d54dddcedd0dc19318e0dee6f2dfcde5b63d6",
+      "sha256": "9c2757ce9afae34675ae27f96158feefad43a95d8e1e05831303805ef21799cb",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
@@ -226,7 +226,9 @@
         {"line":153,"title":"Cache-path benchmark","contracts":["X02"]},
         {"line":175,"title":"Redis write benchmark","contracts":["X02"]},
         {"line":198,"title":"Stale-on-error benchmark","contracts":["X02"]},
-        {"line":226,"title":"Releasing","contracts":["B01","E05"]}
+        {"line":226,"title":"Releasing","contracts":["B01","E05"]},
+        {"line":305,"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
+        {"line":333,"title":"Retry a Rust publication","contracts":["B01","E05"]}
       ]
     },
     {
@@ -255,24 +257,24 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "0bc133a4897f509b07953682ecb6017a785a6fa4cfee93adbae88ee6cb47864f",
+      "sha256": "c9d47b971bfdc4c8cde0a6198fafc6cabfc20c7098895786a4d667793a40a40f",
       "entries": [
         {"line":1,"title":"Redis and Valkey","contracts":["E01"]},
         {"line":14,"title":"Install a client","contracts":["B01","E01"]},
-        {"line":179,"title":"Remote-read deadlines and async liveness","contracts":["C23","C56"]},
-        {"line":229,"title":"Lifecycle ownership","contracts":["E03","X02"]},
-        {"line":274,"title":"Serialization","contracts":["W06","B03"]},
-        {"line":283,"title":"Default JSON behavior","contracts":["B03","C27","C45","C52"]},
-        {"line":410,"title":"Compression","contracts":["W06","W07","W08","X02"]},
-        {"line":504,"title":"Bundled Redis operations","contracts":["E01"]},
-        {"line":506,"title":"Reads","contracts":["E01","W04"]},
-        {"line":530,"title":"Writes","contracts":["E01","W04","W05"]},
-        {"line":554,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
-        {"line":597,"title":"Redis compatibility and ACLs","contracts":["E01"]},
-        {"line":608,"title":"Custom-client contract","contracts":["C55","C56","E01","E04"]},
-        {"line":695,"title":"Advanced wire protocol","contracts":["W04"]},
-        {"line":750,"title":"Read decoding and validation order","contracts":["W04"]},
-        {"line":839,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
+        {"line":181,"title":"Remote-read deadlines and async liveness","contracts":["C23","C56"]},
+        {"line":231,"title":"Lifecycle ownership","contracts":["E03","X02"]},
+        {"line":276,"title":"Serialization","contracts":["W06","B03"]},
+        {"line":285,"title":"Default JSON behavior","contracts":["B03","C27","C45","C52"]},
+        {"line":412,"title":"Compression","contracts":["W06","W07","W08","X02"]},
+        {"line":506,"title":"Bundled Redis operations","contracts":["E01"]},
+        {"line":508,"title":"Reads","contracts":["E01","W04"]},
+        {"line":532,"title":"Writes","contracts":["E01","W04","W05"]},
+        {"line":556,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
+        {"line":599,"title":"Redis compatibility and ACLs","contracts":["E01"]},
+        {"line":610,"title":"Custom-client contract","contracts":["C55","C56","E01","E04"]},
+        {"line":697,"title":"Advanced wire protocol","contracts":["W04"]},
+        {"line":752,"title":"Read decoding and validation order","contracts":["W04"]},
+        {"line":841,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
       ]
     },
     {

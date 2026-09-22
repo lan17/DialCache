@@ -64,10 +64,12 @@ change shared prose, tested native examples and generated references together.
 | Why is shadow validation doing no work? | [Shadow eligibility](shadow-validation.md#eligibility) |
 
 The published site and generated native API references follow `main`, which may
-be ahead of a released npm package or Go module. For an installed version, use
+be ahead of a released npm package, Go module or Rust crate. For an installed version, use
 its [release notes](https://github.com/lan17/DialCache/releases) and matching
-[release tag](https://github.com/lan17/DialCache/tags). Rust and Python are currently
-unpublished and used from a checkout.
+[release tag](https://github.com/lan17/DialCache/tags). See the
+[Rust guide](languages/rust.md) for registry releases and checkout dependencies.
+Python is currently unpublished and installed from a checkout as described in
+the [Python guide](languages/python.md).
 
 [Project overview](https://github.com/lan17/DialCache#readme)
 · [npm package](https://www.npmjs.com/package/dialcache)
