@@ -273,6 +273,14 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(plan.at(-1)!.args).toEqual(["formal/conformance.mjs", "check", ".formal-traces/python-completion.json", ".formal-traces/python-context.json"]);
     expect(validationPlan("smoke", { directory, environment }).at(-1)!.args).toEqual(["-m", "pytest", "python/tests/test_conformance.py"]);
     expect(validationPlan("integration-python", { directory, environment })[0]!.args).toEqual(["formal/run-python-integration.mjs"]);
+    expect(validationPlan("integration-wire", { directory, environment })[0]).toMatchObject({
+      args: ["formal/run-python-integration.mjs", "--suite", "wire"], env: { PYTHON: environment.PYTHON },
+    });
+  });
+
+  it.each(["go", "cargo", "python"])("requires %s for the shared wire lane", (tool) => {
+    fakeTool(tool, 'console.error("missing wire tool"); process.exit(127)');
+    expect(() => checkPrerequisites("integration-wire", { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/missing wire tool/);
   });
 
   it("prepends the selected Python sources for both native commands and prerequisite imports", () => {

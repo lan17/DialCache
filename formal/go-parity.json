@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "f3989f3032706ec6880ea29805dd1634964d868a2c3d99188adc6eaa1aac68ca",
     "executionSha256": "bdb8428c4fc4b34d7eed84d60f53fce53331bc3d3f16433c720e34331a9ea64f",
-    "sourceAuditSha256": "9e8d78497e6cd075d0599018500fc69c977482c0d0c9f1456a791e6d76aa7721",
+    "sourceAuditSha256": "27975bae3abdf8143f18d2d161982d35154cd74c597c1960404b8179e94a5ad9",
     "featureCoverageSha256": "92c2961ec6a97d0bc0c7aeeac3041404ee3a7ed358b1a09ccab9de84b6abf047",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "15fbdb476b5ee9f39ea017ef5668d9c26cb7d53ebc96a6b7c4f531cccfa8d897"
@@ -4541,7 +4541,7 @@
           "B02",
           "B03"
         ],
-        "rationale": "The Python binding guide explains shared request lifetime, policy inheritance, identities, deadlines, invalidation and observer boundaries. Those portable rules apply to Go through the referenced APIs and tests; Python decorators, contextvars, asyncio cancellation, native values and package installation are language-specific guidance, not claims about Go execution. The borrowed-client and primary-read requirements remain shared adapter obligations."
+        "rationale": "The Python binding guide explains shared request lifetime, policy inheritance, identities, deadlines, invalidation and observer boundaries. Those portable rules apply to Go through the referenced APIs and tests; Python decorators, contextvars, asyncio cancellation, native values and package installation are language-specific guidance, not claims about Go execution. The borrowed-client and primary-read requirements remain shared adapter obligations. Shared cross-language compatibility is documented once in the Redis guide; the Python note retains its native null, undefined, nonfinite-number and inferred-name differences. The integration-wire command identifies separate native boundary evidence, not a claim of universal mixed-release compatibility."
       },
       {
         "path": "docs/languages/rust.md",
@@ -4615,14 +4615,16 @@
           "go/redis_adapter.go",
           "go/redis_adapter_test.go",
           "go/redis_integration_test.go",
-          "go/protocol_test.go"
+          "go/protocol_test.go",
+          "go/codec.go"
         ],
         "nativeAdaptations": [
           "B01",
           "B02",
-          "X02"
+          "X02",
+          "B03"
         ],
-        "rationale": "The corresponding Go adapter, protocol and real integration tests exercise atomic primary reads, exact replies, complete writes, invalidation and cross-language bytes. Node-redis and GLIDE option objects, queue APIs and lifecycle assertions require the explicit go-redis binding treatment. Automatic primary routing is limited to a direct ClusterClient; standalone/Sentinel clients must target the primary with ReplicaOnly disabled."
+        "rationale": "The corresponding Go adapter, protocol and real integration tests exercise atomic primary reads, exact replies, complete writes, invalidation and cross-language bytes. Node-redis and GLIDE option objects, queue APIs and lifecycle assertions require the explicit go-redis binding treatment. Automatic primary routing is limited to a direct ClusterClient; standalone/Sentinel clients must target the primary with ReplicaOnly disabled. The shared compatibility section scopes the full-client suite to directed language pairs, supported JSON and binary values, matching identity and codecs, and the current checkout. Go JSONCodec[any] retains Absent distinctly from nil; Rust null/undefined loss and typed destination constraints are native value boundaries. Documentation applicability is not execution evidence or a guarantee for arbitrary mixed releases."
       },
       {
         "path": "docs/shadow-validation.md",

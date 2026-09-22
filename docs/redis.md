@@ -509,6 +509,57 @@ open.
 See [Upgrading](upgrading.md#compression-and-value-schemas) for legacy binary
 collisions and readers-first deployment of the envelope.
 
+## Sharing entries across languages
+
+TypeScript, Go, Rust and Python use the same Redis frame, compression envelope
+and entity invalidation protocol. To reuse an entry, match its
+[cache identity](keys.md): namespace, key type, entity ID, explicit use-case
+name, normalized arguments and tracking mode. Choose the use-case name
+explicitly and align adapted argument names, values and ordering; inferred
+function names and native argument binding can otherwise produce different keys.
+Remote invalidation affects every matching tracked reader, while existing
+request memos and local entries retain their [usual reuse boundaries](invalidation.md#reuse-boundaries).
+
+Choose values that every participating codec can represent. The common JSON
+domain includes Unicode scalar strings (without unpaired UTF-16 surrogates),
+booleans, finite numbers, arrays/lists, objects/maps with string keys, and null.
+Keep integers used as values or numeric identity components in JavaScript's
+exact range, `-(2**53 - 1)` through `2**53 - 1`; encode larger exact integers as
+strings. Go and Rust destination types must accept the stored schema. Native
+objects, nonfinite numbers and nested undefined values do not have universal
+cross-language semantics; see [default JSON behavior](#default-json-behavior).
+
+Null and undefined are present cached results, with these default-codec mappings:
+
+| Port | JSON null | Top-level undefined marker |
+| --- | --- | --- |
+| TypeScript | `null` | Distinct `undefined` |
+| Go, using `JSONCodec[any]` | `nil` | Distinct `Absent` |
+| Rust, using `JsonCodec` | `serde_json::Value::Null`, or `None` for a suitable `Option<T>` | The same null value; a destination that cannot accept null fails decoding |
+| Python | `None` | Distinct `UNDEFINED` |
+
+Rust's default `JsonCodec` cannot write a distinct undefined value. If the
+application needs to preserve that distinction across all four languages,
+choose an explicit representation or compatible custom codecs. Custom codecs
+must agree on both the stored text or bytes and their decoded meaning. Readers
+decode another port's compression envelope even when their own new-write
+compression is disabled.
+
+The [full-client wire suite](https://github.com/lan17/DialCache/blob/main/interop/test_wire_interop.py)
+exercises all twelve directed writer/reader pairs on Redis 6.2, Valkey 8 and
+Redis 7 Cluster. It covers tracked and untracked entries, raw and compressed
+JSON and binary payloads, and invalidation in every direction. Undefined cases
+assert the native mappings above. Readers must hit the other client's stored
+entry without calling their source; invalidation checks the entity fence across
+multiple key variants and preserves an unrelated entity.
+
+Run `make integration-wire` from the repository root with the pinned Node,
+Go and Rust toolchains, Python test dependencies, and Docker. The required wire
+CI job runs this suite separately from native language validation. This evidence
+covers the tested values and protocol in the same checkout. Use matching releases
+for this scope; arbitrary custom codecs and mixed release versions require
+their own compatibility checks. See [Upgrading](upgrading.md).
+
 ## Bundled Redis operations
 
 ### Reads

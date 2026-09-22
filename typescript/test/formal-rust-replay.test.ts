@@ -184,7 +184,7 @@ describe("Rust validation lanes", () => {
   it("runs the real-server integration binary only through the integration lane, which selects its ignored tests", () => {
     const lane = validationPlan("integration-rust", { directory });
     expect(lane).toEqual([{ label: "Run Rust Redis/Valkey/Cluster integrations", command: "cargo", args: ["test", "--all-features", "--test", "redis_integration", "--", "--ignored"], cwd: "rust" }]);
-    expect(validationPlan("integration", { directory })).toEqual(["integration-ts", "integration-go", "integration-rust", "integration-python"].flatMap(target => validationPlan(target, { directory })));
+    expect(validationPlan("integration", { directory })).toEqual(["integration-ts", "integration-go", "integration-rust", "integration-python", "integration-wire"].flatMap(target => validationPlan(target, { directory })));
     for (const target of ["check-rust", "smoke", "formal-rust"]) expect(validationPlan(target, { directory }).some(step => step.args?.includes("--ignored")), target).toBe(false);
   });
 

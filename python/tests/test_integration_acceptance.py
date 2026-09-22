@@ -50,6 +50,8 @@ def pytest_collection_modifyitems(session, config, items):
     mode = os.environ.get("PROBE_MODE")
     if mode == "subset":
         items[:] = [item for item in items if "inventory_only" in item.nodeid]
+    elif mode == "exclude_mixed_client":
+        items[:] = [item for item in items if "test_wire_interop.py" not in item.nodeid]
     elif mode == "duplicate":
         items.append(next(item for item in items if item.get_closest_marker("integration")))
     elif mode == "empty":
@@ -63,24 +65,33 @@ def pytest_runtestloop(session):
 """
 
 
+CHALLENGES = [
+    "baseline",
+    "inherited_keyword",
+    "configured_keyword",
+    "inherited_collect_only",
+    "external_plugin_ignored",
+    "subset",
+    "exclude_mixed_client",
+    "duplicate",
+    "empty",
+    "skip",
+    "fail",
+    "xpass",
+    "no_reports",
+]
+
+
 @pytest.mark.parametrize(
-    "challenge",
+    "suite,challenge",
     [
-        "baseline",
-        "inherited_keyword",
-        "configured_keyword",
-        "inherited_collect_only",
-        "external_plugin_ignored",
-        "subset",
-        "duplicate",
-        "empty",
-        "skip",
-        "fail",
-        "xpass",
-        "no_reports",
+        (suite, challenge)
+        for suite in ["native", "wire"]
+        for challenge in CHALLENGES
+        if suite == "wire" or challenge != "exclude_mixed_client"
     ],
 )
-def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_path, challenge):
+def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_path, suite, challenge):
     node = os.environ.get("NODE") or shutil.which("node")
     assert node, "Node 24 is required by Python validation"
     checkout = tmp_path
@@ -97,7 +108,7 @@ def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_pat
         'markers=["integration: required real-server case"]\n'
         f"addopts={json.dumps(configured)}\n"
     )
-    failures = {"subset", "duplicate", "empty", "skip", "fail", "xpass", "no_reports"}
+    failures = {"subset", "exclude_mixed_client", "duplicate", "empty", "skip", "fail", "xpass", "no_reports"}
     mode = challenge if challenge in failures else "pass"
     external_plugin = challenge == "external_plugin_ignored"
     if external_plugin:
@@ -106,6 +117,12 @@ def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_pat
         TEST.format(plugins='pytest_plugins = ["challenge_plugin"]' if challenge in failures else "")
     )
     (tests / "test_docs_examples.py").write_text(DOCS)
+    (checkout / "interop").mkdir()
+    (checkout / "interop/test_wire_interop.py").write_text(
+        TEST.format(plugins='pytest_plugins = ["challenge_plugin"]' if challenge in failures else "")
+        .replace('"雪"', '"wire雪"')
+        .replace('"<not-xml>"', '"wire<not-xml>"')
+    )
     (tests / "challenge_plugin.py").write_text(PLUGIN)
     coverage = checkout / "coverage/python"
     coverage.mkdir(parents=True)
@@ -130,7 +147,7 @@ def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_pat
         "PYTEST_PLUGINS": "challenge_plugin" if external_plugin else "",
     }
     result = subprocess.run(
-        [node, "formal/run-python-integration.mjs"],
+        [node, "formal/run-python-integration.mjs", "--suite", suite],
         cwd=checkout,
         env=environment,
         text=True,
@@ -140,14 +157,22 @@ def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_pat
     if challenge in failures:
         assert result.returncode != 0, result.stdout + result.stderr
         assert "Integration acceptance failed:" in result.stderr, result.stdout + result.stderr
-        assert not list(coverage.glob("*.lcov"))
+        if suite == "native":
+            assert not list(coverage.glob("*.lcov"))
     else:
         assert result.returncode == 0, result.stdout + result.stderr
         for backend in ["Redis", "Valkey"]:
-            report = (coverage / f"{backend}.lcov").read_text()
-            assert "SF:" in report and "stale report" not in report
+            if suite == "native":
+                report = (coverage / f"{backend}.lcov").read_text()
+                assert "SF:" in report and "stale report" not in report
+            else:
+                assert (checkout / f".formal-traces/wire-integration-{backend}.xml").is_file()
         assert log.read_text().splitlines() == [
             f"{url} {value}"
             for url in [environment["TEST_REDIS_URL"], environment["TEST_VALKEY_URL"]]
-            for value in ["雪", "<not-xml>"]
+            for value in (["雪", "<not-xml>"] if suite == "native" else ["wire雪", "wire<not-xml>"])
         ]
+    if suite == "wire":
+        # Wire evidence must not replace or clear native Python Codecov data.
+        for backend in ["Redis", "Valkey"]:
+            assert (coverage / f"{backend}.lcov").read_text() == "stale report must not survive a failed run"
