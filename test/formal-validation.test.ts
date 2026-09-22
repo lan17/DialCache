@@ -9,6 +9,7 @@ type Step = {
   label: string;
   command?: string;
   args?: string[];
+  cwd?: string;
   env?: NodeJS.ProcessEnv;
   stdoutFile?: string;
   requireEmptyStdout?: boolean;
@@ -45,7 +46,7 @@ describe("shared validation runner", () => {
 
   beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), "dialcache-validation-"));
-    for (const path of ["bin", "formal", "dist", "node_modules/typescript"]) mkdirSync(join(directory, path), { recursive: true });
+    for (const path of ["bin", "formal", "dist", "node_modules/typescript", "rust"]) mkdirSync(join(directory, path), { recursive: true });
     child = join(directory, "child.mjs");
     put("child.mjs", `import { appendFileSync } from 'node:fs';
 appendFileSync(process.env.RUNNER_EVENTS, JSON.stringify({ label: process.argv[2], cwd: process.cwd(),
@@ -62,6 +63,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     put("formal/generated-fixtures.lock.json", '{"quintVersion":"0.32.0"}');
     fakeTool("corepack", 'console.log("10.33.0")');
     fakeTool("go", 'console.log("go version go1.27.1 test/test")');
+    fakeTool("cargo", 'console.log("cargo 1.98.1 (test 2026-08-05)")');
     fakeTool("quint", 'console.log("0.32.0")');
     fakeTool("java", 'console.log("openjdk 21.0.11")');
     fakeTool("tar", 'console.log("bsdtar 3.5.3")');
@@ -84,6 +86,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       DIALCACHE_FEATURE_TRACE_DIR: join(directory, ".formal-traces/features"),
       DIALCACHE_WITNESS_EVIDENCE_DIR: join(directory, ".formal-traces/go-parity-witnesses"),
     });
+  });
+
+  it("runs a step inside its declared directory and every other step at the checkout root", async () => {
+    await run([
+      { label: "root", command: process.execPath, args: [child, "root"] },
+      { label: "crate", command: process.execPath, args: [child, "crate"], cwd: "rust" },
+    ]);
+    const [root, crate] = events();
+    expect(root!.cwd).toBe(realpathSync(directory));
+    expect(crate!.cwd).toBe(realpathSync(join(directory, "rust")));
   });
 
   it("excludes only opt-in Go workers from complete replay and exploration", async () => {
@@ -130,11 +142,14 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       .rejects.toThrow(/files requiring formatting:\ngo\/cache.go/);
   });
 
-  it("orders generation and shared witness evaluation before both port replays without duplicate wire generation", () => {
+  it("orders generation and shared witness evaluation before every port replay without duplicate wire generation", () => {
     const plan = validationPlan("formal", { directory });
     const position = (script: string, argument: string) => plan.findIndex(step => step.args?.[0] === script && step.args.includes(argument));
     const tsPrepare = position("formal/conformance.mjs", "typescript");
     const goPrepare = position("formal/conformance.mjs", "go");
+    const rustPrepare = position("formal/conformance.mjs", "rust");
+    const goCompletion = position("formal/conformance.mjs", ".formal-traces/go-completion.json");
+    const rustCompletion = position("formal/conformance.mjs", ".formal-traces/rust-completion.json");
     const tsCompletion = position("formal/conformance.mjs", ".formal-traces/ts-completion.json");
     const witnesses = position("formal/witnesses.mjs", "evaluate");
     expect(position("formal/run-models.mjs", "check")).toBeLessThan(position("formal/run-models.mjs", "generate"));
@@ -142,14 +157,17 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(witnesses).toBeLessThan(tsPrepare);
     expect(tsPrepare).toBeLessThan(tsCompletion);
     expect(tsCompletion).toBeLessThan(goPrepare);
+    expect(goPrepare).toBeLessThan(goCompletion);
+    expect(goCompletion).toBeLessThan(rustPrepare);
+    expect(rustPrepare).toBeLessThan(rustCompletion);
     expect(plan.filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "generate")).toHaveLength(1);
     expect(plan.filter(step => step.args?.[0] === "formal/witnesses.mjs")).toHaveLength(1);
     expect(plan.some(step => step.args?.[0] === "formal/generate-artifacts.mjs")).toBe(false);
     expect(plan[0]!.args).toEqual(["formal/run-models.mjs", "check"]);
-    expect(plan.find(step => step.remove)!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json"]);
+    expect(plan.find(step => step.remove)!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json", ".formal-traces/rust-completion.json"]);
     // The aggregate is exactly these lanes in order, so a CI job running
     // one lane executes the same steps as the local sequential run.
-    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go"].flatMap(target => validationPlan(target, { directory })));
+    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go", "formal-rust"].flatMap(target => validationPlan(target, { directory })));
   });
 
   it("keeps the model check as its own lane that produces nothing the port lanes consume", () => {
@@ -164,7 +182,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     const generate = validationPlan("formal-generate", { directory });
     expect(generate.some(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toBe(false);
     expect(generate.some(step => step.args?.[0] === "formal/check-model-properties.mjs")).toBe(false);
-    for (const target of ["formal-ts", "formal-go", "mutations"]) {
+    for (const target of ["formal-ts", "formal-go", "formal-rust", "mutations"]) {
       expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/run-models.mjs")).toBe(false);
     }
     // Every acceptance entry point keeps one complete campaign, after all
@@ -215,18 +233,41 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(ts.some(step => step.args?.[0] === "formal/witnesses.mjs" || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
   });
 
-  it("lets Go parity and both mutation measurements run off the generated corpus without completion checks", () => {
+  it("replays Rust from its crate with full corpus selectors and a dedicated report before the completion gate", () => {
+    const plan = validationPlan("formal-rust", { directory, environment });
+    expect(plan[0]!.remove).toEqual([".formal-traces/rust-completion.json"]);
+    expect(plan[1]!.args).toEqual(["formal/conformance.mjs", "prepare", "rust", ".formal-traces/rust-context.json"]);
+    const replay = plan.find(step => step.command === "cargo")!;
+    expect(replay).toMatchObject({ cwd: "rust", args: ["test", "--release", "--all-features", "--test", "conformance"] });
+    expect(replay.env).toEqual({
+      DIALCACHE_MBT_TRACE_DIR: join(directory, ".formal-traces/conformance"),
+      DIALCACHE_EFFECTS_TRACE_DIR: join(directory, ".formal-traces/effects"),
+      DIALCACHE_FEATURE_TRACE_DIR: join(directory, ".formal-traces/features"),
+      DIALCACHE_WITNESS_EVIDENCE_DIR: join(directory, ".formal-traces/go-parity-witnesses"),
+      DIALCACHE_RUST_REPORT: join(directory, ".formal-traces/rust-replay.jsonl"),
+    });
+    expect(plan.slice(plan.indexOf(replay) + 1).map(step => step.args)).toEqual([
+      ["formal/check-rust-replay.mjs"],
+      ["formal/conformance-adapters.mjs", "rust", ".formal-traces/rust-replay.jsonl", ".formal-traces/rust-context.json"],
+      ["formal/conformance.mjs", "check", ".formal-traces/rust-completion.json", ".formal-traces/rust-context.json"],
+    ]);
+    const smoke = validationPlan("smoke", { directory }).find(step => step.command === "cargo")!;
+    expect(smoke.args).toEqual(["test", "--all-features", "--test", "conformance"]);
+    expect(smoke.env).toBeUndefined();
+  });
+
+  it("lets Go parity and every mutation measurement run off the generated corpus without completion checks", () => {
     const isCompletionCheck = (step: Step) => step.args?.[0] === "formal/conformance.mjs" && step.args[1] === "check";
     const go = validationPlan("formal-go", { directory });
     expect(go[0]!.remove).toEqual([".formal-traces/go-completion.json"]);
     expect(go.some(step => step.args?.some(argument => argument.startsWith(".formal-traces/ts-")))).toBe(false);
     expect(go.filter(isCompletionCheck).map(step => step.args)).toEqual([["formal/conformance.mjs", "check", ".formal-traces/go-completion.json", ".formal-traces/go-context.json"]]);
     expect(go.some(step => step.args?.[0] === "formal/witnesses.mjs" || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
-    for (const [target, script] of [["mutations-ts", "formal/measure-semantics.mjs"], ["mutations-go", "formal/measure-go-semantics.mjs"]] as const) {
+    for (const [target, script] of [["mutations-ts", "formal/measure-semantics.mjs"], ["mutations-go", "formal/measure-go-semantics.mjs"], ["mutations-rust", "formal/measure-rust-semantics.mjs"]] as const) {
       expect(validationPlan(target, { directory }).map(step => step.args)).toEqual([[script]]);
     }
     const all = validationPlan("mutations", { directory });
-    expect(all.map(step => step.args?.[0])).toEqual(["formal/measure-semantics.mjs", "formal/measure-go-semantics.mjs"]);
+    expect(all.map(step => step.args?.[0])).toEqual(["formal/measure-semantics.mjs", "formal/measure-go-semantics.mjs", "formal/measure-rust-semantics.mjs"]);
     expect(all.some(isCompletionCheck)).toBe(false);
     expect(all.some(step => step.remove || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
   });
@@ -237,6 +278,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/measure-semantics.mjs", "--shard=2/3"] },
     ]);
     expect(validationPlan("mutations-go", { directory, environment: sharded }).map(step => step.args)).toEqual([["formal/measure-go-semantics.mjs", "--shard=2/3"]]);
+    expect(validationPlan("mutations-rust", { directory, environment: sharded }).map(step => step.args)).toEqual([["formal/measure-rust-semantics.mjs", "--shard=2/3"]]);
     // Unset, the plan is exactly today's complete measurement.
     expect(validationPlan("mutations-ts", { directory, environment }).map(step => step.args)).toEqual([["formal/measure-semantics.mjs"]]);
     for (const value of ["0/3", "4/3", "1/0", "a/b", "1", "01/3", "1/3/", " 1/3", ""]) {
@@ -244,9 +286,9 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     }
     // The aggregates stay unsharded and refuse to ignore the variable silently; unrelated targets ignore it.
     for (const target of ["mutations", "ci"]) {
-      expect(() => validationPlan(target, { directory, environment: sharded }), target).toThrow(/MUTATION_SHARD=2\/3 applies only to make mutations-ts and make mutations-go/);
+      expect(() => validationPlan(target, { directory, environment: sharded }), target).toThrow(/MUTATION_SHARD=2\/3 applies only to make mutations-ts, make mutations-go and make mutations-rust/);
     }
-    for (const target of ["check", "formal", "formal-ts", "mutations-merge-ts", "mutations-merge-go"]) {
+    for (const target of ["check", "formal", "formal-ts", "mutations-merge-ts", "mutations-merge-go", "mutations-merge-rust"]) {
       expect(validationPlan(target, { directory, environment: sharded }), target).toEqual(validationPlan(target, { directory, environment }));
     }
     // The runner's environment cleaning removes replay selectors, not the shard.
@@ -259,6 +301,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/measure-semantics.mjs", "--only=M14,M15"] },
     ]);
     expect(validationPlan("mutations-go", { directory, environment: partial }).map(step => step.args)).toEqual([["formal/measure-go-semantics.mjs", "--only=M14,M15"]]);
+    expect(validationPlan("mutations-rust", { directory, environment: { ...environment, MUTATION_ONLY: "M01,M02" } }).map(step => step.args)).toEqual([["formal/measure-rust-semantics.mjs", "--only=M01,M02"]]);
     for (const value of ["", "M14,", "M14,M14", "m14", "14", "M14 M15"]) {
       expect(() => validationPlan("mutations-ts", { directory, environment: { ...environment, MUTATION_ONLY: value } }), value).toThrow(/MUTATION_ONLY must be <id>,<id> naming distinct mutant ids/);
     }
@@ -266,23 +309,25 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(() => validationPlan("mutations-ts", { directory, environment: { ...partial, MUTATION_SHARD: "2/3" } })).toThrow(/MUTATION_SHARD and MUTATION_ONLY exclude each other/);
     // The aggregates refuse to ignore it silently; unrelated targets ignore it.
     for (const target of ["mutations", "ci"]) {
-      expect(() => validationPlan(target, { directory, environment: partial }), target).toThrow(/MUTATION_ONLY=M14,M15 applies only to make mutations-ts and make mutations-go/);
+      expect(() => validationPlan(target, { directory, environment: partial }), target).toThrow(/MUTATION_ONLY=M14,M15 applies only to make mutations-ts, make mutations-go and make mutations-rust/);
     }
-    for (const target of ["check", "formal", "formal-ts", "mutations-merge-ts", "mutations-merge-go"]) {
+    for (const target of ["check", "formal", "formal-ts", "mutations-merge-ts", "mutations-merge-go", "mutations-merge-rust"]) {
       expect(validationPlan(target, { directory, environment: partial }), target).toEqual(validationPlan(target, { directory, environment }));
     }
     expect(cleanEnvironment({ MUTATION_ONLY: "M14", DIALCACHE_PROTOCOL_CORPUS: "fixed" })).toEqual({ MUTATION_ONLY: "M14" });
-    for (const target of ["mutations-ts", "mutations-go"]) expect(targetDescriptions[target]).toMatch(/MUTATION_ONLY=<id>,<id>/);
+    for (const target of ["mutations-ts", "mutations-go", "mutations-rust"]) expect(targetDescriptions[target]).toMatch(/MUTATION_ONLY=<id>,<id>/);
   });
 
-  it("merges each language's shards with a plain Node step that needs neither Quint nor Go", () => {
+  it("merges each language's shards with a plain Node step that needs no native toolchains or Quint", () => {
     expect(validationPlan("mutations-merge-ts", { directory })).toEqual([
       { label: "Merge TypeScript mutation shards", command: process.execPath, args: ["formal/merge-mutation-reports.mjs", "ts"] },
     ]);
     expect(validationPlan("mutations-merge-go", { directory }).map(step => step.args)).toEqual([["formal/merge-mutation-reports.mjs", "go"]]);
+    expect(validationPlan("mutations-merge-rust", { directory }).map(step => step.args)).toEqual([["formal/merge-mutation-reports.mjs", "rust"]]);
     fakeTool("quint", 'console.error("quint: not installed"); process.exit(1)');
     fakeTool("go", 'console.error("go: not installed"); process.exit(1)');
-    for (const target of ["mutations-merge-ts", "mutations-merge-go"]) {
+    fakeTool("cargo", 'console.error("cargo: not installed"); process.exit(1)');
+    for (const target of ["mutations-merge-ts", "mutations-merge-go", "mutations-merge-rust"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
       expect(targetDescriptions[target]).toMatch(/Merge .* mutation shards/);
     }
@@ -344,7 +389,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     for (const target of ["mutations-ts", "mutations-go"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/docker/);
     }
-    for (const target of ["mutations-merge-ts", "mutations-merge-go"]) {
+    for (const target of ["mutations-merge-ts", "mutations-merge-go", "mutations-merge-rust"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
     }
   });
@@ -379,7 +424,7 @@ else {
 describe("full formal workflow shape", () => {
   type Step = { name?: string; run?: string; uses?: string; if?: string; env?: Record<string, string>; with?: Record<string, string | boolean> };
   type Job = { needs?: string | string[]; if?: string; env?: Record<string, string>; strategy?: { "fail-fast"?: boolean; matrix?: Record<string, unknown[]> }; "timeout-minutes"?: number; steps: Step[] };
-  const lanes = ["typescript-parity", "go-parity", "typescript-mutations", "go-mutations"];
+  const lanes = ["typescript-parity", "go-parity", "rust-parity", "typescript-mutations", "go-mutations", "rust-mutations"];
   const needsOf = (job: Job) => (job.needs === undefined ? [] : [job.needs].flat());
   let jobs: Record<string, Job>;
 
@@ -463,6 +508,32 @@ describe("full formal workflow shape", () => {
     expect(gate.env).not.toHaveProperty("GO_MUTATIONS_RESULT");
     expect(gate.run).toMatch(/test "\$TYPESCRIPT_MUTATIONS_MERGE_RESULT" = success/);
     expect(gate.run).toMatch(/test "\$GO_MUTATIONS_MERGE_RESULT" = success/);
+  });
+
+  it("requires Rust replay and merged mutations and retains Rust completion in the summary", () => {
+    const parity = jobs["rust-parity"]!;
+    expect(parity.steps.find(step => step.uses === "./.github/actions/setup-validation")!.with).toEqual({ rust: "true" });
+    expect(parity.steps.map(step => step.run).filter(Boolean)).toEqual(["make formal-rust"]);
+    const mutations = jobs["rust-mutations"]!;
+    const shards = mutations.strategy!.matrix!.shard as number[];
+    expect(mutations.env).toEqual({ MUTATION_SHARD: "$" + "{{ matrix.shard }}/" + shards.length });
+    expect(mutations.steps.map(step => step.run).filter(Boolean)).toEqual(["make mutations-rust"]);
+    const merge = jobs["rust-mutations-merge"]!;
+    expect(needsOf(merge)).toEqual(["rust-mutations"]);
+    expect(merge.if).toBe("always() && needs.rust-mutations.result != 'skipped'");
+    expect(merge.steps.map(step => step.run).filter(Boolean)).toEqual(["make mutations-merge-rust"]);
+    const aggregate = jobs["formal-full"]!;
+    expect(needsOf(aggregate)).toEqual(expect.arrayContaining(["rust-parity", "rust-mutations-merge"]));
+    expect(needsOf(aggregate)).not.toContain("rust-mutations");
+    const gate = aggregate.steps.find(step => step.run?.includes("_RESULT"))!;
+    expect(gate.env).toMatchObject({ RUST_RESULT: "$" + "{{ needs.rust-parity.result }}",
+      RUST_MUTATIONS_MERGE_RESULT: "$" + "{{ needs.rust-mutations-merge.result }}" });
+    expect(gate.run).toMatch(/test "\$RUST_RESULT" = success/);
+    expect(gate.run).toMatch(/test "\$RUST_MUTATIONS_MERGE_RESULT" = success/);
+    const summary = aggregate.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!.with!;
+    expect(summary.path).toContain("formal-summary/rust/rust-completion.json");
+    expect(summary.path).toContain("formal-summary/rust/rust-context.json");
+    expect(summary.path).toContain("formal-summary/rust/rust-replay-summary.json");
   });
 
   it("requires the model check in the aggregate and retains its report in the long-lived summary", () => {

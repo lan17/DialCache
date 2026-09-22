@@ -1,0 +1,279 @@
+//! Settle-once cells shared by coalesced callers and detached raw work.
+
+use std::future::Future;
+use std::panic::AssertUnwindSafe;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::task::{Context, Poll, Waker};
+use std::time::Duration;
+
+use futures::FutureExt;
+use parking_lot::Mutex;
+use slab::Slab;
+
+use crate::error::Error;
+use crate::local::StoredValue;
+use crate::runtime::Runtime;
+
+struct SettledState<T> {
+    value: Option<T>,
+    wakers: Slab<Waker>,
+}
+
+/// A value that is set at most once and observed by any number of waiters.
+pub(crate) struct Settled<T> {
+    inner: Arc<Mutex<SettledState<T>>>,
+}
+
+impl<T> Clone for Settled<T> {
+    fn clone(&self) -> Self {
+        Settled {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<T: Clone> Settled<T> {
+    pub(crate) fn new() -> Self {
+        Settled {
+            inner: Arc::new(Mutex::new(SettledState {
+                value: None,
+                wakers: Slab::new(),
+            })),
+        }
+    }
+
+    /// Store the value and wake every waiter. Returns false if already settled.
+    pub(crate) fn settle(&self, value: T) -> bool {
+        let wakers = {
+            let mut state = self.inner.lock();
+            if state.value.is_some() {
+                return false;
+            }
+            state.value = Some(value);
+            std::mem::take(&mut state.wakers)
+        };
+        for (_, waker) in wakers {
+            waker.wake();
+        }
+        true
+    }
+
+    pub(crate) fn peek(&self) -> Option<T> {
+        self.inner.lock().value.clone()
+    }
+
+    /// A future that completes with a clone of the settled value.
+    pub(crate) fn wait(&self) -> Wait<T> {
+        Wait {
+            settled: self.clone(),
+            registration: None,
+        }
+    }
+}
+
+pub(crate) struct Wait<T> {
+    settled: Settled<T>,
+    registration: Option<usize>,
+}
+
+impl<T: Clone> Future for Wait<T> {
+    type Output = T;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
+        let this = self.get_mut();
+        let mut state = this.settled.inner.lock();
+        if let Some(value) = &state.value {
+            return Poll::Ready(value.clone());
+        }
+        let replaced = match this.registration {
+            Some(slot) => Some(std::mem::replace(
+                &mut state.wakers[slot],
+                cx.waker().clone(),
+            )),
+            None => {
+                this.registration = Some(state.wakers.insert(cx.waker().clone()));
+                None
+            }
+        };
+        drop(state);
+        drop(replaced);
+        Poll::Pending
+    }
+}
+
+impl<T> Drop for Wait<T> {
+    fn drop(&mut self) {
+        let removed = {
+            let mut state = self.settled.inner.lock();
+            if state.value.is_none() {
+                self.registration
+                    .take()
+                    .map(|slot| state.wakers.remove(slot))
+            } else {
+                None
+            }
+        };
+        drop(removed);
+    }
+}
+
+impl<T> Unpin for Wait<T> {}
+
+/// Describe a panic payload.
+pub(crate) fn panic_message(payload: Box<dyn std::any::Any + Send>) -> Arc<str> {
+    if let Some(text) = payload.downcast_ref::<&str>() {
+        Arc::from(*text)
+    } else if let Some(text) = payload.downcast_ref::<String>() {
+        Arc::from(text.as_str())
+    } else {
+        Arc::from("non-string panic payload")
+    }
+}
+
+/// The message settled into a cell whose detached task was dropped before it
+/// completed: the runtime shut down while the cache outlived it.
+pub(crate) const DROPPED_MESSAGE: &str =
+    "DialCache detached work was dropped before it settled (runtime shut down)";
+
+/// Settles the cell from `Drop` when the spawned task is dropped unpolled or
+/// mid-await, so waiters on another runtime never hang on a dead task.
+struct SettleOnDrop<T: Clone, P: FnOnce(Arc<str>) -> T> {
+    cell: Settled<T>,
+    on_panic: Option<P>,
+}
+
+impl<T: Clone, P: FnOnce(Arc<str>) -> T> Drop for SettleOnDrop<T, P> {
+    fn drop(&mut self) {
+        if let Some(on_panic) = self.on_panic.take() {
+            self.cell.settle(on_panic(Arc::from(DROPPED_MESSAGE)));
+        }
+    }
+}
+
+/// Start `work` as detached raw work. The returned cell settles with its
+/// result, with `on_panic` when it panics, and with `on_panic` and
+/// [`DROPPED_MESSAGE`] when the runtime drops the task before it completes.
+/// Callers that stop waiting keep no ownership of the work.
+pub(crate) fn start_pending<T, F>(
+    runtime: &dyn Runtime,
+    work: F,
+    on_panic: impl FnOnce(Arc<str>) -> T + Send + 'static,
+) -> Settled<T>
+where
+    T: Clone + Send + 'static,
+    F: Future<Output = T> + Send + 'static,
+{
+    let settled = Settled::new();
+    let mut guard = SettleOnDrop {
+        cell: settled.clone(),
+        on_panic: Some(on_panic),
+    };
+    runtime.spawn(Box::pin(async move {
+        let outcome = match AssertUnwindSafe(work).catch_unwind().await {
+            Ok(value) => value,
+            Err(payload) => (guard.on_panic.take().expect("armed guard"))(panic_message(payload)),
+        };
+        // Disarm before settling so the cell settles exactly once.
+        guard.on_panic = None;
+        guard.cell.settle(outcome);
+    }));
+    settled
+}
+
+/// Complete once work that is already runnable has progressed (the executor's
+/// deferred queue drained under a controlled scheduler).
+pub(crate) async fn yield_deferred(runtime: &dyn Runtime) {
+    let done: Settled<()> = Settled::new();
+    let cell = done.clone();
+    runtime.defer(Box::pin(async move {
+        cell.settle(());
+    }));
+    done.wait().await;
+}
+
+/// Result of one execution shared by every coalesced caller.
+pub(crate) type ValueResult = Result<StoredValue, Error>;
+
+/// One registered execution and its followers.
+pub(crate) struct Flight {
+    pub(crate) result: Settled<ValueResult>,
+    pub(crate) started: Duration,
+    pub(crate) followers: AtomicUsize,
+}
+
+impl Flight {
+    pub(crate) fn new(started: Duration) -> Arc<Self> {
+        Arc::new(Flight {
+            result: Settled::new(),
+            started,
+            followers: AtomicUsize::new(0),
+        })
+    }
+
+    pub(crate) fn join(&self) {
+        self.followers.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub(crate) fn followers(&self) -> usize {
+        self.followers.load(Ordering::Relaxed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+    use std::task::Wake;
+
+    #[derive(Default)]
+    struct Counter(AtomicUsize);
+    impl Wake for Counter {
+        fn wake(self: Arc<Self>) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn many_waiters_replace_and_remove_their_own_registration() {
+        let cell = Settled::new();
+        let mut waiters: Vec<_> = (0..10_000).map(|_| cell.wait()).collect();
+        let counters: Vec<_> = (0..10_000).map(|_| Arc::new(Counter::default())).collect();
+        for (wait, counter) in waiters.iter_mut().zip(&counters) {
+            let waker = Waker::from(counter.clone());
+            for _ in 0..3 {
+                assert!(Pin::new(&mut *wait)
+                    .poll(&mut Context::from_waker(&waker))
+                    .is_pending());
+            }
+        }
+        let replacement = Arc::new(Counter::default());
+        let waker = Waker::from(replacement.clone());
+        assert!(Pin::new(&mut waiters[0])
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending());
+        // Cancellation frees slots; the surviving waiter must not remove a reused slot.
+        waiters.truncate(5_000);
+        let mut later = cell.wait();
+        assert!(Pin::new(&mut later)
+            .poll(&mut Context::from_waker(&waker))
+            .is_pending());
+        assert!(cell.settle(7));
+        assert!(!cell.settle(8));
+        assert_eq!(replacement.0.load(Ordering::SeqCst), 2);
+        for (i, counter) in counters.iter().enumerate() {
+            assert_eq!(
+                counter.0.load(Ordering::SeqCst),
+                usize::from(i > 0 && i < 5_000)
+            );
+        }
+        for mut wait in waiters {
+            assert_eq!(
+                Pin::new(&mut wait).poll(&mut Context::from_waker(&waker)),
+                Poll::Ready(7)
+            );
+        }
+        drop(later); // Settlement removed registrations; stale indices must be ignored.
+    }
+}

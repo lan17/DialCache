@@ -43,6 +43,16 @@ function tsReport(directory: string, failure?: string) {
     testResults: [{ name: `${directory}/test/formal-features.test.ts`, status: failure ? "failed" : "passed",
       startTime: 2, endTime: 3, message: "", assertionResults }] };
 }
+function rustReport(failure?: string) {
+  const records: Record<string, unknown>[] = [{ schemaVersion: 1, kind: "start", implementation: "rust", startedAt: 10 }];
+  for (const [index, entry] of inventory.entries()) {
+    const failed = entry.id === failure;
+    records.push({ kind: "case", id: nativeBinding(entry, "rust"), status: failed ? "failed" : "passed", startedAt: 11 + index, finishedAt: 12 + index,
+      ...(failed ? { message: "Observation mismatch\nexpected: 1\nactual: 2" } : {}) });
+  }
+  records.push({ kind: "finish", status: failure ? "failed" : "passed", finishedAt: 20, cases: inventory.length, failed: failure ? 1 : 0 });
+  return records.map(record => JSON.stringify(record)).join("\n");
+}
 function goReport(failure?: string) {
   const events: Record<string, unknown>[] = [];
   const event = (Action: string, Test?: string) => events.push({ Action, ...(Test ? { Test } : {}), Package: packageName, Time: new Date(10 + events.length).toISOString() });
@@ -92,7 +102,7 @@ function savedFixture(directory: string) {
         writeFileSync(options.directory + '/.formal-traces/saved-runner.json', JSON.stringify(plan));
         // A saved run's evaluator also has to leave a completed witness report behind.
         writeFileSync(options.directory + '/.formal-traces/witness-report.json', ${JSON.stringify(JSON.stringify(completedWitnessReport("0x2a", ["effects"])))});
-        return [{ language: 'typescript', status: 'passed' }, { language: 'go', status: 'passed' }];
+        return [{ language: 'typescript', status: 'passed' }, { language: 'go', status: 'passed' }, { language: 'rust', status: 'passed' }];
       }`,
     "formal/validation.mjs": `import { mkdirSync, writeFileSync } from 'node:fs';
       export function checkPrerequisites(target, { directory }) {
@@ -142,10 +152,11 @@ describe("isolated exploratory validation", () => {
       ["formal/check-go-parity.mjs"],
     ]);
     const replays = plan.filter(step => step.nativeReport);
-    expect(replays.map(step => step.nativeReport)).toEqual(["typescript", "go"]);
+    expect(replays.map(step => step.nativeReport)).toEqual(["typescript", "go", "rust"]);
     for (const step of replays) expect(step.env?.DIALCACHE_FEATURE_TRACE_DIR).toBe(`${directory}/.formal-traces/features`);
-    expect(plan.filter(step => step.explorationContext).map(step => step.explorationContext)).toEqual(["typescript", "go"]);
-    expect(plan.some(step => step.args?.includes("formal/check-go-replay.mjs") || step.args?.includes("formal/conformance-adapters.mjs"))).toBe(false);
+    expect(plan.filter(step => step.explorationContext).map(step => step.explorationContext)).toEqual(["typescript", "go", "rust"]);
+    expect(plan.some(step => step.args?.includes("formal/check-go-replay.mjs") || step.args?.includes("formal/check-rust-replay.mjs")
+      || step.args?.includes("formal/conformance-adapters.mjs"))).toBe(false);
     expect(plan.some(step => step.args?.[0] === "formal/conformance.mjs" && step.args[1] === "check")).toBe(false);
   });
 
@@ -172,8 +183,9 @@ describe("isolated exploratory validation", () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
-  it.each(["typescript", "go"])("classifies exact %s witness leaves separately from replay failures", language => {
-    const native = (failure?: string) => language === "typescript" ? JSON.stringify(tsReport("/snapshot", failure)) : goReport(failure);
+  it.each(["typescript", "go", "rust"])("classifies exact %s witness leaves separately from replay failures", language => {
+    const native = (failure?: string) => language === "typescript" ? JSON.stringify(tsReport("/snapshot", failure))
+      : language === "go" ? goReport(failure) : rustReport(failure);
     expect(nativeExplorationResult(language, native(), context(language), "/snapshot", packageName).status).toBe("passed");
     expect(nativeExplorationResult(language, native("witness/recovery"), context(language), "/snapshot", packageName)).toMatchObject({
       status: "witness-check-failure", witnessFailures: ["witness/recovery"], caseFailures: [],
@@ -250,7 +262,7 @@ describe("isolated exploratory validation", () => {
       await expect(explore("42", { directory, run: async () => {
         const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
         writeFileSync(join(output, "workspace/rule.qnt"), "changed");
-        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }];
+        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }, { language: "rust", status: "passed" }];
       } })).rejects.toThrow(/changed/);
       const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
       expect(readFileSync(join(directory, "rule.qnt"), "utf8")).toBe("original");
@@ -267,12 +279,12 @@ describe("isolated exploratory validation", () => {
       writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
       writeWitnessInventory(directory, selectedProfiles("all"));
       await expect(explore("42", { directory, run: async () => [
-        { language: "typescript", status: "witness-check-failure" }, { language: "go", status: "witness-check-failure" },
+        { language: "typescript", status: "witness-check-failure" }, { language: "go", status: "witness-check-failure" }, { language: "rust", status: "witness-check-failure" },
       ] })).rejects.toThrow(/witness-check-failure/);
       const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
       expect(JSON.parse(readFileSync(join(output, "report.json"), "utf8"))).toMatchObject({
         kind: "exploration", acceptance: false, status: "witness-check-failure", sourcesUnchanged: true,
-        native: [{ language: "typescript" }, { language: "go" }],
+        native: [{ language: "typescript" }, { language: "go" }, { language: "rust" }],
       });
       expect(existsSync(join(output, "workspace/node_modules"))).toBe(false);
     } finally { rmSync(directory, { recursive: true, force: true }); }
@@ -348,7 +360,7 @@ describe("isolated exploratory validation", () => {
         mkdirSync(join(workspace, ".formal-traces"), { recursive: true });
         writeFileSync(join(workspace, ".formal-traces/witness-report.json"), JSON.stringify(witnesses));
         replays = 2;
-        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }];
+        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }, { language: "rust", status: "passed" }];
       } })).rejects.toThrow(/coverage-gate-failure[\s\S]*reply:13 reached by 1 sampled histories/);
       expect(replays).toBe(2);
       const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
@@ -374,7 +386,7 @@ describe("isolated exploratory validation", () => {
         const workspace = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!, "workspace");
         mkdirSync(join(workspace, ".formal-traces"), { recursive: true });
         if (contents !== undefined) writeFileSync(join(workspace, ".formal-traces/witness-report.json"), contents);
-        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }];
+        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }, { language: "rust", status: "passed" }];
       } })).rejects.toThrow(message);
       const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
       expect(JSON.parse(readFileSync(join(output, "report.json"), "utf8")).status).toBe("infrastructure-failure");
@@ -401,7 +413,7 @@ describe("isolated exploratory validation", () => {
         const workspace = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!, "workspace");
         mkdirSync(join(workspace, ".formal-traces"), { recursive: true });
         writeFileSync(join(workspace, ".formal-traces/witness-report.json"), JSON.stringify(witnesses));
-        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }];
+        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }, { language: "rust", status: "passed" }];
       } });
       expect(JSON.parse(readFileSync(join(output, "report.json"), "utf8"))).toMatchObject({ status: "passed", witnesses });
     } finally { rmSync(directory, { recursive: true, force: true }); }

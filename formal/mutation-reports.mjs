@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boundaryEvidence, challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
@@ -115,12 +115,17 @@ export function selectionDirectory(output, { shard, only }) {
 
 // Hash the reviewed inputs, including uncommitted edits and exact file bytes.
 // Git revision alone cannot identify an exploratory run from a dirty worktree.
-export function fingerprintFiles(directory, paths) {
+// `exclude` names build output beneath an input (the Rust target directory)
+// that is neither reviewed nor stable.
+export function fingerprintFiles(directory, paths, { exclude = [] } = {}) {
   const files = [];
+  const skipped = new Set(exclude);
   const visit = path => {
+    if (skipped.has(path)) return;
+    if (statSync(resolve(directory, path)).isFile()) { files.push(path); return; }
     for (const entry of readdirSync(resolve(directory, path), { withFileTypes: true })) {
       if (entry.isDirectory()) visit(`${path}/${entry.name}`);
-      else if (entry.isFile()) files.push(`${path}/${entry.name}`);
+      else if (entry.isFile() && !skipped.has(`${path}/${entry.name}`)) files.push(`${path}/${entry.name}`);
     }
   };
   for (const path of paths) visit(path);
@@ -163,6 +168,7 @@ export function typescriptDetection(mutations, cases) {
   return { all: score(mutations), behavioral: score(mutations.filter(m => !protocol(m))), protocol: score(mutations.filter(protocol)) };
 }
 
+// The four-cohort score shared by the Go and Rust measurements.
 export function goDetection(mutations) {
   return Object.fromEntries(mutantPorts.go.cohorts.map(cohort => {
     const measured = mutations.filter(m => m.cohorts[cohort].state !== 'crashed');
@@ -261,6 +267,16 @@ function goMarkdown(report, directory = root) {
     'Challenges are the model property challenges whose fault the mutant injects natively (nativeMutants in formal/execution.json). Full JSON records snapshot/corpus/witness fingerprints, selected tests, actual passing/failing leaf counts, and assertion diagnostics. Compilation errors, crashes, timeouts, missing witnesses, and skipped executions cannot count as detections.', ''].join('\n');
 }
 
+function rustMarkdown(report) {
+  return ['# Rust semantic mutation measurement', '', `Completed in ${report.elapsedSeconds}s. Counts measure this named fault catalog and exact corpus, not universal equivalence.`, '',
+    ...shardsMarkdown(report),
+    'Scope: Rust native mutation catalog only. Shared TypeScript/Go model-challenge boundary coverage is not measured by this report.', '',
+    ...(report.scope ? [`Shared catalog mutants without a Rust binding: ${report.scope.unmappedSharedMutations.join(', ') || 'none'}.`, ''] : []),
+    '| Mutation | Contract case | Ordinary | Quint generated | Fixed supplement | Full portable |', '| --- | --- | --- | --- | --- | --- |',
+    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.fixed.state} | ${m.cohorts.portable.state} |`), '',
+    'Ordinary is the crate\'s unit and native tests; generated is the conformance harness over the complete corpus and witness evidence; fixed is the harness over the fixed scenarios and checked-in vectors. Full JSON records snapshot/corpus/witness fingerprints, cohort selections, actual passing/failing counts and assertion diagnostics. Compilation errors, crashes, timeouts, missing reports and incomplete runs cannot count as detections.', ''].join('\n');
+}
+
 // Only a merged report carries `shards`; the single run's markdown is unchanged.
 function shardsMarkdown(report) {
   if (!report.shards) return [];
@@ -277,6 +293,10 @@ export const languages = {
     markdown: typescriptMarkdown, recordsRegressions: false },
   go: { name: 'Go', port: 'go', output: '.formal-traces/go-semantic', catalog: mutantCatalogPath, inputs: ['formal', 'go', 'test', 'src'],
     detection: mutations => goDetection(mutations), markdown: goMarkdown, recordsRegressions: true },
+  // The crate's unit tests read go/redis_adapter.go (script byte equality), so
+  // the Go source is an input of the ordinary cohort as well.
+  rust: { name: 'Rust', boundaryEvidence: false, output: '.formal-traces/rust-semantic', catalog: 'formal/rust-mutations.json', inputs: ['formal', 'rust', 'test', 'src', 'go'], exclude: ['rust/target'],
+    detection: mutations => goDetection(mutations), markdown: rustMarkdown, recordsRegressions: true },
 };
 
 // Historical inspection may read a report anywhere. Gated inspection instead
@@ -316,7 +336,8 @@ export function gateDetections(language, report, entries, { directory = root, su
   // Recompute verdicts from the current declarations and completed recordings.
   // An omitted mapping, a stale pin or a claimed confirmation without a clean
   // baseline must fail just as a measured non-detection does.
-  const regressions = requiredDetectionRegressions(entries, report.mutations, currentBoundaries(report, entries, directory));
+  const boundaries = language.boundaryEvidence === false ? [] : currentBoundaries(report, entries, directory);
+  const regressions = requiredDetectionRegressions(entries, report.mutations, boundaries);
   if (summarize) report.detection = language.detection(report.mutations, directory);
   if (language.recordsRegressions) report.requiredDetectionRegressions = regressions;
   if (regressions.length) throw new Error(`Lost required detections: ${regressions.join(', ')}`);

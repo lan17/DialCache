@@ -1,0 +1,302 @@
+{
+  "schemaVersion": 1,
+  "mutations": [
+    {
+      "id": "M01",
+      "case": "C45.maximum-age-exclusive",
+      "description": "Accept a retained candidate at the exact maximum age after decoding",
+      "typescriptMutation": "M01",
+      "edits": [
+        {
+          "path": "rust/src/execution.rs",
+          "before": "        if !valid || age as u64 >= max_age {\n            self.recovery_event(RecoveryOutcome::Miss, None);\n            return None;\n        }\n        self.recovery_event(RecoveryOutcome::Served, Some(age));",
+          "after": "        if !valid || age as u64 > max_age {\n            self.recovery_event(RecoveryOutcome::Miss, None);\n            return None;\n        }\n        self.recovery_event(RecoveryOutcome::Served, Some(age));"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M02",
+      "case": "C45.recheck-after-decode",
+      "description": "Reuse the pre-decode age instead of observing age after asynchronous decoding",
+      "typescriptMutation": "M02",
+      "edits": [
+        {
+          "path": "rust/src/execution.rs",
+          "before": "        };\n        let (age, valid) = self.frame_age(frame, Layer::Remote);",
+          "after": "        };\n        // Fault injection: retain the pre-decode age and validity."
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M03",
+      "case": "C25.late-source-rejected",
+      "description": "Accept an externally settled result after its elapsed deadline when the timer has not run",
+      "typescriptMutation": "M03",
+      "edits": [
+        {
+          "path": "rust/src/deadline.rs",
+          "before": "            Either::Left((value, _timer)) => {\n                if since(clock, started) < budget {",
+          "after": "            Either::Left((value, _timer)) => {\n                if true {"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M04",
+      "case": "C34.second-fence",
+      "description": "Skip the tracked fence recheck after serialization",
+      "typescriptMutation": "M04",
+      "edits": [
+        {
+          "path": "rust/src/execution.rs",
+          "before": "        if let Some(fence) = fence {\n            if stamp <= fence {",
+          "after": "        if let Some(fence) = fence {\n            if false && stamp <= fence {"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M05",
+      "case": "C03.detached-bypass",
+      "description": "Treat a detached context whose outer scope closed as still enabled",
+      "typescriptMutation": "M05",
+      "edits": [
+        {
+          "path": "rust/src/scope.rs",
+          "before": "        self.enabled && self.owner.as_ref().is_some_and(|owner| owner.is_live())",
+          "after": "        self.enabled"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M06",
+      "case": "W04.strict-fence",
+      "description": "Accept a tracked frame timestamp equal to its watermark",
+      "typescriptMutation": "M06",
+      "edits": [
+        {
+          "path": "rust/src/protocol/frame.rs",
+          "before": "        if stamp <= fence {\n            return miss(MissReason::WatermarkFenced);",
+          "after": "        if stamp < fence {\n            return miss(MissReason::WatermarkFenced);"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M07",
+      "case": "C51.changed-confirmation",
+      "description": "Confirm an unequal shadow result even when C1 contains different payload bytes",
+      "typescriptMutation": "M07",
+      "edits": [
+        {
+          "path": "rust/src/shadow.rs",
+          "before": "            ReadSnapshot::Hit(confirmed) if confirmed.payload.bytes == frame.payload.bytes => {}",
+          "after": "            ReadSnapshot::Hit(_) => {}"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M08",
+      "case": "C60.invalid-logging-policy",
+      "description": "Enable mismatch logging after a malformed runtime logging flag",
+      "typescriptMutation": "M08",
+      "edits": [
+        {
+          "path": "rust/src/policy.rs",
+          "before": "                    shadow.log_mismatches = false;\n                    shadow.logging_config_error = true;",
+          "after": "                    shadow.log_mismatches = true;\n                    shadow.logging_config_error = true;"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M09",
+      "case": "C60.logging-default-off",
+      "description": "Enable mismatch logging when its flag is omitted",
+      "typescriptMutation": "M09",
+      "edits": [
+        {
+          "path": "rust/src/policy.rs",
+          "before": "    let mut shadow = ResolvedShadow::default();",
+          "after": "    let mut shadow = ResolvedShadow {\n        log_mismatches: true,\n        ..ResolvedShadow::default()\n    };"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M10",
+      "case": "C31.tracked-no-local-fill",
+      "description": "Publish an unvalidated tracked source value directly into local storage",
+      "typescriptMutation": "M10",
+      "edits": [
+        {
+          "path": "rust/src/execution.rs",
+          "before": "                if local_miss && !self.identity.tracked {",
+          "after": "                if local_miss {"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M11",
+      "case": "C09.fixed-local-ttl",
+      "description": "Renew the local insertion TTL on every cache hit",
+      "typescriptMutation": "M11",
+      "edits": [
+        {
+          "path": "rust/src/local.rs",
+          "before": "        Ok(match self.entries.get(key) {\n            Some(entry) => LocalRead::Live(entry.value.clone()),\n            None => LocalRead::Absent,\n        })",
+          "after": "        Ok(match self.entries.get_mut(key) {\n            Some(entry) => {\n                entry.inserted_ms = now_ms;\n                LocalRead::Live(entry.value.clone())\n            }\n            None => LocalRead::Absent,\n        })"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M12",
+      "case": "W02.sorted-arguments",
+      "description": "Reverse the prescribed argument-name ordering",
+      "typescriptMutation": "M12",
+      "edits": [
+        {
+          "path": "rust/src/identity.rs",
+          "before": "    pairs.sort_by(|left, right| compare_utf16(&left.0, &right.0));",
+          "after": "    pairs.sort_by(|left, right| compare_utf16(&right.0, &left.0));"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M13",
+      "case": "C54.expired-before-start",
+      "description": "Dispatch dark shadow reads after the job deadline already elapsed before deferred work starts",
+      "typescriptMutation": "M13",
+      "edits": [
+        {
+          "path": "rust/src/shadow.rs",
+          "before": "        if expired() {\n            return Verdict::of(ShadowOutcome::Timeout);\n        }\n        let mut fill = false;",
+          "after": "        if false && expired() {\n            return Verdict::of(ShadowOutcome::Timeout);\n        }\n        let mut fill = false;"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    }
+  ]
+}

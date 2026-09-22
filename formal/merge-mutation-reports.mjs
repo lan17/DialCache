@@ -135,7 +135,7 @@ export function readShardReports(directory) {
 // Any refusal leaves an incomplete report with the reason in its place.
 export function mergeMutationReports(name, { directory = root, shardsDirectory, outputDirectory } = {}) {
   const language = languages[name];
-  if (!language) throw new Error(`Expected language ts or go; got ${name}`);
+  if (!language) throw new Error(`Expected language ts, go or rust; got ${name}`);
   const output = resolve(directory, outputDirectory ?? language.output);
   const shards = resolve(directory, shardsDirectory ?? resolve(output, 'shards'));
   const startedAt = new Date().toISOString();
@@ -147,9 +147,12 @@ export function mergeMutationReports(name, { directory = root, shardsDirectory, 
   try {
     const catalogText = readFileSync(resolve(directory, language.catalog));
     const catalog = JSON.parse(catalogText);
-    // The gate reads this port's section of each catalog entry through the one catalog reader.
-    const entries = mutantsForPort(readMutantCatalog(path => readFileSync(resolve(directory, path), 'utf8')), language.port);
-    merged = mergeShardReports(language, readShardReports(shards), { catalog, catalogSha256: sha256(catalogText), inputs: fingerprintFiles(directory, language.inputs) });
+    // Rust keeps its native catalog; shared TypeScript/Go entries use the
+    // canonical port reader introduced on main.
+    const entries = language.port
+      ? mutantsForPort(readMutantCatalog(path => readFileSync(resolve(directory, path), 'utf8')), language.port)
+      : catalog.mutations;
+    merged = mergeShardReports(language, readShardReports(shards), { catalog, catalogSha256: sha256(catalogText), inputs: fingerprintFiles(directory, language.inputs, { exclude: language.exclude }) });
     gateDetections(language, merged, entries, { directory });
   } catch (error) {
     const failed = merged ?? { schemaVersion: 1, complete: false, startedAt };
@@ -166,7 +169,7 @@ export function mergeMutationReports(name, { directory = root, shardsDirectory, 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [name, shardsDirectory, ...extra] = process.argv.slice(2);
   if (!languages[name] || extra.length) {
-    console.error('Usage: node formal/merge-mutation-reports.mjs <ts|go> [shard-directory]');
+    console.error('Usage: node formal/merge-mutation-reports.mjs <ts|go|rust> [shard-directory]');
     process.exitCode = 2;
   } else {
     try {

@@ -7,13 +7,14 @@ import { cleanEnvironment, executeSteps, validationPlan } from './validation.mjs
 import { nativeBinding } from './conformance-bindings.mjs';
 import { parseTypeScriptReport } from './conformance-adapters.mjs';
 import { checkGoReplay } from './check-go-replay.mjs';
+import { checkRustReplay } from './check-rust-replay.mjs';
 import { canonicalSeed, reportFileName } from './witnesses.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = value => createHash('sha256').update(value).digest('hex');
 const inside = (directory, path) => path.startsWith(directory + sep);
-const reportPaths = { typescript: '.formal-traces/ts-replay.json', go: '.formal-traces/go-replay.jsonl' };
-const contextPaths = { typescript: '.formal-traces/ts-context.json', go: '.formal-traces/go-context.json' };
+const reportPaths = { typescript: '.formal-traces/ts-replay.json', go: '.formal-traces/go-replay.jsonl', rust: '.formal-traces/rust-replay.jsonl' };
+const contextPaths = { typescript: '.formal-traces/ts-context.json', go: '.formal-traces/go-context.json', rust: '.formal-traces/rust-context.json' };
 
 export function explorationSeed(value = `0x${randomBytes(8).toString('hex')}`) {
   try { return canonicalSeed(value); }
@@ -21,7 +22,7 @@ export function explorationSeed(value = `0x${randomBytes(8).toString('hex')}`) {
 }
 
 // Share model generation and native execution with acceptance. Exploration has
-// its own report: a seed's missing witness must not prevent the other port from
+// its own report: a seed's missing witness must not prevent the other ports from
 // executing the histories. No acceptance completion/adaptation step runs here.
 export function explorationPlan(directory, seed, options = {}) {
   const normalized = explorationSeed(seed);
@@ -30,16 +31,16 @@ export function explorationPlan(directory, seed, options = {}) {
     // This campaign uses the manifest's pinned seed, not the exploration seed.
     // Full acceptance keeps it; exploration retains every unmodified model job.
     if (script === 'formal/check-model-properties.mjs') return [];
-    if (step.remove || ['formal/conformance-adapters.mjs', 'formal/check-go-replay.mjs'].includes(script)
+    if (step.remove || ['formal/conformance-adapters.mjs', 'formal/check-go-replay.mjs', 'formal/check-rust-replay.mjs'].includes(script)
       || script === 'formal/conformance.mjs' && step.args[1] === 'check') return [];
     if (script === 'formal/conformance.mjs' && step.args[1] === 'prepare') {
       return [{ label: `Prepare exploratory ${step.args[2]} context`, explorationContext: step.args[2] }];
     }
     if (script === 'formal/run-models.mjs') return [{ ...step, env: { ...step.env, QUINT_SEED: normalized } }];
-    if (step.env?.DIALCACHE_MBT_TRACE_DIR) return [{ ...step, nativeReport: step.command === 'go' ? 'go' : 'typescript' }];
-    // A seed's missing witness is classified by both native reports. The shared
-    // evaluator runs before either replay and still writes evidence for complete
-    // profiles; its exit status must not stop either port from executing that
+    if (step.env?.DIALCACHE_MBT_TRACE_DIR) return [{ ...step, nativeReport: step.command === 'go' ? 'go' : step.command === 'cargo' ? 'rust' : 'typescript' }];
+    // A seed's missing witness is classified by every native report. The shared
+    // evaluator runs before native replay and still writes evidence for complete
+    // profiles; its exit status must not stop any port from executing that
     // seed's histories.
     // The evaluator learns the corpus seed from the same variable run-models.mjs
     // reads, so its baseline gate applies the exploration rule to this seed.
@@ -158,6 +159,22 @@ export function nativeExplorationResult(language, text, context, directory, pack
       required: inventory.map(entry => ({ name: nativeBinding(entry, language), category: entry.category })) };
     checkGoReplay(events.map(event => JSON.stringify(event.Action === 'fail' ? { ...event, Action: 'pass' } : event)).join('\n'), native);
     startedAt = Date.parse(events[0].Time); finishedAt = Date.parse(events.at(-1).Time);
+  } else if (language === 'rust') {
+    // The Rust report names cases by inventory id; a failed case record is the
+    // native counterexample. The all-passed copy reuses the strict report gate.
+    const records = text.trim().split('\n').map(line => JSON.parse(line));
+    const cases = new Map(inventory.map(entry => [nativeBinding(entry, language), entry]));
+    for (const record of records) {
+      if (record.kind !== 'case' || record.status !== 'failed') continue;
+      const entry = cases.get(record.id);
+      if (entry) failed.push(entry); else otherFailures.push(record.id);
+    }
+    const finish = records.at(-1);
+    if (finish?.kind !== 'finish') throw new Error('Rust report has no finish record: the harness crashed or timed out before completing.');
+    if ((finish.status === 'failed') !== (failed.length + otherFailures.length > 0)) throw new Error('Rust report status disagrees with its case records.');
+    checkRustReplay(records.map(record => JSON.stringify(record.kind === 'case' ? { ...record, status: 'passed', message: undefined }
+      : record.kind === 'finish' ? { ...record, status: 'passed', failed: 0 } : record)).join('\n'), inventory);
+    startedAt = records[0]?.startedAt; finishedAt = finish.finishedAt;
   } else throw new Error('Unsupported exploratory port.');
   if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt) || startedAt < context.createdAt
     || finishedAt < startedAt || finishedAt > Date.now() + 60_000) throw new Error('Stale or invalid native report timestamps.');
@@ -327,9 +344,9 @@ async function executeExploration(seed, { directory = root, environment = proces
     });
     verifyHashes(workspace, [report.sources]);
     report.sourcesUnchanged = true;
-    if (report.native.map(result => result.language).sort().join() !== 'go,typescript'
+    if (report.native.map(result => result.language).sort().join() !== 'go,rust,typescript'
       || report.native.some(result => !['passed', 'native-failure', 'witness-check-failure'].includes(result.status))) {
-      throw new Error('Exploration did not finish both native ports.');
+      throw new Error('Exploration did not finish every native port.');
     }
     // The witness step is tolerated so both ports replay, but its baseline
     // gate still decides the outcome afterwards: a fresh seed whose sampled

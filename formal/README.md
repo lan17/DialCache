@@ -1,7 +1,7 @@
 # Executable DialCache specification
 
-Quint defines the portable contracts that TypeScript, Go and future ports must
-preserve. TypeScript is the executable reference those contracts formalize; a
+Quint defines the portable contracts that TypeScript, Go, Rust and future ports
+must preserve. TypeScript is the executable reference those contracts formalize; a
 disagreement between the two is settled by a distinguishing regression and a
 recorded decision, not by editing the easier side. Native drivers execute
 external commands against the real libraries; generated expectations stay in
@@ -62,7 +62,7 @@ The verification models emphasize individual ownership or safety boundaries:
 | [dialcache-stale-recovery.qnt](./dialcache-stale-recovery.qnt) | Retained bytes, age checks and recovery authority |
 | [dialcache-redis-protocol.qnt](./dialcache-redis-protocol.qnt) | Frame/fence validation order |
 
-Conformance profiles expose external commands that both language drivers replay:
+Conformance profiles expose external commands that every language driver replays:
 
 | Profile | Behavior and interactions |
 | --- | --- |
@@ -122,12 +122,12 @@ downloads its pinned solver archive.
 ```sh
 make help          # Targets and prerequisites.
 make check         # Native checks, package, docs and inventories.
-make smoke         # Committed Quint-derived histories in both ports.
-make formal        # Rust model checks, full corpus and both-port completion.
+make smoke         # Committed Quint-derived histories in every port.
+make formal        # Quint model checks, full corpus and every port's completion.
 make differential  # Replay composed profiles' reference corpus through the working tree.
 make model-check   # Separate finite symbolic checks; Java 21 and tar required.
 make mutations     # Challenge assertions after full replay has passed.
-make integration   # Real Redis/Valkey/Cluster and interoperability.
+make integration   # Real Redis/Valkey/Cluster in every port and interoperability.
 make explore       # Fresh recorded seed in an isolated source snapshot.
 make ci NODE22_BIN=/absolute/path/to/node22/bin/node
 ```
@@ -137,14 +137,15 @@ scheduled model with the Rust evaluator, the public regressions and the model
 mutation challenges. Its first command, `node formal/run-models.mjs check`,
 runs only the unmodified model checks and regressions; the next step runs the
 complete pinned fault campaign. `make formal` and `make ci` require both steps.
-`make explore` retains the model checks, generation and both port replays but
+`make explore` retains the model checks, generation and all port replays but
 omits that identical pinned campaign; its result remains non-acceptance evidence.
 `make formal-generate` runs generation, fixture
-recomputation and the shared witness evaluation; `make formal-ts` and
-`make formal-go` then complete each port's replay against that exact corpus.
-`make mutations-ts` and `make mutations-go` split the fault campaigns. The
-parity and mutation lanes depend only on the generated corpus and shared witness
-evidence, so hosted CI runs all four in parallel and none of them waits for the
+recomputation and the shared witness evaluation; `make formal-ts`,
+`make formal-go` and `make formal-rust` then complete each port's replay against
+that exact corpus. `make mutations-ts`, `make mutations-go` and
+`make mutations-rust` split the fault campaigns. The parity and mutation lanes
+depend only on the generated corpus and shared witness evidence, so hosted CI
+runs all six in parallel and none of them waits for the
 model check, which runs beside generation; the aggregate requires every lane.
 `make fixtures-check` recomputes committed artifacts; after an intentional model
 edit, update them with `node formal/generate-artifacts.mjs --write` first.
@@ -160,7 +161,7 @@ keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. S
 [VALIDATION.md](./VALIDATION.md) for CI policy and report interpretation.
 
 Scheduled named public-action Quint regressions exercise their declared
-boundaries independently of sampling. Both ports replay those histories and the
+boundaries independently of sampling. Every port replays those histories and the
 complete sampled corpus; required witness coverage is checked across their
 union. A model regression reaches implementations only when registered for
 replay in `execution.json`, and the manifest validator requires every

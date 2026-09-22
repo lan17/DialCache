@@ -161,24 +161,39 @@ results; fresh measurements belong with their exact source and corpus artifacts.
 Use the [shared Make targets and pinned prerequisites](./README.md#generating-and-replaying-behavior):
 
 ```sh
-make formal        # Regenerate and complete prepared TS and Go replay.
-make mutations     # Measure both fault catalogs over the generated corpus.
+make formal        # Regenerate and complete prepared TS, Go and Rust replay.
+make mutations     # Measure every fault catalog over the generated corpus.
 ```
 
-`make mutations-ts` and `make mutations-go` depend only on the corpus produced
-by `make formal-generate` and its shared witness evidence, not on either port's
-completion report. Hosted CI runs both mutation lanes in parallel with both
-parity lanes off one generation job; the aggregate requires all of them. Each
-report records the source, corpus and witness fingerprints it measured. Raw
-measurement programs remain `measure-semantics.mjs` and
-`measure-go-semantics.mjs`; the Make targets supply the pinned prerequisite
+`make mutations-ts`, `make mutations-go` and `make mutations-rust` depend only
+on the corpus produced by `make formal-generate` and its shared witness
+evidence, not on any port's completion report. Hosted CI runs the three
+mutation lanes in parallel with the three parity lanes off one generation job;
+the aggregate requires all of them. Each report records the source, corpus and
+witness fingerprints it measured. Raw measurement programs remain
+`measure-semantics.mjs`, `measure-go-semantics.mjs` and
+`measure-rust-semantics.mjs`; the Make targets supply the pinned prerequisite
 checks used by hosted full validation.
+
+Rust has a separate catalog, [`rust-mutations.json`](./rust-mutations.json). Its
+ordinary cohort runs crate unit tests and native integration tests, excluding
+harness controls, protocol-vector suites and real-server tests. Its generated
+and fixed cohorts select the corresponding conformance harness suites. The
+runner requires complete reports and assertion evidence; an infrastructure
+failure is a failed measurement. Rust results establish detection for this
+catalog only; the TypeScript/Go model-to-mutant boundary mappings in
+`mutations.json` do not confer Rust coverage. Each mutant builds in release
+mode in an isolated crate copy. Cargo build directories are isolated by shard
+selection automatically; partial runs use a separate directory. A direct runner
+invocation can override the directory with `DIALCACHE_RUST_TARGET_DIR`, but
+concurrent shards must use distinct override paths to avoid sharing mutant binaries.
 
 Hosted runs shard each lane with `MUTATION_SHARD=<index>/<count>`, matching the workflow matrix; `test/formal-validation.test.ts` pins how many mutants a shard may hold within its timeout, so catalog growth fails the pull request until the matrix grows.
 A shard reruns the compile check, every unmodified baseline and the witness
 evaluation before its contiguous slice of the catalog, and writes an incomplete
 report under `shards/<index>-of-<count>/`. `make mutations-merge-ts` and
-`make mutations-merge-go` (`merge-mutation-reports.mjs`) assemble the complete
+`make mutations-merge-go` and `make mutations-merge-rust`
+(`merge-mutation-reports.mjs`) assemble the complete
 report from those shards and refuse any inconsistency: a missing or duplicated
 shard, a shard that failed or claims completion, differing fingerprints or
 baseline results, or mutations that do not cover the catalog exactly once in
