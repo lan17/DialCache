@@ -240,10 +240,14 @@ Major bumps resume when the project cuts 1.0.0. `release.config.mjs` implements
 this policy; change it and this guide together so the documented release table
 cannot drift from automation.
 
-The workflow opens a `release: <version>` pull request whose only change is the
-matching `typescript/package.json` version. `release` is a reserved Conventional
-Commit type configured not to request another release, so the version-control commit
-does not cause an extra bump.
+The workflow opens a `release: <version>` pull request containing only the
+matching versions in `typescript/package.json`, `rust/Cargo.toml` and the root crate entry
+in `rust/Cargo.lock`. The release helper preserves dependency versions and
+rejects any other content or file changes. It uses Python 3.11 or later, included
+on GitHub's Ubuntu runners. `release` is a reserved Conventional Commit type
+configured not to request another release, so the version-control commit does
+not cause an extra bump. Before opening or reusing the PR, Cargo packages the
+committed candidate and builds the extracted archive with every feature enabled.
 
 GitHub marks workflow runs for a pull request opened with `GITHUB_TOKEN` as
 approval-required. Approve those runs, review the pull request, and squash-merge
@@ -253,26 +257,30 @@ The merge triggers the publish job. Before any release side effect, it verifies:
 
 - current `main`;
 - the release commit subject;
-- the one-file diff;
-- the package version;
+- the exact version-only changes in all three version files;
+- the matching npm, Cargo manifest and Cargo lockfile versions;
 - the absent npm and Go tags;
 - the Go module path for the release major; and
 - Semantic Release's independently calculated version and commit.
 
-It then reruns the package checks and asks Semantic Release to:
+It then reruns the npm checks and Rust package verification before asking Semantic Release to:
 
 1. create the matching Git tag;
 2. publish the public npm package with provenance; and
 3. publish the GitHub release.
 
-Finally the workflow tags the same commit `go/vX.Y.Z` for the Go module.
+The workflow tags the same commit `go/vX.Y.Z` for the Go module, then a separate
+`publish-rust` job publishes `dialcache` version `X.Y.Z` to crates.io. That job
+checks out the captured release commit and verifies both tags point to it.
+TypeScript, Go and Rust therefore use one selected version and release commit;
+the first Rust registry release need not start at `0.1.0`.
 
 Go has no package registry. A module version is a Git tag that `go get`
 resolves through the public module proxy, and a module in a subdirectory
 takes that directory as its tag prefix, so
 `go get github.com/lan17/DialCache/go@vX.Y.Z` resolves the tag `go/vX.Y.Z`.
-The TypeScript and Go ports therefore share one version number and one release commit from
-the first tagged release onward; earlier npm versions have no Go tag. After
+The TypeScript and Go ports share releases from the first Go tag onward;
+earlier npm versions have no Go tag. After
 pushing the tag, the workflow requests the version from `proxy.golang.org`
 and `sum.golang.org` so the proxy and the checksum database record it, and
 pkg.go.dev follows the proxy index. A fetched version is immutable: never
@@ -288,13 +296,52 @@ git tag go/vX.Y.Z vX.Y.Z
 git push origin go/vX.Y.Z
 ```
 
-Rust currently has `publish = false` and is not part of this registry release
-flow. Its site reference follows repository source, not a crates.io/docs.rs
-release.
+### Set up crates.io publishing once
+
+Before the first Rust release, sign in to crates.io with the owning GitHub
+account, verify its email, and create an API token allowed to publish the new
+`dialcache` crate. Add it as the repository secret `CARGO_REGISTRY_TOKEN`:
+
+```sh
+gh secret set CARGO_REGISTRY_TOKEN --repo lan17/DialCache
+```
+
+Enter the token at the prompt. The first publication can run entirely in the
+workflow; no local `cargo publish` is needed. The package check does not verify
+registry credentials or ownership. Until the first publication succeeds, use a
+checkout dependency as described in the [Rust guide](languages/rust.md).
+
+After the crate exists, configure its **Settings → Trusted Publishing** for
+GitHub owner `lan17`, repository `DialCache`, workflow `release.yaml`, with no
+environment restriction (the job does not use a GitHub environment). Remove the
+repository's `CARGO_REGISTRY_TOKEN` secret after configuring that trust. Later
+runs use GitHub's short-lived identity through the pinned official
+`rust-lang/crates-io-auth-action`; the action revokes its temporary token when
+the job finishes. If the secret remains, it takes precedence over trusted
+publishing. See the [crates.io setup guide](https://crates.io/docs/trusted-publishing).
+
+docs.rs automatically queues a documentation build after publication. The crate
+metadata enables the Redis and Prometheus API documentation. The repository
+site still follows `main` independently of registry releases.
+
+### Retry a Rust publication
+
+Registry publication is not atomic across npm, Go tags and crates.io. If only
+`publish-rust` fails, fix its credentials or transient failure and choose
+**Re-run failed jobs** in the original workflow run. Do not rerun all jobs: the
+npm/Go publisher intentionally rejects existing release tags. The Rust job uses
+the original release commit even if `main` has since advanced.
+
+The Rust job builds the archive and checks the registry index before uploading.
+If an earlier attempt uploaded successfully but lost its acknowledgement, a
+retry accepts the existing version only when its SHA-256 checksum matches that
+exact archive and it is not yanked. Conflicting bytes fail the job; published
+versions are never overwritten. Resolve a content conflict with a new release.
 
 The repository must enable **Allow GitHub Actions to create and approve pull
 requests** under Actions workflow permissions.
 
 The workflow uses that capability only to create the version pull request. It
-never approves or merges one, and no ruleset bypass actor or persistent release
-credential is required.
+never approves or merges one, and no ruleset bypass actor is required. Once
+crates.io trusted publishing is configured, neither registry needs a persistent
+publishing credential in this workflow.

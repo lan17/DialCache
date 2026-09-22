@@ -142,7 +142,9 @@ dialcache = { path = "../DialCache/rust", features = ["redis"] }
 redis = { version = "1", features = ["tokio-comp", "connection-manager"] }
 ```
 
-The path points to a checkout because the crate is unpublished. `RedisAdapter`
+The path uses a repository checkout, including before the first crates.io
+publication. For a published release, use `cargo add dialcache --features redis`.
+`RedisAdapter`
 implements `Remote` for connection managers, multiplexed connections and Cluster
 connections. Pass an adapter through the cache builder's `remote` method.
 For `ClusterConnection`, tracked reads explicitly route to slot primaries.

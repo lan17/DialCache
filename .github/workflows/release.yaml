@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # The preparation run can create a branch and PR, but it cannot publish to
-    # npm, tag a release, approve the PR, merge it, or bypass branch protection.
+    # registries, tag a release, approve the PR, merge it, or bypass branch protection.
     permissions:
       contents: write
       pull-requests: write
@@ -35,6 +35,12 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+        with:
+          toolchain: 1.98.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
       - name: Verify release source
         run: |
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
@@ -95,15 +101,6 @@ jobs:
             release_commit="$(git rev-parse "refs/remotes/origin/$release_branch")"
             release_parent="$(git rev-parse "${release_commit}^")"
             release_subject="$(git log -1 --format=%s "$release_commit")"
-            changed_files="$(
-              git diff-tree --no-commit-id --name-only -r \
-                "$release_parent" "$release_commit"
-            )"
-            actual_version="$(
-              git show "$release_commit:typescript/package.json" |
-                node -e 'const fs = require("node:fs"); console.log(JSON.parse(fs.readFileSync(0, "utf8")).version)'
-            )"
-
             if [[ "$release_parent" != "$GITHUB_SHA" ]]; then
               echo "Existing $release_branch is not based on current main $GITHUB_SHA" >&2
               exit 1
@@ -112,40 +109,26 @@ jobs:
               echo "Expected $release_branch subject '$release_title'; got '$release_subject'" >&2
               exit 1
             fi
-            if [[ "$changed_files" != "typescript/package.json" ]]; then
-              echo "Expected $release_branch to change only typescript/package.json; got:" >&2
-              echo "$changed_files" >&2
-              exit 1
-            fi
-            if [[ "$actual_version" != "$RELEASE_VERSION" ]]; then
-              echo "Expected $release_branch package version $RELEASE_VERSION; got $actual_version" >&2
-              exit 1
-            fi
+            python3 scripts/release.py verify "$RELEASE_VERSION" "$GITHUB_SHA" "$release_commit"
+            git checkout --detach "$release_commit"
           else
             if [[ -n "$existing_pr" ]]; then
               echo "Open release PR $existing_pr has no remote head branch" >&2
               exit 1
             fi
 
-            npm --prefix typescript version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
-
-            actual_version="$(node -p 'require("./typescript/package.json").version')"
-            if [[ "$actual_version" != "$RELEASE_VERSION" ]]; then
-              echo "Expected typescript/package.json version $RELEASE_VERSION; got $actual_version" >&2
-              exit 1
-            fi
-
-            git diff --exit-code -- . ':(exclude)typescript/package.json'
-            if git diff --quiet -- typescript/package.json; then
-              echo "typescript/package.json already has release version $RELEASE_VERSION" >&2
-              exit 1
-            fi
-
+            python3 scripts/release.py update "$RELEASE_VERSION"
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -- typescript/package.json
+            git add -- typescript/package.json rust/Cargo.toml rust/Cargo.lock
             git commit -m "$release_title"
+            python3 scripts/release.py verify "$RELEASE_VERSION" "$GITHUB_SHA" HEAD
+          fi
 
+          # Check the committed candidate, including when reusing a release PR.
+          # Cargo verifies an extracted archive, catching missing package files.
+          (cd rust && cargo package --locked --all-features)
+          if [[ -z "$remote_ref" ]]; then
             git -c credential.helper= \
               -c "credential.helper=!f() { echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f" \
               push "https://github.com/$GITHUB_REPOSITORY.git" \
@@ -164,7 +147,7 @@ jobs:
 
           pr_body="Automated by the Release workflow run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID.
 
-          This PR updates only typescript/package.json to $RELEASE_VERSION. Approve its workflow runs, review it, and squash-merge it to publish the release from the protected main branch."
+          This PR updates typescript/package.json, rust/Cargo.toml and rust/Cargo.lock to $RELEASE_VERSION. Approve its workflow runs, review it, and squash-merge it to publish npm, Go and Rust from the same protected main commit."
           pr_url="$(
             gh pr create \
               --repo "$GITHUB_REPOSITORY" \
@@ -179,6 +162,9 @@ jobs:
     if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: ') }}"
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      release_commit: ${{ steps.source.outputs.release_commit }}
+      release_version: ${{ steps.source.outputs.release_version }}
     # contents: write pushes the release tag and GitHub release;
     # id-token: write mints the OIDC token for npm trusted publishing.
     permissions:
@@ -196,6 +182,12 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+        with:
+          toolchain: 1.98.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
       - name: Verify publish source
         id: source
         run: |
@@ -224,21 +216,7 @@ jobs:
             exit 1
           fi
           release_parent="$(git rev-parse "${GITHUB_SHA}^")"
-          changed_files="$(
-            git diff-tree --no-commit-id --name-only -r \
-              "$release_parent" "$GITHUB_SHA"
-          )"
-          if [[ "$changed_files" != "typescript/package.json" ]]; then
-            echo "Release commit must change only typescript/package.json; got:" >&2
-            echo "$changed_files" >&2
-            exit 1
-          fi
-
-          actual_version="$(node -p 'require("./typescript/package.json").version')"
-          if [[ "$actual_version" != "$release_version" ]]; then
-            echo "Expected typescript/package.json version $release_version; got $actual_version" >&2
-            exit 1
-          fi
+          python3 scripts/release.py verify "$release_version" "$release_parent" "$GITHUB_SHA"
           if git rev-parse --verify --quiet "refs/tags/v$release_version" >/dev/null; then
             echo "Release tag v$release_version already exists" >&2
             exit 1
@@ -267,6 +245,9 @@ jobs:
           echo "go_module=$go_module" >> "$GITHUB_OUTPUT"
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - name: Verify the Rust release package before publishing
+        working-directory: rust
+        run: cargo package --locked --all-features
       - name: Resolve publish release
         id: plan
         uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
@@ -361,3 +342,57 @@ jobs:
           }
           warm proxy.golang.org "https://proxy.golang.org/$escaped/@v/v$RELEASE_VERSION.info"
           warm sum.golang.org "https://sum.golang.org/lookup/$escaped@v$RELEASE_VERSION"
+
+  publish-rust:
+    # A separate job can be retried after a crates.io failure without repeating
+    # npm publication or Go tagging. Always use the captured release, even if
+    # main has advanced before the retry.
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_COMMIT: ${{ needs.publish.outputs.release_commit }}
+      RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
+      HAS_BOOTSTRAP_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.publish.outputs.release_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+        with:
+          toolchain: 1.98.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      - name: Verify the published release identity
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          test "$(git rev-parse "v$RELEASE_VERSION^{commit}")" = "$RELEASE_COMMIT"
+          test "$(git rev-parse "go/v$RELEASE_VERSION^{commit}")" = "$RELEASE_COMMIT"
+          python3 scripts/release.py verify "$RELEASE_VERSION" "$RELEASE_COMMIT^" "$RELEASE_COMMIT"
+      - name: Package and check for an identical existing publication
+        id: package
+        working-directory: rust
+        run: |
+          cargo package --locked --all-features
+          python3 ../scripts/release.py published "$RELEASE_VERSION" \
+            "target/package/dialcache-$RELEASE_VERSION.crate" >> "$GITHUB_OUTPUT"
+      - name: Authenticate to crates.io with GitHub
+        id: crates-auth
+        if: steps.package.outputs.published != 'true' && env.HAS_BOOTSTRAP_TOKEN != 'true'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish the Rust crate
+        if: steps.package.outputs.published != 'true'
+        working-directory: rust
+        env:
+          # The first publication requires an API token. Remove this secret
+          # after configuring trusted publishing to use short-lived OIDC tokens.
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.crates-auth.outputs.token }}
+        run: cargo publish --locked --all-features
+      - name: Record Rust release
+        run: echo "Rust dialcache@$RELEASE_VERSION published from $RELEASE_COMMIT to https://crates.io/crates/dialcache/$RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"

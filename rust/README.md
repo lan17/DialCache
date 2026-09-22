@@ -10,7 +10,7 @@ deterministic rollout, sparse runtime policy, request and process coalescing,
 tracked invalidation, source and read deadlines, stale recovery, dark and
 served-hit shadow validation, compression, and failure-isolated observability.
 
-The [Quint models](../formal/README.md) are the behavioral source of truth.
+The [Quint models](https://github.com/lan17/DialCache/blob/main/formal/README.md) are the behavioral source of truth.
 The Rust conformance harness replays the same sampled histories and named
 public-action regressions as the other ports, plus the fixed scenarios and
 Quint-derived protocol vectors, through the shared Node replay coordinator.
@@ -58,7 +58,7 @@ are misses; compatible remote JSON may still decode into the requested type.
 Simultaneous calls sharing a key also share one source result, so an incompatible
 coalesced follower returns a type error. Use a consistent value type per key.
 
-Run the complete [basic example](./examples/basic.rs), which demonstrates a
+Run the complete [basic example](https://github.com/lan17/DialCache/blob/main/rust/examples/basic.rs), which demonstrates a
 structured value, an asynchronous source and reuse across two request scopes:
 
 ```sh
@@ -66,7 +66,7 @@ cd rust
 cargo run --example basic
 ```
 
-The [Redis example](./examples/redis.rs) configures application-owned connection
+The [Redis example](https://github.com/lan17/DialCache/blob/main/rust/examples/redis.rs) configures application-owned connection
 and command timeouts, enables tracked Redis caching and demonstrates
 invalidation. With a Redis server running:
 
@@ -254,7 +254,7 @@ invalidation by either language. The tests are `#[ignore]`d, and
 
 ## Validation and reproducing a trace
 
-Use the repository [Make targets](../Makefile) from its root. CI pins Rust
+Use the repository [Make targets](https://github.com/lan17/DialCache/blob/main/Makefile) from its root. CI pins Rust
 1.98.1, Go 1.27.1, Node 24 and pnpm 10.33.0. Rust conformance tests use the
 shared Node replay coordinator for command mappings and assertions; the crate
 itself has no Node dependency.
@@ -271,7 +271,7 @@ make mutations-rust    # Measure the Rust fault catalog (formal/rust-mutations.j
 copy of the crate and requires the conformance harness to detect it
 (`DIALCACHE_RUST_SUITE=generated` for the Quint-generated evidence,
 `DIALCACHE_RUST_SUITE=fixed` for the fixed scenarios); see
-[SEMANTIC-COVERAGE.md](../formal/SEMANTIC-COVERAGE.md).
+[SEMANTIC-COVERAGE.md](https://github.com/lan17/DialCache/blob/main/formal/SEMANTIC-COVERAGE.md).
 
 Without overrides, `cargo test --all-features --test conformance` replays the
 committed smoke histories, every fixed scenario and every protocol vector.

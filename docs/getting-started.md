@@ -38,8 +38,9 @@ and module-version details.
 
 <LanguageContent language="rust">
 
-The Rust crate is currently **unpublished**. From a repository checkout, use a
-path dependency pointing at its `rust/` directory:
+For a published Rust release, run `cargo add dialcache`. Before the first
+crates.io publication, or for unreleased source, use a path dependency pointing
+at a repository checkout's `rust/` directory:
 
 ```toml
 [dependencies]
