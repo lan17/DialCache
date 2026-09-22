@@ -1,6 +1,6 @@
 [package]
 name = "dialcache"
-version = "0.1.0"
+version = "0.23.4"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"
@@ -8,7 +8,10 @@ description = "Explicitly enabled, layered caching with runtime rollout, request
 repository = "https://github.com/lan17/DialCache"
 keywords = ["cache", "redis", "async"]
 categories = ["caching"]
-publish = false
+publish = ["crates-io"]
+
+[package.metadata.docs.rs]
+features = ["redis", "prometheus"]
 
 [features]
 default = ["tokio"]

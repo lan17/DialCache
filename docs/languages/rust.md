@@ -7,8 +7,10 @@ operations while following the shared behavioral contract.
 
 ## Installation and runtime
 
-The crate is currently **unpublished**. Use a path dependency from your
-application to a repository checkout:
+Rust releases use the same version as npm and Go through the
+[release workflow](../maintainers.md#releasing). After the first crates.io
+publication, install a released version with `cargo add dialcache`. Before that
+first publication, or to use an unreleased checkout, use a path dependency:
 
 ```toml
 [dependencies]
@@ -19,8 +21,8 @@ serde = { version = "1", features = ["derive"] }
 
 Adjust the path to your checkout. The core crate requires Rust 1.85 or later;
 the current `redis` dependency requires 1.88. The repository pins its CI toolchain
-in `rust/rust-toolchain.toml`. There is no released crates.io/docs.rs version to
-install or link to yet.
+in `rust/rust-toolchain.toml`. Available registry versions are listed on
+[crates.io](https://crates.io/crates/dialcache); docs.rs builds their API references.
 
 Build the cache inside a live Tokio runtime with the time driver enabled. The
 default `TokioRuntime` captures that handle. `TokioRuntime::from_handle` permits
