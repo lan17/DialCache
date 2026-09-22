@@ -195,22 +195,39 @@ class RegistryTests(ReleaseFixture):
                     with self.assertRaises(python_release.ReleaseError):
                         python_release.verify_published(VERSION, self.dist, attempts=1)
 
-    def test_verification_polls_only_missing_files(self):
-        replies = [None, release_metadata(self.dist, [WHEEL]), release_metadata(self.dist)]
-        with patch.object(python_release, "registry_release", side_effect=replies) as registry:
-            with patch.object(python_release.time, "sleep") as sleep:
+    def test_verification_waits_for_delayed_visibility_of_exact_original_files(self):
+        elapsed = 0
+
+        def sleep(seconds):
+            nonlocal elapsed
+            elapsed += seconds
+
+        def registry_response(version):
+            self.assertEqual(version, VERSION)
+            # The first real publication remained absent beyond the old
+            # 25-second window. Model a lagging API followed by a partial view.
+            if elapsed <= 30:
+                return None
+            if elapsed <= 75:
+                return release_metadata(self.dist, [WHEEL])
+            return release_metadata(self.dist)
+
+        with patch.object(python_release, "registry_release", side_effect=registry_response) as registry:
+            with patch.object(python_release.time, "sleep", side_effect=sleep) as sleeping:
                 python_release.verify_published(VERSION, self.dist)
-        self.assertEqual(registry.call_count, 3)
-        self.assertEqual(sleep.call_count, 2)
-        sleep.assert_called_with(5)
+        self.assertEqual(elapsed, 90)
+        self.assertEqual(registry.call_count, 7)
+        self.assertEqual(sleeping.call_count, 6)
+        self.assertTrue(all(call.args == (15,) for call in sleeping.call_args_list))
 
     def test_verification_exhausts_bounded_retries(self):
         with patch.object(python_release, "registry_release", return_value=None) as registry:
             with patch.object(python_release.time, "sleep") as sleep:
                 with self.assertRaisesRegex(python_release.ReleaseError, "missing release files"):
                     python_release.verify_published(VERSION, self.dist)
-        self.assertEqual(registry.call_count, 6)
-        self.assertEqual(sleep.call_count, 5)
+        self.assertEqual(registry.call_count, 12)
+        self.assertEqual(sleep.call_count, 11)
+        self.assertEqual(sum(call.args[0] for call in sleep.call_args_list), 165)
 
     def test_verification_does_not_retry_conflicts_or_registry_errors(self):
         conflict = release_metadata(self.dist)
