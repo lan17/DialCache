@@ -180,25 +180,12 @@ pub(crate) async fn run(core: Arc<Core>, scope: Scope, op: Arc<ErasedOperation>)
         }
     };
     let overlay: Result<Option<crate::policy::RuntimePolicy>, BoxError> = match &core.provider {
-        Some(provider) => {
-            let pending = start_pending(
-                core.runtime.as_ref(),
-                {
-                    let provider = provider.clone();
-                    let identity = identity.clone();
-                    async move {
-                        provider(identity)
-                            .await
-                            .map_err(|e| Arc::from(e) as SharedError)
-                    }
-                },
-                |message| Err(Arc::new(PanicError(message)) as SharedError),
-            );
-            pending
-                .wait()
-                .await
-                .map_err(|e| Box::new(SharedErrorWrapper(e)) as BoxError)
-        }
+        Some(provider) => AssertUnwindSafe(async { provider(identity.clone()).await })
+            .catch_unwind()
+            .await
+            .unwrap_or_else(
+                |payload| Err(Box::new(PanicError(panic_message(payload))) as BoxError),
+            ),
         None => Ok(None),
     };
     let resolved = overlay.and_then(|overlay| {

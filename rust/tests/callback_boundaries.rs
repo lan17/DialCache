@@ -5,7 +5,7 @@ use std::future::{ready, Ready};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use dialcache::observe::{ErrorKind, RecoveryOutcome, ShadowOutcome};
+use dialcache::observe::{ErrorKind, Layer, RecoveryOutcome, ShadowOutcome};
 use dialcache::testing::{TestExecutor, WALL_EPOCH_MS};
 use dialcache::{
     BoxError, DialCache, Event, Frame, FromSync, Identity, InvalidateRequest, JsonCodec,
@@ -309,6 +309,165 @@ fn dark_shadow_distinguishes_its_deadline_from_application_timeout_errors() {
                 ShadowOutcome::SourceError
             }],
             "{error_kind}"
+        );
+    }
+}
+
+#[test]
+fn provider_construction_poll_and_returned_failures_preserve_source_results() {
+    for failure in ["construct", "poll", "error"] {
+        let mut executor = TestExecutor::new(WALL_EPOCH_MS);
+        let events = Arc::new(Events::default());
+        let cache = DialCache::builder()
+            .clock_arc(executor.clock.clone())
+            .runtime_arc(executor.runtime.clone())
+            .observer_arc(events.clone())
+            .policy_provider(
+                move |_| -> BoxFuture<'static, Result<Option<dialcache::RuntimePolicy>, BoxError>> {
+                    if failure == "construct" {
+                        panic!("provider future construction");
+                    }
+                    Box::pin(async move {
+                        if failure == "poll" {
+                            panic!("provider future poll");
+                        }
+                        Err("provider failed".into())
+                    })
+                },
+            )
+            .build()
+            .unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let request = cache.enable_guard();
+        for expected in 1..=2 {
+            let (cache, scope, calls) = (cache.clone(), request.scope().clone(), calls.clone());
+            let value = executor.block_on(async move {
+                cache
+                    .get_or_load(
+                        &scope,
+                        Operation::<usize>::new(Identity::new("thing", "one", "ProviderFailure"))
+                            .policy(Policy::default().local_ttl_sec(60)),
+                        move |_| {
+                            let value = calls.fetch_add(1, Ordering::SeqCst) + 1;
+                            async move { Ok(value) }
+                        },
+                    )
+                    .await
+                    .unwrap()
+            });
+            assert_eq!(
+                *value, expected,
+                "provider failure must bypass cache publication"
+            );
+        }
+        let policy_errors = events.0.lock().iter().filter(|event| matches!(event,
+            Event::Error { labels, error: ErrorKind::ConfigResolution, .. } if labels.layer == Layer::Noop
+        )).count();
+        assert_eq!(policy_errors, 2, "{failure}");
+    }
+}
+
+#[test]
+fn held_policy_survives_caller_cancellation_and_rechecks_scope_closure() {
+    for close_scope in [false, true] {
+        let mut executor = TestExecutor::new(WALL_EPOCH_MS);
+        let (release, held) = futures::channel::oneshot::channel::<()>();
+        let held = Arc::new(Mutex::new(Some(held)));
+        let provider_calls = Arc::new(AtomicUsize::new(0));
+        let events = Arc::new(Events::default());
+        let cache = DialCache::builder()
+            .clock_arc(executor.clock.clone())
+            .runtime_arc(executor.runtime.clone())
+            .observer_arc(events.clone())
+            .policy_provider({
+                let provider_calls = provider_calls.clone();
+                move |_| {
+                    provider_calls.fetch_add(1, Ordering::SeqCst);
+                    let held = held.lock().take();
+                    async move {
+                        if let Some(held) = held {
+                            held.await.unwrap();
+                        }
+                        Ok(None)
+                    }
+                }
+            })
+            .build()
+            .unwrap();
+        let mut request = Some(cache.enable_guard());
+        let scope = request.as_ref().unwrap().scope().clone();
+        let operation = Operation::<u64>::new(Identity::new("thing", "one", "HeldProvider"))
+            .policy(Policy::default().local_ttl_sec(60));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let source_enabled = Arc::new(Mutex::new(Vec::new()));
+        let caller_finished = Arc::new(AtomicBool::new(false));
+        let (cancel, registration) = futures::future::AbortHandle::new_pair();
+        executor.spawn({
+            let (cache, operation, calls) = (cache.clone(), operation.clone(), calls.clone());
+            let (source_enabled, caller_finished) =
+                (source_enabled.clone(), caller_finished.clone());
+            async move {
+                let pending = cache.get_or_load(&scope, operation, move |scope| {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    source_enabled.lock().push(scope.is_enabled());
+                    async { Ok(7) }
+                });
+                let result = futures::future::Abortable::new(pending, registration).await;
+                assert_eq!(result.is_err(), !close_scope);
+                if let Ok(value) = result {
+                    assert_eq!(*value.unwrap(), 7);
+                }
+                caller_finished.store(true, Ordering::SeqCst);
+            }
+        });
+        executor.drain();
+        assert_eq!(provider_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(!caller_finished.load(Ordering::SeqCst));
+        if close_scope {
+            drop(request.take());
+        } else {
+            cancel.abort();
+        }
+        executor.drain();
+        assert_eq!(caller_finished.load(Ordering::SeqCst), !close_scope);
+        release.send(()).unwrap();
+        executor.drain();
+        assert!(caller_finished.load(Ordering::SeqCst));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(*source_enabled.lock(), vec![!close_scope]);
+        let source_layers: Vec<_> = events
+            .0
+            .lock()
+            .iter()
+            .filter_map(|event| match event {
+                Event::Fallback { labels, .. } => Some(labels.layer),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            source_layers,
+            vec![if close_scope {
+                Layer::Noop
+            } else {
+                Layer::Local
+            }]
+        );
+        let calls_for_next = calls.clone();
+        let value = executor.block_on(async move {
+            let request = cache.enable_guard();
+            cache
+                .get_or_load(request.scope(), operation, move |_| {
+                    calls_for_next.fetch_add(1, Ordering::SeqCst);
+                    async { Ok(8) }
+                })
+                .await
+                .unwrap()
+        });
+        assert_eq!(*value, if close_scope { 8 } else { 7 });
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            if close_scope { 2 } else { 1 }
         );
     }
 }
