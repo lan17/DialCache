@@ -17,7 +17,7 @@ const aggregateTargets = {
 export const targetDescriptions = {
   check: 'TypeScript, Go and Rust checks, docs build and reviewed inventories; no Quint generation or Docker',
   'check-ts': 'Typecheck, unit coverage, build and packed-package checks on Node 24',
-  'check-go': 'Go vet, formatting check and default tests with race detection',
+  'check-go': 'Go vet, formatting check and default tests with race detection and coverage (go/coverage-unit.out)',
   'check-rust': 'Rust formatting check, clippy with warnings denied and default tests including the smoke conformance run',
   docs: 'Check shared examples and links; generate native API references and the documentation site (Go and Rust required)',
   audit: 'Check source, behavior, feature, Go and generated-fixture freshness inventories',
@@ -42,7 +42,7 @@ export const targetDescriptions = {
   'mutations-merge-rust': 'Merge Rust mutation shards into the complete report; refuses inconsistent or missing shards',
   integration: 'Run real TypeScript, Go and Rust Redis/Valkey/Cluster integration checks',
   'integration-ts': 'Run TypeScript real integration checks',
-  'integration-go': 'Run Go real integration and interoperability checks with race detection',
+  'integration-go': 'Run Go real integration and interoperability checks with race detection and coverage (go/coverage-integration.out)',
   'integration-rust': 'Run Rust real Redis/Valkey/Cluster integration checks and invalidation vector replay',
   'package-floor': 'Check zstd and the packed package on exact Node 22.15.0 (NODE22_BIN)',
   ci: 'Run check, package-floor, formal, model-check, integration and mutations in dependency order',
@@ -153,8 +153,8 @@ export function validationPlan(target, { directory = root, environment = process
   // Opt-in native workers need inputs from the mutation/vector coordinator.
   // Exclude exactly those roots from the full corpus command so the completed
   // report can keep rejecting every actual skip, including required cases.
-  const nativeGo = full => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
-    'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m',
+  const nativeGo = (full, { coverage = false } = {}) => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
+    'test', '-race', '-count=1', ...(coverage ? ['-covermode=atomic', '-coverprofile=coverage-unit.out'] : []), ...(full ? ['-json', '-timeout=35m',
       '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver|TestDocsTrackedInvalidation)$'] : []), './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   // The Rust conformance harness is one cargo test target. Without directory
@@ -170,7 +170,7 @@ export function validationPlan(target, { directory = root, environment = process
   const plans = {
     'check-ts': [pnpm('Typecheck TypeScript', 'typecheck'), pnpm('Run TypeScript unit tests with coverage', 'test'),
       pnpm('Build package', 'build'), pnpm('Check packed package on Node 24', 'test:package')],
-    'check-go': [go('Go vet', 'vet', './...'), { label: 'Check Go formatting', command: 'gofmt', args: ['-l', 'go'], requireEmptyStdout: true }, nativeGo(false)],
+    'check-go': [go('Go vet', 'vet', './...'), { label: 'Check Go formatting', command: 'gofmt', args: ['-l', 'go'], requireEmptyStdout: true }, nativeGo(false, { coverage: true })],
     'check-rust': [cargo('Check Rust formatting', 'fmt', '--check'),
       cargo('Lint Rust with clippy', 'clippy', '--all-targets', '--all-features', '--', '-D', 'warnings'),
       cargo('Run Rust default tests', 'test', '--all-features')],
@@ -218,7 +218,7 @@ export function validationPlan(target, { directory = root, environment = process
     'mutations-merge-go': [node('Merge Go mutation shards', 'formal/merge-mutation-reports.mjs', 'go')],
     'mutations-merge-rust': [node('Merge Rust mutation shards', 'formal/merge-mutation-reports.mjs', 'rust')],
     'integration-ts': [pnpm('Run TypeScript Redis/Valkey/Cluster integrations', 'test:integration')],
-    'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
+    'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-covermode=atomic', '-coverprofile=coverage-integration.out', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
     // The Rust integration tests are #[ignore]d, so a plain cargo test reports
     // them as ignored and never needs Docker; this lane runs exactly them.
     'integration-rust': [cargo('Run Rust Redis/Valkey/Cluster integrations', 'test', '--all-features', '--test', 'redis_integration', '--', '--ignored')],
