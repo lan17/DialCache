@@ -1597,13 +1597,21 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "dcef48b1acaea88d04dd2ea49ed09f7ce7ea17a019f41b9df257a31b6560bebf",
+      "sha256": "0647ea2c0ec98ff7f7a19a6711dd37a7ff4dbb0b072dbc608b8321d4d3318b8f",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
-        {"line":23,"title":"Use"},
-        {"line":89,"title":"Configuration and effects"},
-        {"line":147,"title":"Values, codecs and observability"},
-        {"line":193,"title":"Validation and reproducing a trace"}
+        {"line":24,"title":"Install"},
+        {"line":36,"title":"Usage"},
+        {"line":119,"title":"Enable caching per request"},
+        {"line":138,"title":"Define use cases"},
+        {"line":156,"title":"Set and change policy"},
+        {"line":176,"title":"Connect Redis"},
+        {"line":211,"title":"Handle errors and deadlines"},
+        {"line":238,"title":"Choose value types and codecs"},
+        {"line":259,"title":"Export metrics and logs"},
+        {"line":286,"title":"Defaults"},
+        {"line":299,"title":"Advanced clock and executor hooks"},
+        {"line":310,"title":"Verify the port"}
       ],
       "review": {
         "kind": "contract-guide",
