@@ -29,20 +29,26 @@ test('rejects missing regions instead of letting VitePress silently show the who
   const root = mkdtempSync(join(tmpdir(), 'dialcache-docs-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, 'docs/languages'), { recursive: true });
-  const ports = ['typescript', 'go', 'rust'].map(id => ({ id, guide: `/languages/${id}`, example: `${id}.txt` }));
+  const ports = ['typescript', 'go', 'rust', 'python'].map(id => ({ id, guide: `/languages/${id}`, example: id === 'python' ? 'python.py' : `${id}.txt` }));
   writeFileSync(join(root, 'docs/ports.json'), JSON.stringify(ports));
   for (const port of ports) {
     writeFileSync(join(root, `docs${port.guide}.md`), '# Install\n');
-    writeFileSync(join(root, port.example), '// #region scope\nreal_code();\n// #endregion scope\n');
+    const marker = port.id === 'python' ? '# ' : '// #';
+    writeFileSync(join(root, port.example), `${marker}region scope\nreal_code();\n${marker}endregion scope\n`);
   }
-  const section = id => `<LanguageContent language="${id}">\n\n<<< @/../${id}.txt#scope\n\n</LanguageContent>\n`;
+  const section = id => `<LanguageContent language="${id}">\n\n<<< @/../${ports.find(port => port.id === id).example}#scope\n\n</LanguageContent>\n`;
   writeFileSync(join(root, 'docs/concepts.md'), ports.map(port => section(port.id)).join('\n'));
-  assert.deepEqual(checkDocsSources(root), { ports: 3, imports: 3 });
+  assert.deepEqual(checkDocsSources(root), { ports: 4, imports: 4 });
+  writeFileSync(join(root, 'python.py'), '# #region scope\nreal_code()\n# #endregion scope\n');
+  assert.throws(() => checkDocsSources(root), /missing, duplicate or unclosed region/);
+  writeFileSync(join(root, 'python.py'), '# region scope\nreal_code()\n# endregion scope\n');
   writeFileSync(join(root, 'rust.txt'), 'code_without_the_named_region();\n');
   assert.throws(() => checkDocsSources(root), /missing, duplicate or unclosed region/);
   writeFileSync(join(root, 'rust.txt'), '// #region scope\nreal_code();\n// #endregion scope\n');
   writeFileSync(join(root, 'docs/concepts.md'), section('typescript') + section('go'));
   assert.throws(() => checkDocsSources(root), /scope missing rust/);
+  writeFileSync(join(root, 'docs/concepts.md'), ports.filter(port => port.id !== 'python').map(port => section(port.id)).join('\n'));
+  assert.throws(() => checkDocsSources(root), /scope missing python/);
   writeFileSync(join(root, 'docs/concepts.md'), section('typescript').replace('language="typescript"', 'language="ruby"'));
   assert.throws(() => checkDocsSources(root), /unknown language ruby/);
 });

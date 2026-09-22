@@ -8,13 +8,14 @@ import { nativeBinding } from './conformance-bindings.mjs';
 import { parseTypeScriptReport } from './conformance-adapters.mjs';
 import { checkGoReplay } from './check-go-replay.mjs';
 import { checkRustReplay } from './check-rust-replay.mjs';
+import { checkPythonReplay } from './check-python-replay.mjs';
 import { canonicalSeed, reportFileName } from './witnesses.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = value => createHash('sha256').update(value).digest('hex');
 const inside = (directory, path) => path.startsWith(directory + sep);
-const reportPaths = { typescript: '.formal-traces/ts-replay.json', go: '.formal-traces/go-replay.jsonl', rust: '.formal-traces/rust-replay.jsonl' };
-const contextPaths = { typescript: '.formal-traces/ts-context.json', go: '.formal-traces/go-context.json', rust: '.formal-traces/rust-context.json' };
+const reportPaths = { typescript: '.formal-traces/ts-replay.json', go: '.formal-traces/go-replay.jsonl', rust: '.formal-traces/rust-replay.jsonl', python: '.formal-traces/python-replay.jsonl' };
+const contextPaths = { typescript: '.formal-traces/ts-context.json', go: '.formal-traces/go-context.json', rust: '.formal-traces/rust-context.json', python: '.formal-traces/python-context.json' };
 
 export function explorationSeed(value = `0x${randomBytes(8).toString('hex')}`) {
   try { return canonicalSeed(value); }
@@ -31,12 +32,13 @@ export function explorationPlan(directory, seed, options = {}) {
     // This campaign uses the manifest's pinned seed, not the exploration seed.
     // Full acceptance keeps it; exploration retains every unmodified model job.
     if (script === 'formal/check-model-properties.mjs') return [];
-    if (step.remove || ['formal/conformance-adapters.mjs', 'formal/check-go-replay.mjs', 'formal/check-rust-replay.mjs'].includes(script)
+    if (step.remove || ['formal/conformance-adapters.mjs', 'formal/check-go-replay.mjs', 'formal/check-rust-replay.mjs', 'formal/check-python-replay.mjs'].includes(script)
       || script === 'formal/conformance.mjs' && step.args[1] === 'check') return [];
     if (script === 'formal/conformance.mjs' && step.args[1] === 'prepare') {
       return [{ label: `Prepare exploratory ${step.args[2]} context`, explorationContext: step.args[2] }];
     }
     if (script === 'formal/run-models.mjs') return [{ ...step, env: { ...step.env, QUINT_SEED: normalized } }];
+    if (script === 'formal/run-python-replay.mjs') return [{ ...step, nativeReport: 'python' }];
     if (step.env?.DIALCACHE_MBT_TRACE_DIR) return [{ ...step, nativeReport: step.command === 'go' ? 'go' : step.command === 'cargo' ? 'rust' : 'typescript' }];
     // A seed's missing witness is classified by every native report. The shared
     // evaluator runs before native replay and still writes evidence for complete
@@ -159,21 +161,24 @@ export function nativeExplorationResult(language, text, context, directory, pack
       required: inventory.map(entry => ({ name: nativeBinding(entry, language), category: entry.category })) };
     checkGoReplay(events.map(event => JSON.stringify(event.Action === 'fail' ? { ...event, Action: 'pass' } : event)).join('\n'), native);
     startedAt = Date.parse(events[0].Time); finishedAt = Date.parse(events.at(-1).Time);
-  } else if (language === 'rust') {
-    // The Rust report names cases by inventory id; a failed case record is the
+  } else if (language === 'rust' || language === 'python') {
+    // These reports name cases by inventory id; a failed case record is the
     // native counterexample. The all-passed copy reuses the strict report gate.
     const records = text.trim().split('\n').map(line => JSON.parse(line));
     const cases = new Map(inventory.map(entry => [nativeBinding(entry, language), entry]));
     for (const record of records) {
+      if (record.kind === 'case' && !['passed', 'failed'].includes(record.status)) throw new Error(`Skipped or unfinished ${language} case.`);
       if (record.kind !== 'case' || record.status !== 'failed') continue;
       const entry = cases.get(record.id);
       if (entry) failed.push(entry); else otherFailures.push(record.id);
     }
     const finish = records.at(-1);
-    if (finish?.kind !== 'finish') throw new Error('Rust report has no finish record: the harness crashed or timed out before completing.');
-    if ((finish.status === 'failed') !== (failed.length + otherFailures.length > 0)) throw new Error('Rust report status disagrees with its case records.');
-    checkRustReplay(records.map(record => JSON.stringify(record.kind === 'case' ? { ...record, status: 'passed', message: undefined }
-      : record.kind === 'finish' ? { ...record, status: 'passed', failed: 0 } : record)).join('\n'), inventory);
+    if (finish?.kind !== 'finish') throw new Error(`${language} report has no finish record: the harness crashed or timed out before completing.`);
+    if (!['passed', 'failed'].includes(finish.status) || (finish.status === 'failed') !== (failed.length + otherFailures.length > 0)
+      || finish.failed !== failed.length + otherFailures.length) throw new Error(`${language} report status disagrees with its case records.`);
+    (language === 'rust' ? checkRustReplay : checkPythonReplay)(records.map(record => JSON.stringify(record.kind === 'case' ? { ...record, status: 'passed', message: undefined }
+      : record.kind === 'finish' ? { ...record, status: 'passed', failed: 0 } : record)).join('\n'), inventory,
+    language === 'python' ? { corpus: context.corpus } : undefined);
     startedAt = records[0]?.startedAt; finishedAt = finish.finishedAt;
   } else throw new Error('Unsupported exploratory port.');
   if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt) || startedAt < context.createdAt
@@ -240,9 +245,10 @@ function savedExploration(path) {
 }
 
 function linkDependencies(directory, workspace, sources, replay) {
-  if (replay) for (const path of ['package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'typescript/package.json']) {
+  if (replay) for (const path of ['package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'typescript/package.json',
+    ...(Object.hasOwn(sources, 'python/pyproject.toml') ? ['python/pyproject.toml'] : [])]) {
     if (!Object.hasOwn(sources, path) || hash(readFileSync(resolve(directory, path))) !== sources[path]) {
-      throw new Error(`Saved ${path} differs from the current dependency runtime; replay requires matching package and lockfile bytes.`);
+      throw new Error(`Saved ${path} differs from the current dependency runtime; replay requires matching dependency manifest bytes.`);
     }
   }
   symlinkSync(resolve(directory, 'node_modules'), resolve(workspace, 'node_modules'), 'dir');
@@ -308,6 +314,12 @@ async function executeExploration(seed, { directory = root, environment = proces
   const parent = resolve(directory, '.formal-traces/exploration');
   mkdirSync(parent, { recursive: true });
   const output = mkdtempSync(resolve(parent, `${selectedSeed}-`)), workspace = resolve(output, 'workspace');
+  // Reuse only the dependency interpreter. The runner prepends its own source
+  // tree; the prerequisite probe also imports the snapshot, never an editable
+  // installation's original checkout. A virtualenv is not copied into evidence.
+  const runtimeEnvironment = { ...environment,
+    PYTHON: environment.PYTHON ?? resolve(directory, 'python/.venv/bin/python'),
+    PYTHONPATH: resolve(workspace, 'python') };
   const report = { schemaVersion: 1, kind: 'exploration', acceptance: false, seed: selectedSeed,
     status: 'running', startedAt: new Date().toISOString(), sources: {}, native: [],
     ...(origin ? { replayOrigin: { path: origin.reportPath, reportSha256: origin.reportSha256,
@@ -341,17 +353,23 @@ async function executeExploration(seed, { directory = root, environment = proces
       : await import(pathToFileURL(resolve(workspace, 'formal/explore.mjs')).href);
     if (!run) {
       const validation = await import(pathToFileURL(resolve(workspace, 'formal/validation.mjs')).href);
-      validation.checkPrerequisites('explore', { directory: workspace, environment: cleanEnvironment(environment) });
+      validation.checkPrerequisites('explore', { directory: workspace, environment: cleanEnvironment(runtimeEnvironment) });
     }
-    report.native = await snapshot.runExplorationSteps(snapshot.explorationPlan(workspace, selectedSeed, { environment }), {
-      directory: workspace, environment: cleanEnvironment(environment), onResult: results => { report.native = results; save(); },
+    const plan = snapshot.explorationPlan(workspace, selectedSeed, { environment: runtimeEnvironment });
+    // The copied plan owns its port inventory, just as it owns execution. A
+    // newer caller must not require a language absent from a saved snapshot.
+    const requiredLanguages = plan.filter(step => step.nativeReport !== undefined).map(step => step.nativeReport).sort();
+    if (!requiredLanguages.length || requiredLanguages.some(language => typeof language !== 'string' || !language)
+      || new Set(requiredLanguages).size !== requiredLanguages.length) throw new Error('Exploration plan has an empty or invalid native port inventory.');
+    report.native = await snapshot.runExplorationSteps(plan, {
+      directory: workspace, environment: cleanEnvironment(runtimeEnvironment), onResult: results => { report.native = results; save(); },
       // The evaluator step is tolerated so both ports replay; its failure is
       // still part of the record so a missing report explains itself.
       onToleratedFailure: (step, error) => { report.witnessStepError = `${step.label ?? 'tolerated step'}: ${error}`; save(); },
     });
     verifyHashes(workspace, [report.sources]);
     report.sourcesUnchanged = true;
-    if (report.native.map(result => result.language).sort().join() !== 'go,rust,typescript'
+    if (JSON.stringify(report.native.map(result => result.language).sort()) !== JSON.stringify(requiredLanguages)
       || report.native.some(result => !['passed', 'native-failure', 'witness-check-failure'].includes(result.status))) {
       throw new Error('Exploration did not finish every native port.');
     }

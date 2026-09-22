@@ -3,7 +3,7 @@
 DialCache wraps application reads with explicit enablement, layered storage, and
 runtime policy. These guides explain its model and feature behavior; the API
 reference collects each port's native options and contracts. Choose TypeScript,
-Go or Rust in the site selector: shared behavior stays on the same page, while
+Go, Rust or Python in the site selector: shared behavior stays on the same page, while
 examples and integration notes follow your selection.
 
 <a id="start-here"></a>
@@ -46,6 +46,7 @@ examples and integration notes follow your selection.
 | [TypeScript](languages/typescript.md) | Node.js async context, serializers, optional client adapters |
 | [Go](languages/go.md) | Context propagation, generic operations, duration and overlay types |
 | [Rust](languages/rust.md) | Scope guards, `Arc<T>` values, runtime and feature flags |
+| [Python](languages/python.md) | Async decorators, `contextvars` scopes, native values and application-owned Redis clients |
 
 [Behavior catalogue](generated/behavior.md) connects shared contracts to the
 existing formal cases. [Documentation authoring](authoring.md) explains how to
@@ -67,6 +68,8 @@ be ahead of a released npm package, Go module or Rust crate. For an installed ve
 its [release notes](https://github.com/lan17/DialCache/releases) and matching
 [release tag](https://github.com/lan17/DialCache/tags). See the
 [Rust guide](languages/rust.md) for registry releases and checkout dependencies.
+Python is currently unpublished and installed from a checkout as described in
+the [Python guide](languages/python.md).
 
 [Project overview](https://github.com/lan17/DialCache#readme)
 · [npm package](https://www.npmjs.com/package/dialcache)

@@ -124,6 +124,14 @@ The bundled observer opts into shadow outcomes. See the [Rust API](api.md).
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Python exposes the backend-neutral `metrics` callback contract. Connect events
+to your application-owned Prometheus registry; this port does not currently
+ship a Prometheus exporter. Preserve the shared labels, names and units below.
+
+</LanguageContent>
+
 ### Histogram buckets
 
 Bucket boundaries are fixed; the adapter has no bucket customization option:
@@ -220,6 +228,14 @@ shutdown. See the [Rust API](api.md).
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Connect the Python `metrics` observer to your application-owned DogStatsD
+client. This port does not currently ship a Datadog exporter. The application
+owns metric delivery, flushing and transport shutdown.
+
+</LanguageContent>
+
 ### Distribution or histogram
 
 The observation mode is required.
@@ -278,6 +294,13 @@ for them when checking final name length and series cardinality.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Any metric-name prefix or global tags come from the application's observer.
+Account for them when checking final name length and series cardinality.
+
+</LanguageContent>
+
 ### Datadog metrics
 
 The adapter emits exact increments of `1` for counters and preserves seconds
@@ -331,6 +354,13 @@ shutdown after a callback returns.
 
 Observer failures are isolated from cache and source results. A custom client
 still owns delivery errors and shutdown after a callback returns.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Observer and logger failures are isolated from cache and source outcomes.
+The application owns delivery errors and shutdown after a callback returns.
 
 </LanguageContent>
 
@@ -657,6 +687,18 @@ bundled exporters do this; merely logging mismatch warnings does not.
 A custom `Logger` receives structured `LogEvent`s. Observer/logger failures do
 not change cache results. Use the [generated Rust API](api.md) for exact native
 traits and event variants.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Pass `metrics=callback` or an object with synchronous `observe(event)`. Event
+dictionaries use the shared names and camelCase labels, such as `cacheNamespace`,
+`useCase` and `keyType`. Supplying an observer enables shadow-outcome reporting;
+an optional `supports("shadowValidation")` method can opt out.
+
+The `logger` option accepts a standard Python-compatible warning logger.
+See the [generated Python API](api.md) for signatures.
 
 </LanguageContent>
 

@@ -54,6 +54,19 @@ runtime, feature and value-ownership details.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+The Python package is currently **unpublished**. Install from a repository checkout:
+
+```sh
+python3 -m pip install './python[redis]'
+```
+
+Python 3.11 or later is required. Omit the Redis extra for local-only use.
+See the [Python guide](languages/python.md) for asyncio and client ownership.
+
+</LanguageContent>
+
 ## Wrap a reader
 
 Start with request-local caching so no Redis server or expiration timer is
@@ -87,6 +100,14 @@ file supplies imports and test setup; the source link opens the complete file.
 <<< @/../rust/tests/docs_examples.rs#request-scope{rust}
 
 [Complete executable example](https://github.com/lan17/DialCache/blob/main/rust/tests/docs_examples.rs)
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+<<< @/../python/tests/test_docs_examples.py#request-scope{python}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/python/tests/test_docs_examples.py)
 
 </LanguageContent>
 
@@ -133,6 +154,15 @@ pass-through scope. Reader values are shared as `Arc<T>`.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Use `async with cache.enable():` or `with cache.enable():` around request reads.
+`cache.disable()` temporarily bypasses caching. The outer scope owns the memo;
+tasks inheriting its context pass through after it closes. Values are shared
+Python references and should be treated as immutable.
+
+</LanguageContent>
+
 Disabling caching does not invalidate stored data. After a source mutation,
 freshness still depends on TTLs and [invalidation policy](invalidation.md).
 Treat reused in-memory values as immutable.
@@ -161,6 +191,14 @@ the identity, policy and codec. See the [Go API](api.md).
 
 Use `cache.get_or_load(scope, operation, loader)` with an `Operation<T>`.
 The result is still `Arc<T>`. See the [Rust API](api.md).
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Use `await cache.get_or_load(loader, key=..., key_type=..., use_case=...,
+default_config=...)` for an inline read, or `await cache.aget(key, loader, ...)`
+for a structured `Key`. See the [Python API](api.md).
 
 </LanguageContent>
 

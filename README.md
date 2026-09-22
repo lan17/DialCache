@@ -5,16 +5,19 @@
 [![TypeScript coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=typescript&label=TypeScript%20coverage)](https://codecov.io/gh/lan17/DialCache)
 [![Go coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=go&label=Go%20coverage)](https://codecov.io/gh/lan17/DialCache)
 [![Rust coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=rust&label=Rust%20coverage)](https://codecov.io/gh/lan17/DialCache)
+[![Python coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=python&label=Python%20coverage)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
 Read the [shared behavior guides](https://lan17.github.io/DialCache/) with a
-language selector for TypeScript, Go and Rust. Native examples in those guides
+language selector for TypeScript, Go, Rust and Python. Native examples in those guides
 are imported from source files that CI executes.
 
-**TypeScript is the reference implementation. Go and Rust are experimental.**
+**TypeScript is the reference implementation. Go, Rust, and Python are experimental.**
+The [Python asyncio guide](python/README.md) covers its native decorator API,
+request scopes, and checkout installation.
 
 DialCache organizes caching into use cases, with runtime control and
-observability for each one. Its TypeScript, Go and Rust implementations share
+observability for each one. Its TypeScript, Go, Rust and Python implementations share
 behavioral contracts and documentation.
 
 - **Off by default:** caching runs only inside an `enable()` scope.
@@ -36,6 +39,7 @@ behavioral contracts and documentation.
 | TypeScript | [`typescript/`](typescript/) — reference implementation | [TypeScript and npm](typescript/README.md) |
 | Go | [`go/`](go/) — experimental | [Go guide](go/README.md) |
 | Rust | [`rust/`](rust/) — experimental | [Rust guide](rust/README.md) · [crates.io](https://crates.io/crates/dialcache) |
+| Python | [`python/`](python/) — experimental | [Python guide](python/README.md) |
 
 Shared contracts and portable test histories live in [`formal/`](formal/).
 Run repository validation from the root; see the
@@ -152,9 +156,9 @@ for sampling and comparison behavior.
 | Recovery from selected source failures | [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html) |
 | Shared execution and deadlines | [Coalescing and liveness](https://lan17.github.io/DialCache/coalescing.html) |
 | Methods, options, and exports | [API reference](https://lan17.github.io/DialCache/api.html) |
-| Native implementations and shared behavior contracts | [TypeScript guide](typescript/README.md) · [Go guide](go/README.md) · [Rust guide](rust/README.md) · [Quint specification](formal/README.md) · [Worked walkthrough](formal/WALKTHROUGH.md) |
+| Native implementations and shared behavior contracts | [TypeScript guide](typescript/README.md) · [Go guide](go/README.md) · [Rust guide](rust/README.md) · [Python guide](python/README.md) · [Quint specification](formal/README.md) · [Worked walkthrough](formal/WALKTHROUGH.md) |
 
-The Go port, the Rust port and the TypeScript library replay the same
+The Go, Rust, and Python ports and the TypeScript library replay the same
 Quint-generated histories. Whether those histories reach every required boundary is decided by
 one language-neutral evaluator, `node formal/witnesses.mjs evaluate`, that any
 port runs over the same corpus; no port depends on another port's test suite

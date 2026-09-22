@@ -369,6 +369,30 @@
         "shadow-read-deadlines"
       ],
       "limits": "Same generated histories and portable scenarios as TypeScript and Go and all protocol vectors, replayed by the Rust conformance harness against the shared witness evidence. Claims require current corpus and witness fingerprints; finite evidence does not prove every possible schedule. Native Redis integration is not yet part of the claim."
+    },
+    {
+      "id": "python",
+      "profiles": [
+        "core",
+        "effects",
+        "scope",
+        "recovery",
+        "policy",
+        "shadow",
+        "admission",
+        "layers",
+        "independent",
+        "recovery-read",
+        "local-failure",
+        "runtime-boundaries",
+        "shadow-layers",
+        "local-clock",
+        "source-budgets",
+        "dark-layers",
+        "shadow-read-deadlines"
+      ],
+      "definition": "python/README.md",
+      "limits": "Asyncio implementation with all shared histories, fixed scenarios, protocol vectors and corpus-bound witness evidence in the complete replay lane. Claims require a current prepared completion report; smoke results and partial reports do not establish completion. Native Redis/Valkey/Cluster integration is validated separately. Finite evidence does not prove every possible schedule; Python semantic mutation coverage is not yet registered."
     }
   ],
   "replaySources": [

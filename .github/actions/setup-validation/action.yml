@@ -1,5 +1,5 @@
 name: Set up validation
-description: Install the shared pinned Node/pnpm environment and optional Go/Quint tools.
+description: Install the shared pinned Node/pnpm environment and optional native language and Quint tools.
 inputs:
   go:
     description: Install the pinned Go toolchain.
@@ -13,6 +13,12 @@ inputs:
   rust:
     description: Install the pinned Rust toolchain (rust/rust-toolchain.toml) with clippy and rustfmt.
     default: "false"
+  python:
+    description: Install Python and the editable package with test and Redis dependencies.
+    default: "false"
+  python-version:
+    description: Python version for the native validation lane.
+    default: "3.14"
 runs:
   using: composite
   steps:
@@ -26,6 +32,18 @@ runs:
     - name: Install project dependencies
       shell: bash
       run: corepack pnpm install --frozen-lockfile
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      if: inputs.python == 'true'
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+        cache-dependency-path: python/pyproject.toml
+    - name: Install Python package and validation dependencies
+      if: inputs.python == 'true'
+      shell: bash
+      run: |
+        python -m venv python/.venv
+        python/.venv/bin/python -m pip install -e './python[test,redis]'
     - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
       if: inputs.go == 'true'
       with:

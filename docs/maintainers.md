@@ -8,7 +8,10 @@ benchmarks, and the existing release process.
 ## Validation
 
 Use Node.js 24 and the repository's pinned pnpm through Corepack. Go and Rust
-checks use their CI-pinned toolchains; full formal checks also require the pinned
+checks use their CI-pinned toolchains. Prepare Python 3.11 or later with
+`python3 -m venv python/.venv` and
+`python/.venv/bin/python -m pip install -e './python[test,redis]'`.
+Full formal checks also require the pinned
 Quint executable. Run `make help` for targets and prerequisites:
 
 ```bash
@@ -19,14 +22,14 @@ make integration
 
 `make check` runs strict TypeScript checks and coverage, bundles/declarations,
 packed ESM/CJS consumer checks, Go vet/formatting/race tests, Rust formatting,
-Clippy and native tests, documentation builds, and evidence inventories.
-TypeScript, Go and Rust replay the committed
+Clippy and native tests, Python native tests, documentation builds, and evidence inventories.
+TypeScript, Go, Rust and Python replay the committed
 Quint smoke fixtures and protocol cases. Integration tests require a
 Docker-compatible runtime for Redis, Valkey, and Redis Cluster and exercise
-all three language bindings.
+all four language bindings.
 
 `make formal` checks the scheduled Quint models, generates the complete corpus,
-and requires full TypeScript, Go and Rust replay with matching evidence fingerprints.
+and requires full TypeScript, Go, Rust and Python replay with matching evidence fingerprints.
 `make model-check` runs the separate finite symbolic checks; it needs Java 21,
 `tar` and a checksummed Apalache release and is the only lane that does.
 `make mutations` challenges the tests with the catalogued implementation
@@ -144,7 +147,7 @@ also be run manually from `main` to republish. Pull requests and manual runs fro
 other branches cannot upload a Pages artifact or deploy. The deployment job uses
 GitHub's short-lived token and OIDC; no deployment secret is needed.
 
-The published reference follows `main` independently of npm releases. Use the
+The published reference follows `main` independently of registry releases. Use the
 Markdown at a release tag when reading about an older installed version.
 
 ## Cache-path benchmark
@@ -274,6 +277,9 @@ The workflow tags the same commit `go/vX.Y.Z` for the Go module, then a separate
 checks out the captured release commit and verifies both tags point to it.
 TypeScript, Go and Rust therefore use one selected version and release commit;
 the first Rust registry release need not start at `0.1.0`.
+
+Python is currently unpublished and is installed from a checkout; its CI builds
+a wheel but does not publish to PyPI.
 
 Go has no package registry. A module version is a Git tag that `go get`
 resolves through the public module proxy, and a module in a subdirectory

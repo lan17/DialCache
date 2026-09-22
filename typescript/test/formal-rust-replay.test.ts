@@ -43,7 +43,7 @@ describe("Rust replay report gate", () => {
   it("binds every inventory entry to its own id", () => {
     for (const entry of inventory) expect(nativeBinding(entry, "rust")).toBe(entry.id);
     expect(nativeBinding(inventory[0]!, "go")).not.toBe(inventory[0]!.id);
-    expect(() => nativeBinding(inventory[0]!, "zig")).toThrow(/TypeScript, Go and Rust/);
+    expect(() => nativeBinding(inventory[0]!, "zig")).toThrow(/TypeScript, Go, Rust and Python/);
   });
 
   it("accepts a complete report and summarizes it by category and profile", () => {
@@ -143,7 +143,7 @@ describe("Rust validation lanes", () => {
       expect(step.env, step.label).toBeUndefined();
       expect(step.cwd, step.label).toBe("rust");
     }
-    expect(validationPlan("check", { directory })).toEqual(["check-ts", "check-go", "check-rust", "docs", "audit"].flatMap(target => validationPlan(target, { directory })));
+    expect(validationPlan("check", { directory })).toEqual(["check-ts", "check-go", "check-rust", "check-python", "docs", "audit"].flatMap(target => validationPlan(target, { directory })));
   });
 
   it("replays the complete corpus against the shared evidence and adapts the harness report into a completion", () => {
@@ -170,19 +170,21 @@ describe("Rust validation lanes", () => {
     expect(plan.some(step => step.args?.some(argument => /\.formal-traces\/(ts|go)-/.test(argument)))).toBe(false);
     const go = validationPlan("formal-go", { directory }).find(step => step.command === "go" && step.env)!;
     for (const key of Object.keys(go.env!)) expect(replay.env![key], key).toBe(go.env![key]);
-    expect(validationPlan("formal", { directory }).slice(-plan.length)).toEqual(plan);
+    const aggregate = validationPlan("formal", { directory });
+    const rustStart = aggregate.findIndex(step => step.label === plan[0]!.label);
+    expect(rustStart).toBeGreaterThanOrEqual(0);
+    expect(aggregate.slice(rustStart, rustStart + plan.length)).toEqual(plan);
   });
 
   it("adds the smoke conformance run in default mode with no corpus selectors", () => {
     const smoke = validationPlan("smoke", { directory });
-    expect(smoke.at(-1)).toEqual({ label: "Replay committed Rust fixtures", command: "cargo", args: ["test", "--all-features", "--test", "conformance"], cwd: "rust" });
-    expect(smoke.filter(step => step.command === "cargo")).toHaveLength(1);
+    expect(smoke.filter(step => step.command === "cargo")).toEqual([{ label: "Replay committed Rust fixtures", command: "cargo", args: ["test", "--all-features", "--test", "conformance"], cwd: "rust" }]);
   });
 
   it("runs the real-server integration binary only through the integration lane, which selects its ignored tests", () => {
     const lane = validationPlan("integration-rust", { directory });
     expect(lane).toEqual([{ label: "Run Rust Redis/Valkey/Cluster integrations", command: "cargo", args: ["test", "--all-features", "--test", "redis_integration", "--", "--ignored"], cwd: "rust" }]);
-    expect(validationPlan("integration", { directory })).toEqual(["integration-ts", "integration-go", "integration-rust"].flatMap(target => validationPlan(target, { directory })));
+    expect(validationPlan("integration", { directory })).toEqual(["integration-ts", "integration-go", "integration-rust", "integration-python"].flatMap(target => validationPlan(target, { directory })));
     for (const target of ["check-rust", "smoke", "formal-rust"]) expect(validationPlan(target, { directory }).some(step => step.args?.includes("--ignored")), target).toBe(false);
   });
 
@@ -200,7 +202,8 @@ describe("Rust validation lanes", () => {
       tool("corepack", 'console.log("10.33.0")');
       tool("go", 'console.log("go version go1.27.1 test/test")');
       tool("quint", 'console.log("0.32.0")');
-      const environment = { ...process.env, PATH: `${join(temporary, "bin")}${delimiter}${process.env.PATH ?? ""}` };
+      tool("python", 'if (process.argv.includes("--version")) console.log("Python 3.11.9")');
+      const environment = { ...process.env, PYTHON: join(temporary, "bin", "python"), PATH: `${join(temporary, "bin")}${delimiter}${process.env.PATH ?? ""}` };
       const options = { directory: temporary, environment, nodeVersion: "v24.20.0" };
       tool("cargo", 'console.error("cargo: command not found"); process.exit(127)');
       for (const target of ["check-rust", "formal-rust", "smoke", "check", "integration-rust", "mutations-rust", "mutations", "explore"]) expect(() => checkPrerequisites(target, options), target).toThrow(/Cannot run cargo/);

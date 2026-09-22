@@ -15,6 +15,7 @@ behavior; the native references give each language's signatures and types.
 | TypeScript | <a href="./reference/typescript/index.html" target="_self">TypeDoc</a> | [TypeScript guide](languages/typescript.md) |
 | Go | <a href="./reference/go/index.html" target="_self">Go package documentation</a> | [Go guide](languages/go.md) |
 | Rust | <a href="./reference/rust/dialcache/index.html" target="_self">rustdoc</a> | [Rust guide](languages/rust.md) |
+| Python | <a href="./reference/python/index.html" target="_self">pydoc</a> | [Python guide](languages/python.md) |
 
 <LanguageContent language="go">
 
@@ -30,6 +31,15 @@ sparse-policy representations.
 Use rustdoc for `DialCache`, registered `UseCase` values, `Policy`, `RuntimePolicy`,
 and integration traits. Rust calls use a scope and return shared `Arc<T>`
 values. [Rust setup](languages/rust.md) explains ownership and feature flags.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Use the generated Python reference for `DialCache`, `Policy`, `Key`, serializers,
+semantic Redis requests and protocol helpers. Methods use Python snake_case;
+cache calls are awaitable. [Python setup](languages/python.md) explains context
+lifetime, argument binding and application-owned clients.
 
 </LanguageContent>
 

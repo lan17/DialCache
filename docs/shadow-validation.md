@@ -95,6 +95,14 @@ Use a policy with `.remote_ttl_sec(300).remote_ramp(0.0)` and a
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+Use `Policy(ttl_sec={"remote": 300}, ramp={"remote": 0},
+shadow={"ramp": 5})` and instance `shadow_max_in_flight=4`. Supply a metrics
+callback or observer for terminal shadow outcomes. See [observability](observability.md).
+
+</LanguageContent>
+
 Inside an enabled scope, callers use the source. Eligible keys in the independent
 5% shadow cohort exercise Redis in the background. A semantic miss authorizes a
 fill. Use the selected language's outcome opt-in described above.
@@ -247,6 +255,15 @@ panics report `comparison_error`; returned values must be safe to share.
 
 </LanguageContent>
 
+<LanguageContent language="python">
+
+The default recursively compares JSON-like values and distinguishes booleans
+from numbers. Use `shadow_comparator` for custom native domains; it must return
+a synchronous boolean. Exceptions and non-boolean results report
+`comparison_error`.
+
+</LanguageContent>
+
 Comparison uses the decoded cache value and raw source value intentionally: it
 can reveal lossy serialization. Ignore differences only when they are acceptable
 application semantics.
@@ -304,6 +321,14 @@ The captured runtime runs detached shadow tasks. Admitted CPU work can retain
 capacity even after an async runtime shutdown. Mismatch preview callbacks run
 through the bounded CPU executor and can run on worker threads; application
 codecs control their own scheduling.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+The asyncio event loop owns detached shadow work. Keep it alive while work
+settles. Loaders, codecs and compression execute on that event loop; use native
+async I/O and application-controlled scheduling for blocking custom work.
 
 </LanguageContent>
 
@@ -382,6 +407,15 @@ callback renders optional value details. Default JSON previews retain an 8 KiB
 prefix while checking serialization; they run through the bounded CPU executor
 after confirmation. Admission failure can omit previews while retaining a
 metadata warning. The logical-key preview is bounded to 2 KiB.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Set `shadow={"ramp": 5, "log_mismatches": True}`. Confirmed mismatches emit
+bounded native JSON previews (8 KiB) and a logical-key preview (2 KiB).
+Serialization failures omit unavailable value previews; warning failures do
+not alter cache results.
 
 </LanguageContent>
 
