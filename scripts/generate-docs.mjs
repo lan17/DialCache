@@ -40,7 +40,7 @@ const modelLink = ref => {
   const line = lines.findIndex(text => new RegExp(`\\b${name}\\b`).test(text)) + 1;
   return link(name ?? path, path + (line ? `#L${line}` : ''));
 };
-const pages = ['# Behavior catalogue', '',
+const pages = ['---', 'editLink: false', '---', '', '# Behavior catalogue', '',
   'Generated from the reviewed [semantic case inventory](' + source('formal/semantic-cases.json') + '). ' + inventory.scope, '',
   'These links describe registered evidence and its scope. They are not a fresh test result or a claim of exhaustive coverage. ' +
   'See the [validation guide](' + source('formal/VALIDATION.md') + ') for how a completed run is established.', '',
