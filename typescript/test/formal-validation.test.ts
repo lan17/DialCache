@@ -259,10 +259,12 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
 
   it("runs Python from its prepared interpreter and checks complete evidence after replay", () => {
     const native = validationPlan("check-python", { directory, environment });
-    expect(native).toEqual([{
-      label: "Run Python native, wire, scenario and smoke tests", command: environment.PYTHON,
-      args: ["-m", "pytest", "python/tests", "-m", "not integration"], env: { NODE: process.execPath, PYTHONPATH: [join(directory, "python"), environment.PYTHONPATH].filter(Boolean).join(delimiter) },
-    }]);
+    expect(native[0]!.remove).toEqual(["coverage/python/.coverage-native", "coverage/python/native.lcov"]);
+    expect(native.slice(1).map(step => step.command)).toEqual([environment.PYTHON, environment.PYTHON]);
+    expect(native[1]!.args).toEqual(["-m", "coverage", "run", "--rcfile=python/pyproject.toml",
+      "--data-file=coverage/python/.coverage-native", "-m", "pytest", "python/tests", "-m", "not integration"]);
+    expect(native[2]!.args).toEqual(["-m", "coverage", "lcov", "--rcfile=python/pyproject.toml",
+      "--data-file=coverage/python/.coverage-native", "-o", "coverage/python/native.lcov"]);
     const plan = validationPlan("formal-python", { directory, environment });
     expect(plan[0]!.remove).toEqual([".formal-traces/python-completion.json"]);
     expect(plan[1]!.args).toEqual(["formal/conformance.mjs", "prepare", "python", ".formal-traces/python-context.json"]);

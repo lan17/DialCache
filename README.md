@@ -2,7 +2,10 @@
 
 [![npm version](https://img.shields.io/npm/v/dialcache.svg)](https://www.npmjs.com/package/dialcache)
 [![crates.io](https://img.shields.io/crates/v/dialcache.svg)](https://crates.io/crates/dialcache)
-[![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
+[![TypeScript coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=typescript&label=TypeScript%20coverage)](https://codecov.io/gh/lan17/DialCache)
+[![Go coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=go&label=Go%20coverage)](https://codecov.io/gh/lan17/DialCache)
+[![Rust coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=rust&label=Rust%20coverage)](https://codecov.io/gh/lan17/DialCache)
+[![Python coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=python&label=Python%20coverage)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
 Read the [shared behavior guides](https://lan17.github.io/DialCache/) with a

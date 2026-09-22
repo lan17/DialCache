@@ -107,6 +107,10 @@ def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_pat
     )
     (tests / "test_docs_examples.py").write_text(DOCS)
     (tests / "challenge_plugin.py").write_text(PLUGIN)
+    coverage = checkout / "coverage/python"
+    coverage.mkdir(parents=True)
+    for backend in ["Redis", "Valkey"]:
+        (coverage / f"{backend}.lcov").write_text("stale report must not survive a failed run")
     log = checkout / "executed.txt"
     addopts = "-k test_inventory_only" if challenge == "inherited_keyword" else ""
     if challenge == "inherited_collect_only":
@@ -136,8 +140,12 @@ def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_pat
     if challenge in failures:
         assert result.returncode != 0, result.stdout + result.stderr
         assert "Integration acceptance failed:" in result.stderr, result.stdout + result.stderr
+        assert not list(coverage.glob("*.lcov"))
     else:
         assert result.returncode == 0, result.stdout + result.stderr
+        for backend in ["Redis", "Valkey"]:
+            report = (coverage / f"{backend}.lcov").read_text()
+            assert "SF:" in report and "stale report" not in report
         assert log.read_text().splitlines() == [
             f"{url} {value}"
             for url in [environment["TEST_REDIS_URL"], environment["TEST_VALKEY_URL"]]

@@ -17,6 +17,9 @@ jobs:
   native:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +36,16 @@ jobs:
         run: make integration-python
       - name: Build a distributable wheel
         run: python/.venv/bin/python -m pip wheel --no-deps ./python --wheel-dir .formal-traces/python-dist
-      - name: Retain the built wheel and integration diagnostics
+      - name: Upload Python coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: ./coverage/python/native.lcov,./coverage/python/Redis.lcov,./coverage/python/Valkey.lcov
+          flags: python
+          name: python-${{ matrix.python }}
+          disable_search: true
+          use_oidc: true
+          fail_ci_if_error: true
+      - name: Retain the built wheel, coverage and integration diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -41,6 +53,7 @@ jobs:
           path: |
             .formal-traces/python-dist/
             .formal-traces/python-integration*
+            coverage/python/*.lcov
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14

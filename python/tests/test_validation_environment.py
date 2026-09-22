@@ -24,7 +24,7 @@ if (boundary === 'prerequisites') {
 } else {
   const steps = validationPlan(boundary, { directory, environment })
     .filter(step => step.command === environment.PYTHON);
-  if (steps.length !== 1) throw new Error('Expected exactly one direct Python step');
+  if (steps.length === 0) throw new Error('Expected direct Python validation steps');
   await executeSteps(steps, { directory, environment });
 }
 """
@@ -51,6 +51,7 @@ def test_validation_selects_checkout_over_foreign_editable(tmp_path, boundary):
         ROOT / "python/dialcache", checkout / "python/dialcache", ignore=shutil.ignore_patterns("__pycache__")
     )
     (tests / "test_conformance.py").write_text(NATIVE_TEST)
+    shutil.copyfile(ROOT / "python/pyproject.toml", checkout / "python/pyproject.toml")
     # Both generated native commands run their exact argv, but this small
     # checkout contains only the sentinel test, so this test cannot recurse.
     foreign = tmp_path / "foreign-editable"
@@ -122,3 +123,10 @@ def test_validation_selects_checkout_over_foreign_editable(tmp_path, boundary):
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    if boundary == "check-python":
+        report = (checkout / "coverage/python/native.lcov").read_text()
+        sources = [line.removeprefix("SF:") for line in report.splitlines() if line.startswith("SF:")]
+        assert "python/dialcache/cache.py" in sources
+        assert all(
+            source.startswith("python/dialcache/") and (checkout / source).is_file() for source in sources
+        )

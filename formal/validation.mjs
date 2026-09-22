@@ -17,9 +17,9 @@ const aggregateTargets = {
 export const targetDescriptions = {
   check: 'TypeScript, Go, Rust and Python checks, docs build and reviewed inventories; no Quint generation or Docker',
   'check-ts': 'Typecheck, unit coverage, build and packed-package checks on Node 24',
-  'check-go': 'Go vet, formatting check and default tests with race detection',
+  'check-go': 'Go vet, formatting check and default tests with race detection and coverage (go/coverage-unit.out)',
   'check-rust': 'Rust formatting check, clippy with warnings denied and default tests including the smoke conformance run',
-  'check-python': 'Python native, protocol, scenario and committed smoke tests, excluding real Redis integrations',
+  'check-python': 'Python native, protocol, scenario and committed smoke tests with coverage (coverage/python/native.lcov)',
   docs: 'Check shared examples and links; generate native API references and the documentation site (Go, Rust and Python required)',
   audit: 'Check source, behavior, feature, Go and generated-fixture freshness inventories',
   smoke: 'Replay committed Quint-derived fixtures in TypeScript, Go, Rust and Python; no full completion claim',
@@ -44,9 +44,9 @@ export const targetDescriptions = {
   'mutations-merge-rust': 'Merge Rust mutation shards into the complete report; refuses inconsistent or missing shards',
   integration: 'Run real TypeScript, Go, Rust and Python Redis/Valkey/Cluster integration checks',
   'integration-ts': 'Run TypeScript real integration checks',
-  'integration-go': 'Run Go real integration and interoperability checks with race detection',
+  'integration-go': 'Run Go real integration and interoperability checks with race detection and coverage (go/coverage-integration.out)',
   'integration-rust': 'Run Rust real Redis/Valkey/Cluster integration checks and invalidation vector replay',
-  'integration-python': 'Run Python real Redis/Valkey/Cluster integration checks, invalidation vectors and TypeScript interoperability',
+  'integration-python': 'Run Python real Redis/Valkey/Cluster integration checks, invalidation vectors and TypeScript interoperability with coverage (coverage/python/Redis.lcov and Valkey.lcov)',
   'package-floor': 'Check zstd and the packed package on exact Node 22.15.0 (NODE22_BIN)',
   ci: 'Run check, package-floor, formal, model-check, integration and mutations in dependency order',
 };
@@ -163,8 +163,8 @@ export function validationPlan(target, { directory = root, environment = process
   // Opt-in native workers need inputs from the mutation/vector coordinator.
   // Exclude exactly those roots from the full corpus command so the completed
   // report can keep rejecting every actual skip, including required cases.
-  const nativeGo = full => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
-    'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m',
+  const nativeGo = (full, { coverage = false } = {}) => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
+    'test', '-race', '-count=1', ...(coverage ? ['-covermode=atomic', '-coverprofile=coverage-unit.out'] : []), ...(full ? ['-json', '-timeout=35m',
       '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver|TestDocsTrackedInvalidation)$'] : []), './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   // The Rust conformance harness is one cargo test target. Without directory
@@ -180,11 +180,16 @@ export function validationPlan(target, { directory = root, environment = process
   const plans = {
     'check-ts': [pnpm('Typecheck TypeScript', 'typecheck'), pnpm('Run TypeScript unit tests with coverage', 'test'),
       pnpm('Build package', 'build'), pnpm('Check packed package on Node 24', 'test:package')],
-    'check-go': [go('Go vet', 'vet', './...'), { label: 'Check Go formatting', command: 'gofmt', args: ['-l', 'go'], requireEmptyStdout: true }, nativeGo(false)],
+    'check-go': [go('Go vet', 'vet', './...'), { label: 'Check Go formatting', command: 'gofmt', args: ['-l', 'go'], requireEmptyStdout: true }, nativeGo(false, { coverage: true })],
     'check-rust': [cargo('Check Rust formatting', 'fmt', '--check'),
       cargo('Lint Rust with clippy', 'clippy', '--all-targets', '--all-features', '--', '-D', 'warnings'),
       cargo('Run Rust default tests', 'test', '--all-features')],
-    'check-python': [python('Run Python native, wire, scenario and smoke tests', '-m', 'pytest', 'python/tests', '-m', 'not integration')],
+    'check-python': [{ label: 'Clear prior Python native coverage', remove: ['coverage/python/.coverage-native', 'coverage/python/native.lcov'] },
+      python('Run Python native, wire, scenario and smoke tests with coverage', '-m', 'coverage', 'run',
+        '--rcfile=python/pyproject.toml', '--data-file=coverage/python/.coverage-native',
+        '-m', 'pytest', 'python/tests', '-m', 'not integration'),
+      python('Report Python native coverage', '-m', 'coverage', 'lcov',
+        '--rcfile=python/pyproject.toml', '--data-file=coverage/python/.coverage-native', '-o', 'coverage/python/native.lcov')],
     docs: [pnpm('Build documentation', 'docs:build')],
     audit: ['execution', 'check-source-audit', 'check-semantic-coverage', 'check-feature-coverage', 'check-go-parity']
       .map(name => node(`Check ${name}`, `formal/${name}.mjs`))
@@ -235,7 +240,7 @@ export function validationPlan(target, { directory = root, environment = process
     'mutations-merge-go': [node('Merge Go mutation shards', 'formal/merge-mutation-reports.mjs', 'go')],
     'mutations-merge-rust': [node('Merge Rust mutation shards', 'formal/merge-mutation-reports.mjs', 'rust')],
     'integration-ts': [pnpm('Run TypeScript Redis/Valkey/Cluster integrations', 'test:integration')],
-    'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
+    'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-covermode=atomic', '-coverprofile=coverage-integration.out', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
     // The Rust integration tests are #[ignore]d, so a plain cargo test reports
     // them as ignored and never needs Docker; this lane runs exactly them.
     'integration-rust': [cargo('Run Rust Redis/Valkey/Cluster integrations', 'test', '--all-features', '--test', 'redis_integration', '--', '--ignored')],
@@ -275,6 +280,10 @@ export function checkPrerequisites(target, { directory = root, environment = pro
     if (!parsed || Number(parsed[1]) !== 3 || Number(parsed[2]) < 11) throw new Error(`Python validation requires Python 3.11 or later; found ${version}. Set PYTHON or create python/.venv and install './python[test,redis]'.`);
     probe(executable, ['-c', 'import dialcache, pytest, pytest_asyncio, jsonschema, zstandard, redis'],
       { directory, environment: { ...environment, ...pythonSourceEnvironment(directory, environment) } });
+    if (targets.some(name => ['check-python', 'integration-python'].includes(name))) {
+      probe(executable, ['-c', 'import coverage'],
+        { directory, environment: { ...environment, ...pythonSourceEnvironment(directory, environment) } });
+    }
   }
   if (targets.some(name => ['formal-check', 'formal-generate', 'fixtures-check', 'explore', 'model-check', 'differential'].includes(name))) {
     const requiredQuint = JSON.parse(readFileSync(resolve(directory, 'formal/generated-fixtures.lock.json'), 'utf8')).quintVersion;
