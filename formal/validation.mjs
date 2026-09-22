@@ -11,7 +11,7 @@ const aggregateTargets = {
   check: ['check-ts', 'check-go', 'check-rust', 'check-python', 'docs', 'audit'],
   formal: ['formal-check', 'formal-generate', 'formal-ts', 'formal-go', 'formal-rust', 'formal-python'],
   mutations: ['mutations-ts', 'mutations-go', 'mutations-rust'],
-  integration: ['integration-ts', 'integration-go', 'integration-rust', 'integration-python'],
+  integration: ['integration-ts', 'integration-go', 'integration-rust', 'integration-python', 'integration-wire'],
   ci: ['check', 'package-floor', 'formal', 'model-check', 'integration', 'mutations'],
 };
 export const targetDescriptions = {
@@ -47,6 +47,7 @@ export const targetDescriptions = {
   'integration-go': 'Run Go real integration and interoperability checks with race detection and coverage (go/coverage-integration.out)',
   'integration-rust': 'Run Rust real Redis/Valkey/Cluster integration checks and invalidation vector replay',
   'integration-python': 'Run Python real Redis/Valkey/Cluster integration checks, invalidation vectors and TypeScript interoperability with coverage (coverage/python/Redis.lcov and Valkey.lcov)',
+  'integration-wire': 'Run all six language pairs through complete cache clients on Redis/Valkey/Cluster; requires all four toolchains',
   'package-floor': 'Check zstd and the packed package on exact Node 22.15.0 (NODE22_BIN)',
   ci: 'Run check, package-floor, formal, model-check, integration and mutations in dependency order',
 };
@@ -245,6 +246,7 @@ export function validationPlan(target, { directory = root, environment = process
     // them as ignored and never needs Docker; this lane runs exactly them.
     'integration-rust': [cargo('Run Rust Redis/Valkey/Cluster integrations', 'test', '--all-features', '--test', 'redis_integration', '--', '--ignored')],
     'integration-python': [{ ...node('Run Python Redis/Valkey/Cluster integrations', 'formal/run-python-integration.mjs'), env: { PYTHON: pythonExecutable } }],
+    'integration-wire': [{ ...node('Run all six cross-language Redis pairs', 'formal/run-python-integration.mjs', '--suite', 'wire'), env: { PYTHON: pythonExecutable } }],
     'package-floor': [{ label: 'Require a built package for floor checks', requireFile: 'typescript/dist/index.js', failureHint: 'Build first with make check-ts, or run make ci with NODE22_BIN set.' },
       { label: 'Check Node 22.15 zstd round trip and output ceiling', command: node22, args: ['--eval', floorSmoke], env: { PATH: floorEnvironment(environment, node22).PATH } },
       { label: 'Check packed package on Node 22.15', command: node22, args: ['typescript/scripts/test-package.mjs'], env: { PATH: floorEnvironment(environment, node22).PATH } }],
@@ -265,15 +267,15 @@ export function checkPrerequisites(target, { directory = root, environment = pro
   const requiredPnpm = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')).packageManager?.replace(/^pnpm@/, '');
   const pnpm = probe('corepack', ['pnpm', '--version'], { directory, environment });
   if (!requiredPnpm || pnpm !== requiredPnpm) throw new Error(`Expected pinned pnpm ${requiredPnpm}; found ${pnpm}. Use corepack pnpm and install the frozen lockfile.`);
-  if (targets.some(name => ['check-go', 'docs', 'smoke', 'formal-go', 'mutations-go', 'integration-go', 'explore'].includes(name))) {
+  if (targets.some(name => ['check-go', 'docs', 'smoke', 'formal-go', 'mutations-go', 'integration-go', 'integration-wire', 'explore'].includes(name))) {
     const version = probe('go', ['version'], { directory, environment });
     if (!/^go version go1\.27\.1\s/.test(version)) throw new Error(`Validation requires Go 1.27.1; found ${version}. Put the pinned Go toolchain on PATH.`);
   }
-  if (targets.some(name => ['check-rust', 'docs', 'smoke', 'formal-rust', 'integration-rust', 'mutations-rust', 'explore'].includes(name))) {
+  if (targets.some(name => ['check-rust', 'docs', 'smoke', 'formal-rust', 'integration-rust', 'integration-wire', 'mutations-rust', 'explore'].includes(name))) {
     const version = probe('cargo', ['--version'], { directory: resolve(directory, 'rust'), environment });
     if (!/^cargo 1\.98\.1(?:\s|$)/.test(version)) throw new Error(`Validation requires cargo 1.98.1; found ${version}. Install Rust 1.98.1 (rustup reads rust/rust-toolchain.toml) and put it on PATH.`);
   }
-  if (targets.some(name => ['check-python', 'smoke', 'formal-python', 'integration-python', 'explore', 'docs'].includes(name))) {
+  if (targets.some(name => ['check-python', 'smoke', 'formal-python', 'integration-python', 'integration-wire', 'explore', 'docs'].includes(name))) {
     const executable = environment.PYTHON ?? resolve(directory, 'python/.venv/bin/python');
     const version = probe(executable, ['--version'], { directory, environment });
     const parsed = /^Python (\d+)\.(\d+)(?:\.|\s|$)/.exec(version);

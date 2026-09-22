@@ -8,6 +8,12 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 2 || args[0] !== '--suite' || !['native', 'wire'].includes(args[1]))) {
+  throw new Error('Expected --suite native|wire');
+}
+const suite = args[1] ?? 'native';
+const labelPrefix = suite === 'wire' ? 'wire' : 'python';
 const python = process.env.PYTHON ?? (existsSync(join(root, 'python/.venv/bin/python'))
   ? join(root, 'python/.venv/bin/python') : 'python3');
 const docker = process.env.DOCKER ?? 'docker';
@@ -15,9 +21,11 @@ const reports = join(root, '.formal-traces');
 const coverage = join(root, 'coverage/python');
 mkdirSync(reports, { recursive: true });
 for (const label of ['Redis', 'Valkey']) {
-  rmSync(join(reports, `python-integration-${label}.xml`), { force: true });
-  rmSync(join(coverage, `.coverage-${label}`), { force: true });
-  rmSync(join(coverage, `${label}.lcov`), { force: true });
+  rmSync(join(reports, `${labelPrefix}-integration-${label}.xml`), { force: true });
+  if (suite === 'native') {
+    rmSync(join(coverage, `.coverage-${label}`), { force: true });
+    rmSync(join(coverage, `${label}.lcov`), { force: true });
+  }
 }
 const names = [];
 let active;
@@ -101,20 +109,23 @@ async function cluster() {
 }
 
 async function testServer(label, url, clusterUrl, isolated) {
-  console.log(`Python integration: ${label}, tracked primary reads on a six-node Redis Cluster, TypeScript interoperability`);
-  const report = join(reports, `python-integration-${label}.xml`);
+  console.log(`${suite === 'wire' ? 'All six language pairs' : 'Python integration'}: ${label}, tracked primary reads on a six-node Redis Cluster`);
+  const report = join(reports, `${labelPrefix}-integration-${label}.xml`);
   const coverageData = join(coverage, `.coverage-${label}`);
   // Instrument the process without adding a pytest plugin or weakening the
   // launcher's exact collection/outcome acceptance gate.
-  await run(python, ['-m', 'coverage', 'run', '--rcfile=python/pyproject.toml',
-    `--data-file=${coverageData}`, 'python/tests/run_integration.py', report], {
+  const command = ['python/tests/run_integration.py', report, '--suite', suite];
+  if (suite === 'native') command.unshift('-m', 'coverage', 'run', '--rcfile=python/pyproject.toml', `--data-file=${coverageData}`);
+  await run(python, command, {
     env: { ...process.env, NODE: process.env.NODE ?? process.execPath,
       PYTHONPATH: [join(root, 'python'), process.env.PYTHONPATH].filter(Boolean).join(process.platform === 'win32' ? ';' : ':'),
       TEST_REDIS_URL: url, DOCS_REDIS_URL: url, TEST_REDIS_CLUSTER_URL: clusterUrl,
       DIALCACHE_TEST_CLUSTER_ISOLATED: isolated ? '1' : '0' },
   });
-  await run(python, ['-m', 'coverage', 'lcov', '--rcfile=python/pyproject.toml',
-    `--data-file=${coverageData}`, '-o', join(coverage, `${label}.lcov`)]);
+  if (suite === 'native') {
+    await run(python, ['-m', 'coverage', 'lcov', '--rcfile=python/pyproject.toml',
+      `--data-file=${coverageData}`, '-o', join(coverage, `${label}.lcov`)]);
+  }
 }
 
 try {

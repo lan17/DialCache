@@ -169,21 +169,45 @@ jobs:
       contents: read
       id-token: write
 
+  wire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ./.github/actions/setup-validation
+        with:
+          python: "true"
+          go: "true"
+          rust: "true"
+      - name: Check every language pair over real Redis, Valkey and Cluster
+        run: make integration-wire
+      - name: Retain cross-language wire results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wire-integration-results
+          path: .formal-traces/wire-integration-*.xml
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
   # Keep every native language behind the branch's required `test` status.
   test:
-    needs: [typescript, go, rust, python]
+    needs: [typescript, go, rust, python, wire]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require successful TypeScript, Go, Rust and Python checks
+      - name: Require successful native and cross-language wire checks
         env:
           TYPESCRIPT_RESULT: ${{ needs.typescript.result }}
           GO_RESULT: ${{ needs.go.result }}
           RUST_RESULT: ${{ needs.rust.result }}
           PYTHON_RESULT: ${{ needs.python.result }}
+          WIRE_RESULT: ${{ needs.wire.result }}
         run: |
           test "$TYPESCRIPT_RESULT" = success
           test "$GO_RESULT" = success
           test "$RUST_RESULT" = success
           test "$PYTHON_RESULT" = success
+          test "$WIRE_RESULT" = success

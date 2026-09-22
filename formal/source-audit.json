@@ -178,7 +178,7 @@
     },
     {
       "path": "docs/languages/python.md",
-      "sha256": "c06527592599c05e4616e4ca5b31f1df96587ce638c23799e9c7aa392e7c054c",
+      "sha256": "4d4e0f898e167c50299d264dcec88e73bd7fc4e47e30141556a75f00c474086b",
       "entries": [
         {"line":1,"title":"Python integration","contracts":["B01"]},
         {"line":10,"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -186,7 +186,8 @@
         {"line":46,"title":"Identity and policy","contracts":["W01","W02","C16","C18","C20","B01"]},
         {"line":69,"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
         {"line":87,"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
-        {"line":106,"title":"Validation","contracts":["B01"]}
+        {"line":106,"title":"Sharing Redis with other languages","contracts":["W01","W02","E04","B03","B01"]},
+        {"line":116,"title":"Validation","contracts":["B01"]}
       ]
     },
     {
@@ -259,7 +260,7 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "f7a7ab8e6d181641484a03ad797a4d9aea82a0c7251a23566234e41b20dd210a",
+      "sha256": "754d156cff4d53d65ea33aef458839a8459aacfeac0d59303a292113d667545d",
       "entries": [
         {"line":1,"title":"Redis and Valkey","contracts":["E01"]},
         {"line":14,"title":"Install a client","contracts":["B01","E01"]},
@@ -268,15 +269,16 @@
         {"line":282,"title":"Serialization","contracts":["W06","B03"]},
         {"line":291,"title":"Default JSON behavior","contracts":["B03","C27","C45","C52"]},
         {"line":418,"title":"Compression","contracts":["W06","W07","W08","X02"]},
-        {"line":512,"title":"Bundled Redis operations","contracts":["E01"]},
-        {"line":514,"title":"Reads","contracts":["E01","W04"]},
-        {"line":538,"title":"Writes","contracts":["E01","W04","W05"]},
-        {"line":562,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
-        {"line":605,"title":"Redis compatibility and ACLs","contracts":["E01"]},
-        {"line":616,"title":"Custom-client contract","contracts":["C55","C56","E01","E04"]},
-        {"line":703,"title":"Advanced wire protocol","contracts":["W04"]},
-        {"line":758,"title":"Read decoding and validation order","contracts":["W04"]},
-        {"line":847,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
+        {"line":512,"title":"Sharing entries across languages","contracts":["W01","W02","W04","W06","W07","W08","W09","C32","C36","E01","E04","E05","B03"]},
+        {"line":563,"title":"Bundled Redis operations","contracts":["E01"]},
+        {"line":565,"title":"Reads","contracts":["E01","W04"]},
+        {"line":589,"title":"Writes","contracts":["E01","W04","W05"]},
+        {"line":613,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
+        {"line":656,"title":"Redis compatibility and ACLs","contracts":["E01"]},
+        {"line":667,"title":"Custom-client contract","contracts":["C55","C56","E01","E04"]},
+        {"line":754,"title":"Advanced wire protocol","contracts":["W04"]},
+        {"line":809,"title":"Read decoding and validation order","contracts":["W04"]},
+        {"line":898,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
       ]
     },
     {

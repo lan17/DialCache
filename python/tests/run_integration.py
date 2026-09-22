@@ -49,18 +49,27 @@ class Acceptance:
 
 
 root = Path(__file__).resolve().parents[2]
+suite = sys.argv[2:] or ["--suite", "native"]
+if suite not in (["--suite", "native"], ["--suite", "wire"]):
+    raise SystemExit("Expected report path followed by --suite native|wire")
+files = (
+    [root / "interop/test_wire_interop.py"]
+    if suite[1] == "wire"
+    else [root / "python/tests/test_redis_integration.py", root / "python/tests/test_docs_examples.py"]
+)
 gate = Acceptance()
 status = pytest.main(
     [
         "-c",
         str(root / "python/pyproject.toml"),
+        "--rootdir",
+        str(root),
         "-o",
         "addopts=",
         "--noconftest",
         "-p",
         "pytest_asyncio.plugin",
-        str(root / "python/tests/test_redis_integration.py"),
-        str(root / "python/tests/test_docs_examples.py"),
+        *map(str, files),
         "-m",
         "integration",
         "-q",

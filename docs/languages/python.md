@@ -103,6 +103,16 @@ including `cacheNamespace`, `useCase`, and `keyType`. Observer failures do not
 alter application results. This port currently supplies the observer contract;
 applications connect it to their metrics backend.
 
+## Sharing Redis with other languages
+
+Follow the shared [cross-language compatibility guide](../redis.md#sharing-entries-across-languages)
+for cache identity, supported values, compression and the full-client wire suite.
+Python `None` represents JSON null; its top-level `UNDEFINED` sentinel is
+distinct. The default `JsonSerializer` rejects nonfinite numbers (`NaN` and
+infinities), while TypeScript's `JSON.stringify` converts them to `null`.
+Choose an explicit `use_case` and align adapted arguments with other clients;
+Python's inferred module and qualified function name may differ from their names.
+
 ## Validation
 
 Prepare a development environment from the repository root:
@@ -118,7 +128,8 @@ make integration-python
 `check-python` executes native tests, shared wire vectors, fixed scenarios,
 committed behavioral histories, and the settlement control. `integration-python`
 uses isolated Redis, Valkey, and Redis Cluster servers, including the invalidation
-vectors and bidirectional TypeScript interoperability. It requires Docker.
+vectors. It requires Docker. Run `make integration-wire` for the separate
+four-language client suite; it also requires the pinned Go and Rust toolchains.
 
 Generate the shared corpus with `make formal-generate`, then run
 `make formal-python` for complete prepared replay and completion checks. The

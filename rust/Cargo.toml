@@ -63,3 +63,7 @@ required-features = ["tokio"]
 [[example]]
 name = "redis"
 required-features = ["redis", "tokio"]
+
+[[example]]
+name = "wire_client"
+required-features = ["redis", "tokio"]
