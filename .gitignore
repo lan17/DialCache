@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+/go/coverage-*.out
 .formal-traces/
 docs/.vitepress/cache/
 docs/public/reference/
