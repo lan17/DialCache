@@ -30,8 +30,43 @@ use crate::remote::{Frame, ReadContext, ReadRequest, ReadResult, WriteRequest};
 use crate::scope::{Owner, Scope};
 use crate::shadow::ShadowWork;
 
-/// The raw outcome of one adapter read.
-pub(crate) type RawRead = Result<ReadResult, SharedError>;
+/// An immutable acquired frame shared by readers of the same settled result.
+/// The public adapter result stays owned; only internal observations share it.
+#[derive(Debug, Clone)]
+pub(crate) enum ReadSnapshot {
+    Hit(Arc<Frame>),
+    Miss {
+        reason: MissReason,
+        observed_watermark_ms: Option<u64>,
+    },
+}
+
+impl ReadSnapshot {
+    pub(crate) fn miss(reason: MissReason) -> Self {
+        Self::Miss {
+            reason,
+            observed_watermark_ms: None,
+        }
+    }
+}
+
+impl From<ReadResult> for ReadSnapshot {
+    fn from(read: ReadResult) -> Self {
+        match read {
+            ReadResult::Hit(frame) => Self::Hit(Arc::new(frame)),
+            ReadResult::Miss {
+                reason,
+                observed_watermark_ms,
+            } => Self::Miss {
+                reason,
+                observed_watermark_ms,
+            },
+        }
+    }
+}
+
+/// The normalized, shared outcome of one raw adapter read.
+pub(crate) type RawRead = Result<ReadSnapshot, SharedError>;
 
 #[derive(Debug, thiserror::Error)]
 #[error("DialCache callback panicked: {0}")]
@@ -113,11 +148,11 @@ pub(crate) struct Execution {
 pub(crate) enum RemoteValue {
     Hit {
         value: StoredValue,
-        frame: Frame,
+        frame: Arc<Frame>,
     },
     /// A valid stale frame retained only as a recovery candidate.
     Retained {
-        frame: Frame,
+        frame: Arc<Frame>,
     },
     Miss {
         fence: Option<u64>,
@@ -617,7 +652,7 @@ impl Execution {
                 let recoverable = !matches!(remote, RemoteValue::Error | RemoteValue::DecodeError);
                 if recoverable && p.stale_on_error_max_age_ms > 0 && self.can_recover(&error) {
                     let frame = match &remote {
-                        RemoteValue::Retained { frame } => Some(frame),
+                        RemoteValue::Retained { frame } => Some(frame.as_ref()),
                         _ => None,
                     };
                     if let Some(value) = self.recover(frame).await {
@@ -679,21 +714,22 @@ impl Execution {
         let clock = self.core.clock.clone();
         let runtime = self.core.runtime.clone();
         let start = clock.elapsed();
+        let tracked = self.identity.tracked;
         let raw: Settled<RawRead> = start_pending(
             self.core.runtime.as_ref(),
             async move {
                 remote
                     .read(request, context)
                     .await
+                    .map(|read| ReadSnapshot::from(normalize_read_result(read, tracked)))
                     .map_err(|e| Arc::from(e) as SharedError)
             },
             |message| Err(Arc::new(PanicError(message)) as SharedError),
         );
-        let tracked = self.identity.tracked;
         let use_case = self.labels.use_case.to_string();
         let waited = raw.clone();
         let bounded = Box::pin(async move {
-            let result = await_deadline(
+            await_deadline(
                 clock.as_ref(),
                 runtime.as_ref(),
                 &waited,
@@ -707,8 +743,7 @@ impl Execution {
                     }) as SharedError)
                 },
             )
-            .await;
-            result.map(|read| normalize_read_result(read, tracked))
+            .await
         });
         (bounded, raw)
     }
@@ -750,7 +785,7 @@ impl Execution {
                 self.error_event(Layer::Remote, kind, false);
                 RemoteValue::Error
             }
-            Ok(ReadResult::Miss {
+            Ok(ReadSnapshot::Miss {
                 reason,
                 observed_watermark_ms,
             }) => {
@@ -762,7 +797,7 @@ impl Execution {
                     fence: observed_watermark_ms,
                 }
             }
-            Ok(ReadResult::Hit(frame)) => {
+            Ok(ReadSnapshot::Hit(frame)) => {
                 let (age, valid) = self.frame_age(&frame, Layer::Remote);
                 if !valid {
                     self.emit(Event::Miss {
@@ -1100,3 +1135,7 @@ impl Execution {
         Some(value)
     }
 }
+
+#[cfg(test)]
+#[path = "read_snapshot_tests.rs"]
+mod read_snapshot_tests;

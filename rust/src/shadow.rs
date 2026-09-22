@@ -12,7 +12,7 @@ use futures::FutureExt;
 use crate::deadline::{await_deadline, since};
 use crate::engine::Core;
 use crate::error::Error;
-use crate::execution::{call_load, Execution, RawRead};
+use crate::execution::{call_load, Execution, RawRead, ReadSnapshot};
 use crate::flight::{start_pending, yield_deferred, Settled, ValueResult};
 use crate::limits::DEFAULT_FALLBACK_TIMEOUT_MS;
 use crate::local::StoredValue;
@@ -20,7 +20,7 @@ use crate::observe::{
     ErrorKind, Event, Layer, LogEvent, MissReason, ShadowMismatchDetails, ShadowOutcome,
 };
 use crate::preview::{preview_key, preview_value};
-use crate::remote::{Frame, ReadResult};
+use crate::remote::Frame;
 
 /// One admitted shadow job holding an instance slot.
 /// One held entry of the instance-wide shadow table. Dropping it frees the
@@ -134,7 +134,7 @@ impl Execution {
     /// instance capacity allow it.
     pub(crate) fn schedule_shadow(
         self: &Arc<Self>,
-        frame: Option<Frame>,
+        frame: Option<Arc<Frame>>,
         source: Option<Settled<ValueResult>>,
         started: Duration,
     ) {
@@ -228,7 +228,7 @@ impl Execution {
     async fn run_shadow(
         self: Arc<Self>,
         flight: Arc<ShadowFlight>,
-        frame: Option<Frame>,
+        frame: Option<Arc<Frame>>,
         source: Option<Settled<ValueResult>>,
         started: Duration,
         slot: ShadowSlot,
@@ -326,15 +326,15 @@ impl Execution {
                 Err(error)
             }
             Ok(mut read) => {
-                if let ReadResult::Hit(frame) = &read {
+                if let ReadSnapshot::Hit(frame) = &read {
                     let (age, valid) = self.frame_age(frame, Layer::RemoteShadow);
                     if !valid && !(retain_future && age < 0) {
-                        read = ReadResult::miss(MissReason::Unclassified);
+                        read = ReadSnapshot::miss(MissReason::Unclassified);
                     } else if max_age && valid && age as u64 >= self.policy.remote.ttl_ms {
-                        read = ReadResult::miss(MissReason::Expired);
+                        read = ReadSnapshot::miss(MissReason::Expired);
                     }
                 }
-                if let ReadResult::Miss { reason, .. } = &read {
+                if let ReadSnapshot::Miss { reason, .. } = &read {
                     self.emit(Event::Miss {
                         labels: self.labels(Layer::RemoteShadow),
                         reason: *reason,
@@ -353,7 +353,7 @@ impl Execution {
     async fn validate(
         self: Arc<Self>,
         work: ShadowWork,
-        mut frame: Option<Frame>,
+        mut frame: Option<Arc<Frame>>,
         source: Option<Settled<ValueResult>>,
         reads: &mut Vec<Settled<RawRead>>,
     ) -> Verdict {
@@ -372,14 +372,14 @@ impl Execution {
                 return Verdict::of(ShadowOutcome::Timeout);
             }
             match read {
-                ReadResult::Miss {
+                ReadSnapshot::Miss {
                     observed_watermark_ms,
                     ..
                 } => {
                     fill = true;
                     fence = observed_watermark_ms;
                 }
-                ReadResult::Hit(read_frame) => frame = Some(read_frame),
+                ReadSnapshot::Hit(read_frame) => frame = Some(read_frame),
             }
         }
         let value: ValueResult = match &source {
@@ -463,7 +463,7 @@ impl Execution {
             return Verdict::of(ShadowOutcome::Timeout);
         }
         match confirmation {
-            ReadResult::Hit(confirmed) if confirmed.payload.bytes == frame.payload.bytes => {}
+            ReadSnapshot::Hit(confirmed) if confirmed.payload.bytes == frame.payload.bytes => {}
             _ => return Verdict::of(ShadowOutcome::Superseded),
         }
         let age = self

@@ -2,6 +2,9 @@
 //! portable protocol corpus (`formal/protocol-vectors.json` plus the
 //! Quint-generated frame and envelope artifacts).
 
+#[path = "formal/digest.rs"]
+mod digest;
+
 // TODO(integrator): switch to `formal/fixtures.rs` and delete `formal/fixtures_tmp.rs`.
 #[path = "formal/fixtures.rs"]
 mod fixtures;

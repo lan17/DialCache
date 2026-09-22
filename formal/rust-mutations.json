@@ -147,8 +147,8 @@
       "edits": [
         {
           "path": "rust/src/shadow.rs",
-          "before": "            ReadResult::Hit(confirmed) if confirmed.payload.bytes == frame.payload.bytes => {}",
-          "after": "            ReadResult::Hit(_) => {}"
+          "before": "            ReadSnapshot::Hit(confirmed) if confirmed.payload.bytes == frame.payload.bytes => {}",
+          "after": "            ReadSnapshot::Hit(_) => {}"
         }
       ],
       "requiredDetections": [

@@ -31,6 +31,9 @@
 
 #![cfg(feature = "redis")]
 
+#[path = "formal/digest.rs"]
+mod digest;
+
 mod formal;
 #[path = "formal/invalidation_vectors.rs"]
 mod invalidation_vectors;

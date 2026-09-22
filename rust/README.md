@@ -214,6 +214,10 @@ synchronous, so large values can occupy an async worker.
 validation exists only to be observed, so a job is admitted only when the
 observer opts in through `observes_shadow_outcomes`; the bundled exporters do.
 `Logger` receives structured `LogEvent`s and defaults to the `log` facade.
+Default stale-recovery decode warnings omit error text that could contain cached
+values; JSON errors retain their category and line/column location. A custom
+`Logger` can inspect the original error when application-controlled details are
+needed.
 Mismatch logging is opt-in, confirmed, bounded, and previews values through
 the operation's `preview` (JSON for serde values). Default JSON previews retain
 only an 8 KiB prefix while checking the entire serialization for errors. Preview

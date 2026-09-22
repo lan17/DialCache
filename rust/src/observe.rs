@@ -477,7 +477,8 @@ pub enum LogEvent {
     /// The stale-recovery classifier panicked; recovery was denied.
     RecoveryPredicateFailed(BoxError),
     /// Decoding the retained stale frame failed during recovery; the source
-    /// error was returned.
+    /// error was returned. Default formatting omits value-bearing error text;
+    /// custom loggers can inspect the original error here.
     RecoveryDecodeFailed(BoxError),
     /// A shadow job's clean-miss fill failed while preparing or writing the payload.
     ShadowFillFailed(BoxError),
@@ -518,10 +519,23 @@ impl fmt::Display for LogEvent {
                     "DialCache stale recovery predicate failed; recovery was denied: {e}"
                 )
             }
-            LogEvent::RecoveryDecodeFailed(e) => write!(
-                f,
-                "Error using retained Redis value during stale recovery: {e}"
-            ),
+            LogEvent::RecoveryDecodeFailed(e) => {
+                write!(
+                    f,
+                    "Error using retained Redis value during stale recovery: "
+                )?;
+                if let Some(json) = e.downcast_ref::<serde_json::Error>() {
+                    write!(
+                        f,
+                        "JSON {:?} at line {} column {}",
+                        json.classify(),
+                        json.line(),
+                        json.column()
+                    )
+                } else {
+                    write!(f, "decoding failed")
+                }
+            }
             LogEvent::ShadowFillFailed(e) => {
                 write!(f, "Error populating Redis from DialCache shadow work: {e}")
             }

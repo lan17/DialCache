@@ -11,6 +11,9 @@
 
 #![allow(dead_code)]
 
+#[path = "formal/digest.rs"]
+mod digest;
+
 #[path = "formal/fixtures.rs"]
 mod fixtures;
 mod formal;

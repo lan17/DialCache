@@ -1,6 +1,9 @@
 //! The no-settle control: skipping the driver drain must fail the settlement
 //! contract of every behavior smoke history before observation comparison.
 
+#[path = "formal/digest.rs"]
+mod digest;
+
 mod formal;
 
 use formal::driver::{install_panic_hook, Driver};

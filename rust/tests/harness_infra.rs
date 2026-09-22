@@ -7,6 +7,9 @@
 //! `formal::transport`). Prepend `/opt/homebrew/opt/node@24/bin` to `PATH`
 //! when the default toolchain is another major version.
 
+#[path = "formal/digest.rs"]
+mod digest;
+
 mod formal;
 
 use formal::inventory::{

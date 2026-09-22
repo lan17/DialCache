@@ -4,6 +4,9 @@
 //!
 //! Set `DIALCACHE_PROTOCOL_CORPUS=fixed|generated` to narrow the corpus.
 
+#[path = "formal/digest.rs"]
+mod digest;
+
 #[path = "formal/fixtures.rs"]
 mod fixtures;
 #[path = "formal/key_vectors.rs"]
