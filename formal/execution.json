@@ -968,7 +968,7 @@
       "after": "owners: state.owners.replaceAt(caller, 0),",
       "nativeMutants": {
         "kind": "model-only",
-        "text": "The fault rewrites kernel/flights.qnt registerSource to record every source-starting caller as the owner of source 0, so finish (finishOwnedCalls and ownedBy) never completes a caller from the source it started; the connection monitor sourceOwnersMatchContract checks this bookkeeping against a reference captured at start. Neither port has an owners table: the starter awaits the promise its own run returned (TypeScript src/dialcache.ts singleFlightProcess and singleFlightRequestLocal) or its own goroutine result (Go go/engine.go singleFlight), and followers await the flight they looked up by key, so a caller cannot be bound to any source other than the one it started or joined. A wrong-key lookup is the C11 identity fault (M20), not this one."
+        "text": "The fault rewrites kernel/flights.qnt registerSource to record every source-starting caller as the owner of source 0, so finish (finishOwnedCalls and ownedBy) never completes a caller from the source it started; the connection monitor sourceOwnersMatchContract checks this bookkeeping against a reference captured at start. Neither port has an owners table: the starter awaits the promise its own run returned (TypeScript typescript/src/dialcache.ts singleFlightProcess and singleFlightRequestLocal) or its own goroutine result (Go go/engine.go singleFlight), and followers await the flight they looked up by key, so a caller cannot be bound to any source other than the one it started or joined. A wrong-key lookup is the C11 identity fault (M20), not this one."
       },
       "reproducer": {
         "kind": "model-run",
@@ -1279,7 +1279,7 @@
       "measures": "Repeats the profile-source-wrong-owner fault against the independent connection: the same registry mutation, reached through remote_io's read dispatch instead of the local release, must also be caught by that monitor's origins clause.",
       "nativeMutants": {
         "kind": "model-only",
-        "text": "The fault rewrites kernel/flights.qnt registerSource to record every caller as the owner of flight 0, so the flight a caller's own read dispatched never completes it and flight 0 completes every caller; the connection monitor independentSourceOriginsMatchContract finds no owner for any other flight's loader. With coalesce false each port caller awaits the promise or goroutine of the source it started itself (TypeScript src/dialcache.ts finishRedisChain through callFallback and withFallbackTimeout; Go go/engine.go execution.source returning into GetOrLoad), so no registry exists that could route a settlement to another caller."
+        "text": "The fault rewrites kernel/flights.qnt registerSource to record every caller as the owner of flight 0, so the flight a caller's own read dispatched never completes it and flight 0 completes every caller; the connection monitor independentSourceOriginsMatchContract finds no owner for any other flight's loader. With coalesce false each port caller awaits the promise or goroutine of the source it started itself (TypeScript typescript/src/dialcache.ts finishRedisChain through callFallback and withFallbackTimeout; Go go/engine.go execution.source returning into GetOrLoad), so no registry exists that could route a settlement to another caller."
       },
       "reproducer": {
         "kind": "model-run",
@@ -1431,7 +1431,7 @@
       "after": "val localHit = s.callLocal and s.localHasValue",
       "nativeMutants": {
         "kind": "model-only",
-        "text": "The core model keeps localHasValue apart from the environment flag localReadHealthy, so the fault in dialcache-core.qnt localHit serves a value through a read the environment declared failed. In both ports the failed read is the harness seam and yields no value: TypeScript spies LocalCache.prototype.getWithResolvedConfig in test/formal/behavior-driver.ts and throws before delegation, so DialCache.readLocalWithResolvedConfig in src/dialcache.ts returns a disabled result with reason config_error; Go panics in behaviorLocalFaultClock.ElapsedMS (go/behavior_driver_test.go) inside Cache.localGet (go/cache.go) and callSafely returns the zero localResult. No decision point could return the stored value from a failed read; a Go-only bypass of the seam has no TypeScript twin and would test the harness. Moving either seam must re-trigger this review."
+        "text": "The core model keeps localHasValue apart from the environment flag localReadHealthy, so the fault in dialcache-core.qnt localHit serves a value through a read the environment declared failed. In both ports the failed read is the harness seam and yields no value: TypeScript spies LocalCache.prototype.getWithResolvedConfig in typescript/test/formal/behavior-driver.ts and throws before delegation, so DialCache.readLocalWithResolvedConfig in typescript/src/dialcache.ts returns a disabled result with reason config_error; Go panics in behaviorLocalFaultClock.ElapsedMS (go/behavior_driver_test.go) inside Cache.localGet (go/cache.go) and callSafely returns the zero localResult. No decision point could return the stored value from a failed read; a Go-only bypass of the seam has no TypeScript twin and would test the harness. Moving either seam must re-trigger this review."
       },
       "reproducer": {
         "kind": "model-run",
@@ -1897,7 +1897,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M63",
-        "text": "M63 changes the production Lua in src/internal/redis-scripts.ts and go/redis_adapter.go at the same invalidation boundary as this model fault. The generated Redis cohort executes the actual scripts, and the exact selected row records their public response and stored state.",
+        "text": "M63 changes the production Lua in typescript/src/internal/redis-scripts.ts and go/redis_adapter.go at the same invalidation boundary as this model fault. The generated Redis cohort executes the actual scripts, and the exact selected row records their public response and stored state.",
         "evidence": {
           "vector": {
             "artifact": "formal/quint-invalidation-vectors.json",
@@ -1936,7 +1936,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M64",
-        "text": "M64 changes the production Lua in src/internal/redis-scripts.ts and go/redis_adapter.go at the same invalidation boundary as this model fault. The generated Redis cohort executes the actual scripts, and the exact selected row records their public response and stored state.",
+        "text": "M64 changes the production Lua in typescript/src/internal/redis-scripts.ts and go/redis_adapter.go at the same invalidation boundary as this model fault. The generated Redis cohort executes the actual scripts, and the exact selected row records their public response and stored state.",
         "evidence": {
           "vector": {
             "artifact": "formal/quint-invalidation-vectors.json",
@@ -2262,7 +2262,7 @@
       "after": "if (slot < 0) state else {",
       "nativeMutants": {
         "kind": "unobservable",
-        "text": "The closure guard on the memo write (TypeScript RequestLocalCache.set in src/context.ts; Go the owner-live check before the memo write in the run closure of go/engine.go GetOrLoad) is the native line of kernel/request-memo.qnt memoize memoizing into a closed scope, but removing it changes no public history: both ports re-check closure on the memo read (TypeScript RequestLocalCache.read in src/context.ts; the same Go run closure serves the memo only while the owner is live) and bypass closed scopes at admission, mirroring the kernel's admission bypass. Measured once while this table was authored, the edit survived every scope and layers history in both ports; the model detects the fault only through the state invariant closedScopesHaveNoMemo, so the challenge is unobservable rather than mapped."
+        "text": "The closure guard on the memo write (TypeScript RequestLocalCache.set in typescript/src/context.ts; Go the owner-live check before the memo write in the run closure of go/engine.go GetOrLoad) is the native line of kernel/request-memo.qnt memoize memoizing into a closed scope, but removing it changes no public history: both ports re-check closure on the memo read (TypeScript RequestLocalCache.read in typescript/src/context.ts; the same Go run closure serves the memo only while the owner is live) and bypass closed scopes at admission, mirroring the kernel's admission bypass. Measured once while this table was authored, the edit survived every scope and layers history in both ports; the model detects the fault only through the state invariant closedScopesHaveNoMemo, so the challenge is unobservable rather than mapped."
       },
       "reproducer": {
         "kind": "exported-regression",
@@ -2482,7 +2482,7 @@
       "measures": "The layers model measures this fault across keys and instances; scope-late-source-repopulates-closed-memo measures it where nested handles memoize into their outer lifetime's row and a replacement request opens beside a closed root.",
       "nativeMutants": {
         "kind": "unobservable",
-        "text": "The closure guard on the memo write (TypeScript RequestLocalCache.set in src/context.ts; Go the owner-live check before the memo write in the run closure of go/engine.go GetOrLoad) is the native line of kernel/request-memo.qnt memoize memoizing into a closed scope, but removing it changes no public history: both ports re-check closure on the memo read (TypeScript RequestLocalCache.read in src/context.ts; the same Go run closure serves the memo only while the owner is live) and bypass closed scopes at admission, mirroring the kernel's admission bypass. Measured once while this table was authored, the edit survived every scope and layers history in both ports; the model detects the fault only through the state invariant closedScopesHaveNoMemo, so the challenge is unobservable rather than mapped."
+        "text": "The closure guard on the memo write (TypeScript RequestLocalCache.set in typescript/src/context.ts; Go the owner-live check before the memo write in the run closure of go/engine.go GetOrLoad) is the native line of kernel/request-memo.qnt memoize memoizing into a closed scope, but removing it changes no public history: both ports re-check closure on the memo read (TypeScript RequestLocalCache.read in typescript/src/context.ts; the same Go run closure serves the memo only while the owner is live) and bypass closed scopes at admission, mirroring the kernel's admission bypass. Measured once while this table was authored, the edit survived every scope and layers history in both ports; the model detects the fault only through the state invariant closedScopesHaveNoMemo, so the challenge is unobservable rather than mapped."
       },
       "reproducer": {
         "kind": "exported-regression",
@@ -2522,7 +2522,7 @@
       "after": "val stale = visible",
       "nativeMutants": {
         "kind": "model-only",
-        "text": "The fault drops the age window from kernel/recovery.qnt retain, so a visible frame the read declined is retained whatever its age. A fresh frame never reaches retain, so the candidate retained under the fault is one past the maximum, consulted only through validCandidate's maximum recheck at loader failure and at decode settlement: no observation changes and only retainedSnapshotsWereEligible sees it; the former literal mutant (retainedAgeAllowed to recoveryAgeAllowed) is equivalent here for the same reason. In both ports retention and serving are mutually exclusive (TypeScript src/internal/redis-cache.ts getWithResolvedConfig returns hit or retained by comparing the age with the fresh age; Go go/engine.go readServing returns kind hit before recover) and the maximum is rechecked before and after decode, so no single edit retains an out-of-window frame a later check does not reject."
+        "text": "The fault drops the age window from kernel/recovery.qnt retain, so a visible frame the read declined is retained whatever its age. A fresh frame never reaches retain, so the candidate retained under the fault is one past the maximum, consulted only through validCandidate's maximum recheck at loader failure and at decode settlement: no observation changes and only retainedSnapshotsWereEligible sees it; the former literal mutant (retainedAgeAllowed to recoveryAgeAllowed) is equivalent here for the same reason. Retention and serving are mutually exclusive in both ports (typescript/src/internal/redis-cache.ts getWithResolvedConfig returns hit or retained by comparing the age with the fresh age; Go go/engine.go readServing returns kind hit before recover) and the maximum is rechecked before and after decode, so no single edit retains an out-of-window frame a later check does not reject."
       },
       "reproducer": {
         "kind": "exported-regression",
@@ -2578,7 +2578,7 @@
       },
       "nativeMutants": {
         "kind": "model-only",
-        "text": "The fault makes kernel/deadlines.qnt deliver move the clocks straight to the advance's target instead of visiting each due instant, so a deadline is delivered at the end of the advance rather than at its own instant: a loader a read expiry starts is stamped at the wrong instant and its deadline registered from there, which the monitor's origins clause (the read's own due instant plus the budget) rejects. The former text measured this rule through the settledAt it stamped at expiry, which the held shape does not carry. Neither port records when a deadline error settled (TypeScript src/internal/deadline.ts withMonotonicDeadline rejects on the timer or on a late result; Go go/deadline.go awaitDeadline returns its timeout error), and the nearest observable, the fallback duration metric, is emitted for every outcome, so an edit there would be a different, broader fault."
+        "text": "The fault makes kernel/deadlines.qnt deliver move the clocks straight to the advance's target instead of visiting each due instant, so a deadline is delivered at the end of the advance rather than at its own instant: a loader a read expiry starts is stamped at the wrong instant and its deadline registered from there, which the monitor's origins clause (the read's own due instant plus the budget) rejects. The former text measured this rule through the settledAt it stamped at expiry, which the held shape does not carry. Neither port records when a deadline error settled (TypeScript typescript/src/internal/deadline.ts withMonotonicDeadline rejects on the timer or on a late result; Go go/deadline.go awaitDeadline returns its timeout error), and the nearest observable, the fallback duration metric, is emitted for every outcome, so an edit there would be a different, broader fault."
       }
     },
     {
@@ -2705,7 +2705,7 @@
       "after": "    val publishing = state",
       "nativeMutants": {
         "kind": "model-only",
-        "text": "The fault in kernel/local-faults.qnt settle commits a local write the environment flagged failed: the settlement keeps the source's captured local TTL under an armed fault, so serving.publish warms the slot. In both ports the write and its failure are one operation: the TypeScript driver spy on LocalCache.prototype.put (test/formal/behavior-driver.ts) throws before delegation, so putLocalFailOpen in src/dialcache.ts only logs and records cache_write; Go's Cache.localPut in go/cache.go evaluates the panicking Clock.ElapsedMS while building the entry before simplelru.Add, and execution.putLocal in go/engine.go recovers through callSafely. Nothing can commit the entry after the storage operation threw. local-failure/localWriteFailureKeepsSourceAndRequestMemoTest pins the model site (calls 1,1,0 with two loaders, not a hit on the dropped value)."
+        "text": "The fault in kernel/local-faults.qnt settle commits a local write the environment flagged failed: the settlement keeps the source's captured local TTL under an armed fault, so serving.publish warms the slot. In both ports the write and its failure are one operation: the TypeScript driver spy on LocalCache.prototype.put (typescript/test/formal/behavior-driver.ts) throws before delegation, so putLocalFailOpen in typescript/src/dialcache.ts only logs and records cache_write; Go's Cache.localPut in go/cache.go evaluates the panicking Clock.ElapsedMS while building the entry before simplelru.Add, and execution.putLocal in go/engine.go recovers through callSafely. Nothing can commit the entry after the storage operation threw. local-failure/localWriteFailureKeepsSourceAndRequestMemoTest pins the model site (calls 1,1,0 with two loaders, not a hit on the dropped value)."
       },
       "reproducer": {
         "kind": "exported-regression",

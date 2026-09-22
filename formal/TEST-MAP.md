@@ -42,7 +42,7 @@ measured through the composing profile's scheduled invariants.
 | Shadow admission and fills | Shadow verification; shadow/admission/shadow-layers profiles | `dialcache-shadow-validation`, `dialcache-shadow-confirmation`: C0/source order, C1 identity, captured fill policy, mixed capacity, timeout ownership and public publication probes | Bounded keys/jobs/instances; not every remote physical-expiry race |
 | Diagnostics | Effects/policy/shadow and composition profiles | `dialcache-metrics`, `shadow-log-json`: actual category/count, age/duration, source identity, future offset and warning eligibility | Exporter registration and complete backend schemas remain native |
 
-File stems above refer to TypeScript tests under `test/`. The Go case ledger and
+File stems above refer to TypeScript tests under `typescript/test/`. The Go case ledger and
 native inventory name exact corresponding Go symbols and tests. Review those
 precise references before claiming that a broad test file establishes a clause.
 
@@ -113,7 +113,7 @@ Checking a model, reaching a witness and replaying its observations are separate
 requirements. Both implementation completion gates derive the exact sampled
 corpus, exported regressions and wire inventory from metadata.
 
-Regular CI explicitly measures `src/**/*.ts`, retaining the existing root-barrel
+Regular CI explicitly measures `typescript/src/**/*.ts`, retaining the existing root-barrel
 exclusion and unchanged 95% line/function/statement and 90% branch thresholds.
 Every shipped implementation module remains in scope. Imported formal tooling
 has separate parser, provenance, model, replay and mutation checks; importing a

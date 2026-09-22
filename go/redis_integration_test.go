@@ -422,9 +422,9 @@ func runTypeScript(t *testing.T, environment redisEnvironment, actions []map[str
 	bundle := filepath.Join(t.TempDir(), "interop.cjs")
 	// tsup is a declared dev dependency and owns the esbuild version. Bundling
 	// imports the current production TS source, never a duplicate fixture codec.
-	build := `const {createRequire}=require('node:module');const {buildSync}=createRequire(require.resolve('tsup'))('esbuild');buildSync({entryPoints:[process.argv[1]],outfile:process.argv[2],bundle:true,platform:'node',format:'cjs'});`
+	build := `const {createRequire}=require('node:module');const {buildSync}=createRequire(require.resolve('tsup'))('esbuild');buildSync({entryPoints:[process.argv[1]],outfile:process.argv[2],bundle:true,platform:'node',format:'cjs',nodePaths:[require('node:path').resolve('node_modules')]});`
 	command := exec.Command("node", "-e", build, filepath.Join(root, "go/redis_interop.ts"), bundle)
-	command.Dir = root
+	command.Dir = filepath.Join(root, "typescript")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("bundle TS interop: %v\n%s", err, output)
 	}

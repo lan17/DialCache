@@ -326,7 +326,7 @@ module serving {
   // local read hides the local value and warms nothing from this release
   // (`publishable`), and leaves the layers as the reply resolved them, so
   // participation and sharing follow configuration, as the implementations
-  // decide the process flight before the read (`src/dialcache.ts`
+  // decide the process flight before the read (`typescript/src/dialcache.ts`
   // `getThroughSharedLayers`) and a local read that throws
   // (`getThroughActiveLocal`) disables only that call's local value and
   // write. The remote observation is a
@@ -597,15 +597,15 @@ module serving {
 
   // Maintenance: invalidating an entity raises its watermark. The outcome is
   // one rule of the write-fault switch, as the drivers classify it
-  // (the `invalidate` command of `test/formal/behavior-driver.ts` `apply` and
+  // (the `invalidate` command of `typescript/test/formal/behavior-driver.ts` `apply` and
   // of `go/behavior_driver_test.go` `behaviorDriver.apply`): without remote
   // storage the request reports the missing layer and changes nothing, the
-  // adapter is never called (`src/dialcache.ts` `invalidateRemote`,
+  // adapter is never called (`typescript/src/dialcache.ts` `invalidateRemote`,
   // `go/cache.go` `Invalidate` returning `ErrNoRemote`); under a write fault
   // the invalidation is counted and reports the mutation error, and the
   // watermark does not move, as the adapter counts it before its write fails
   // (the driver adapter's `invalidate` override in
-  // `test/formal/behavior-driver.ts`, `go/behavior_driver_test.go`
+  // `typescript/test/formal/behavior-driver.ts`, `go/behavior_driver_test.go`
   // `behaviorRemote.Invalidate`); otherwise it is counted, reports
   // ok and raises the watermark to the wall clock plus the invalidator's
   // future buffer (`bufferMs`, the public `futureBufferMs`; 0 where the

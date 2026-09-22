@@ -8,12 +8,12 @@ module payloads {
   // apart: a code in the band is a class hundred plus the value the bytes
   // carry, so values stay below 100 and no profile value collides with a
   // class. COMPRESSED + v is a compressed frame whose bytes decode to v
-  // (`src/internal/compression.ts` outcome "decompressed"); CORRUPT + v a
+  // (`typescript/src/internal/compression.ts` outcome "decompressed"); CORRUPT + v a
   // frame whose compressed bytes fail to decode (outcome "fallback_raw"; v is
   // the value the bytes would have carried); UNSUPPORTED_ENCODING a frame
   // whose header names an encoding the adapter does not know, which throws
   // once the frame is present and fence-cleared
-  // (`src/internal/redis-payload.ts` `decodeRedisPayload`), so the read
+  // (`typescript/src/internal/redis-payload.ts` `decodeRedisPayload`), so the read
   // fails. A compressed or corrupt code must carry a positive value to reach
   // a decode step or to be a recovery candidate: `remote_frames::observe` and
   // `recovery::retain` consult the value before any decode as that

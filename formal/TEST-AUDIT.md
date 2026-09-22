@@ -18,7 +18,7 @@ Run:
 node formal/check-source-audit.mjs
 ```
 
-Normal TypeScript tests run the check too, without Quint. It fails when a source file is added/removed, its contents change, a test/section is added or moved, or an entry lacks a known contract disposition. SHA-256 fingerprints include inline fixture and assertion changes, not just test titles. Shared helper changes must still be reviewed with their consuming tests; helpers are not independently fingerprinted. This prevents a green *stale inventory* from silently being reused after source drift; it cannot judge whether a mapping is correct.
+Normal TypeScript tests run the check too, without Quint. It fails when a source file is added/removed, its contents change, a typescript/test/section is added or moved, or an entry lacks a known contract disposition. SHA-256 fingerprints include inline fixture and assertion changes, not just test titles. Shared helper changes must still be reviewed with their consuming tests; helpers are not independently fingerprinted. This prevents a green *stale inventory* from silently being reused after source drift; it cannot judge whether a mapping is correct.
 
 For a changed file, read the changed assertions/prose and any affected fixtures, then:
 
@@ -28,7 +28,7 @@ For a changed file, read the changed assertions/prose and any affected fixtures,
 - Run the focused implementation and formal checks. A mapping is evidence bookkeeping, not a substitute for those checks.
 
 The `sources` inventory covers `README.md`, authored Markdown pages under `docs/`
-(including native language guides), and ordinary `test/*.test.ts` files,
+(including native language guides), and ordinary `typescript/test/*.test.ts` files,
 including real Redis/Cluster integration declarations. It excludes generated
 content under `docs/generated`, native API output under `docs/public`, and
 VitePress internals. The generated behavior catalogue takes its reviewed claims

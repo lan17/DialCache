@@ -16,14 +16,14 @@ test('models, recipes, exporters, artifacts, execution and tool pins require rec
     'formal/execution.json', 'formal/execution.mjs', 'formal/profiles.json',
     'formal/generated-fixtures.lock.json', 'formal/quint-frame-vectors.json',
     'formal/profile-lint-baseline.json',
-    'formal/conformance-smoke.itf.json', 'test/fixtures/new-witnesses.json', 'test/fixtures/kernel/held-replies.qnt',
-    'package.json', 'pnpm-lock.yaml', 'go/go.mod', 'go/go.sum',
+    'formal/conformance-smoke.itf.json', 'typescript/test/fixtures/new-witnesses.json', 'formal/fixtures/kernel/held-replies.qnt',
+    'package.json', 'typescript/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'go/go.mod', 'go/go.sum',
     '.github/actions/setup-quint/action.yml', '.github/workflows/formal.yaml',
   ]) assert.equal(fixtureScope('pull_request', pullRequest, changed([path])).recompute, true, path);
 });
 
 test('new explicitly declared fixture inputs are detected regardless of file extension', () => {
-  assert.equal(affectsQuintArtifacts('test/new-model-input.data', new Set(['test/new-model-input.data'])), true);
+  assert.equal(affectsQuintArtifacts('typescript/test/new-model-input.data', new Set(['typescript/test/new-model-input.data'])), true);
 });
 
 test('fork pull requests use exact event SHAs and preserve both sides of renames', () => {

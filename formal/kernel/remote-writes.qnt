@@ -54,7 +54,7 @@ module remote_writes {
   // carries its source's, a job's fill the one its own C0 read observed,
   // `shadow`). A held write keeps the retention and adds the stamp captured
   // when its dump was released. `sampled` is the wall clock the
-  // pre-serialization fence check sampled (`src/internal/redis-cache.ts`
+  // pre-serialization fence check sampled (`typescript/src/internal/redis-cache.ts`
   // `putWithLayer`, `sampleWriteTimestamp` before `dump`), the receipt the
   // first fence check leaves: a held dump's fence was cleared by that instant,
   // whatever the wall clock does before the dump is released and the second

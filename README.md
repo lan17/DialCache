@@ -12,8 +12,9 @@ request scopes, and checkout installation.
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-DialCache is a TypeScript library that organizes caching into use cases, with
-runtime control and observability for each one.
+DialCache organizes caching into use cases, with runtime control and
+observability for each one. Its TypeScript, Go, Rust and Python implementations share
+behavioral contracts and documentation.
 
 - **Off by default:** caching runs only inside an `enable()` scope.
 - **Multi-layer:** request-local → process-local → Redis.
@@ -29,7 +30,18 @@ runtime control and observability for each one.
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
 · [API reference](https://lan17.github.io/DialCache/api.html)
 
-## Install
+| Language | Implementation | Native guide |
+| --- | --- | --- |
+| TypeScript | [`typescript/`](typescript/) — reference implementation | [TypeScript and npm](typescript/README.md) |
+| Go | [`go/`](go/) — experimental | [Go guide](go/README.md) |
+| Rust | [`rust/`](rust/) — experimental | [Rust guide](rust/README.md) |
+| Python | [`python/`](python/) — experimental | [Python guide](python/README.md) |
+
+Shared contracts and portable test histories live in [`formal/`](formal/).
+Run repository validation from the root; see the
+[maintainer guide](https://lan17.github.io/DialCache/maintainers.html).
+
+## Install TypeScript
 
 ```bash
 npm install dialcache
@@ -140,7 +152,7 @@ for sampling and comparison behavior.
 | Recovery from selected source failures | [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html) |
 | Shared execution and deadlines | [Coalescing and liveness](https://lan17.github.io/DialCache/coalescing.html) |
 | Methods, options, and exports | [API reference](https://lan17.github.io/DialCache/api.html) |
-| Other implementations and shared behavior contracts | [Go guide](go/README.md) · [Rust guide](rust/README.md) · [Python guide](python/README.md) · [Quint specification](formal/README.md) · [Worked walkthrough](formal/WALKTHROUGH.md) |
+| Native implementations and shared behavior contracts | [TypeScript guide](typescript/README.md) · [Go guide](go/README.md) · [Rust guide](rust/README.md) · [Python guide](python/README.md) · [Quint specification](formal/README.md) · [Worked walkthrough](formal/WALKTHROUGH.md) |
 
 The Go, Rust, and Python ports and the TypeScript library replay the same
 Quint-generated histories. Whether those histories reach every required boundary is decided by

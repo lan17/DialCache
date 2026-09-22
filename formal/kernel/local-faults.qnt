@@ -5,7 +5,7 @@ module local_faults {
   // and write throws and the cache fails open. A call whose local read fails
   // keeps the layers its reply resolved to, and with them its coalescing: the
   // implementations pick the process flight from the resolved layer
-  // configuration before any read (`src/dialcache.ts` `getThroughSharedLayers`
+  // configuration before any read (`typescript/src/dialcache.ts` `getThroughSharedLayers`
   // wraps the traversal in the single flight when the local layer is enabled
   // and the key coalesces), and a local read that throws
   // (`getThroughActiveLocal`, `readLocalWithResolvedConfig`) disables only

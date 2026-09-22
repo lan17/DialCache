@@ -1,4 +1,4 @@
-import type { Fixture, Input, Observation } from "../../test/formal/behavior-driver.js";
+import type { Fixture, Input, Observation } from "../../typescript/test/formal/behavior-driver.js";
 export const actions: readonly string[];
 export const observedFields: readonly string[];
 export interface Event { event: string; location: string; detail: string; amount: number }

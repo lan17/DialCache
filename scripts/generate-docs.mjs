@@ -71,7 +71,7 @@ const pages = ['---', 'editLink: false', '---', '', '# Behavior catalogue', '',
   'These links describe registered evidence and its scope. They are not a fresh test result or a claim of exhaustive coverage. ' +
   'See the [validation guide](' + source('formal/VALIDATION.md') + ') for how a completed run is established.', '',
   'All supported ports replay the shared histories through their native drivers. ' +
-  [link('TypeScript replay tests', 'test/formal-features.test.ts'), link('Go replay tests', 'go/feature_replay_test.go'), link('Rust replay tests', 'rust/tests/conformance.rs'), link('Python replay tests', 'python/tests/test_conformance.py')].join(' · ') + '.', '',
+  [link('TypeScript replay tests', 'typescript/test/formal-features.test.ts'), link('Go replay tests', 'go/feature_replay_test.go'), link('Rust replay tests', 'rust/tests/conformance.rs'), link('Python replay tests', 'python/tests/test_conformance.py')].join(' · ') + '.', '',
   '| Case | Behavior | Model and regression evidence | Shared replay evidence |',
   '| --- | --- | --- | --- |'];
 for (const item of inventory.cases) {

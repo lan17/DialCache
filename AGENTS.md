@@ -9,27 +9,34 @@ DialCache has TypeScript, Go, Rust and Python implementations with explicit requ
 ```text
 README.md              # Landing page and documentation entry point
 docs/                  # User guides and API reference
-src/
-  index.ts              # Public root entry point (barrel)
-  dialcache.ts          # Main DialCache API and cached-function wrapper
-  errors.ts             # Public core error classes (DialCacheError hierarchy)
-  config.ts             # Public configuration and rollout types
-  context.ts            # AsyncLocalStorage-based enabled context
-  key.ts                # Structured cache keys and Redis hash tags
-  metrics.ts            # Backend-neutral metrics adapter contract
-  prometheus.ts         # Optional Prometheus adapter
-  datadog.ts            # Optional Datadog (DogStatsD) adapter
-  redis-client.ts       # Client-independent semantic Redis interface and its public error classes
-  node-redis.ts         # node-redis adapter and invalidation dispatch
-  valkey-glide.ts       # Valkey GLIDE adapter (standalone and cluster)
-  redis-protocol.ts     # Public frame codec and Lua protocol exports
-  serializer.ts         # Serializer contract and JSON implementation
-  internal/             # Cache layers, runtime config, payload compression, and invalidation Lua script
-test/                   # Unit and Redis integration tests
+typescript/             # Published npm package, README and build configuration
+  src/
+    index.ts            # Public root entry point (barrel)
+    dialcache.ts        # Main DialCache API and cached-function wrapper
+    errors.ts           # Public core error classes (DialCacheError hierarchy)
+    config.ts           # Public configuration and rollout types
+    context.ts          # AsyncLocalStorage-based enabled context
+    key.ts              # Structured cache keys and Redis hash tags
+    metrics.ts          # Backend-neutral metrics adapter contract
+    prometheus.ts       # Optional Prometheus adapter
+    datadog.ts          # Optional Datadog (DogStatsD) adapter
+    redis-client.ts     # Client-independent semantic Redis interface and its public error classes
+    node-redis.ts       # node-redis adapter and invalidation dispatch
+    valkey-glide.ts     # Valkey GLIDE adapter (standalone and cluster)
+    redis-protocol.ts   # Public frame codec and Lua protocol exports
+    serializer.ts       # Serializer contract and JSON implementation
+    internal/           # Cache layers, runtime config, payload compression, and invalidation Lua script
+  test/                 # Unit, Redis integration and shared-corpus replay tests
+  examples/             # Executable native documentation examples
+  scripts/              # Package checks and TypeScript benchmarks
 go/                     # Go module, public cache and adapters, shared-corpus replay
 rust/                   # Rust crate, public cache and adapters, shared-corpus replay (tests/conformance.rs)
 python/                 # Async Python package, borrowed Redis adapter, native tests and shared-corpus replay
 formal/                 # Quint behavioral source of truth, contracts and portable vectors
+scripts/                # Shared documentation tools
+package.json            # Private shared tooling and TypeScript command dispatch
+pnpm-workspace.yaml     # TypeScript package membership and shared dependency policy
+pnpm-lock.yaml          # Shared workspace dependency lockfile
 ```
 
 ## Critical behavior
@@ -53,11 +60,15 @@ formal/                 # Quint behavioral source of truth, contracts and portab
 ## Conventions
 
 - Preserve strict TypeScript settings and public abstraction boundaries.
-- Keep the README focused on evaluation and getting started. Document complete
-  feature behavior in `docs/` and link it from `docs/index.md`.
+- Keep the root README focused on evaluation and language entry points, and
+  `typescript/README.md` suitable for npm consumers. Document complete feature
+  behavior in `docs/` and link it from `docs/index.md`.
 - Keep Redis client-specific behavior in adapters; core code depends on `DialCacheRedisClient`.
-- Public exports belong in the root or an explicit integration entry point such as `src/node-redis.ts`, `src/prometheus.ts`, or `src/redis-protocol.ts`.
+- Public TypeScript exports belong in `typescript/src/index.ts` or an explicit integration entry point such as `typescript/src/node-redis.ts`, `typescript/src/prometheus.ts`, or `typescript/src/redis-protocol.ts`.
 - Use `corepack pnpm` for project commands.
+- Run shared `make` targets and pnpm commands from the repository root; the
+  private workspace package dispatches native TypeScript commands. Keep npm
+  package paths and exports independent of the repository's `typescript/` prefix.
 - For documentation work, follow `docs/authoring.md`. Maintain shared behavior
   prose once, import executable native examples by named region, and keep real
   language differences in `LanguageContent` notes or the short native guides.

@@ -161,8 +161,8 @@ jobs:
   # as strict as one sequential run. The lane is bounded by sequential
   # mutants: about 1 minute per TypeScript mutant on a fast runner and about 2
   # on the slow class (13 mutants took 17 minutes unsharded in run
-  # 34669546872). test/formal-validation.test.ts pins the mutants a shard may
-  # hold so that the baselines (2-4 minutes), the slow-class mutant cost and
+  # 34669546872). typescript/test/formal-validation.test.ts pins the mutants
+  # a shard may hold so that the baselines (2-4 minutes), the slow-class cost and
   # one hung cohort's 9-minute bound fit the timeout; growing the catalog past
   # that fails the pull request until the matrix grows.
   typescript-mutations:
@@ -289,15 +289,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # The Go lane bounds the whole workflow: every mutant replays the generated
-  # cohort, about 1.6 minutes per mutant on a fast runner and about 3 on the
-  # slow class (13 mutants took 25 minutes in run 34660598461 and 47-48 in
-  # runs 34669546872 and 34670045249), strictly in sequence. A shard compiles,
-  # runs the baselines (2-4 minutes) and its slice of the catalog; one hung
-  # cohort adds its 8-minute test bound before the shard fails.
-  # test/formal-validation.test.ts pins the mutants a shard may hold within
-  # the timeout, so catalog growth fails the pull request until the matrix
-  # grows.
   python-parity:
     needs: generate
     runs-on: ubuntu-latest
@@ -327,6 +318,15 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # The Go lane bounds the whole workflow: every mutant replays the generated
+  # cohort, about 1.6 minutes per mutant on a fast runner and about 3 on the
+  # slow class (13 mutants took 25 minutes in run 34660598461 and 47-48 in
+  # runs 34669546872 and 34670045249), strictly in sequence. A shard compiles,
+  # runs the baselines (2-4 minutes) and its slice of the catalog; one hung
+  # cohort adds its 8-minute test bound before the shard fails.
+  # typescript/test/formal-validation.test.ts pins the mutants a shard may
+  # hold within the timeout, so catalog growth fails the pull request until
+  # the matrix grows.
   go-mutations:
     needs: generate
     runs-on: ubuntu-latest

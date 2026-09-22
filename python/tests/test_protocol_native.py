@@ -50,9 +50,9 @@ let text = ''; for await (const chunk of process.stdin) text += chunk;
 const input = JSON.parse(text);
 let output;
 if (input.op === 'numbers') output = input.values.map(String);
-else if (input.op === 'script') output = (await import(moduleUrl(path.resolve('src/internal/redis-scripts.ts')))).INVALIDATE_CACHE_SCRIPT;
+else if (input.op === 'script') output = (await import(moduleUrl(path.resolve('typescript/src/internal/redis-scripts.ts')))).INVALIDATE_CACHE_SCRIPT;
 else {
-  const wire = await import(moduleUrl(path.resolve('src/internal/redis-payload.ts')));
+  const wire = await import(moduleUrl(path.resolve('typescript/src/internal/redis-payload.ts')));
   if (input.op === 'encode') output = wire.encodeRedisFrame(input.binary ? Buffer.from(input.payload,'hex') : input.payload,input.at).toString('hex');
   if (input.op === 'decode') {
     const frame = Buffer.from(input.hex,'hex');
