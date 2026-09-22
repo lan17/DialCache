@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "benchmark": "node benchmarks/run.mjs",
+    "benchmark:report": "node benchmarks/report.mjs",
+    "benchmark:test": "node --test benchmarks/runner.test.mjs",
     "benchmark:request-local": "pnpm --dir typescript benchmark:request-local",
     "benchmark:redis-write": "pnpm --dir typescript benchmark:redis-write",
     "benchmark:stale-on-error": "pnpm --dir typescript benchmark:stale-on-error",

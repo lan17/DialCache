@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 .formal-traces/
+.bench-results/
 docs/.vitepress/cache/
 docs/public/reference/
 docs/generated/

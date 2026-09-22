@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "cases": [
+    { "id": "source-baseline", "kind": "source-baseline", "suite": "core", "scope": "none", "iterations": 20000, "warmup": 5000, "fanout": 1, "capacity": 128, "payloadBytes": 32 },
+    { "id": "disabled", "kind": "disabled", "suite": "core", "scope": "none", "iterations": 20000, "warmup": 5000, "fanout": 1, "capacity": 128, "payloadBytes": 32 },
+    { "id": "enabled-uncached", "kind": "enabled-uncached", "suite": "core", "scope": "single", "iterations": 20000, "warmup": 5000, "fanout": 1, "capacity": 128, "payloadBytes": 32 },
+    { "id": "request-local-hit", "kind": "request-local-hit", "suite": "core", "scope": "single", "iterations": 20000, "warmup": 5000, "fanout": 1, "capacity": 128, "payloadBytes": 32 },
+    { "id": "process-local-hit", "kind": "process-local-hit", "suite": "core", "scope": "per-operation", "iterations": 20000, "warmup": 5000, "fanout": 1, "capacity": 128, "payloadBytes": 32 },
+    { "id": "local-eviction", "kind": "local-eviction", "suite": "core", "scope": "per-operation", "iterations": 2000, "warmup": 500, "fanout": 1, "capacity": 128, "payloadBytes": 32 },
+    { "id": "request-coalescing", "kind": "request-coalescing", "suite": "core", "scope": "per-burst", "iterations": 50, "warmup": 10, "fanout": 32, "capacity": 128, "payloadBytes": 32 },
+    { "id": "process-coalescing", "kind": "process-coalescing", "suite": "core", "scope": "per-operation", "iterations": 50, "warmup": 10, "fanout": 32, "capacity": 128, "payloadBytes": 32 },
+    { "id": "redis-hit-1k", "kind": "redis-hit", "suite": "redis", "scope": "per-operation", "iterations": 500, "warmup": 100, "fanout": 1, "capacity": 128, "payloadBytes": 1024 },
+    { "id": "redis-hit-64k", "kind": "redis-hit", "suite": "redis", "scope": "per-operation", "iterations": 500, "warmup": 100, "fanout": 1, "capacity": 128, "payloadBytes": 65536 },
+    { "id": "redis-tracked-hit-1k", "kind": "redis-tracked-hit", "suite": "redis", "scope": "per-operation", "iterations": 500, "warmup": 100, "fanout": 1, "capacity": 128, "payloadBytes": 1024 },
+    { "id": "redis-tracked-hit-64k", "kind": "redis-tracked-hit", "suite": "redis", "scope": "per-operation", "iterations": 500, "warmup": 100, "fanout": 1, "capacity": 128, "payloadBytes": 65536 },
+    { "id": "redis-write-100b", "kind": "redis-write", "suite": "redis", "scope": "none", "iterations": 4000, "warmup": 30, "fanout": 1, "capacity": 128, "payloadBytes": 100 },
+    { "id": "redis-write-10k", "kind": "redis-write", "suite": "redis", "scope": "none", "iterations": 2000, "warmup": 30, "fanout": 1, "capacity": 128, "payloadBytes": 10240 },
+    { "id": "redis-write-100k", "kind": "redis-write", "suite": "redis", "scope": "none", "iterations": 600, "warmup": 30, "fanout": 1, "capacity": 128, "payloadBytes": 102400 },
+    { "id": "redis-write-1m", "kind": "redis-write", "suite": "redis", "scope": "none", "iterations": 150, "warmup": 30, "fanout": 1, "capacity": 128, "payloadBytes": 1048576 }
+  ]
+}

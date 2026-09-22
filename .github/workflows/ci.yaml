@@ -36,6 +36,10 @@ jobs:
         run: python3 -B -m unittest discover -s scripts -p test_release.py
       - name: Check TypeScript types, native tests, build and package
         run: make check-ts
+      - name: Validate shared benchmark runner and TypeScript workloads
+        run: |
+          corepack pnpm benchmark:test
+          corepack pnpm benchmark --ports typescript --suite all --smoke --redis-url "$DOCS_REDIS_URL"
       # push events only reach this workflow for main, so this uploads
       # coverage exactly when a commit lands there — never for PRs.
       - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -75,6 +79,8 @@ jobs:
           go: "true"
       - name: Check Go formatting, vet and native tests with race detection
         run: make check-go
+      - name: Validate shared Go benchmark workloads
+        run: corepack pnpm benchmark --ports go --suite all --smoke --redis-url "$DOCS_REDIS_URL"
       - name: Check real Redis, Valkey, Cluster and TypeScript interoperability with race detection
         run: make integration-go
       - name: Retain Go integration results
@@ -106,6 +112,8 @@ jobs:
           rust: "true"
       - name: Check Rust formatting, clippy and native tests including the smoke conformance run
         run: make check-rust
+      - name: Validate shared Rust benchmark workloads
+        run: corepack pnpm benchmark --ports rust --suite all --smoke --redis-url "$DOCS_REDIS_URL"
       - name: Verify the packaged Rust crate with every feature
         working-directory: rust
         run: cargo package --locked --all-features
