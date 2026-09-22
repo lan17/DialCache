@@ -23,19 +23,24 @@ watch(() => route.path, () => {
 </script>
 
 <template>
-  <label class="language-selector">
-    <span>Language</span>
-    <select :value="language" aria-label="Documentation language"
-      @change="choose(($event.target as HTMLSelectElement).value)">
-      <option v-for="port in ports" :key="port.id" :value="port.id">{{ port.label }}</option>
-    </select>
+  <div class="language-selector">
+    <span aria-hidden="true">Language</span>
+    <div class="language-options" role="group" aria-label="Documentation language">
+      <button v-for="port in ports" :key="port.id" type="button"
+        :aria-pressed="language === port.id" @click="choose(port.id)">
+        {{ port.label }}
+      </button>
+    </div>
     <a :href="withBase(selectedPort.reference)" target="_self">API reference</a>
-  </label>
+  </div>
 </template>
 
 <style scoped>
-.language-selector { display: flex; align-items: center; gap: .65rem; margin-bottom: 1.5rem; font-size: .9rem; color: var(--vp-c-text-2); }
-select { border: 1px solid var(--vp-c-divider); border-radius: 6px; padding: .35rem 1.8rem .35rem .6rem; appearance: auto; color: var(--vp-c-text-1); background: var(--vp-c-bg-soft); font: inherit; }
-select:focus-visible { outline: 2px solid var(--vp-c-brand-1); outline-offset: 2px; }
+.language-selector { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem .9rem; margin-bottom: 1.5rem; font-size: .9rem; color: var(--vp-c-text-2); }
+.language-options { display: inline-flex; gap: .2rem; padding: .2rem; border: 1px solid var(--vp-c-divider); border-radius: 9px; background: var(--vp-c-bg-soft); }
+button { min-height: 36px; padding: .35rem .8rem; border-radius: 6px; color: var(--vp-c-text-2); font: inherit; font-weight: 600; cursor: pointer; }
+button:hover { color: var(--vp-c-text-1); background: var(--vp-c-default-soft); }
+button[aria-pressed="true"] { color: var(--vp-button-brand-text); background: var(--vp-button-brand-bg); }
+button:focus-visible { outline: 2px solid var(--vp-c-brand-1); outline-offset: 2px; }
 a { color: var(--vp-c-brand-1); }
 </style>
