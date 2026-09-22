@@ -27,7 +27,7 @@ export function validateRecipes(book, execution = readExecution()) {
   if (book.schemaVersion !== 1 || !Array.isArray(book.artifacts) || !book.artifacts.length) fail('Invalid fixture recipe inventory');
   const paths = new Set();
   for (const artifact of book.artifacts) {
-    if (typeof artifact.path !== 'string' || !/^(formal\/[\w-]+-smoke\.itf|test\/fixtures\/[\w-]+)\.json$/.test(artifact.path) || paths.has(artifact.path)) fail('Invalid/duplicate fixture path');
+    if (typeof artifact.path !== 'string' || !/^(formal\/[\w-]+-smoke\.itf|typescript\/test\/fixtures\/[\w-]+)\.json$/.test(artifact.path) || paths.has(artifact.path)) fail('Invalid/duplicate fixture path');
     paths.add(artifact.path);
     if (Object.keys(artifact).some(key => !['path', 'model', 'format', 'recipes'].includes(key))) fail('Unexpected artifact recipe field');
     if (!['smoke', 'named-map', 'named-list', 'excerpts'].includes(artifact.format) || !Array.isArray(artifact.recipes) || !artifact.recipes.length) fail('Invalid fixture format');
@@ -60,7 +60,7 @@ export function validateRecipes(book, execution = readExecution()) {
     }
   }
   const expected = [...JSON.parse(read('formal/profiles.json')).profiles.map(p => p.smoke),
-    ...readdirSync(resolve(root, 'test/fixtures')).filter(name => /witness.*\.json$/.test(name)).map(name => `test/fixtures/${name}`)].sort();
+    ...readdirSync(resolve(root, 'typescript/test/fixtures')).filter(name => /witness.*\.json$/.test(name)).map(name => `typescript/test/fixtures/${name}`)].sort();
   if (!isDeepStrictEqual([...paths].sort(), expected)) fail('Fixture recipe inventory omits or adds a committed fixture');
   return book;
 }

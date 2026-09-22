@@ -33,7 +33,7 @@ Exporter compatibility and resource-exhaustion limits have explicit native integ
 
 ## Portable obligations and executable evidence
 
-`S:` names an exact scenario in [behavioral-scenarios.json](./behavioral-scenarios.json). `V:` names a group in [protocol-vectors.json](./protocol-vectors.json). `I:` refers to [invalidation-vectors.json](./invalidation-vectors.json), executed against the production Lua protocol on real Redis and Valkey. The [behavioral evidence map](./TEST-MAP.md#behavioral-map) connects model and profile names to implementation provenance and bounded composition coverage. These forms complement one another; model coverage alone does not mean generated implementation replay. A scheduled property establishes only its reviewed clause. A required generated witness must expose the corresponding public consequence; an action name, input fixture, or intermediate phase alone cannot establish it. `G:` names a generated profile in `test/formal-features.test.ts`; each explores the bounded subset described in `BEHAVIOR.md`, not necessarily the entire row.
+`S:` names an exact scenario in [behavioral-scenarios.json](./behavioral-scenarios.json). `V:` names a group in [protocol-vectors.json](./protocol-vectors.json). `I:` refers to [invalidation-vectors.json](./invalidation-vectors.json), executed against the production Lua protocol on real Redis and Valkey. The [behavioral evidence map](./TEST-MAP.md#behavioral-map) connects model and profile names to implementation provenance and bounded composition coverage. These forms complement one another; model coverage alone does not mean generated implementation replay. A scheduled property establishes only its reviewed clause. A required generated witness must expose the corresponding public consequence; an action name, input fixture, or intermediate phase alone cannot establish it. `G:` names a generated profile in `typescript/test/formal-features.test.ts`; each explores the bounded subset described in `BEHAVIOR.md`, not necessarily the entire row.
 
 ### Scope, traversal, storage, and sharing
 
@@ -163,7 +163,7 @@ Each row identifies where the source's semantic rules land. Repeated tests in di
 | `docs/observability.md` | C30/C47/C50–C54, W04; X01 for detailed telemetry contracts |
 | `docs/upgrading.md`, `docs/maintainers.md` | E05, B01, X01/X02 for deployment, package/release/test workflow, and benchmarks |
 
-| Implementation tests (`test/` basenames) | Inventory |
+| Implementation tests (`typescript/test/` basenames) | Inventory |
 | --- | --- |
 | `dialcache-local`, `dialcache-request-local` | C01–C10, C15/C19/C27, W01/W02; B01–B03, X02 |
 | `dialcache-get-or-load` | C01–C05, C11/C15/C18/C27/C31; B01/B03 for inline/wrapper API differences |
@@ -182,7 +182,7 @@ Each row identifies where the source's semantic rules land. Repeated tests in di
 | `redis-real.integration`, `redis-cluster.integration` | E01/E02, W01/W04–W09, C22/C27–C39; X02; portable invalidation vectors execute here |
 | `formal-behavior`, `formal-conformance`, `formal-effects`, `formal-features`, `formal-protocol-vectors` | Execution of the portable artifacts and independent-observation/parser regression checks |
 
-`fake-redis.ts`, `marker-colliding-serializer.ts`, and `test/formal/*.ts` are fixture/driver helpers, not additional product contracts. Compile-time, packed-package, and example checks outside `test/` establish B01/B03. The formal docs describe the checking machinery, its assumptions, and its limits.
+`fake-redis.ts`, `marker-colliding-serializer.ts`, and `typescript/test/formal/*.ts` are fixture/driver helpers, not additional product contracts. Compile-time, packed-package, and example checks outside `typescript/test/` establish B01/B03. The formal docs describe the checking machinery, its assumptions, and its limits.
 
 ## Maintenance and claim limits
 

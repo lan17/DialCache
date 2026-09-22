@@ -165,7 +165,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     // Copies preserve repo-relative witness definition paths while mutations
     // remain completely outside the shared checkout. No git resets or writes
     // touch the user's implementation or trace corpus.
-    for (const path of ['formal', 'go', 'test', 'src']) cpSync(resolve(root, path), resolve(workspace, path), { recursive: true });
+    for (const path of ['formal', 'go', 'typescript/test', 'typescript/src']) cpSync(resolve(root, path), resolve(workspace, path), { recursive: true });
     const moduleDirectory = resolve(workspace, 'go');
     const catalogPath = resolve(workspace, language.catalog);
     // The catalog is validated and every anchor checked in the workspace copy by

@@ -11,7 +11,7 @@ import (
 )
 
 // Harness control for the causally-ready-v1 settlement contract (PORTING.md),
-// the Go counterpart of test/formal-settlement-control.test.ts. It replays the
+// the Go counterpart of typescript/test/formal-settlement-control.test.ts. It replays the
 // committed smoke history of every behaviorDriver-backed profile the
 // coordinator lists through the shared coordinator twice: once with the
 // settling driver, which must pass, and once with a driver that skips the

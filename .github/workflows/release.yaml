@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - package.json
+      - typescript/package.json
 
 permissions: {}
 
@@ -100,7 +100,7 @@ jobs:
                 "$release_parent" "$release_commit"
             )"
             actual_version="$(
-              git show "$release_commit:package.json" |
+              git show "$release_commit:typescript/package.json" |
                 node -e 'const fs = require("node:fs"); console.log(JSON.parse(fs.readFileSync(0, "utf8")).version)'
             )"
 
@@ -112,8 +112,8 @@ jobs:
               echo "Expected $release_branch subject '$release_title'; got '$release_subject'" >&2
               exit 1
             fi
-            if [[ "$changed_files" != "package.json" ]]; then
-              echo "Expected $release_branch to change only package.json; got:" >&2
+            if [[ "$changed_files" != "typescript/package.json" ]]; then
+              echo "Expected $release_branch to change only typescript/package.json; got:" >&2
               echo "$changed_files" >&2
               exit 1
             fi
@@ -127,23 +127,23 @@ jobs:
               exit 1
             fi
 
-            npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
+            npm --prefix typescript version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
 
-            actual_version="$(node -p 'require("./package.json").version')"
+            actual_version="$(node -p 'require("./typescript/package.json").version')"
             if [[ "$actual_version" != "$RELEASE_VERSION" ]]; then
-              echo "Expected package.json version $RELEASE_VERSION; got $actual_version" >&2
+              echo "Expected typescript/package.json version $RELEASE_VERSION; got $actual_version" >&2
               exit 1
             fi
 
-            git diff --exit-code -- . ':(exclude)package.json'
-            if git diff --quiet -- package.json; then
-              echo "package.json already has release version $RELEASE_VERSION" >&2
+            git diff --exit-code -- . ':(exclude)typescript/package.json'
+            if git diff --quiet -- typescript/package.json; then
+              echo "typescript/package.json already has release version $RELEASE_VERSION" >&2
               exit 1
             fi
 
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -- package.json
+            git add -- typescript/package.json
             git commit -m "$release_title"
 
             git -c credential.helper= \
@@ -164,7 +164,7 @@ jobs:
 
           pr_body="Automated by the Release workflow run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID.
 
-          This PR updates only package.json to $RELEASE_VERSION. Approve its workflow runs, review it, and squash-merge it to publish the release from the protected main branch."
+          This PR updates only typescript/package.json to $RELEASE_VERSION. Approve its workflow runs, review it, and squash-merge it to publish the release from the protected main branch."
           pr_url="$(
             gh pr create \
               --repo "$GITHUB_REPOSITORY" \
@@ -228,15 +228,15 @@ jobs:
             git diff-tree --no-commit-id --name-only -r \
               "$release_parent" "$GITHUB_SHA"
           )"
-          if [[ "$changed_files" != "package.json" ]]; then
-            echo "Release commit must change only package.json; got:" >&2
+          if [[ "$changed_files" != "typescript/package.json" ]]; then
+            echo "Release commit must change only typescript/package.json; got:" >&2
             echo "$changed_files" >&2
             exit 1
           fi
 
-          actual_version="$(node -p 'require("./package.json").version')"
+          actual_version="$(node -p 'require("./typescript/package.json").version')"
           if [[ "$actual_version" != "$release_version" ]]; then
-            echo "Expected package.json version $release_version; got $actual_version" >&2
+            echo "Expected typescript/package.json version $release_version; got $actual_version" >&2
             exit 1
           fi
           if git rev-parse --verify --quiet "refs/tags/v$release_version" >/dev/null; then

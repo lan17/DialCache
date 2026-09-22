@@ -81,11 +81,11 @@ using the published mapping, rather than supplying the predicted call result.
 | Follow this part | File and exact symbol |
 | --- | --- |
 | Shared command mapping and fixture | [source-budgets.mjs](./replay/profiles/source-budgets.mjs), `sourceBudgetsProfile` |
-| TS real API execution | [behavior-driver.ts](../test/formal/behavior-driver.ts), `BehaviorDriver.apply` and `snapshot` |
+| TS real API execution | [behavior-driver.ts](../typescript/test/formal/behavior-driver.ts), `BehaviorDriver.apply` and `snapshot` |
 | Go real API execution | [behavior_driver_test.go](../go/behavior_driver_test.go), `behaviorDriver.apply` and `observation` |
 | Rust real API execution | [driver.rs](../rust/tests/formal/driver.rs), `Driver::apply` and `Driver::observation` |
 | Shared projection and per-step assertion | [features.mjs](./replay/features.mjs), `projectObservation` and `assertFeatureObservation` |
-| TS replay | [formal-features.test.ts](../test/formal-features.test.ts), `replay` |
+| TS replay | [formal-features.test.ts](../typescript/test/formal-features.test.ts), `replay` |
 | Go replay transport | [feature_replay_test.go](../go/feature_replay_test.go), `TestFeatureConformance`, and [replay_coordinator_test.go](../go/replay_coordinator_test.go) |
 | Rust replay transport | [conformance.rs](../rust/tests/conformance.rs), `Run::replay_behavior`, and [transport.rs](../rust/tests/formal/transport.rs), `Coordinator::execute` |
 
@@ -144,7 +144,7 @@ Replay that same history against each port:
 ```sh
 DIALCACHE_FEATURE_PROFILE=source-budgets \
 DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/walkthrough/source-budgets/heldPolicyDoesNotSpendSourceBudgetTest.itf.json" \
-  corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false
+  corepack pnpm --dir typescript exec vitest run test/formal-features.test.ts --coverage.enabled=false
 
 DIALCACHE_FEATURE_PROFILE=source-budgets \
 DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/walkthrough/source-budgets/heldPolicyDoesNotSpendSourceBudgetTest.itf.json" \

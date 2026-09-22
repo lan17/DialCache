@@ -1,8 +1,8 @@
 module adapter_replies {
   // The queued adapter reply (C55): what the remote adapter returns in place
   // of the stored frame, interpreted once at the trust boundary
-  // (`src/internal/redis-cache.ts` `validateReadResult` and `frameAge`,
-  // `src/internal/redis-payload.ts` `decodeTrackedRedisReadResult`,
+  // (`typescript/src/internal/redis-cache.ts` `validateReadResult` and `frameAge`,
+  // `typescript/src/internal/redis-payload.ts` `decodeTrackedRedisReadResult`,
   // `go/engine.go` the same). The drivers queue one reply by its class
   // (BEHAVIOR.md, the effects `adapterReply` choices 1 to 16, below); the
   // next successful raw completion consumes it whether or not DialCache still

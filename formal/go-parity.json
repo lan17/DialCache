@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "faa768fbf06eddc03dc4f26570094b1df066fb075f898043b40c6ce9d8c952a1",
-    "executionSha256": "3df06c53eb69f02fb6eafabd51c6cc7a306c6739e04ab3fa521b53389da559f2",
-    "sourceAuditSha256": "d1d7b67b16d64b2ca31da3b0632a2379760d024d265e3f581586e9d453c7a3d6",
-    "featureCoverageSha256": "91723cc5398c8fff102d2beb199ebcab82af137e11f1cb9771b8d16d0304a95c",
+    "semanticCasesSha256": "f3989f3032706ec6880ea29805dd1634964d868a2c3d99188adc6eaa1aac68ca",
+    "executionSha256": "bdb8428c4fc4b34d7eed84d60f53fce53331bc3d3f16433c720e34331a9ea64f",
+    "sourceAuditSha256": "795119a613517e0b215647f23ac6ada79f2707aa3f3cdf84fbe54e53f13fcf1f",
+    "featureCoverageSha256": "92c2961ec6a97d0bc0c7aeeac3041404ee3a7ed358b1a09ccab9de84b6abf047",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "2ebb3ba9c9b71334bcbbaa1e2d9c1d539664ed69e826942ff829a2c31fe9434b"
   },
@@ -3316,7 +3316,7 @@
   },
   "sourceInventory": [
     {
-      "path": "src/config.ts",
+      "path": "typescript/src/config.ts",
       "sha256": "3ece031f00acee5067f18db6a8eab35a725fd87e1525c60dfd9c578741953cbf",
       "candidateGoFiles": [
         "go/policy.go",
@@ -3356,7 +3356,7 @@
       }
     },
     {
-      "path": "src/context.ts",
+      "path": "typescript/src/context.ts",
       "sha256": "11ba0a9181aa8bdd171d668a3d2909843c5e44c775425141741413dfb80c9631",
       "candidateGoFiles": [
         "go/cache.go"
@@ -3386,7 +3386,7 @@
       }
     },
     {
-      "path": "src/datadog.ts",
+      "path": "typescript/src/datadog.ts",
       "sha256": "078ee508e948dcf997b556e6ab34d6c5e779c057dd588f2b7b16dee40fcf2c41",
       "candidateGoFiles": [
         "go/metrics_datadog.go",
@@ -3423,7 +3423,7 @@
       }
     },
     {
-      "path": "src/dialcache.ts",
+      "path": "typescript/src/dialcache.ts",
       "sha256": "90e83928537806591b4de1553c81dc542bb59615150b90d5897d929532e15702",
       "candidateGoFiles": [
         "go/cache.go",
@@ -3515,7 +3515,7 @@
       }
     },
     {
-      "path": "src/errors.ts",
+      "path": "typescript/src/errors.ts",
       "sha256": "a3ebca8ae9ed370d6601132fa69878696685ce12f5bb021e49df3ca746f369d3",
       "candidateGoFiles": [
         "go/api.go",
@@ -3551,7 +3551,7 @@
       }
     },
     {
-      "path": "src/index.ts",
+      "path": "typescript/src/index.ts",
       "sha256": "bbf222cec750670240b0475f1e4ab8a071d86fee2a10c3e1d30b8d314d38be5d",
       "candidateGoFiles": [
         "go/api.go",
@@ -3617,7 +3617,7 @@
       }
     },
     {
-      "path": "src/internal/cache-result.ts",
+      "path": "typescript/src/internal/cache-result.ts",
       "sha256": "15c64e72fddce519c1c7c1135d69dc0207da9b0c374a18c9bd8e206765cb0773",
       "candidateGoFiles": [
         "go/protocol.go",
@@ -3652,7 +3652,7 @@
       }
     },
     {
-      "path": "src/internal/compression.ts",
+      "path": "typescript/src/internal/compression.ts",
       "sha256": "3d4e2bcdeafb297e2f4b677b6d4ef82bde7b962d03362c810f095278ccb94320",
       "candidateGoFiles": [
         "go/codec.go"
@@ -3681,7 +3681,7 @@
       }
     },
     {
-      "path": "src/internal/deadline.ts",
+      "path": "typescript/src/internal/deadline.ts",
       "sha256": "5c5d218d7ec2b1f08745c9d9234e4523af8c3af3f2e6c3dd9620730ae5a2584c",
       "candidateGoFiles": [
         "go/deadline.go",
@@ -3720,7 +3720,7 @@
       }
     },
     {
-      "path": "src/internal/duration.ts",
+      "path": "typescript/src/internal/duration.ts",
       "sha256": "fb9333221f4e0dbb0815e75451df36d659d27e21d6cfb537cdf86746cdb5be91",
       "candidateGoFiles": [
         "go/protocol.go",
@@ -3757,7 +3757,7 @@
       }
     },
     {
-      "path": "src/internal/local-cache.ts",
+      "path": "typescript/src/internal/local-cache.ts",
       "sha256": "506914e17cfdddacbf2c84e01c6893fe0dc87d509e7688cfc1718d0584470527",
       "candidateGoFiles": [
         "go/cache.go",
@@ -3802,7 +3802,7 @@
       }
     },
     {
-      "path": "src/internal/ramp.ts",
+      "path": "typescript/src/internal/ramp.ts",
       "sha256": "830576aa71716bc57afd8aace8fb67654dcb7bd6ae8fc4e443e4beb8780730ae",
       "candidateGoFiles": [
         "go/protocol.go",
@@ -3831,7 +3831,7 @@
       }
     },
     {
-      "path": "src/internal/redis-cache.ts",
+      "path": "typescript/src/internal/redis-cache.ts",
       "sha256": "6fd0f9d16289efd66d60cfdf538d44fb520301a45634f72c5aaaaf4f79deae79",
       "candidateGoFiles": [
         "go/engine.go",
@@ -3887,7 +3887,7 @@
       }
     },
     {
-      "path": "src/internal/redis-invalidation.ts",
+      "path": "typescript/src/internal/redis-invalidation.ts",
       "sha256": "be560a4614091d88c69dc9ddf792551c9ace8bcfd4da49f5e24cfd69aa6d412d",
       "candidateGoFiles": [
         "go/cache.go",
@@ -3921,7 +3921,7 @@
       }
     },
     {
-      "path": "src/internal/redis-payload.ts",
+      "path": "typescript/src/internal/redis-payload.ts",
       "sha256": "dee3b1eb48fd425116b94a9ce3d76fa72a6ca38b2471e99abe9c97a0e706d0b3",
       "candidateGoFiles": [
         "go/protocol.go"
@@ -3948,7 +3948,7 @@
       }
     },
     {
-      "path": "src/internal/redis-script-reply.ts",
+      "path": "typescript/src/internal/redis-script-reply.ts",
       "sha256": "ed209f330943aa158a3ae31ba59b7a2acd8f0d7d082f8cdef77bbb9338ed7dbb",
       "candidateGoFiles": [
         "go/redis_adapter.go"
@@ -3974,7 +3974,7 @@
       }
     },
     {
-      "path": "src/internal/redis-scripts.ts",
+      "path": "typescript/src/internal/redis-scripts.ts",
       "sha256": "53fb01ec57150f1e51d46047164ba2149407f7b9884b364258249012d5a463f3",
       "candidateGoFiles": [
         "go/redis_adapter.go"
@@ -3999,7 +3999,7 @@
       }
     },
     {
-      "path": "src/internal/runtime-config.ts",
+      "path": "typescript/src/internal/runtime-config.ts",
       "sha256": "7fbf42ce9d346f30d65b431b546649d9592405073dd5c900559f1e4e3c6fb703",
       "candidateGoFiles": [
         "go/policy.go"
@@ -4026,7 +4026,7 @@
       }
     },
     {
-      "path": "src/internal/shadow-log-json.ts",
+      "path": "typescript/src/internal/shadow-log-json.ts",
       "sha256": "6fae44c08e79ea2fe63bed8de91c621c1ec59672a415608ade3acf63b18ac91a",
       "candidateGoFiles": [
         "go/metrics.go",
@@ -4061,7 +4061,7 @@
       }
     },
     {
-      "path": "src/key.ts",
+      "path": "typescript/src/key.ts",
       "sha256": "72d52df06f1e96e08a83fbb266e2106085c36f096eb86757b71f50f24d999c43",
       "candidateGoFiles": [
         "go/protocol.go"
@@ -4089,7 +4089,7 @@
       }
     },
     {
-      "path": "src/metrics.ts",
+      "path": "typescript/src/metrics.ts",
       "sha256": "6c2607ec512c10362f1906ff082799d8b770f34cb3d61d5523dba908349d90d8",
       "candidateGoFiles": [
         "go/api.go",
@@ -4144,7 +4144,7 @@
       }
     },
     {
-      "path": "src/node-redis.ts",
+      "path": "typescript/src/node-redis.ts",
       "sha256": "b57b4db9b75d12e3da7c4b388cb736927c4301753c082cd4e160d913b041b991",
       "candidateGoFiles": [
         "go/redis_adapter.go"
@@ -4173,7 +4173,7 @@
       }
     },
     {
-      "path": "src/prometheus.ts",
+      "path": "typescript/src/prometheus.ts",
       "sha256": "56c11cd6fba362c4b0ab16b222cd5785a37bdc81fdde67ae920557ba05ed5ec7",
       "candidateGoFiles": [
         "go/metrics_prometheus.go"
@@ -4202,7 +4202,7 @@
       }
     },
     {
-      "path": "src/redis-client.ts",
+      "path": "typescript/src/redis-client.ts",
       "sha256": "2b07115b1f35f82b857ed9ee4dd27656eb636e7426c60cbfb31b39903b084b30",
       "candidateGoFiles": [
         "go/api.go",
@@ -4246,7 +4246,7 @@
       }
     },
     {
-      "path": "src/redis-protocol.ts",
+      "path": "typescript/src/redis-protocol.ts",
       "sha256": "d68a674346fd61f4b14f3a5315baf3e171835b964a895192a6cc3590e58fdba1",
       "candidateGoFiles": [
         "go/protocol.go",
@@ -4278,7 +4278,7 @@
       }
     },
     {
-      "path": "src/serializer.ts",
+      "path": "typescript/src/serializer.ts",
       "sha256": "b41dc9f3ba888faaece599a5f5e643b4cb5f90aebdf864526f316560bb9cb763",
       "candidateGoFiles": [
         "go/api.go",
@@ -4317,7 +4317,7 @@
       }
     },
     {
-      "path": "src/valkey-glide.ts",
+      "path": "typescript/src/valkey-glide.ts",
       "sha256": "0cb2e03925f55e53057fa666ac41060abf5445fdfcda1ae25792bd75986d30c8",
       "candidateGoFiles": [
         "go/redis_adapter.go"
@@ -4656,109 +4656,7 @@
         "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings."
       },
       {
-        "path": "test/compression-error.test.ts",
-        "goFiles": [
-          "go/codec.go",
-          "go/codec_test.go",
-          "go/protocol_test.go",
-          "go/engine.go"
-        ],
-        "nativeAdaptations": [
-          "B03",
-          "X02"
-        ],
-        "rationale": "Compression assertions apply to Go envelope and bounded zstd helpers, with protocol vectors and codec tests as native counterparts. Native library mocking/availability, exact compressed bitstreams and JavaScript buffer behavior are not portable test obligations."
-      },
-      {
-        "path": "test/compression-guard.test.ts",
-        "goFiles": [
-          "go/codec.go",
-          "go/codec_test.go",
-          "go/protocol_test.go",
-          "go/engine.go"
-        ],
-        "nativeAdaptations": [
-          "B03",
-          "X02"
-        ],
-        "rationale": "Compression assertions apply to Go envelope and bounded zstd helpers, with protocol vectors and codec tests as native counterparts. Native library mocking/availability, exact compressed bitstreams and JavaScript buffer behavior are not portable test obligations."
-      },
-      {
-        "path": "test/compression.test.ts",
-        "goFiles": [
-          "go/codec.go",
-          "go/codec_test.go",
-          "go/protocol_test.go",
-          "go/engine.go"
-        ],
-        "nativeAdaptations": [
-          "B03",
-          "X02"
-        ],
-        "rationale": "Compression assertions apply to Go envelope and bounded zstd helpers, with protocol vectors and codec tests as native counterparts. Native library mocking/availability, exact compressed bitstreams and JavaScript buffer behavior are not portable test obligations."
-      },
-      {
-        "path": "test/datadog.test.ts",
-        "goFiles": [
-          "go/metrics.go",
-          "go/metrics_prometheus.go",
-          "go/metrics_datadog.go",
-          "go/metrics_test.go",
-          "go/api_boundary_test.go"
-        ],
-        "nativeAdaptations": [
-          "B02",
-          "X01"
-        ],
-        "rationale": "Portable diagnostic attribution and failure isolation belong to the shared behavioral histories. Metric backend schemas, registry reuse, logger panics and bounded previews have native Go tests; the TypeScript exporter and fake-timer assertions are not represented as Go execution evidence."
-      },
-      {
-        "path": "test/dialcache-coalescing.test.ts",
-        "goFiles": [
-          "go/cache.go",
-          "go/bindings.go",
-          "go/cache_test.go",
-          "go/bindings_test.go",
-          "go/core_replay_test.go",
-          "go/feature_replay_test.go"
-        ],
-        "nativeAdaptations": [
-          "B01",
-          "B02",
-          "B03"
-        ],
-        "rationale": "Layer, scope and coalescing consequences apply through explicit Go contexts and owned request holders. Shared Quint histories check reuse, scope closure and publication; native tests exercise generic wrappers and context APIs. Promise identity and JavaScript object aliasing are not claimed as identical Go mechanics."
-      },
-      {
-        "path": "test/dialcache-compression.test.ts",
-        "goFiles": [
-          "go/codec.go",
-          "go/codec_test.go",
-          "go/protocol_test.go",
-          "go/engine.go"
-        ],
-        "nativeAdaptations": [
-          "B03",
-          "X02"
-        ],
-        "rationale": "Compression assertions apply to Go envelope and bounded zstd helpers, with protocol vectors and codec tests as native counterparts. Native library mocking/availability, exact compressed bitstreams and JavaScript buffer behavior are not portable test obligations."
-      },
-      {
-        "path": "test/dialcache-config-ramp.test.ts",
-        "goFiles": [
-          "go/policy.go",
-          "go/policy_test.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go"
-        ],
-        "nativeAdaptations": [
-          "B01",
-          "B02"
-        ],
-        "rationale": "Sparse overlays, omission/null distinctions, validation and captured policy apply to Go ResolvePolicy and invocation execution. Shared histories carry portable expectations; typed configuration, panic/error timing and pointer mutation boundaries additionally have native tests."
-      },
-      {
-        "path": "test/dialcache-get-or-load.test.ts",
+        "path": "typescript/README.md",
         "goFiles": [
           "go/api.go",
           "go/bindings.go",
@@ -4775,7 +4673,126 @@
         "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings."
       },
       {
-        "path": "test/dialcache-invalidation.test.ts",
+        "path": "typescript/test/compression-error.test.ts",
+        "goFiles": [
+          "go/codec.go",
+          "go/codec_test.go",
+          "go/protocol_test.go",
+          "go/engine.go"
+        ],
+        "nativeAdaptations": [
+          "B03",
+          "X02"
+        ],
+        "rationale": "Compression assertions apply to Go envelope and bounded zstd helpers, with protocol vectors and codec tests as native counterparts. Native library mocking/availability, exact compressed bitstreams and JavaScript buffer behavior are not portable test obligations."
+      },
+      {
+        "path": "typescript/test/compression-guard.test.ts",
+        "goFiles": [
+          "go/codec.go",
+          "go/codec_test.go",
+          "go/protocol_test.go",
+          "go/engine.go"
+        ],
+        "nativeAdaptations": [
+          "B03",
+          "X02"
+        ],
+        "rationale": "Compression assertions apply to Go envelope and bounded zstd helpers, with protocol vectors and codec tests as native counterparts. Native library mocking/availability, exact compressed bitstreams and JavaScript buffer behavior are not portable test obligations."
+      },
+      {
+        "path": "typescript/test/compression.test.ts",
+        "goFiles": [
+          "go/codec.go",
+          "go/codec_test.go",
+          "go/protocol_test.go",
+          "go/engine.go"
+        ],
+        "nativeAdaptations": [
+          "B03",
+          "X02"
+        ],
+        "rationale": "Compression assertions apply to Go envelope and bounded zstd helpers, with protocol vectors and codec tests as native counterparts. Native library mocking/availability, exact compressed bitstreams and JavaScript buffer behavior are not portable test obligations."
+      },
+      {
+        "path": "typescript/test/datadog.test.ts",
+        "goFiles": [
+          "go/metrics.go",
+          "go/metrics_prometheus.go",
+          "go/metrics_datadog.go",
+          "go/metrics_test.go",
+          "go/api_boundary_test.go"
+        ],
+        "nativeAdaptations": [
+          "B02",
+          "X01"
+        ],
+        "rationale": "Portable diagnostic attribution and failure isolation belong to the shared behavioral histories. Metric backend schemas, registry reuse, logger panics and bounded previews have native Go tests; the TypeScript exporter and fake-timer assertions are not represented as Go execution evidence."
+      },
+      {
+        "path": "typescript/test/dialcache-coalescing.test.ts",
+        "goFiles": [
+          "go/cache.go",
+          "go/bindings.go",
+          "go/cache_test.go",
+          "go/bindings_test.go",
+          "go/core_replay_test.go",
+          "go/feature_replay_test.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "B03"
+        ],
+        "rationale": "Layer, scope and coalescing consequences apply through explicit Go contexts and owned request holders. Shared Quint histories check reuse, scope closure and publication; native tests exercise generic wrappers and context APIs. Promise identity and JavaScript object aliasing are not claimed as identical Go mechanics."
+      },
+      {
+        "path": "typescript/test/dialcache-compression.test.ts",
+        "goFiles": [
+          "go/codec.go",
+          "go/codec_test.go",
+          "go/protocol_test.go",
+          "go/engine.go"
+        ],
+        "nativeAdaptations": [
+          "B03",
+          "X02"
+        ],
+        "rationale": "Compression assertions apply to Go envelope and bounded zstd helpers, with protocol vectors and codec tests as native counterparts. Native library mocking/availability, exact compressed bitstreams and JavaScript buffer behavior are not portable test obligations."
+      },
+      {
+        "path": "typescript/test/dialcache-config-ramp.test.ts",
+        "goFiles": [
+          "go/policy.go",
+          "go/policy_test.go",
+          "go/bindings_test.go",
+          "go/api_boundary_test.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02"
+        ],
+        "rationale": "Sparse overlays, omission/null distinctions, validation and captured policy apply to Go ResolvePolicy and invocation execution. Shared histories carry portable expectations; typed configuration, panic/error timing and pointer mutation boundaries additionally have native tests."
+      },
+      {
+        "path": "typescript/test/dialcache-get-or-load.test.ts",
+        "goFiles": [
+          "go/api.go",
+          "go/bindings.go",
+          "go/bindings_test.go",
+          "go/api_boundary_test.go",
+          "go/policy.go",
+          "go/protocol.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "B03"
+        ],
+        "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings."
+      },
+      {
+        "path": "typescript/test/dialcache-invalidation.test.ts",
         "goFiles": [
           "go/cache.go",
           "go/engine.go",
@@ -4790,7 +4807,7 @@
         "rationale": "Tracked fences, client timestamps, maintenance failures and local/acquired-snapshot lifetime apply to Go. Shared histories and real invalidation/interoperability vectors supply distinct evidence; native timestamp/error tests complement them. Deployment clock/retention assumptions remain external preconditions."
       },
       {
-        "path": "test/dialcache-liveness.test.ts",
+        "path": "typescript/test/dialcache-liveness.test.ts",
         "goFiles": [
           "go/deadline.go",
           "go/engine.go",
@@ -4806,7 +4823,7 @@
         "rationale": "Deadline, abandonment and source ownership consequences apply to elapsed-time Go scheduling and channels. Shared histories control real source/adapter gates; native tests cover callback panics and immutable deadline snapshots. Node timer/rejection internals are reviewed as language-specific mechanics."
       },
       {
-        "path": "test/dialcache-local.test.ts",
+        "path": "typescript/test/dialcache-local.test.ts",
         "goFiles": [
           "go/cache.go",
           "go/bindings.go",
@@ -4823,7 +4840,7 @@
         "rationale": "Layer, scope and coalescing consequences apply through explicit Go contexts and owned request holders. Shared Quint histories check reuse, scope closure and publication; native tests exercise generic wrappers and context APIs. Promise identity and JavaScript object aliasing are not claimed as identical Go mechanics."
       },
       {
-        "path": "test/dialcache-logger.test.ts",
+        "path": "typescript/test/dialcache-logger.test.ts",
         "goFiles": [
           "go/metrics.go",
           "go/metrics_prometheus.go",
@@ -4838,7 +4855,7 @@
         "rationale": "Portable diagnostic attribution and failure isolation belong to the shared behavioral histories. Metric backend schemas, registry reuse, logger panics and bounded previews have native Go tests; the TypeScript exporter and fake-timer assertions are not represented as Go execution evidence."
       },
       {
-        "path": "test/dialcache-metrics.test.ts",
+        "path": "typescript/test/dialcache-metrics.test.ts",
         "goFiles": [
           "go/metrics.go",
           "go/metrics_prometheus.go",
@@ -4853,7 +4870,7 @@
         "rationale": "Portable diagnostic attribution and failure isolation belong to the shared behavioral histories. Metric backend schemas, registry reuse, logger panics and bounded previews have native Go tests; the TypeScript exporter and fake-timer assertions are not represented as Go execution evidence."
       },
       {
-        "path": "test/dialcache-observability-internals.test.ts",
+        "path": "typescript/test/dialcache-observability-internals.test.ts",
         "goFiles": [
           "go/policy.go",
           "go/policy_test.go",
@@ -4867,7 +4884,7 @@
         "rationale": "Sparse overlays, omission/null distinctions, validation and captured policy apply to Go ResolvePolicy and invocation execution. Shared histories carry portable expectations; typed configuration, panic/error timing and pointer mutation boundaries additionally have native tests."
       },
       {
-        "path": "test/dialcache-redis-read-deadline.test.ts",
+        "path": "typescript/test/dialcache-redis-read-deadline.test.ts",
         "goFiles": [
           "go/deadline.go",
           "go/engine.go",
@@ -4883,7 +4900,7 @@
         "rationale": "Deadline, abandonment and source ownership consequences apply to elapsed-time Go scheduling and channels. Shared histories control real source/adapter gates; native tests cover callback panics and immutable deadline snapshots. Node timer/rejection internals are reviewed as language-specific mechanics."
       },
       {
-        "path": "test/dialcache-redis.test.ts",
+        "path": "typescript/test/dialcache-redis.test.ts",
         "goFiles": [
           "go/redis_adapter.go",
           "go/redis_adapter_test.go",
@@ -4898,7 +4915,7 @@
         "rationale": "The corresponding Go adapter, protocol and real integration tests exercise atomic primary reads, exact replies, complete writes, invalidation and cross-language bytes. Node-redis and GLIDE option objects, queue APIs and lifecycle assertions require the explicit go-redis binding treatment."
       },
       {
-        "path": "test/dialcache-request-local.test.ts",
+        "path": "typescript/test/dialcache-request-local.test.ts",
         "goFiles": [
           "go/cache.go",
           "go/bindings.go",
@@ -4915,7 +4932,7 @@
         "rationale": "Layer, scope and coalescing consequences apply through explicit Go contexts and owned request holders. Shared Quint histories check reuse, scope closure and publication; native tests exercise generic wrappers and context APIs. Promise identity and JavaScript object aliasing are not claimed as identical Go mechanics."
       },
       {
-        "path": "test/dialcache-shadow-confirmation.test.ts",
+        "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
         "goFiles": [
           "go/shadow.go",
           "go/codec.go",
@@ -4932,7 +4949,7 @@
         "rationale": "Shadow admission, confirmation, retained work and fill ownership apply to Go and require the shared histories. Semantic comparison uses the documented Go value domain; logging preview/exporter internals and native asynchronous scheduling are separate implementation bindings."
       },
       {
-        "path": "test/dialcache-shadow-validation.test.ts",
+        "path": "typescript/test/dialcache-shadow-validation.test.ts",
         "goFiles": [
           "go/shadow.go",
           "go/codec.go",
@@ -4949,7 +4966,7 @@
         "rationale": "Shadow admission, confirmation, retained work and fill ownership apply to Go and require the shared histories. Semantic comparison uses the documented Go value domain; logging preview/exporter internals and native asynchronous scheduling are separate implementation bindings."
       },
       {
-        "path": "test/dialcache-stale-on-error.test.ts",
+        "path": "typescript/test/dialcache-stale-on-error.test.ts",
         "goFiles": [
           "go/engine.go",
           "go/api.go",
@@ -4963,7 +4980,7 @@
         "rationale": "Retained candidates, recovery age boundaries, predicate precedence and original-error preservation are portable obligations implemented in Go execution. Quint histories and fixed scenarios exercise those consequences; native panic/type representation is the explicit Go binding."
       },
       {
-        "path": "test/dialcache-stale-recovery-policy.test.ts",
+        "path": "typescript/test/dialcache-stale-recovery-policy.test.ts",
         "goFiles": [
           "go/engine.go",
           "go/api.go",
@@ -4977,7 +4994,7 @@
         "rationale": "Retained candidates, recovery age boundaries, predicate precedence and original-error preservation are portable obligations implemented in Go execution. Quint histories and fixed scenarios exercise those consequences; native panic/type representation is the explicit Go binding."
       },
       {
-        "path": "test/duration.test.ts",
+        "path": "typescript/test/duration.test.ts",
         "goFiles": [
           "go/policy.go",
           "go/policy_test.go",
@@ -4991,7 +5008,7 @@
         "rationale": "Sparse overlays, omission/null distinctions, validation and captured policy apply to Go ResolvePolicy and invocation execution. Shared histories carry portable expectations; typed configuration, panic/error timing and pointer mutation boundaries additionally have native tests."
       },
       {
-        "path": "test/node-redis.test.ts",
+        "path": "typescript/test/node-redis.test.ts",
         "goFiles": [
           "go/redis_adapter.go",
           "go/redis_adapter_test.go",
@@ -5006,7 +5023,7 @@
         "rationale": "The corresponding Go adapter, protocol and real integration tests exercise atomic primary reads, exact replies, complete writes, invalidation and cross-language bytes. Node-redis and GLIDE option objects, queue APIs and lifecycle assertions require the explicit go-redis binding treatment."
       },
       {
-        "path": "test/prometheus.test.ts",
+        "path": "typescript/test/prometheus.test.ts",
         "goFiles": [
           "go/metrics.go",
           "go/metrics_prometheus.go",
@@ -5021,7 +5038,7 @@
         "rationale": "Portable diagnostic attribution and failure isolation belong to the shared behavioral histories. Metric backend schemas, registry reuse, logger panics and bounded previews have native Go tests; the TypeScript exporter and fake-timer assertions are not represented as Go execution evidence."
       },
       {
-        "path": "test/redis-cluster.integration.test.ts",
+        "path": "typescript/test/redis-cluster.integration.test.ts",
         "goFiles": [
           "go/redis_adapter.go",
           "go/redis_adapter_test.go",
@@ -5036,7 +5053,7 @@
         "rationale": "The corresponding Go adapter, protocol and real integration tests exercise atomic primary reads, exact replies, complete writes, invalidation and cross-language bytes. Node-redis and GLIDE option objects, queue APIs and lifecycle assertions require the explicit go-redis binding treatment."
       },
       {
-        "path": "test/redis-payload.test.ts",
+        "path": "typescript/test/redis-payload.test.ts",
         "goFiles": [
           "go/redis_adapter.go",
           "go/redis_adapter_test.go",
@@ -5051,7 +5068,7 @@
         "rationale": "The corresponding Go adapter, protocol and real integration tests exercise atomic primary reads, exact replies, complete writes, invalidation and cross-language bytes. Node-redis and GLIDE option objects, queue APIs and lifecycle assertions require the explicit go-redis binding treatment."
       },
       {
-        "path": "test/redis-real.integration.test.ts",
+        "path": "typescript/test/redis-real.integration.test.ts",
         "goFiles": [
           "go/redis_adapter.go",
           "go/redis_adapter_test.go",
@@ -5066,7 +5083,7 @@
         "rationale": "The corresponding Go adapter, protocol and real integration tests exercise atomic primary reads, exact replies, complete writes, invalidation and cross-language bytes. Node-redis and GLIDE option objects, queue APIs and lifecycle assertions require the explicit go-redis binding treatment."
       },
       {
-        "path": "test/shadow-log-json.test.ts",
+        "path": "typescript/test/shadow-log-json.test.ts",
         "goFiles": [
           "go/metrics.go",
           "go/metrics_prometheus.go",
@@ -5081,7 +5098,7 @@
         "rationale": "Portable diagnostic attribution and failure isolation belong to the shared behavioral histories. Metric backend schemas, registry reuse, logger panics and bounded previews have native Go tests; the TypeScript exporter and fake-timer assertions are not represented as Go execution evidence."
       },
       {
-        "path": "test/valkey-glide.test.ts",
+        "path": "typescript/test/valkey-glide.test.ts",
         "goFiles": [
           "go/redis_adapter.go",
           "go/redis_adapter_test.go",

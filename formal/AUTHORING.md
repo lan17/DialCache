@@ -190,7 +190,7 @@ own API and integration tests.
    property in `execution.json`; every run the model declares is a regression
    without being listed. Give the challenge a
    `nativeMutants` entry that maps it to a TypeScript mutant and a Go mutant
-   injecting the same wrong behavior into `src/` and `go/`, or an enumerated
+   injecting the same wrong behavior into `typescript/src/` and `go/`, or an enumerated
    explanation of why no native line embodies the rule (see
    [Mapping every challenge to native mutants](#mapping-every-challenge-to-native-mutants)).
 4. **Exercise every supported implementation.** Require a generated witness or exported
@@ -460,7 +460,7 @@ validation rejects a missing reproducer or any attempt to reopen either backlog.
 
 A model challenge shows that a named property rejects one deliberate change to
 the specification. It says nothing about the ports until the same wrong
-behavior is injected into `src/` and `go/` and the generated corpus, replayed
+behavior is injected into `typescript/src/` and `go/` and the generated corpus, replayed
 through each port, fails. Each challenge therefore carries a `nativeMutants`
 entry in `execution.json`:
 
@@ -509,7 +509,7 @@ its semantic `case`, a one-sentence `description`, the `rationale`, and a
 (applied in order, every `before` matching the port text exactly once) and
 `requiredDetections`. Every validation of the manifest checks the catalog's
 schema: every entry has a description, a rationale, a known case, and in each
-section known cohorts and a non-empty list of edits inside its port (`src/` or
+section known cohorts and a non-empty list of edits inside its port (`typescript/src/` or
 `go/`, never a Go test file). The anchors themselves are checked by
 `node formal/execution.mjs`, `make audit`, the test suite and both mutation
 runners (`checkMutantAnchors`), so a refactor that moves an anchored line

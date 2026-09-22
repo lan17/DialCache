@@ -28,7 +28,7 @@ and `tracked-invalidation` in every port. A shared page includes all variants:
 ````markdown
 <LanguageContent language="typescript">
 
-<<< @/../examples/typescript/docs.mts#request-scope{typescript}
+<<< @/../typescript/examples/docs.mts#request-scope{typescript}
 
 </LanguageContent>
 

@@ -12,7 +12,7 @@ const digest = path => createHash('sha256').update(readFileSync(root + path)).di
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const sorted = values => [...values].sort();
 
-function sourcePaths(directory = 'src') {
+function sourcePaths(directory = 'typescript/src') {
   return readdirSync(root + directory, { withFileTypes: true }).flatMap(entry =>
     entry.isDirectory() ? sourcePaths(`${directory}/${entry.name}`) :
       entry.name.endsWith('.ts') ? [`${directory}/${entry.name}`] : []).sort();
@@ -163,7 +163,7 @@ export function checkGoParity(ledger = json('formal/go-parity.json'), inputs = {
     for (const path of adaptation.references ?? []) pathExists(path, adaptation.id);
   }
   // Each production source keeps its hash and reviewed Go bindings; its
-  // declarations are scanned from src/ and only counted.
+  // declarations are scanned from typescript/src/ and only counted.
   check(equal(ledger.sourceInventory.map(row => row.path), sourcePaths()), 'Production TypeScript source file inventory changed');
   let declarations = 0;
   for (const source of ledger.sourceInventory) {

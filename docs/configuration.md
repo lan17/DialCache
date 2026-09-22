@@ -46,9 +46,9 @@ inherited defaults fails the example.
 
 <LanguageContent language="typescript">
 
-<<< @/../examples/typescript/docs.mts#runtime-policy{typescript}
+<<< @/../typescript/examples/docs.mts#runtime-policy{typescript}
 
-[Complete executable example](https://github.com/lan17/DialCache/blob/main/examples/typescript/docs.mts)
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/typescript/examples/docs.mts)
 
 </LanguageContent>
 

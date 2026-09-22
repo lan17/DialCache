@@ -44,8 +44,8 @@ function specificationInputs() {
   return filesBelow('formal').filter(path => /\.(qnt|mjs|mts|json)$/.test(path)).sort();
 }
 export function defaultSources(language) {
-  const shared = [...filesBelow('src'), ...filesBelow('test')].filter(path => /\.(ts|json)$/.test(path));
-  if (language === 'typescript') return [...shared, 'package.json', 'pnpm-lock.yaml', 'vitest.config.ts', 'tsconfig.json'];
+  const shared = [...filesBelow('typescript/src'), ...filesBelow('typescript/test')].filter(path => /\.(ts|json)$/.test(path));
+  if (language === 'typescript') return [...shared, 'package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'typescript/package.json', 'typescript/vitest.config.ts', 'typescript/tsconfig.json'];
   // Go also reads shared fixtures, TypeScript metric schemas and witness
   // definitions. Bind those bytes and the evaluated witness files it consumes,
   // so edits after a native assertion cannot escape the completion check.

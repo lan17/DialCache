@@ -94,7 +94,7 @@ export function runBoundaryReplay({ port, history, label, output, root, workspac
   if (port === 'typescript') {
     command = process.execPath;
     args = [resolve(root, 'node_modules/vitest/vitest.mjs'), 'run', 'test/formal-boundary-evidence.test.ts', '--coverage.enabled=false'];
-    cwd = workspace;
+    cwd = resolve(workspace, 'typescript');
     selection = { DIALCACHE_BOUNDARY_HISTORY: history, DIALCACHE_BOUNDARY_OUT: file };
   } else if (port === 'go') {
     const selected = goBoundarySelection(profile, path);

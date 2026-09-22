@@ -17,8 +17,8 @@ ESM and CommonJS entry points plus TypeScript declarations. Applications own
 Redis and telemetry clients; integrations are optional subpath imports.
 
 The [getting-started example](../getting-started.md#wrap-a-reader) is imported
-from an executed native example. For a standalone script, the root
-[README](https://github.com/lan17/DialCache#readme) contains a complete example.
+from an executed native example. For a standalone script, the package
+[README](https://github.com/lan17/DialCache/blob/main/typescript/README.md) contains a complete example.
 
 ## Request scope and operations
 

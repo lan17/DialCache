@@ -76,11 +76,33 @@ compatibility implications in [Upgrading](upgrading.md). The generated
 [behavior catalogue](generated/behavior.md) reuses the formal case inventory;
 it does not turn a prose claim into proof.
 
-The npm tarball includes `README.md` but not the site, so root README links use
-absolute hosted URLs. `test:package` checks its runnable TypeScript block and the
-native documentation source against the installed packed package. Keep the root
-README's first TypeScript block self-contained and preserve its expected output
-in `scripts/test-package.mjs` when editing it.
+Each implementation owns its native source, tests, examples and package
+metadata under `typescript/`, `go/` or `rust/`. Shared guides, formal contracts,
+and repository validation remain at the root. The private root pnpm package
+dispatches TypeScript commands into `typescript/`; installation uses the shared
+workspace lockfile.
+
+The npm tarball includes `typescript/README.md` as `README.md`, but not the site,
+so that README uses absolute hosted URLs. `test:package` checks its runnable
+TypeScript block and the native documentation source against the installed
+packed package. Keep its first TypeScript block self-contained and preserve its
+expected output in `typescript/scripts/test-package.mjs` when editing it. The
+root README is the repository landing page for every language.
+
+For repository layout changes, build and pack the before and after revisions at
+the same package version, then compare the actual tarballs:
+
+```sh
+node scripts/compare-npm-packages.mjs /path/to/before.tgz /path/to/after.tgz
+```
+
+The comparison requires identical package file paths and byte-identical file
+contents, apart from `package.json`. All manifest metadata must also match, with
+one narrow exception for the TypeScript directory move: the five `docs:*`
+commands may forward to their matching commands at the workspace root. This
+preserves the installed JavaScript, declarations, exports, dependencies, README
+and license while ignoring archive timestamps. Run `corepack pnpm test:package`
+as well to exercise the packed package in ESM, CommonJS and TypeScript consumers.
 
 ### Run the documentation site
 
@@ -134,7 +156,7 @@ dependencies:
 corepack pnpm benchmark:request-local
 ```
 
-The command builds `dist` before reporting ten scenarios: sequential
+The command builds `typescript/dist` before reporting ten scenarios: sequential
 request-local hits, sequential process-local hits, enabled bounded fallbacks,
 request-local coalescing fan-out, process coalescing fan-out,
 remote-read-deadline coalescing fan-out, tracked Redis hits with shadow
@@ -158,8 +180,8 @@ statistics between cases, so use a disposable or dedicated instance:
 corepack pnpm benchmark:redis-write
 ```
 
-The command builds `dist`, then runs sequential native writes at 100 B, 10
-KiB, 100 KiB, and 1 MiB payloads. It reports `SET`, script, and `TIME` calls
+The command builds `typescript/dist`, then runs sequential native writes at
+100 B, 10 KiB, 100 KiB, and 1 MiB payloads. It reports `SET`, script, and `TIME` calls
 per operation, server-side `SET` cost from `INFO commandstats`, and
 client-side p50/p95 latency. Semantic assertions require exactly one `SET`,
 zero scripts, and zero `TIME` calls per write. Because operations are
@@ -186,7 +208,7 @@ one adapter read per stale-recovery flight. A separate high-cardinality
 scenario holds delayed source calls open with distinct incompressible raw
 payloads, then reports process memory before retention, while every candidate
 is retained, and after recovery. Run the built script with `node --expose-gc
-scripts/benchmark-stale-on-error.mjs` for less noisy memory snapshots. It
+typescript/scripts/benchmark-stale-on-error.mjs` for less noisy memory snapshots. It
 snapshots `INFO commandstats` and network byte counters around each scenario
 without resetting shared server statistics, and reports command, server-CPU,
 network, and client-throughput signals per operation. Semantic assertions
@@ -219,8 +241,8 @@ this policy; change it and this guide together so the documented release table
 cannot drift from automation.
 
 The workflow opens a `release: <version>` pull request whose only change is the
-matching `package.json` version. `release` is a reserved Conventional Commit
-type configured not to request another release, so the version-control commit
+matching `typescript/package.json` version. `release` is a reserved Conventional
+Commit type configured not to request another release, so the version-control commit
 does not cause an extra bump.
 
 GitHub marks workflow runs for a pull request opened with `GITHUB_TOKEN` as

@@ -34,7 +34,7 @@ export default {
     ...(process.env.DIALCACHE_RELEASE_PLAN_ONLY === "true"
       ? []
       : [
-          "@semantic-release/npm",
+          ["@semantic-release/npm", { pkgRoot: "typescript" }],
           [
             "@semantic-release/github",
             { successCommentCondition: false, failCommentCondition: false },

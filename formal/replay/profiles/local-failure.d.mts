@@ -1,2 +1,2 @@
-import type { Profile } from "../../../test/formal/feature-profile.js";
+import type { Profile } from "../../../typescript/test/formal/feature-profile.js";
 export const localFailureProfile: Profile;

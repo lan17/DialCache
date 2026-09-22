@@ -1,0 +1,229 @@
+import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
+import { performance } from "node:perf_hooks";
+
+import { vi } from "vitest";
+
+import { ReplayCoordinator, settlement } from "../../../formal/replay/coordinator.mjs";
+import type { Divergence } from "../../../formal/replay/divergence.mjs";
+import type { CoreCommand } from "../../../formal/replay/core.mjs";
+import { wallEpochMs } from "../../../formal/replay/settlement.mjs";
+import { parseJSON } from "../../../formal/replay/validation.mjs";
+import { DialCache, DialCacheKeyConfig } from "../../src/index.js";
+import { FakeRedis } from "../fake-redis.js";
+import { BehaviorDriver, emptyObservation, type Fixture, type Input, type Observation, type SettlementReceipt } from "./behavior-driver.js";
+
+// Every controlled driver starts its wall clock at the shared epoch. Frame
+// timestamps, marker cutoffs and adapter replies are computed relative to it.
+export { wallEpochMs };
+
+export function smokeTracePath(profile: string): string {
+  return fileURLToPath(new URL(`../../../formal/${profile === "core" ? "conformance" : profile}-smoke.itf.json`, import.meta.url));
+}
+
+// A native driver as the coordinator sees it: it applies fixture-independent
+// commands, reports its own observation, clock and settlement receipt, and
+// never receives expected model state. Only behavior drivers have a controlled
+// executor to report on; core and local-clock return no receipt.
+interface CoordinatedDriver {
+  apply(command: Record<string, unknown>): Promise<void>;
+  observe(): unknown;
+  receipt(): SettlementReceipt | undefined;
+  settlementDiagnostic?(): string | undefined;
+  wallMs(): number;
+  dispose(): Promise<void>;
+}
+
+// `settle: false` is the harness control of test/formal-settlement-control.test.ts
+// only; conformance replays never pass it.
+export interface ReplayOptions { settle?: boolean }
+
+type Prepared = { session: string; fixture: Record<string, unknown>; setup: Array<Record<string, unknown>>; steps: number };
+type Observed = { complete: false; index: number; inputs: Array<Record<string, unknown>> } | { complete: true; steps: number };
+
+// Replays one trace end to end through the shared coordinator with the real
+// language driver for its profile, exactly as a native port does over JSONL:
+// prepare, apply setup, then observe/apply until the coordinator acknowledges
+// completion. Observations cross a JSON roundtrip so undefined members vanish
+// the way they do on the wire.
+export async function replayThroughCoordinator(profile: string, path: string, coordinator = new ReplayCoordinator(),
+  options: ReplayOptions = {}): Promise<{ steps: number; divergences: Divergence[] }> {
+  let id = 0;
+  const request = <T>(fields: Record<string, unknown>): T =>
+    coordinator.dispatch(parseJSON(JSON.stringify({ version: 1, id: ++id, ...fields }))) as T;
+  const prepared = request<Prepared>({ op: "prepare", profile, path });
+  const driver = driverFor(profile, prepared.fixture as unknown as Fixture, options);
+  let complete = false;
+  try {
+    for (const command of prepared.setup) await driver.apply(command);
+    for (let index = 0; ; index++) {
+      const result = observe<Observed>(driver, () => request<Observed>({
+        op: "observe", session: prepared.session, index, settlement,
+        observed: parseJSON(JSON.stringify(driver.observe())), environment: { wallMs: driver.wallMs() },
+        // A driver without a receipt reports undefined, which the JSON round
+        // trip drops; the coordinator alone decides whether one was required.
+        receipt: driver.receipt(),
+      }));
+      if (result.complete) {
+        complete = true;
+        return { steps: result.steps, divergences: coordinator.recording(prepared.session)?.divergences ?? [] };
+      }
+      for (const command of result.inputs) await driver.apply(command);
+    }
+  } catch (cause) {
+    coordinator.abort(prepared.session, cause);
+    throw cause;
+  } finally {
+    // The coordinator drops a session on its own failure; release it after a
+    // driver failure so the coordinator can be reused for another trace.
+    if (!complete) { try { request({ op: "discard", session: prepared.session }); } catch { /* Already released. */ } }
+    await driver.dispose();
+  }
+}
+
+// A settlement violation names the rule; the driver's own account of what its
+// verification drain found makes the failure diagnosable from the message.
+function observe<T>(driver: CoordinatedDriver, send: () => T): T {
+  try { return send(); } catch (cause) {
+    const diagnostic = driver.settlementDiagnostic?.();
+    if (diagnostic === undefined || !/Settlement violation/.test(String(cause))) throw cause;
+    throw new Error(`${(cause as Error).message}\n${diagnostic}`, { cause });
+  }
+}
+
+function driverFor(profile: string, fixture: Fixture, options: ReplayOptions): CoordinatedDriver {
+  if (profile === "core") return new CoordinatedCoreDriver();
+  if (profile === "local-clock") return new CoordinatedLocalClockDriver();
+  return new CoordinatedBehaviorDriver(fixture, options);
+}
+
+// Feature profiles and effects: the shared BehaviorDriver under fake timers
+// pinned to the wall epoch, as in test/formal-features.test.ts and
+// test/formal-effects.test.ts. The driver drains causally ready work itself
+// and attests it through its receipt.
+class CoordinatedBehaviorDriver implements CoordinatedDriver {
+  private readonly driver: BehaviorDriver;
+  constructor(fixture: Fixture, options: ReplayOptions) {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(wallEpochMs));
+    this.driver = new BehaviorDriver(fixture, {}, options);
+  }
+  apply(command: Record<string, unknown>): Promise<void> { return this.driver.apply(command as Input); }
+  observe(): Observation { return this.driver.snapshot(); }
+  receipt(): SettlementReceipt { return this.driver.receipt(); }
+  settlementDiagnostic(): string | undefined { return this.driver.settlementDiagnostic(); }
+  wallMs(): number { return Date.now(); }
+  async dispose(): Promise<void> {
+    try { await this.driver.dispose(); } finally { vi.useRealTimers(); vi.restoreAllMocks(); }
+  }
+}
+
+// Core: the flat conformance driver from test/formal-conformance.test.ts,
+// consuming the coordinator's explicit advanceWall/bumpSource/invalidate/call
+// commands instead of action names.
+class CoordinatedCoreDriver implements CoordinatedDriver {
+  private readonly redis = new FakeRedis();
+  private readonly dialcache: DialCache;
+  private sourceVersion = 1;
+  private lastResult = 0;
+  private wallClockMs = wallEpochMs;
+  private readonly counters: Record<string, number> = {
+    outsideLoaderCalls: 0, requestLoaderCalls: 0, localLoaderCalls: 0, coalescedLoaderCalls: 0, remoteLoaderCalls: 0,
+  };
+  constructor() {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(wallEpochMs));
+    this.dialcache = new DialCache({ redis: { client: this.redis } });
+  }
+  async apply(command: Record<string, unknown>): Promise<void> {
+    const input = command as unknown as CoreCommand;
+    if (input.op === "advanceWall") {
+      this.wallClockMs += input.ms;
+      vi.setSystemTime(this.wallClockMs);
+      return;
+    }
+    if (input.op === "bumpSource") { this.sourceVersion++; return; }
+    if (input.op === "invalidate") {
+      await this.dialcache.invalidateRemote(input.identity.keyType, input.identity.id);
+      return;
+    }
+    const options = {
+      keyType: input.identity.keyType, key: input.identity.id, useCase: input.identity.useCase,
+      trackForInvalidation: input.identity.tracked, defaultConfig: new DialCacheKeyConfig(input.policy),
+    };
+    const call = (wait?: Promise<void>) => this.dialcache.getOrLoad(async () => {
+      this.counters[input.counter] = (this.counters[input.counter] ?? 0) + 1;
+      if (wait !== undefined) await wait;
+      return this.sourceVersion;
+    }, options);
+    const pair = async (concurrent: boolean) => {
+      if (!concurrent) {
+        const first = await call();
+        const second = await call();
+        assert.equal(second, first);
+        return second;
+      }
+      let release!: () => void;
+      const gate = new Promise<void>(done => { release = done; });
+      const leader = call(gate);
+      const follower = call();
+      // Drain only causally ready work while the actual source remains held.
+      await vi.advanceTimersByTimeAsync(0);
+      release();
+      const values = await Promise.all([leader, follower]);
+      assert.equal(values[1], values[0]);
+      return values[1];
+    };
+    this.redis.failGet = input.readFailure;
+    try {
+      this.lastResult = input.mode === "outside" ? await call()
+        : await this.dialcache.enable(() => input.mode === "single" ? call() : pair(input.mode === "coalesced-pair"));
+    } finally {
+      this.redis.failGet = false;
+    }
+  }
+  observe(): Record<string, number | { absent: true }> {
+    return {
+      sourceVersion: this.sourceVersion,
+      // An absent actual result must survive the JSON roundtrip as data.
+      // Otherwise a wrong-value fault impersonates a missing driver field.
+      lastResult: this.lastResult === undefined ? { absent: true } : this.lastResult,
+      ...this.counters,
+      redisReads: this.redis.getCalls + this.redis.mGetCalls, redisWrites: this.redis.setCalls,
+    };
+  }
+  receipt(): undefined { return undefined; }
+  wallMs(): number { return this.wallClockMs; }
+  async dispose(): Promise<void> { vi.useRealTimers(); vi.restoreAllMocks(); }
+}
+
+// Local clock: default DialCache instances on the real scheduler with only the
+// process clock mocked, as in test/formal/local-clock-profile.ts. The wall
+// clock is the real one; no local-clock mapping consumes it.
+class CoordinatedLocalClockDriver implements CoordinatedDriver {
+  private ticks = 0;
+  private readonly now = vi.spyOn(performance, "now").mockImplementation(() => this.ticks / 1000);
+  private readonly actual = { ...emptyObservation(), calls: [] as number[] };
+  private readonly caches: Array<{ call: (offered: number) => Promise<number> } | undefined> = [undefined, undefined];
+  async apply(command: Record<string, unknown>): Promise<void> {
+    const input = command as { op: string; instance?: number; ticks?: number; offered?: number };
+    if (input.op === "constructInstance") {
+      if (this.caches[input.instance!] !== undefined) throw new Error("Instance already constructed");
+      const cache = new DialCache();
+      const load = cache.cached(async (offered: number) => { this.actual.loaders++; return offered; }, {
+        keyType: "clock", useCase: "QuintLocalGrid", cacheKey: () => "one",
+        defaultConfig: new DialCacheKeyConfig({ ttlSec: { local: 1 } }),
+      });
+      this.caches[input.instance!] = { call: offered => cache.enable(() => load(offered)) };
+    } else if (input.op === "advanceTicks") this.ticks += input.ticks!;
+    else if (input.op === "call") {
+      const cache = this.caches[input.instance!];
+      if (cache === undefined) throw new Error("Call before instance construction");
+      this.actual.calls.push(await cache.call(input.offered!));
+    } else throw new Error(`Unknown local-clock command ${input.op}`);
+  }
+  observe(): unknown { return this.actual; }
+  receipt(): undefined { return undefined; }
+  wallMs(): number { return Date.now(); }
+  async dispose(): Promise<void> { this.now.mockRestore(); }
+}

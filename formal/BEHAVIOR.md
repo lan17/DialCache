@@ -31,7 +31,7 @@ Start with the empty observation below. When `fixture.observe` is present, also 
 }
 ```
 
-Every scenario/trace gets a fresh default cache instance and empty Redis environment. Additional named instances share that Redis environment but own separate local storage, request contexts, flights, and shadow capacity. State persists between its steps. The TypeScript implementation is [`test/formal/behavior-driver.ts`](../test/formal/behavior-driver.ts), used by the effects and feature replay tests. No new production APIs, private cache maps, or flight mutations are needed.
+Every scenario/trace gets a fresh default cache instance and empty Redis environment. Additional named instances share that Redis environment but own separate local storage, request contexts, flights, and shadow capacity. State persists between its steps. The TypeScript implementation is [`typescript/test/formal/behavior-driver.ts`](../typescript/test/formal/behavior-driver.ts), used by the effects and feature replay tests. No new production APIs, private cache maps, or flight mutations are needed.
 
 ## Optional observed events
 
@@ -46,7 +46,7 @@ Every scenario/trace gets a fresh default cache instance and empty Redis environ
 - `mismatchWarning`: fields supplied to the public logger for a confirmed-mismatch warning. The scalar fixtures do not prescribe a general host-language JSON conversion algorithm or truncation implementation.
 - `marker`: an explicit environment probe of the tracked watermark's cutoff and remaining physical TTL. Cutoffs are milliseconds relative to the fixture wall origin; absence is `cutoffMs: -1`. TTL uses Redis's `-2` absent and `-1` persistent values. This controlled adapter observation supplements real-server integration evidence.
 
-Names are a trace vocabulary, not required language method names. All selected events are compared after every input, including steps that expect none. The [source audit](./TEST-AUDIT.md) explains the test/doc obligations these probes cover.
+Names are a trace vocabulary, not required language method names. All selected events are compared after every input, including steps that expect none. The [source audit](./TEST-AUDIT.md) explains the typescript/test/doc obligations these probes cover.
 
 ## Fixture
 
@@ -301,11 +301,11 @@ Thirteen shadow fixtures, both custom comparison overrides, comparison failure, 
 
 Fixtures 11/12 use the existing external `sourceWorkMs` input, advancing elapsed and wall time without delivering timers while the source begins. At 9 ms, the dark job still dispatches C0 and an immediately settled source can succeed. At exactly 10 ms, the deferred job reports timeout without a Redis read, while the caller remains pending. Subsequent source resolution or rejection produces the caller's deadline error when settlement checks elapsed time; delivering its timer may produce that error first. These fixtures advance in full 10 ms windows after the blocked work, observing after overdue timers are delivered; intermediate native timer ordering is outside their bounds. This distinguishes job abandonment from source timer delivery. Generated witnesses require both boundaries and both late settlement outcomes. The `expiredSourceWorkSkipsRedis` invariant independently forbids reads in the exhausted-work fixture; warning authorization is checked against captured valid policy separately from verdict emission.
 
-`test/formal-features.test.ts` replays these traces and checks parser/assertion trust boundaries. Fast PR checks use the committed `recovery-smoke.itf.json`, `policy-smoke.itf.json`, and `shadow-smoke.itf.json` without Quint. Full validation replays every generated trace. To replay a downloaded artifact:
+`typescript/test/formal-features.test.ts` replays these traces and checks parser/assertion trust boundaries. Fast PR checks use the committed `recovery-smoke.itf.json`, `policy-smoke.itf.json`, and `shadow-smoke.itf.json` without Quint. Full validation replays every generated trace. To replay a downloaded artifact:
 
 ```sh
 DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/recovery/trace_0.itf.json \
-  corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false
+  corepack pnpm --dir typescript exec vitest run test/formal-features.test.ts --coverage.enabled=false
 ```
 
 Full policy validation requires six additional concurrency witnesses: cross-key overlap, uncoalesced same-key overlap, a join after policy changes, reverse source settlement, one source settling multiple callers, and publication while another provider reply is held. Its committed smoke is a generated prefix containing a shared rejection and a later independent settlement; it also runs without Quint. Policy settlement choices changed with the concurrent profile, so replay these traces with the matching specification revision.

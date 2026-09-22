@@ -45,8 +45,8 @@ module remote_frames {
 
   // A tracked write's retention is clamped to one hour so the entity's
   // watermark, kept for twice that, outlives every frame it may fence
-  // (`src/internal/duration.ts` `MAX_TRACKED_REDIS_VALUE_TTL_MS`,
-  // `src/internal/redis-cache.ts` `putWithLayer`, `go/engine.go` `putRemote`
+  // (`typescript/src/internal/duration.ts` `MAX_TRACKED_REDIS_VALUE_TTL_MS`,
+  // `typescript/src/internal/redis-cache.ts` `putWithLayer`, `go/engine.go` `putRemote`
   // with its `tracked_ttl_clamped` event, `go/protocol.go`
   // `MaxTrackedValueTTLMS`); an untracked write is retained for its full TTL.
   pure val TRACKED_RETENTION_CAP_MS = 3600000

@@ -6,7 +6,7 @@ module markers {
   // and a desired lifetime: a floor of twice the tracked retention cap, or
   // the span from the invalidation's wall clock to the watermark plus the cap
   // and a minute's margin, whichever is longer, so the watermark outlives
-  // every frame it may fence (`src/internal/redis-scripts.ts`
+  // every frame it may fence (`typescript/src/internal/redis-scripts.ts`
   // `INVALIDATE_CACHE_SCRIPT`: `MIN_WATERMARK_TTL_MS = 2 *
   // MAX_TRACKED_REDIS_VALUE_TTL_MS`, `WATERMARK_TTL_MARGIN_MS = 60000`, keep
   // the larger existing PTTL; `go/redis_adapter.go` `InvalidationScript`).
