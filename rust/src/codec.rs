@@ -1,6 +1,7 @@
 //! Serialized payloads and value codecs.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use futures::future::BoxFuture;
 use serde::de::DeserializeOwned;
@@ -64,6 +65,21 @@ pub trait Codec<T>: Send + Sync + 'static {
     /// Serialize `value`. A failure counts as a `serialization_dump` error
     /// and skips the remote write.
     fn encode<'a>(&'a self, value: &'a T) -> BoxFuture<'a, Result<Payload, BoxError>>;
+
+    /// Serialize a shared value owned by the cache.
+    ///
+    /// The engine calls this method for remote writes. By default it delegates
+    /// to [`encode`](Self::encode) without copying the value. Override it to
+    /// move the shared handle into a background job without requiring `T: Clone`.
+    /// The codec owns scheduling, admission and the lifetime of any jobs it
+    /// starts; those jobs do not inherit the cache's shadow-capacity token.
+    fn encode_owned(&self, value: Arc<T>) -> BoxFuture<'_, Result<Payload, BoxError>>
+    where
+        T: Send + Sync + 'static,
+    {
+        Box::pin(async move { self.encode(value.as_ref()).await })
+    }
+
     /// Deserialize `payload` into an independent value. A failure counts as
     /// a `serialization_load` error and is treated as a miss.
     fn decode(&self, payload: Payload) -> BoxFuture<'_, Result<T, BoxError>>;

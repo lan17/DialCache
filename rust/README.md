@@ -201,6 +201,15 @@ until its admitted CPU work finishes or is discarded, including after a deadline
 or async runtime shutdown. Codecs supplied by the application still choose their
 own scheduling; `FromSync` does not offload application serialization.
 
+For remote writes, the engine calls `Codec::encode_owned` with the existing
+`Arc<T>`. Its default implementation delegates to `encode(&T)`, so existing
+codecs work unchanged. Override `encode_owned` to send a non-`Clone` value to a
+background CPU job without copying it or changing the cached value type.
+`decode` already receives an owned `Payload`. Application codecs own admission
+and the lifetime of jobs they start; those jobs do not inherit the library's
+shadow-capacity token. Default JSON encoding/decoding and `FromSync` remain
+synchronous, so large values can occupy an async worker.
+
 `Observer` receives every public diagnostic as a typed `Event`. Shadow
 validation exists only to be observed, so a job is admitted only when the
 observer opts in through `observes_shadow_outcomes`; the bundled exporters do.

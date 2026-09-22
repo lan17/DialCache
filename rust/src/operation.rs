@@ -216,7 +216,7 @@ pub(crate) struct ErasedOperation {
 
 /// A codec over erased values.
 pub(crate) trait ErasedCodec: Send + Sync {
-    fn encode<'a>(&'a self, value: &'a StoredValue) -> BoxFuture<'a, Result<Payload, BoxError>>;
+    fn encode(&self, value: StoredValue) -> BoxFuture<'_, Result<Payload, BoxError>>;
     fn decode(&self, payload: Payload) -> BoxFuture<'_, Result<StoredValue, BoxError>>;
 }
 
@@ -225,10 +225,10 @@ struct TypedCodec<T> {
 }
 
 impl<T: Send + Sync + 'static> ErasedCodec for TypedCodec<T> {
-    fn encode<'a>(&'a self, value: &'a StoredValue) -> BoxFuture<'a, Result<Payload, BoxError>> {
-        match value.downcast_ref::<T>() {
-            Some(value) => self.codec.encode(value),
-            None => Box::pin(std::future::ready(Err(
+    fn encode(&self, value: StoredValue) -> BoxFuture<'_, Result<Payload, BoxError>> {
+        match Arc::downcast::<T>(value) {
+            Ok(value) => self.codec.encode_owned(value),
+            Err(_) => Box::pin(std::future::ready(Err(
                 "codec received a value of another type".into(),
             ))),
         }

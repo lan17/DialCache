@@ -899,7 +899,7 @@ impl Execution {
         }
         let start = self.elapsed();
         let codec = self.op.metadata.codec.clone();
-        let encoded = match AssertUnwindSafe(async { codec.encode(value).await })
+        let encoded = match AssertUnwindSafe(async { codec.encode(value.clone()).await })
             .catch_unwind()
             .await
         {
