@@ -1,3 +1,7 @@
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 type Entry = { id: string; category: string; profile?: string; path?: string; name?: string; feature?: string; group?: string };
@@ -188,34 +192,48 @@ describe("Rust validation lanes", () => {
     for (const target of ["check-rust", "smoke", "formal-rust"]) expect(validationPlan(target, { directory }).some(step => step.args?.includes("--ignored")), target).toBe(false);
   });
 
-  it("probes the pinned cargo exactly for the Rust lanes", async () => {
-    const { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
-    const { delimiter, join } = await import("node:path");
-    const temporary = mkdtempSync(join(tmpdir(), "dialcache-rust-prereq-"));
-    try {
-      for (const path of ["bin", "formal", "node_modules/typescript", "rust"]) mkdirSync(join(temporary, path), { recursive: true });
-      writeFileSync(join(temporary, "package.json"), '{"packageManager":"pnpm@10.33.0"}');
-      writeFileSync(join(temporary, "node_modules/typescript/package.json"), "{}");
-      writeFileSync(join(temporary, "formal/generated-fixtures.lock.json"), '{"quintVersion":"0.32.0"}');
-      const tool = (name: string, body: string) => { const path = join(temporary, "bin", name); writeFileSync(path, `#!${process.execPath}\n${body}\n`); chmodSync(path, 0o755); };
-      tool("corepack", 'console.log("10.33.0")');
-      tool("go", 'console.log("go version go1.27.1 test/test")');
-      tool("quint", 'console.log("0.32.0")');
-      tool("python", 'if (process.argv.includes("--version")) console.log("Python 3.11.9")');
-      const environment = { ...process.env, PYTHON: join(temporary, "bin", "python"), PATH: `${join(temporary, "bin")}${delimiter}${process.env.PATH ?? ""}` };
-      const options = { directory: temporary, environment, nodeVersion: "v24.20.0" };
-      tool("cargo", 'console.error("cargo: command not found"); process.exit(127)');
-      for (const target of ["check-rust", "formal-rust", "smoke", "check", "integration-rust", "mutations-rust", "mutations", "explore"]) expect(() => checkPrerequisites(target, options), target).toThrow(/Cannot run cargo/);
-      for (const target of ["check-ts", "check-go", "formal-ts", "formal-go", "mutations-ts", "mutations-go", "mutations-merge-rust", "audit"]) expect(() => checkPrerequisites(target, options), target).not.toThrow();
-      tool("cargo", 'console.log("cargo 1.97.0 (abcdef 2026-06-01)")');
-      expect(() => checkPrerequisites("check-rust", options)).toThrow(/requires cargo 1\.98\.1; found cargo 1\.97\.0/);
-      tool("cargo", 'console.log("cargo 1.98.10 (abcdef 2026-06-01)")');
-      expect(() => checkPrerequisites("formal-rust", options)).toThrow(/requires cargo 1\.98\.1/);
-      tool("cargo", 'console.log("cargo 1.98.1 (797e8a9bc 2026-08-05)")');
-      for (const target of ["check-rust", "formal-rust", "smoke"]) expect(() => checkPrerequisites(target, options), target).not.toThrow();
-    } finally {
-      rmSync(temporary, { recursive: true, force: true });
-    }
+  describe("pinned cargo prerequisites", () => {
+    // Each scan starts several real subprocesses. Keep each lane/version in its
+    // own test budget instead of accumulating all 21 scans under one timeout.
+    const checkWithCargo = (target: string, cargoBody: string): void => {
+      const temporary = realpathSync(mkdtempSync(join(tmpdir(), "dialcache-rust-prereq-")));
+      try {
+        for (const path of ["bin", "formal", "node_modules/typescript", "rust"]) mkdirSync(join(temporary, path), { recursive: true });
+        writeFileSync(join(temporary, "package.json"), '{"packageManager":"pnpm@10.33.0"}');
+        writeFileSync(join(temporary, "node_modules/typescript/package.json"), "{}");
+        writeFileSync(join(temporary, "formal/generated-fixtures.lock.json"), '{"quintVersion":"0.32.0"}');
+        const tool = (name: string, body: string) => { const path = join(temporary, "bin", name); writeFileSync(path, `#!${process.execPath}\n${body}\n`); chmodSync(path, 0o755); };
+        tool("corepack", 'console.log("10.33.0")');
+        tool("go", 'console.log("go version go1.27.1 test/test")');
+        tool("quint", 'console.log("0.32.0")');
+        tool("python", 'if (process.argv.includes("--version")) console.log("Python 3.11.9")');
+        tool("docker", 'console.log("28.5.2")');
+        tool("cargo", `if (process.cwd() !== ${JSON.stringify(join(temporary, "rust"))}) throw new Error("Cargo probe must run inside the crate");\n${cargoBody}`);
+        const environment = { ...process.env, PYTHON: join(temporary, "bin", "python"), PATH: join(temporary, "bin") };
+        checkPrerequisites(target, { directory: temporary, environment, nodeVersion: "v24.20.0" });
+      } finally {
+        rmSync(temporary, { recursive: true, force: true });
+      }
+    };
+    const missingCargo = 'console.error("cargo: command not found"); process.exit(127)';
+
+    it.each(["check-rust", "formal-rust", "smoke", "check", "integration-rust", "mutations-rust", "mutations", "explore"])("requires cargo for %s", target => {
+      expect(() => checkWithCargo(target, missingCargo)).toThrow(/Cannot run cargo/);
+    });
+
+    it.each(["check-ts", "check-go", "formal-ts", "formal-go", "mutations-ts", "mutations-go", "mutations-merge-rust", "audit"])("does not require cargo for %s", target => {
+      expect(() => checkWithCargo(target, missingCargo)).not.toThrow();
+    });
+
+    it.each([
+      { target: "check-rust", version: "1.97.0", expected: /requires cargo 1\.98\.1; found cargo 1\.97\.0/ },
+      { target: "formal-rust", version: "1.98.10", expected: /requires cargo 1\.98\.1/ },
+    ])("rejects cargo $version for $target", ({ target, version, expected }) => {
+      expect(() => checkWithCargo(target, `console.log("cargo ${version} (abcdef 2026-06-01)")`)).toThrow(expected);
+    });
+
+    it.each(["check-rust", "formal-rust", "smoke"])("accepts the exact pinned cargo for %s", target => {
+      expect(() => checkWithCargo(target, 'console.log("cargo 1.98.1 (797e8a9bc 2026-08-05)")')).not.toThrow();
+    });
   });
 });
