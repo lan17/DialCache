@@ -115,9 +115,9 @@ set of recoverable failures, including `FallbackTimeoutError` if desired.
 
 <LanguageContent language="rust">
 
-Use the operation or builder's `should_recover` predicate. Match
-`Error::FallbackTimeout` if preserving default timeout recovery, and inspect
-application source errors for any additional transient failure cases.
+Use the operation or builder's `should_recover` predicate. Call
+`error.is_fallback_timeout()` to preserve recovery for direct and propagated
+timeouts, then add narrowly classified application source errors.
 
 </LanguageContent>
 

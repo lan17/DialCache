@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue';
-import { useRoute, useRouter, withBase } from 'vitepress';
-import { language, ports, restoreLanguage, selectLanguage } from './language';
+import { useData, useRoute, useRouter, withBase } from 'vitepress';
+import { language, ports, restoreLanguage, revealAnchorLanguage, selectLanguage } from './language';
 const route = useRoute();
 const router = useRouter();
+const { hash } = useData();
 const nativeGuide = () => ports.find(port =>
   route.path === withBase(port.guide) || route.path === withBase(`${port.guide}.html`))?.id;
 const selectedPort = computed(() => ports.find(port => port.id === language.value)!);
@@ -11,15 +12,17 @@ function choose(value: string) {
   selectLanguage(value);
   if (nativeGuide()) void router.go(withBase(`/languages/${value}.html`));
 }
+function syncNativeGuide() {
+  const native = nativeGuide();
+  if (native) selectLanguage(native);
+}
 onMounted(() => {
   restoreLanguage();
-  const native = nativeGuide();
-  if (native) selectLanguage(native);
+  syncNativeGuide();
+  void revealAnchorLanguage();
 });
-watch(() => route.path, () => {
-  const native = nativeGuide();
-  if (native) selectLanguage(native);
-});
+watch(() => route.path, syncNativeGuide);
+watch(hash, revealAnchorLanguage, { flush: 'post' });
 </script>
 
 <template>

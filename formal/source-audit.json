@@ -286,7 +286,7 @@
     },
     {
       "path": "docs/stale-on-error.md",
-      "sha256": "66930473b06ccb007974815394c60032687916d784926c21749477187eb4e6d1",
+      "sha256": "b08303ad0a0c2943e53841a64b2d27979d6ef9b8b1fced705e6e00ac47f053ac",
       "entries": [
         {"line":1,"title":"Stale-on-error","contracts":["C40"]},
         {"line":14,"title":"Fresh age and maximum age","contracts":["C40"]},
