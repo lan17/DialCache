@@ -152,17 +152,17 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "49ddcd2902baca3a667c1e25b355ff1f8cf8c810df623f3d6c806de70c5a3e63",
+      "sha256": "59fadbc08eebcb4866fc8325b1b2b733294381606743567a946e5dad3f75beab",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
-        {"line":59,"title":"Maintaining the reference","contracts":["E05","B01"]},
-        {"line":81,"title":"Run the documentation site","contracts":["B01"]},
-        {"line":108,"title":"Publish to GitHub Pages","contracts":["B01"]},
-        {"line":124,"title":"Cache-path benchmark","contracts":["X02"]},
-        {"line":146,"title":"Redis write benchmark","contracts":["X02"]},
-        {"line":169,"title":"Stale-on-error benchmark","contracts":["X02"]},
-        {"line":197,"title":"Releasing","contracts":["B01","E05"]}
+        {"line":61,"title":"Maintaining the reference","contracts":["E05","B01"]},
+        {"line":83,"title":"Run the documentation site","contracts":["B01"]},
+        {"line":110,"title":"Publish to GitHub Pages","contracts":["B01"]},
+        {"line":126,"title":"Cache-path benchmark","contracts":["X02"]},
+        {"line":148,"title":"Redis write benchmark","contracts":["X02"]},
+        {"line":171,"title":"Stale-on-error benchmark","contracts":["X02"]},
+        {"line":199,"title":"Releasing","contracts":["B01","E05"]}
       ]
     },
     {
@@ -1005,20 +1005,20 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "a6db6620cffc19ca004b94084d2b3ae9b782dcdfa02862889c5c4a03a0d15ce9",
+      "sha256": "075518a6ba47105559d73adc04d44fb29213626ebca9bb102991d24745d895fd",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":20,"title":"Reading a model"},
         {"line":61,"title":"Writing conventions"},
         {"line":172,"title":"Codifying the next behavior"},
-        {"line":221,"title":"Give reviewers focused context"},
-        {"line":236,"title":"Exporting a deterministic regression"},
-        {"line":274,"title":"Maintaining case and witness evidence"},
-        {"line":327,"title":"Reproducible committed fixtures"},
-        {"line":337,"title":"Refactoring and execution"},
-        {"line":365,"title":"Challenging every model"},
-        {"line":446,"title":"Mapping every challenge to native mutants"},
-        {"line":577,"title":"Exported runs are exactly the public-only runs"}
+        {"line":234,"title":"Give reviewers focused context"},
+        {"line":249,"title":"Exporting a deterministic regression"},
+        {"line":287,"title":"Maintaining case and witness evidence"},
+        {"line":340,"title":"Reproducible committed fixtures"},
+        {"line":350,"title":"Refactoring and execution"},
+        {"line":378,"title":"Challenging every model"},
+        {"line":459,"title":"Mapping every challenge to native mutants"},
+        {"line":590,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1288,18 +1288,18 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "e25af32085f0e845e98ec32c1f988accc451f0913050b483456069a086d2430f",
+      "sha256": "162d0705af154099408b23b1df229ecde54df610d02cf91c7ca5989f5f7d9b12",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
-        {"line":45,"title":"Shared coordinator protocol"},
-        {"line":95,"title":"Trace and observation contract"},
-        {"line":196,"title":"Observation contract"},
-        {"line":294,"title":"Generated fixtures and fast local tests"},
-        {"line":329,"title":"Complete corpus and reusable acceptance checks"},
-        {"line":442,"title":"Witness evidence"},
-        {"line":532,"title":"Current limitations for a further port"},
-        {"line":554,"title":"New-port acceptance"}
+        {"line":46,"title":"Shared coordinator protocol"},
+        {"line":96,"title":"Trace and observation contract"},
+        {"line":197,"title":"Observation contract"},
+        {"line":295,"title":"Generated fixtures and fast local tests"},
+        {"line":330,"title":"Complete corpus and reusable acceptance checks"},
+        {"line":450,"title":"Witness evidence"},
+        {"line":540,"title":"Current limitations for a further port"},
+        {"line":562,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1347,15 +1347,15 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "da2c12a96c6a63bf11098dd28a0512e334adf5362834828b35e846bc1dbd1a52",
+      "sha256": "adbbb453df3db158427d1672d13a9c643bc0848208f3d89acd18923757f6f1ef",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
         {"line":26,"title":"How the specification connects to code"},
         {"line":46,"title":"Models and composition profiles"},
         {"line":99,"title":"Generating and replaying behavior"},
-        {"line":194,"title":"Shared verification and replay rules"},
-        {"line":210,"title":"Evidence and scope"}
+        {"line":201,"title":"Shared verification and replay rules"},
+        {"line":217,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1520,17 +1520,17 @@
     },
     {
       "path": "formal/WALKTHROUGH.md",
-      "sha256": "86ec1c60442e2dc1f6912d27a28924e42a32824e0a7c19fccbdb8d69d3b8a2e4",
+      "sha256": "9473a46ff340a9f601fcfa41bb7c58656e3ee5e6eda12347b9ee1d0b1f8ad1b5",
       "entries": [
-        {"line":1,"title":"Follow one behavior from Quint to both ports"},
+        {"line":1,"title":"Follow one behavior from Quint to every port"},
         {"line":14,"title":"Read the named run first"},
-        {"line":58,"title":"Follow input and evidence separately"},
-        {"line":93,"title":"Find the rule's catalog entries"},
-        {"line":119,"title":"Run this example"}
+        {"line":62,"title":"Follow input and evidence separately"},
+        {"line":99,"title":"Find the rule's catalog entries"},
+        {"line":128,"title":"Run this example"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Worked source-budget rule from the existing public Quint regression through the shared profile mapping/assertion to independent TS and Go execution. Includes the source-origin connection and canonical strict-deadline judgment without broadening the example's scope."
+        "scope": "Worked source-budget rule from the existing public Quint regression through the shared profile mapping/assertion to independent TS, Go and Rust execution. Includes the source-origin connection and canonical strict-deadline judgment without broadening the example's scope."
       }
     },
     {

@@ -1,4 +1,4 @@
-# Follow one behavior from Quint to both ports
+# Follow one behavior from Quint to every port
 
 Start with [`heldPolicyDoesNotSpendSourceBudgetTest`](./dialcache-source-budgets-conformance.qnt)
 in `dialcache_source_budgets_conformance`. It is a short example of the portable
@@ -33,8 +33,12 @@ Read these definitions next, in this order:
 
 1. `initialize` and `configuredBudget`: the finite fixture and its initial state.
 2. `begin` and `release`: call admission, held policy, and source creation or reuse.
-3. `startSource`: captures `started: x.now` when the source actually begins.
-4. `advanced` and `settleSource`: apply elapsed deadlines to each source.
+3. `releaseLocal`, `startedLocal` and `stamp` in
+   [kernel/deadlines.qnt](./kernel/deadlines.qnt): record the start time and
+   register a deadline only when releasing policy actually creates a source.
+4. `advanced` and `resolved` in the profile, then `advanceLocal`, `settleLocal`
+   and `arrival` in that kernel module: deliver deadlines and judge source
+   results against their own deadlines.
 5. `acceptedSourceRespectsItsOwnStart`: independently checks an accepted result's
    recorded settlement time against its source start and budget.
 
@@ -61,7 +65,7 @@ other allowed choices. Each transition records its external command in
 flowchart LR
   Q[Quint history] --> I[Recorded external input]
   Q --> P[Predicted observation]
-  I --> D[TS or Go driver]
+  I --> D[TypeScript, Go or Rust driver]
   D --> C[Real DialCache API]
   C --> O[Actual results and effects]
   P --> A[Compare observations]
@@ -79,9 +83,11 @@ using the published mapping, rather than supplying the predicted call result.
 | Shared command mapping and fixture | [source-budgets.mjs](./replay/profiles/source-budgets.mjs), `sourceBudgetsProfile` |
 | TS real API execution | [behavior-driver.ts](../test/formal/behavior-driver.ts), `BehaviorDriver.apply` and `snapshot` |
 | Go real API execution | [behavior_driver_test.go](../go/behavior_driver_test.go), `behaviorDriver.apply` and `observation` |
+| Rust real API execution | [driver.rs](../rust/tests/formal/driver.rs), `Driver::apply` and `Driver::observation` |
 | Shared projection and per-step assertion | [features.mjs](./replay/features.mjs), `projectObservation` and `assertFeatureObservation` |
 | TS replay | [formal-features.test.ts](../test/formal-features.test.ts), `replay` |
 | Go replay transport | [feature_replay_test.go](../go/feature_replay_test.go), `TestFeatureConformance`, and [replay_coordinator_test.go](../go/replay_coordinator_test.go) |
+| Rust replay transport | [conformance.rs](../rust/tests/conformance.rs), `Run::replay_behavior`, and [transport.rs](../rust/tests/formal/transport.rs), `Coordinator::execute` |
 
 The shared fixture installs a real cache with a local TTL and a held runtime-policy
 provider. Source loaders, policy replies and time are controlled at their
@@ -98,20 +104,23 @@ Search by `C23.policy-does-not-spend-source-budget`,
 | Catalog | Responsibility for this example |
 | --- | --- |
 | [CONTRACTS.md](./CONTRACTS.md) and [semantic-cases.json](./semantic-cases.json) | C23 names the broader obligation; the case ID connects this corner to its exact evidence, and the `scope` on each cited property or regression states exactly what it establishes; a broad case can need several narrower checks |
-| [execution.json](./execution.json) | Schedules the property; the named regression is a run of the model, exported as a history for both ports because it is public-only |
+| [execution.json](./execution.json) | Schedules the model and property; [execution.mjs](./execution.mjs), `scheduleExecution`, discovers its named runs and identifies the public-only ones for generation to export to every port |
 | [profiles.json](./profiles.json) | Declares `source-budgets` version, input encoding and bounded scope |
 | [coverage-witnesses.json](./coverage-witnesses.json) | Requires the distinguishing `policy-wait-does-not-spend-source-budget` consequence to be reached |
 
 The witness classifier is `sourceBudgetsWitnessRules` in
-[source-budgets-witnesses.ts](../test/formal/source-budgets-witnesses.ts).
+[source-budgets.mjs](./replay/witnesses/source-budgets.mjs).
 It requires the chosen command sequence and checkpoints: no source during the
 policy wait, one source afterward, and two returned values without a second
 source. A witness answers whether the required corner was reached; the native
 replay assertions establish whether the implementation matched it.
 
-A declared run is not automatically checked or replayed: its execution-manifest
-entries make those obligations concrete. Similarly, adding a case ID without
-its model and native replay evidence does not establish coverage. For shared
+Every run declared by a scheduled model is checked. In a conformance profile,
+public-only runs are also exported automatically: each transition must record
+its external command in `input`. Runs that patch model state stay model-only.
+Do not add manual `regressions` or `replayRegressions` lists to the manifest;
+the validator rejects them. Adding a case ID without its model and native
+replay evidence does not establish coverage. For shared
 wire behavior, [PROTOCOL.md](./PROTOCOL.md) explains the corresponding vector
 path; for binding-specific behavior, [feature-coverage.json](./feature-coverage.json)
 records native tests and explicit adaptations.
@@ -140,7 +149,19 @@ DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/walkthrough/source-budgets/hel
 DIALCACHE_FEATURE_PROFILE=source-budgets \
 DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/walkthrough/source-budgets/heldPolicyDoesNotSpendSourceBudgetTest.itf.json" \
   go -C go test -race -count=1 -run '^TestFeatureConformance/source-budgets/' ./...
+
+(
+  cd rust
+  DIALCACHE_RUST_SUITE=generated \
+  DIALCACHE_FEATURE_PROFILE=source-budgets \
+  DIALCACHE_FEATURE_TRACE_FILE="$PWD/../.formal-traces/walkthrough/source-budgets/heldPolicyDoesNotSpendSourceBudgetTest.itf.json" \
+    cargo test --locked --all-features --test conformance
+)
 ```
+
+The Rust command selects this history for feature replay and skips fixed
+scenarios; its harness also runs the core/effects smoke histories and protocol
+vectors. Keep Node 24 on `PATH` for the shared replay coordinator.
 
 These are focused debugging checks. They do not produce full acceptance or
 satisfy the complete witness inventory. After changing the rule or its driver,

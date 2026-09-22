@@ -4,7 +4,7 @@ The Quint files should let a reader understand a behavior without translating
 the TypeScript implementation. Readability is part of the specification's
 acceptance criteria. Executable checks then challenge that written behavior.
 TypeScript is the executable reference these models formalize; Quint is the
-independently reviewed contract that TypeScript, Go and later ports are held
+independently reviewed contract that TypeScript, Go, Rust and future ports are held
 to. When the two disagree, neither side is edited to match the other quietly:
 the change lands with a regression that distinguishes the two behaviors and a
 comment recording the decision about which one is intended. The prose explains
@@ -13,7 +13,7 @@ definition of the same portable rule.
 
 For a first contribution, start with the [worked walkthrough](./WALKTHROUGH.md).
 It follows one existing contract from a named Quint regression through actual
-TypeScript and Go assertions, and identifies the catalog entry each edit owns.
+TypeScript, Go and Rust assertions, and identifies the catalog entry each edit owns.
 Then use the checklist below for your rule; it applies the same path to another
 behavior.
 
@@ -171,7 +171,10 @@ separate boundary property for faults in the predicate itself.
 
 ## Codifying the next behavior
 
-For each new rule or interaction:
+Use this workflow for portable features, bug fixes and new interactions. Reuse
+existing rules, regressions and faults when they already distinguish the behavior;
+extend the evidence where it is missing. Native binding details retain their
+own API and integration tests.
 
 1. **State the contract.** Record the observable guarantee, its boundary cases,
    environmental assumptions, and allowed races in `SPEC.md`/`CONTRACTS.md`.
@@ -190,33 +193,43 @@ For each new rule or interaction:
    injecting the same wrong behavior into `src/` and `go/`, or an enumerated
    explanation of why no native line embodies the rule (see
    [Mapping every challenge to native mutants](#mapping-every-challenge-to-native-mutants)).
-4. **Exercise both implementations.** Require a generated witness or exported
+4. **Exercise every supported implementation.** Require a generated witness or exported
    Quint regression that exposes the rule's consequence, and replay the same
-   history in TypeScript and Go. Fixed scenarios preserve narrow regressions;
+   history in TypeScript, Go and Rust. Preserve a discovered portable bug as a
+   deterministic exported regression. Fixed scenarios preserve narrow regressions;
    protocol vectors and native
    tests cover wire and language boundaries. The driver supplies only external inputs and asserts actual public
    results/effects. Expected model state must never drive the implementation.
-   The generated cohort of each mutation lane must detect both native mutants:
+   The TypeScript and Go generated cohorts must detect their mapped native faults:
    list `generated` in their `requiredDetections`. A mutant the corpus does not
    detect is a coverage gap; close it with an exported regression or a witness
    before the challenge counts as mapped. A new profile or held effect kind
    stays inside the settlement receipt ([PORTING.md](./PORTING.md)) by
    extending the ledger's kinds and gate names in
    [replay/settlement.mjs](./replay/settlement.mjs), the `held` members of
-   `$defs/settlementReceipt`, both drivers' held computation and the receipt
+   `$defs/settlementReceipt`, each driver's held computation and the receipt
    table; a hold fault must precede every effect-starting command of its step.
    A new rule text belongs in the same module's exported violation pattern,
-   which both mutation runners import.
+   which the TypeScript and Go mutation runners import.
 5. **Account for the evidence.** Link the case, property, scenario, and required
    witness in the existing catalogs. Preserve explicit gaps and update profile
    claims only after the corresponding language driver passes.
 
-Both implementations replay the registered profiles. To expand their generated
-scope, model the next bounded interaction and its environment controls, then
-replay the same corpus in both languages. A readable model and TypeScript
-replay do not by themselves establish Go conformance; the Go completion gate
-also requires every scheduled profile, fixed case, protocol case, and witness
-gate to finish successfully.
+Every supported implementation replays the registered profiles. Each port's
+completion gate requires every scheduled history, fixed case, protocol case and
+witness gate to finish successfully. Passing TypeScript replay alone does not
+establish another port's conformance. Behavior, model and replay changes require
+[full validation](./VALIDATION.md#choosing-a-run) before merge.
+
+Fault-detection evidence is specific to each port. Rust uses
+[its own mutation catalog](./SEMANTIC-COVERAGE.md#reproduction-and-ci); the
+TypeScript/Go mappings above do not establish Rust detection. Add equivalent
+native faults where applicable and report remaining gaps explicitly.
+
+Extend formal infrastructure when a concrete behavior cannot be expressed or
+tested clearly, evidence gives misleading credit, or authoring and execution
+need improvement. Describe that benefit in the change; the remaining composition
+work in issue #165 does not need to precede unrelated feature or port development.
 
 ## Give reviewers focused context
 
@@ -225,7 +238,7 @@ extract the matching catalog entries. Provide a small context packet:
 
 - Contract/case IDs, the observable rule or change, and its documentation link.
 - Model file, exact regression/property symbols, and their execution-manifest entries.
-- Profile name, TS and Go input mappings, and each port's actual-observation assertion.
+- Profile name, each applicable port's input mapping and actual-observation assertion.
 - Latest relevant validation evidence, its source revision, and any changes since that run.
 
 State the exact modeled bounds, environmental assumptions and native evidence
@@ -236,7 +249,7 @@ follow recorded external inputs and actual effect ownership.
 ## Exporting a deterministic regression
 
 Sampled histories explore combinations. Exported and scheduled named Quint
-regressions guarantee that their reviewed boundary is exercised in both ports
+regressions guarantee that their reviewed boundary is exercised in every supported port
 even when a random seed does not reach it.
 Keep the expected result in Quint; do not copy it into a hand-maintained JSON
 scenario and call that Quint-driven evidence.
@@ -264,7 +277,7 @@ The coordinator also accepts raw regression exports directly. `input` remains
 authoritative, and any optional MBT annotations must agree with it.
 
 Each implementation validates the input domain, performs the real public
-operation, and compares its own observations after every step. Both completion
+operation, and compares its own observations after every step. All completion
 gates require the exact scheduled regression inventory. Link a case to its run
 with `quintReplays: ["profile/regressionTest"]`; the same case must cite that
 scheduled Quint check with a precise applicability scope. A checked property,
@@ -315,12 +328,12 @@ F/M or deadline boundaries, byte-equivalence distinctions, and ownership where
 the rule depends on them. Keep these classifier/harness controls outside positive
 behavioral and mutation-detection cohorts. Raw expected state may classify
 reachability and assert outcomes; it must never supply execution inputs or
-actual observations to either implementation.
+actual observations to any implementation.
 
 Run `node formal/check-semantic-coverage.mjs`,
 `node formal/check-feature-coverage.mjs`, and the relevant attribution tests.
 These validate accounting and selected classifier boundaries; they do not
-replace model checks, generation, both implementation replays, or real/native
+replace model checks, generation, every implementation's replay, or real/native
 integration checks. Refresh execution fingerprints and reports after changed
 inputs. Preserve previous measurements as historical until fresh runs finish.
 
@@ -395,7 +408,7 @@ condition of one top-level `.expect(...)` in that run, copied from the model),
 the fault `family` slug it belongs to, the `profiles` where the fault is
 observable, and `exclusions` mapping other known profiles to the reason they
 cannot exercise it. Two kinds exist. An `exported-regression` cites a
-public-only run of a profile model, so both ports replay it: use this kind for
+public-only run of a profile model, so every supported port replays it: use this kind for
 every portable behavior fault. The run normally belongs
 to the challenged model; when the fault sits in a shared library, the
 reproducer may instead name another profile `model` whose exported run reaches

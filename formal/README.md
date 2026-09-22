@@ -12,7 +12,7 @@ the test coordinator.
 | Task | Read first |
 | --- | --- |
 | Understand system behavior | [SPEC.md](./SPEC.md), then the relevant model below |
-| Follow one rule into both implementations | [WALKTHROUGH.md](./WALKTHROUGH.md) |
+| Follow one rule into all three implementations | [WALKTHROUGH.md](./WALKTHROUGH.md) |
 | Change a behavior or extend coverage | [AUTHORING.md](./AUTHORING.md) |
 | Implement another language | [PORTING.md](./PORTING.md) and [PROTOCOL.md](./PROTOCOL.md) |
 | Locate or reproduce a failing check | [TEST-MAP.md](./TEST-MAP.md) and the commands below |
@@ -94,13 +94,16 @@ transitions; a composed profile assigns state only through them. Every profile
 except core composes this library. The corpus differential checks that changes
 preserve existing profiles' observable behavior; a new profile establishes its
 behavior through independent properties, consequential witnesses and replay in
-both implementations.
+every supported implementation.
 
 ## Generating and replaying behavior
 
-Use Node 24, pnpm 10.33.0 and Go 1.27.1 to match CI. Install dependencies with
-`corepack pnpm install --frozen-lockfile`. Model work requires Quint 0.32.0 and
-Rust evaluator 0.6.0 (`npm install --global @informalsystems/quint@0.32.0`).
+Use Node 24, pnpm 10.33.0, Go 1.27.1 and Rust/cargo 1.98.1 to match CI.
+Install dependencies with `corepack pnpm install --frozen-lockfile`; rustup reads
+the native Rust toolchain pin from `rust/rust-toolchain.toml`.
+Model work requires Quint 0.32.0 and its Rust evaluator 0.6.0
+(`npm install --global @informalsystems/quint@0.32.0`). The evaluator is separate
+from the native Rust port's compiler toolchain.
 `make formal` and `make explore` use the Rust evaluator and do not need Java.
 The separate `make model-check` target needs Java 21 and `tar`. Its standalone
 Apalache 0.56.1 runner downloads the versioned release, verifies the SHA-256 in
@@ -109,9 +112,11 @@ The archive is cached under `~/.cache/dialcache/apalache/0.56.1/`; for offline
 use, supply `APALACHE_ARCHIVE=/absolute/path/to/apalache-0.56.1.tgz`. Supplied
 archives must pass the same checksum check.
 
-Real-server tests and native mutation campaigns require Docker. Each mutation
-shard starts a private Redis 6.2 server, replays all generated invalidation
-vectors against the production Lua, and removes its own container afterward. The package floor requires exact Node 22.15.0
+Real-server tests and TypeScript/Go mutation campaigns require Docker. Each
+TypeScript/Go mutation shard starts a private Redis 6.2 server, replays all
+generated invalidation vectors against the production Lua, and removes its own
+container afterward. The Rust mutation campaign uses its separate native fault
+catalog without Docker. The package floor requires exact Node 22.15.0
 provided through `NODE22_BIN`. `make help` lists targets and prerequisites.
 `make model-check` and `make ci` additionally require Java 21 and `tar`, because
 the pinned Apalache distribution is unpacked from a checksummed tarball; both
@@ -126,7 +131,7 @@ make smoke         # Committed Quint-derived histories in every port.
 make formal        # Quint model checks, full corpus and every port's completion.
 make differential  # Replay composed profiles' reference corpus through the working tree.
 make model-check   # Separate finite symbolic checks; Java 21 and tar required.
-make mutations     # Challenge assertions after full replay has passed.
+make mutations     # Challenge assertions against the generated corpus.
 make integration   # Real Redis/Valkey/Cluster in every port and interoperability.
 make explore       # Fresh recorded seed in an isolated source snapshot.
 make ci NODE22_BIN=/absolute/path/to/node22/bin/node
@@ -163,10 +168,10 @@ keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. S
 Scheduled named public-action Quint regressions exercise their declared
 boundaries independently of sampling. Every port replays those histories and the
 complete sampled corpus; required witness coverage is checked across their
-union. A model regression reaches implementations only when registered for
-replay in `execution.json`, and the manifest validator requires every
-public-only run to be registered. Private state-patch checks stay model-only
-unless rewritten as public actions.
+union. `execution.json` schedules the models; the tools discover their runs
+from the Quint source and export every public-only run of a profile model.
+Do not maintain a separate regression list in the manifest. Private state-patch
+checks stay model-only unless rewritten as public actions.
 
 The replay protocol schema types every observation, fixture sentinel and the
 wall epoch, and the coordinator rejects a malformed observation as an
@@ -178,7 +183,7 @@ at least one compiling single-site fault that a named invariant must detect.
 `node formal/check-model-properties.mjs --only=<id>` measures one entry locally;
 only the complete run is evidence.
 
-Replay one failing feature history:
+Replay one failing feature history in TypeScript or Go:
 
 ```sh
 DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/regressions/shadow/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest.itf.json \
@@ -190,6 +195,8 @@ DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/regressions/shadow/confirmatio
 Core/effects use `DIALCACHE_MBT_TRACE_FILE` or `DIALCACHE_EFFECTS_TRACE_FILE`
 and their corresponding tests. Local-clock uses feature selectors with
 `test/formal-local-clock.test.ts` and the Go local-clock replay.
+The [walkthrough](./WALKTHROUGH.md#run-this-example) shows one history replayed
+in all three languages, including Rust's feature-history selectors.
 
 ## Shared verification and replay rules
 
