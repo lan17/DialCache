@@ -83,7 +83,10 @@ export function checkDocsLinks(directory = root) {
   const pages = files(output, '.html', ['assets', 'reference']);
   const failures = [];
   const idCache = new Map();
-  const decode = text => text.replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#39;', "'");
+  // Decode one HTML layer, as the browser does. Chained replacements would
+  // turn a literal &amp;quot; into a quote instead of preserving &quot;.
+  const entities = { '&amp;': '&', '&quot;': '"', '&#39;': "'" };
+  const decode = text => text.replace(/&(?:amp|quot|#39);/g, entity => entities[entity]);
   for (const page of pages) {
     const html = readFileSync(page, 'utf8');
     const pageUrl = new URL(relative(output, page), 'https://docs.invalid/DialCache/');

@@ -42,3 +42,17 @@ test('checks rendered anchors including native reference targets', t => {
   writeFileSync(join(out, 'index.html'), '<a href="gone.html">Missing</a>');
   assert.throws(() => checkDocsLinks(root), /missing target/);
 });
+
+test('decodes escaped link and anchor attributes exactly once', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dialcache-doc-entities-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const out = join(root, 'docs/.vitepress/dist');
+  mkdirSync(out, { recursive: true });
+  // The href names the literal text &quot;, not the quote in this heading's ID.
+  writeFileSync(join(out, 'index.html'), '<h1 id="literal&quot;">Quote</h1><a href="#literal&amp;quot;">Different anchor</a>');
+  assert.throws(() => checkDocsLinks(root), /missing anchor/);
+  writeFileSync(join(out, 'index.html'), '<h1 id="literal&amp;quot;">Literal entity</h1><a href="#literal&amp;quot;">Same anchor</a>');
+  assert.deepEqual(checkDocsLinks(root), { pages: 1 });
+  writeFileSync(join(out, 'index.html'), '<h1 id="literal&amp;quot;">Literal entity</h1><a href="#literal%26quot%3B">URL-encoded anchor</a>');
+  assert.deepEqual(checkDocsLinks(root), { pages: 1 });
+});
