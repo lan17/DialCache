@@ -334,3 +334,207 @@ async fn large_codec_phases_allow_an_independent_short_timer_to_progress() {
         assert_eq!(decodes.load(Ordering::SeqCst), usize::from(decode));
     }
 }
+
+#[derive(Default)]
+struct Logs(Mutex<Vec<ShadowMismatchDetails>>);
+impl Logger for Logs {
+    fn log(&self, event: &LogEvent) {
+        if let LogEvent::ShadowMismatch(details) = event {
+            self.0.lock().push(details.clone());
+        }
+    }
+}
+fn preview_setup() -> (
+    TestExecutor,
+    DialCache,
+    Arc<CpuRuntime>,
+    Arc<Events>,
+    Arc<Logs>,
+) {
+    let executor = TestExecutor::new(WALL_EPOCH_MS);
+    let runtime = Arc::new(CpuRuntime {
+        step: executor.runtime.clone(),
+        jobs: Mutex::new(VecDeque::new()),
+        reject: AtomicBool::new(false),
+    });
+    let events = Arc::new(Events::default());
+    let logs = Arc::new(Logs::default());
+    let cache = DialCache::builder()
+        .clock_arc(executor.clock.clone())
+        .runtime_arc(runtime.clone())
+        .observer_arc(events.clone())
+        .logger_arc(logs.clone())
+        .remote(SnapshotRemote {
+            result: ReadResult::Hit(Frame {
+                created_at_ms: WALL_EPOCH_MS as u64,
+                payload: Payload::text(serde_json::to_string(&"é".repeat(10_000)).unwrap()),
+            }),
+            writes: AtomicUsize::new(0),
+        })
+        .build()
+        .unwrap();
+    (executor, cache, runtime, events, logs)
+}
+fn preview_call(
+    executor: &mut TestExecutor,
+    cache: &DialCache,
+    registered: bool,
+    preview: Option<crate::operation::Preview<String>>,
+) {
+    let cache = cache.clone();
+    executor.block_on(async move {
+        let guard = cache.enable_guard();
+        let policy = Policy::default().remote_ttl_sec(60).shadow(ShadowPolicy {
+            ramp: Some(100.0),
+            log_mismatches: Some(true),
+        });
+        let result = if registered {
+            let use_case = cache
+                .use_case::<(), String>("thing", "Preview")
+                .policy(policy)
+                .key(|_| KeySpec::new("one"))
+                .source(|_, ()| async { Ok("source".to_owned()) })
+                .register()
+                .unwrap();
+            use_case.get(guard.scope(), ()).await
+        } else {
+            let mut operation =
+                Operation::<String>::new(Identity::new("thing", "one", "Preview")).policy(policy);
+            if let Some(preview) = preview {
+                operation.preview = Some(preview);
+            }
+            cache
+                .get_or_load(guard.scope(), operation, |_| async {
+                    Ok("source".to_owned())
+                })
+                .await
+        };
+        assert_eq!(*result.unwrap(), "é".repeat(10_000));
+    });
+}
+
+#[test]
+fn both_default_apis_prepare_bounded_previews_without_holding_the_caller() {
+    for registered in [false, true] {
+        let (mut executor, cache, runtime, events, logs) = preview_setup();
+        preview_call(&mut executor, &cache, registered, None);
+        assert_eq!(*events.0.lock(), vec![ShadowOutcome::Mismatch]);
+        assert!(logs.0.lock().is_empty());
+        assert_eq!(runtime.jobs.lock().len(), 1);
+        assert_eq!(cache.core.state.lock().shadows.len(), 1);
+        // An inline call uses the same identity as the registered handle.
+        preview_call(&mut executor, &cache, false, None);
+        assert_eq!(
+            *events.0.lock(),
+            vec![ShadowOutcome::Mismatch, ShadowOutcome::Dropped]
+        );
+        executor.advance(10_000, true);
+        runtime.take()();
+        executor.drain();
+        assert!(cache.core.state.lock().shadows.is_empty());
+        let messages = logs.0.lock();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(
+            messages[0].cached_value_json,
+            crate::preview::json_preview(&"é".repeat(10_000))
+        );
+        assert_eq!(messages[0].source_value_json.as_deref(), Some("\"source\""));
+        assert_eq!(
+            *events.0.lock(),
+            vec![ShadowOutcome::Mismatch, ShadowOutcome::Dropped]
+        );
+    }
+}
+
+#[test]
+fn rejected_preview_cpu_work_still_logs_the_confirmed_mismatch() {
+    let (mut executor, cache, runtime, events, logs) = preview_setup();
+    runtime.reject.store(true, Ordering::SeqCst);
+    preview_call(&mut executor, &cache, false, None);
+    assert_eq!(*events.0.lock(), vec![ShadowOutcome::Mismatch]);
+    assert!(runtime.jobs.lock().is_empty());
+    assert!(cache.core.state.lock().shadows.is_empty());
+    let messages = logs.0.lock();
+    assert_eq!(messages.len(), 1);
+    assert!(messages[0].cached_value_json.is_none());
+    assert!(messages[0].source_value_json.is_none());
+}
+
+#[test]
+fn custom_preview_failures_are_isolated_per_value_and_success_is_clamped() {
+    for panic in [false, true] {
+        let (mut executor, cache, runtime, _, logs) = preview_setup();
+        preview_call(
+            &mut executor,
+            &cache,
+            false,
+            Some(Arc::new(move |value| {
+                if value == "source" {
+                    Some("🙂".repeat(10_000))
+                } else if panic {
+                    panic!("bad cached preview");
+                } else {
+                    None
+                }
+            })),
+        );
+        runtime.take()();
+        executor.drain();
+        let messages = logs.0.lock();
+        assert_eq!(messages.len(), 1);
+        assert!(messages[0].cached_value_json.is_none());
+        assert_eq!(
+            messages[0].source_value_json,
+            Some(crate::preview::preview_value(&"🙂".repeat(10_000)))
+        );
+        assert!(cache.core.state.lock().shadows.is_empty());
+    }
+}
+
+#[test]
+fn queued_preview_keeps_capacity_after_executor_shutdown_until_run_or_discarded() {
+    for discard in [false, true] {
+        let (mut executor, cache, runtime, _, _) = preview_setup();
+        preview_call(&mut executor, &cache, false, None);
+        drop(executor);
+        assert_eq!(cache.core.state.lock().shadows.len(), 1);
+        let job = runtime.take();
+        if discard {
+            drop(job);
+        } else {
+            job();
+        }
+        assert!(cache.core.state.lock().shadows.is_empty());
+    }
+}
+
+#[test]
+fn running_preview_keeps_capacity_after_executor_shutdown() {
+    let (mut executor, cache, runtime, _, _) = preview_setup();
+    let (started, running) = std::sync::mpsc::channel();
+    let (release, gate) = std::sync::mpsc::channel();
+    let gate = Mutex::new(gate);
+    preview_call(
+        &mut executor,
+        &cache,
+        false,
+        Some(Arc::new(move |value| {
+            if value != "source" {
+                started.send(std::thread::current().id()).unwrap();
+                gate.lock().recv_timeout(Duration::from_secs(5)).unwrap();
+            }
+            Some(value.clone())
+        })),
+    );
+    let job = runtime.take();
+    let worker = std::thread::spawn(job);
+    assert_ne!(
+        running.recv_timeout(Duration::from_secs(5)).unwrap(),
+        std::thread::current().id()
+    );
+    drop(executor);
+    assert_eq!(cache.core.state.lock().shadows.len(), 1);
+    release.send(()).unwrap();
+    worker.join().unwrap();
+    assert!(cache.core.state.lock().shadows.is_empty());
+}

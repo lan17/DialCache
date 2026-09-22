@@ -227,6 +227,8 @@ where
     }
 
     /// Bounded textual preview of a value for mismatch warnings.
+    /// Runs through [`Runtime::spawn_blocking`](crate::Runtime::spawn_blocking)
+    /// after confirmation; callbacks may run on a CPU worker thread.
     pub fn preview(
         mut self,
         preview: impl Fn(&T) -> Option<String> + Send + Sync + 'static,
@@ -331,7 +333,7 @@ where
         let preview = self
             .preview
             .clone()
-            .or_else(|| Some(Arc::new(|value: &T| serde_json::to_string(value).ok())));
+            .or_else(|| Some(Arc::new(crate::preview::json_preview::<T>)));
         self.finish(codec, comparator, preview)
     }
 }

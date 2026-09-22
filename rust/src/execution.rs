@@ -3,7 +3,6 @@
 //! implementations; the Quint models define the behavior.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -108,7 +107,6 @@ pub(crate) struct Execution {
     pub(crate) keys: Keys,
     pub(crate) policy: ResolvedPolicy,
     pub(crate) labels: OutcomeLabels,
-    pub(crate) timed_out: Arc<AtomicBool>,
 }
 
 /// What the serving remote read produced.
@@ -245,7 +243,6 @@ pub(crate) async fn run(core: Arc<Core>, scope: Scope, op: Arc<ErasedOperation>)
         keys,
         policy,
         labels,
-        timed_out: Arc::new(AtomicBool::new(false)),
     });
     if !execution.policy.request_local {
         return execution.shared(Layer::Local).await;
@@ -314,7 +311,7 @@ async fn uncached_source(
     scope: Scope,
     labels: &OutcomeLabels,
 ) -> ValueResult {
-    source_with_budget(core, op, scope, labels, Layer::Noop, None).await
+    source_with_budget(core, op, scope, labels, Layer::Noop).await
 }
 
 /// Run the source under the operation budget, reporting the fallback trail.
@@ -324,7 +321,6 @@ async fn source_with_budget(
     scope: Scope,
     labels: &OutcomeLabels,
     layer: Layer,
-    timed_out: Option<&AtomicBool>,
 ) -> ValueResult {
     let clock = core.clock.clone();
     let start = clock.elapsed();
@@ -345,9 +341,6 @@ async fn source_with_budget(
         start,
         budget,
         || {
-            if let Some(flag) = timed_out {
-                flag.store(true, Ordering::SeqCst);
-            }
             Err(Error::FallbackTimeout(Arc::new(FallbackTimeout {
                 use_case,
                 timeout_ms: budget.unwrap_or(0),
@@ -406,7 +399,6 @@ impl Execution {
             self.scope.clone(),
             &self.labels,
             layer,
-            Some(&self.timed_out),
         )
         .await
     }

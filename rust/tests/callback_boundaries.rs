@@ -238,3 +238,77 @@ fn synchronous_shadow_source_panic_is_a_source_error_and_releases_capacity() {
         vec![ShadowOutcome::SourceError, ShadowOutcome::SourceError]
     );
 }
+
+#[test]
+fn dark_shadow_distinguishes_its_deadline_from_application_timeout_errors() {
+    for error_kind in ["own deadline", "nested deadline", "source error"] {
+        let (mut executor, cache, _, events) = setup(hit(0));
+        let result = Arc::new(Mutex::new(None));
+        let sink = result.clone();
+        executor.spawn(async move {
+            let request = cache.enable_guard();
+            let operation = Operation::<u64>::new(Identity::new("thing", "one", "DarkDeadline"))
+                .policy(
+                    Policy::default()
+                        .remote_ttl_sec(60)
+                        .remote_ramp(0.0)
+                        .shadow(ShadowPolicy {
+                            ramp: Some(100.0),
+                            log_mismatches: None,
+                        }),
+                )
+                .budget(dialcache::SourceBudget::Millis(5));
+            *sink.lock() = Some(
+                cache
+                    .get_or_load(request.scope(), operation, move |_| async move {
+                        match error_kind {
+                            "own deadline" => std::future::pending::<Result<u64, BoxError>>().await,
+                            "nested deadline" => Err(Box::new(dialcache::Error::FallbackTimeout(
+                                Arc::new(dialcache::FallbackTimeout {
+                                    use_case: "nested".to_owned(),
+                                    timeout_ms: 1,
+                                }),
+                            )) as BoxError),
+                            _ => Err("source failed".into()),
+                        }
+                    })
+                    .await,
+            );
+        });
+        executor.drain();
+        if error_kind == "own deadline" {
+            assert!(result.lock().is_none());
+            executor.advance(5, true);
+            assert!(matches!(
+                result.lock().as_ref().unwrap(),
+                Err(dialcache::Error::FallbackTimeout(_))
+            ));
+        } else {
+            assert!(matches!(
+                result.lock().as_ref().unwrap(),
+                Err(dialcache::Error::Source(_))
+            ));
+        }
+        let outcomes: Vec<_> = events
+            .0
+            .lock()
+            .iter()
+            .filter_map(|event| {
+                if let Event::ShadowValidation { outcome, .. } = event {
+                    Some(*outcome)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            outcomes,
+            vec![if error_kind == "own deadline" {
+                ShadowOutcome::Timeout
+            } else {
+                ShadowOutcome::SourceError
+            }],
+            "{error_kind}"
+        );
+    }
+}

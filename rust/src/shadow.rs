@@ -153,7 +153,7 @@ impl Execution {
                 || state.shadows.len() >= self.core.shadow_max_in_flight
             {
                 drop(state);
-                self.shadow_event(Verdict::of(ShadowOutcome::Dropped));
+                self.shadow_event(&Verdict::of(ShadowOutcome::Dropped));
                 return;
             }
             let flight = ShadowFlight::new();
@@ -176,7 +176,7 @@ impl Execution {
         }));
     }
 
-    fn shadow_event(&self, verdict: Verdict) {
+    fn shadow_event(&self, verdict: &Verdict) {
         self.emit(Event::ShadowValidation {
             labels: self.labels.clone(),
             outcome: verdict.outcome,
@@ -188,28 +188,42 @@ impl Execution {
                 seconds: age.max(0) as f64 / 1000.0,
             });
         }
-        if verdict.outcome == ShadowOutcome::Mismatch && self.policy.shadow.log_mismatches {
-            let preview = |value: &StoredValue| -> Option<String> {
-                let preview = self.op.metadata.preview.as_ref()?;
-                catch_unwind(AssertUnwindSafe(|| preview(value)))
-                    .ok()
-                    .flatten()
-                    .map(|json| preview_value(&json))
-            };
-            let (cached, source) = match &verdict.compared {
-                Some((cached, source)) => (preview(cached), preview(source)),
-                None => (None, None),
-            };
-            self.core
-                .log(LogEvent::ShadowMismatch(ShadowMismatchDetails {
-                    namespace: self.labels.namespace.clone(),
-                    use_case: self.labels.use_case.clone(),
-                    key_type: self.labels.key_type.clone(),
-                    cache_key: preview_key(&self.keys.logical),
-                    cached_value_json: cached,
-                    source_value_json: source,
-                }));
+    }
+
+    async fn log_shadow_mismatch(&self, verdict: Verdict, slot: Arc<ShadowSlot>) {
+        if verdict.outcome != ShadowOutcome::Mismatch || !self.policy.shadow.log_mismatches {
+            return;
         }
+        let (cached, source) = match (self.op.metadata.preview.clone(), verdict.compared) {
+            (Some(preview), Some((cached, source))) => {
+                let cpu_slot = slot.clone();
+                crate::blocking::run(self.core.runtime.as_ref(), move || {
+                    // Raw diagnostic work keeps capacity even if the awaiting
+                    // async task is dropped during runtime shutdown.
+                    let _slot = cpu_slot;
+                    let render = |value: &StoredValue| {
+                        catch_unwind(AssertUnwindSafe(|| preview(value)))
+                            .ok()
+                            .flatten()
+                            .map(|json| preview_value(&json))
+                    };
+                    Ok((render(&cached), render(&source)))
+                })
+                .await
+                .unwrap_or_default()
+            }
+            _ => (None, None),
+        };
+        self.core
+            .log(LogEvent::ShadowMismatch(ShadowMismatchDetails {
+                namespace: self.labels.namespace.clone(),
+                use_case: self.labels.use_case.clone(),
+                key_type: self.labels.key_type.clone(),
+                cache_key: preview_key(&self.keys.logical),
+                cached_value_json: cached,
+                source_value_json: source,
+            }));
+        drop(slot);
     }
 
     async fn run_shadow(
@@ -239,6 +253,7 @@ impl Execution {
             started,
             budget: Duration::from_millis(budget_ms),
         };
+        let log_slot = slot.clone();
         let reads: Arc<Mutex<Vec<Settled<RawRead>>>> = Arc::new(Mutex::new(Vec::new()));
         let validation: Settled<Verdict> = start_pending(
             self.core.runtime.as_ref(),
@@ -287,7 +302,8 @@ impl Execution {
             },
         )
         .await;
-        self.shadow_event(verdict);
+        self.shadow_event(&verdict);
+        self.log_shadow_mismatch(verdict, log_slot).await;
     }
 
     async fn shadow_read(
@@ -390,12 +406,10 @@ impl Execution {
         };
         let value = match value {
             Ok(value) => value,
-            Err(_) => {
-                if source.is_some() && self.timed_out.load(Ordering::SeqCst) {
-                    return Verdict::of(ShadowOutcome::Timeout);
-                }
-                return Verdict::of(ShadowOutcome::SourceError);
+            Err(Error::FallbackTimeout(_)) if source.is_some() => {
+                return Verdict::of(ShadowOutcome::Timeout);
             }
+            Err(_) => return Verdict::of(ShadowOutcome::SourceError),
         };
         if expired() {
             return Verdict::of(ShadowOutcome::Timeout);

@@ -206,8 +206,13 @@ validation exists only to be observed, so a job is admitted only when the
 observer opts in through `observes_shadow_outcomes`; the bundled exporters do.
 `Logger` receives structured `LogEvent`s and defaults to the `log` facade.
 Mismatch logging is opt-in, confirmed, bounded, and previews values through
-the operation's `preview` (JSON for serde values). Observer and logger failures
-never change a cache, source or maintenance result.
+the operation's `preview` (JSON for serde values). Default JSON previews retain
+only an 8 KiB prefix while checking the entire serialization for errors. Preview
+callbacks run through the bounded CPU executor after confirmation; they may run
+on a worker thread. Queue rejection omits value previews but still logs the
+confirmed mismatch. Diagnostic work holds shadow capacity until it finishes,
+including after runtime shutdown. Observer and logger failures never change a
+cache, source or maintenance result.
 
 `MetricKind` maps every event to the metric names, labels and values shared
 with the TypeScript and Go exporters. `PrometheusObserver` (feature

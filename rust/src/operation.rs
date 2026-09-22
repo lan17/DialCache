@@ -44,6 +44,8 @@ pub type RecoveryPredicate = Arc<dyn Fn(&Error) -> bool + Send + Sync>;
 /// Application equality used by shadow validation.
 pub type Comparator<T> = Arc<dyn Fn(&T, &T) -> bool + Send + Sync>;
 /// Produces a bounded textual preview of a value for mismatch warnings.
+/// Runs through [`Runtime::spawn_blocking`](crate::Runtime::spawn_blocking)
+/// after mismatch confirmation; callbacks may run on a CPU worker thread.
 pub type Preview<T> = Arc<dyn Fn(&T) -> Option<String> + Send + Sync>;
 
 /// One inline cached call: its identity, static policy, budget and codecs.
@@ -104,7 +106,7 @@ impl<T: Serialize + DeserializeOwned + PartialEq + Send + Sync + 'static> Operat
             codec: Arc::new(JsonCodec),
             comparator: Arc::new(|a: &T, b: &T| a == b),
             should_recover: None,
-            preview: Some(Arc::new(|value: &T| serde_json::to_string(value).ok())),
+            preview: Some(Arc::new(crate::preview::json_preview::<T>)),
         }
     }
 }
