@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dialcache"
-version = "0.1.0"
+version = "0.25.0"
 description = "Explicitly enabled async caching with runtime policies, coalescing, and tracked Redis invalidation."
 readme = "README.md"
 requires-python = ">=3.11"
