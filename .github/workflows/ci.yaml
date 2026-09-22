@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
       - name: Check release version and publication guards
-        run: python3 -B -m unittest discover -s scripts -p test_release.py
+        run: python3 -B -m unittest discover -s scripts -p 'test_*release.py'
       - name: Check TypeScript types, native tests, build and package
         run: make check-ts
       # Upload all three languages on PRs and main so Codecov can compare complete
@@ -163,19 +163,27 @@ jobs:
           use_oidc: true
           fail_ci_if_error: true
 
-  # The existing required `test` status now requires every native language job.
+  python:
+    uses: ./.github/workflows/python.yml
+    permissions:
+      contents: read
+      id-token: write
+
+  # Keep every native language behind the branch's required `test` status.
   test:
-    needs: [typescript, go, rust]
+    needs: [typescript, go, rust, python]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require successful TypeScript, Go and Rust checks
+      - name: Require successful TypeScript, Go, Rust and Python checks
         env:
           TYPESCRIPT_RESULT: ${{ needs.typescript.result }}
           GO_RESULT: ${{ needs.go.result }}
           RUST_RESULT: ${{ needs.rust.result }}
+          PYTHON_RESULT: ${{ needs.python.result }}
         run: |
           test "$TYPESCRIPT_RESULT" = success
           test "$GO_RESULT" = success
           test "$RUST_RESULT" = success
+          test "$PYTHON_RESULT" = success

@@ -9,7 +9,13 @@ generated from this checkout with Python's standard `pydoc` tool.
 
 ## Installation and runtime
 
-The package is currently **unpublished**. Install from a repository checkout:
+Once the first PyPI release is available, install it with:
+
+```sh
+python3 -m pip install 'dialcache[redis]'
+```
+
+Until that release is published, install from the root of a repository checkout:
 
 ```sh
 python3 -m pip install './python[redis]'

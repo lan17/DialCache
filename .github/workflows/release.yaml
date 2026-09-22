@@ -41,6 +41,13 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: rust
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - name: Install Python packaging tools
+        run: |
+          python -m venv .formal-traces/python-release-env
+          .formal-traces/python-release-env/bin/python -m pip install 'build>=1.2,<2' 'twine>=7,<8'
       - name: Verify release source
         run: |
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
@@ -120,7 +127,7 @@ jobs:
             python3 scripts/release.py update "$RELEASE_VERSION"
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -- typescript/package.json rust/Cargo.toml rust/Cargo.lock
+            git add -- typescript/package.json rust/Cargo.toml rust/Cargo.lock python/pyproject.toml
             git commit -m "$release_title"
             python3 scripts/release.py verify "$RELEASE_VERSION" "$GITHUB_SHA" HEAD
           fi
@@ -128,6 +135,8 @@ jobs:
           # Check the committed candidate, including when reusing a release PR.
           # Cargo verifies an extracted archive, catching missing package files.
           (cd rust && cargo package --locked --all-features)
+          .formal-traces/python-release-env/bin/python scripts/python_release.py build \
+            --version "$RELEASE_VERSION" --out-dir .formal-traces/python-dist
           if [[ -z "$remote_ref" ]]; then
             git -c credential.helper= \
               -c "credential.helper=!f() { echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f" \
@@ -145,16 +154,18 @@ jobs:
             exit 0
           fi
 
-          pr_body="Automated by the Release workflow run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID.
+          cat > "$RUNNER_TEMP/release-pr.md" <<EOF
+          Automated by the Release workflow run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID.
 
-          This PR updates typescript/package.json, rust/Cargo.toml and rust/Cargo.lock to $RELEASE_VERSION. Approve its workflow runs, review it, and squash-merge it to publish npm, Go and Rust from the same protected main commit."
+          This PR updates typescript/package.json, rust/Cargo.toml, rust/Cargo.lock and python/pyproject.toml to $RELEASE_VERSION. Approve its workflow runs, review it, and squash-merge it to publish npm, Go, Rust and Python from the same protected main commit.
+          EOF
           pr_url="$(
             gh pr create \
               --repo "$GITHUB_REPOSITORY" \
               --base main \
               --head "$release_branch" \
               --title "$release_title" \
-              --body "$pr_body"
+              --body-file "$RUNNER_TEMP/release-pr.md"
           )"
           echo "Opened release PR: $pr_url" >> "$GITHUB_STEP_SUMMARY"
 
@@ -165,6 +176,7 @@ jobs:
     outputs:
       release_commit: ${{ steps.source.outputs.release_commit }}
       release_version: ${{ steps.source.outputs.release_version }}
+      python_artifact_id: ${{ steps.python-artifact.outputs.artifact-id }}
     # contents: write pushes the release tag and GitHub release;
     # id-token: write mints the OIDC token for npm trusted publishing.
     permissions:
@@ -248,6 +260,26 @@ jobs:
       - name: Verify the Rust release package before publishing
         working-directory: rust
         run: cargo package --locked --all-features
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - name: Build and verify the Python release before publishing
+        env:
+          RELEASE_VERSION: ${{ steps.source.outputs.release_version }}
+        run: |
+          python -m venv .formal-traces/python-release-env
+          .formal-traces/python-release-env/bin/python -m pip install 'build>=1.2,<2' 'twine>=7,<8'
+          .formal-traces/python-release-env/bin/python scripts/python_release.py build \
+            --version "$RELEASE_VERSION" --out-dir .formal-traces/python-dist
+      - name: Retain the verified Python release for publication and retries
+        id: python-artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-release-${{ steps.source.outputs.release_commit }}-${{ github.run_attempt }}
+          path: .formal-traces/python-dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
       - name: Resolve publish release
         id: plan
         uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
@@ -396,3 +428,54 @@ jobs:
         run: cargo publish --locked --all-features
       - name: Record Rust release
         run: echo "Rust dialcache@$RELEASE_VERSION published from $RELEASE_COMMIT to https://crates.io/crates/dialcache/$RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+  publish-python:
+    # Retry only this job after a PyPI failure. The immutable artifact from this
+    # workflow run contains the exact files validated before npm publication.
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/dialcache/${{ needs.publish.outputs.release_version }}/
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_COMMIT: ${{ needs.publish.outputs.release_commit }}
+      RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ needs.publish.outputs.release_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - name: Verify the published release identity
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          test "$(git rev-parse "v$RELEASE_VERSION^{commit}")" = "$RELEASE_COMMIT"
+          test "$(git rev-parse "go/v$RELEASE_VERSION^{commit}")" = "$RELEASE_COMMIT"
+          python scripts/release.py verify "$RELEASE_VERSION" "$RELEASE_COMMIT^" "$RELEASE_COMMIT"
+      - name: Download the original verified distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.publish.outputs.python_artifact_id }}
+          path: .formal-traces/python-dist
+          merge-multiple: true
+      - name: Check PyPI and select missing distributions
+        id: package
+        run: |
+          python scripts/python_release.py pending "$RELEASE_VERSION" \
+            .formal-traces/python-dist .formal-traces/python-upload >> "$GITHUB_OUTPUT"
+      - name: Publish Python distributions with GitHub identity
+        if: steps.package.outputs.pending == 'true'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: .formal-traces/python-upload/
+      - name: Verify and record Python release
+        run: |
+          python scripts/python_release.py verify-published "$RELEASE_VERSION" .formal-traces/python-dist
+          echo "Python dialcache@$RELEASE_VERSION published from $RELEASE_COMMIT to https://pypi.org/project/dialcache/$RELEASE_VERSION/" >> "$GITHUB_STEP_SUMMARY"

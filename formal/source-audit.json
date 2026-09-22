@@ -178,15 +178,15 @@
     },
     {
       "path": "docs/languages/python.md",
-      "sha256": "891eaff52a69017d0a96e78f80bea64b2f13228f802efd5d6b3d985fb2b8318d",
+      "sha256": "c06527592599c05e4616e4ca5b31f1df96587ce638c23799e9c7aa392e7c054c",
       "entries": [
         {"line":1,"title":"Python integration","contracts":["B01"]},
         {"line":10,"title":"Installation and runtime","contracts":["B01","B02"]},
-        {"line":23,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
-        {"line":40,"title":"Identity and policy","contracts":["W01","W02","C16","C18","C20","B01"]},
-        {"line":63,"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
-        {"line":81,"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
-        {"line":100,"title":"Validation","contracts":["B01"]}
+        {"line":29,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
+        {"line":46,"title":"Identity and policy","contracts":["W01","W02","C16","C18","C20","B01"]},
+        {"line":69,"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
+        {"line":87,"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
+        {"line":106,"title":"Validation","contracts":["B01"]}
       ]
     },
     {
@@ -216,7 +216,7 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "9c2757ce9afae34675ae27f96158feefad43a95d8e1e05831303805ef21799cb",
+      "sha256": "836a026530b6773e06aa461a29891fe8c6d2578360f5678702e8d7374d2deb09",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
@@ -227,8 +227,10 @@
         {"line":175,"title":"Redis write benchmark","contracts":["X02"]},
         {"line":198,"title":"Stale-on-error benchmark","contracts":["X02"]},
         {"line":226,"title":"Releasing","contracts":["B01","E05"]},
-        {"line":305,"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
-        {"line":333,"title":"Retry a Rust publication","contracts":["B01","E05"]}
+        {"line":308,"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
+        {"line":336,"title":"Retry a Rust publication","contracts":["B01","E05"]},
+        {"line":350,"title":"Set up PyPI publishing once","contracts":["B01","E05"]},
+        {"line":371,"title":"Retry a Python publication","contracts":["B01","E05"]}
       ]
     },
     {

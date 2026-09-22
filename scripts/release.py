@@ -16,7 +16,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION_FILES = ("typescript/package.json", "rust/Cargo.toml", "rust/Cargo.lock")
+VERSION_FILES = ("typescript/package.json", "rust/Cargo.toml", "rust/Cargo.lock", "python/pyproject.toml")
 CRATE_INDEX = "https://index.crates.io/di/al/dialcache"
 
 
@@ -38,16 +38,27 @@ def replace_version_line(text, old, version):
 
 
 def versioned_files(contents, version):
-    """Preserve every byte except the three package version values."""
+    """Preserve every byte except the four package version values."""
     validate_version(version)
     package = json.loads(contents["typescript/package.json"])
     manifest = tomllib.loads(contents["rust/Cargo.toml"])
     lock = tomllib.loads(contents["rust/Cargo.lock"])
+    python = tomllib.loads(contents["python/pyproject.toml"])
     if package["name"] != "dialcache" or manifest["package"]["name"] != "dialcache":
         raise ValueError("Expected the dialcache npm package and Rust crate")
     local = [p for p in lock["package"] if p["name"] == "dialcache" and "source" not in p]
     if len(local) != 1 or local[0]["version"] != manifest["package"]["version"]:
         raise ValueError("Cargo manifest and root lockfile package must agree")
+    project = python.get("project", {})
+    if not isinstance(project, dict) or project.get("name") != "dialcache":
+        raise ValueError("Expected the dialcache Python project")
+    python_version = project.get("version")
+    dynamic = project.get("dynamic", [])
+    if (
+        not isinstance(python_version, str) or not python_version
+        or not isinstance(dynamic, list) or "version" in dynamic
+    ):
+        raise ValueError("Expected a static Python project version")
 
     result = dict(contents)
     pattern = rf'(?m)^(  "version": )"{re.escape(package["version"])}"(,?)$'
@@ -78,6 +89,18 @@ def versioned_files(contents, version):
     i = matches[0]
     tables[i] = replace_version_line(tables[i], local[0]["version"], version)
     result["rust/Cargo.lock"] = "".join(tables)
+
+    # The first Python publication may start from a different package version.
+    # Its only permitted change is the explicit [project].version value.
+    tables = re.split(r"(?m)(?=^\[)", contents["python/pyproject.toml"])
+    matches = [i for i, table in enumerate(tables) if table.startswith("[project]\n")]
+    if len(matches) != 1:
+        raise ValueError("Expected one explicit Python project table")
+    i = matches[0]
+    tables[i] = replace_version_line(tables[i], python_version, version)
+    result["python/pyproject.toml"] = "".join(tables)
+    if tomllib.loads(result["python/pyproject.toml"])["project"]["version"] != version:
+        raise ValueError("Expected to update the static Python project version")
     return result
 
 
