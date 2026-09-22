@@ -60,25 +60,27 @@ example validation, and working links.
 
 ## Maintaining the reference
 
-The README is the landing page. Keep evaluation, a runnable example, and links
-there; put complete contracts in the feature guides. `docs/index.md` provides
-the reading order, and `docs/api.md` collects public methods/options and routes
-to behavior details.
+The README is the landing page: keep evaluation, a runnable example and links
+there. Feature guides have one shared behavioral explanation plus selected
+native examples and notes. Native language guides explain contexts, ownership,
+codecs and installation; generated API references follow each port's source.
 
-When behavior changes, update the relevant guide and its API table in the same
-PR. Check defaults and bounds against source, and include any rollout or
-compatibility implications in `docs/upgrading.md`. Keep examples explicit about
-application-provided dependencies.
+Follow [documentation authoring](authoring.md) when changing a guide or adding a
+language. Displayed runnable snippets import named regions from real native
+source files. CI compiles and executes those sources with behavioral assertions;
+API excerpts are explicitly labeled and do not claim the same test coverage.
 
-The npm tarball contains `README.md` but not `docs/`. README links to the hosted
-reference therefore use absolute URLs. Reference pages use relative Markdown
-links so they work in a checkout, on GitHub, and in the documentation site.
-Before publishing, check file/anchor targets and parse TypeScript examples.
-`test:package` extracts the first TypeScript block from both the README and
-getting-started guide, typechecks it against the installed tarball, and executes
-it with the documented Node command. CI also runs this check at Node.js 22.15.0.
-Keep those blocks self-contained; when their demonstrated output changes,
-update the expectation in `scripts/test-package.mjs`.
+When behavior changes, update the shared guide and affected native examples in
+the same PR. Check defaults and bounds against source, and document rollout or
+compatibility implications in [Upgrading](upgrading.md). The generated
+[behavior catalogue](generated/behavior.md) reuses the formal case inventory;
+it does not turn a prose claim into proof.
+
+The npm tarball includes `README.md` but not the site, so root README links use
+absolute hosted URLs. `test:package` checks its runnable TypeScript block and the
+native documentation source against the installed packed package. Keep the root
+README's first TypeScript block self-contained and preserve its expected output
+in `scripts/test-package.mjs` when editing it.
 
 ### Run the documentation site
 
@@ -247,7 +249,7 @@ Go has no package registry. A module version is a Git tag that `go get`
 resolves through the public module proxy, and a module in a subdirectory
 takes that directory as its tag prefix, so
 `go get github.com/lan17/DialCache/go@vX.Y.Z` resolves the tag `go/vX.Y.Z`.
-Both ports therefore share one version number and one release commit from
+The TypeScript and Go ports therefore share one version number and one release commit from
 the first tagged release onward; earlier npm versions have no Go tag. After
 pushing the tag, the workflow requests the version from `proxy.golang.org`
 and `sum.golang.org` so the proxy and the checksum database record it, and
@@ -263,6 +265,10 @@ fails after the npm publication, create the tag by hand:
 git tag go/vX.Y.Z vX.Y.Z
 git push origin go/vX.Y.Z
 ```
+
+Rust currently has `publish = false` and is not part of this registry release
+flow. Its site reference follows repository source, not a crates.io/docs.rs
+release.
 
 The repository must enable **Allow GitHub Actions to create and approve pull
 requests** under Actions workflow permissions.

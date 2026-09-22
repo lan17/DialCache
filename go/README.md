@@ -1,12 +1,16 @@
 # DialCache for Go
 
+Read the [shared behavior guides](https://lan17.github.io/DialCache/) and
+[Go integration guide](https://lan17.github.io/DialCache/languages/go).
+The site uses one explanation per feature with selected native examples and notes.
+
 Go implements the same portable behavior as TypeScript: explicit request
 enablement, request/local/Redis layers, deterministic rollout, sparse runtime
 policy, request and process coalescing, tracked invalidation, source/read
 deadlines, stale recovery, dark and served-hit shadow validation, compression,
 and failure-isolated observability.
 
-The [Quint models](../formal/README.md) are the behavioral source of truth. Both
+The [Quint models](../formal/README.md) are the behavioral source of truth. All three
 implementations replay the same sampled histories and named public-action
 regressions, plus fixed scenarios and Quint-derived protocol vectors. The current
 inventory comes from [execution.json](../formal/execution.json); real integration
@@ -105,11 +109,14 @@ disables the deadline), compression on, and shadow capacity one. Invalid
 operation configuration returns an error wrapping `ErrInvalidPolicy` or
 `ErrInvalidOperation` before execution.
 
-`WithRemote` supplies atomic primary snapshots, complete client-stamped frame
+`WithRemote` requires atomic primary snapshots, complete client-stamped frame
 writes, and surfaced invalidation errors. The bundled `RedisAdapter` uses
-go-redis with standalone, Sentinel or Cluster clients. Tracked reads select
-the slot primary even if replica reads were enabled on the client. Writes use
-one native `SET`. Invalidation first dispatches `EVALSHA`; any command rejection
+go-redis with standalone, Sentinel or Cluster clients. For a direct
+`*redis.ClusterClient`, tracked reads select the slot primary even when replica
+reads are enabled. Standalone and Sentinel `*redis.Client` handles must already
+target the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false so replica
+lag cannot hide an invalidation watermark. Writes use one native `SET`.
+Invalidation first dispatches `EVALSHA`; any command rejection
 triggers one retry with `EVAL` using identical logical arguments. A successful
 command with an invalid reply does not trigger a retry. No value write creates
 or extends a watermark. `Invalidate` needs a remote (`ErrNoRemote` otherwise)
@@ -204,7 +211,7 @@ make mutations-go  # Go fault catalog over the generated corpus and witness evid
 make integration-go
 ```
 
-`make check` runs both languages' fast checks.
+`make check` runs all three languages' fast checks.
 `make ci NODE22_BIN=/path/to/node22/bin/node` runs all local lanes in order,
 including symbolic checks and the exact Node 22.15.0 packed-package floor. After
 `make formal-generate`, `make formal-go` prepares Go with the shared witness

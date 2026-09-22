@@ -1,0 +1,11 @@
+{
+  "entryPoints": ["src/index.ts", "src/node-redis.ts", "src/valkey-glide.ts", "src/prometheus.ts", "src/datadog.ts", "src/redis-protocol.ts"],
+  "out": "docs/public/reference/typescript",
+  "name": "DialCache TypeScript API",
+  "readme": "none",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "includeVersion": true,
+  "navigationLinks": { "Shared guides": "/DialCache/", "Languages": "/DialCache/api.html" },
+  "validation": { "notExported": false }
+}

@@ -1,6 +1,43 @@
+---
+outline: false
+---
+
 # API reference
 
 [Documentation](index.md)
+
+The native references below are generated from the public code and doc comments
+in the same checkout as these guides. The shared feature guides explain the
+behavior; the native references give each language's signatures and types.
+
+| Language | Generated reference | Setup and idioms |
+| --- | --- | --- |
+| TypeScript | <a href="./reference/typescript/index.html" target="_self">TypeDoc</a> | [TypeScript guide](languages/typescript.md) |
+| Go | <a href="./reference/go/index.html" target="_self">Go package documentation</a> | [Go guide](languages/go.md) |
+| Rust | <a href="./reference/rust/dialcache/index.html" target="_self">rustdoc</a> | [Rust guide](languages/rust.md) |
+
+<LanguageContent language="go">
+
+Use the Go reference for `Cache`, `Operation`, `Policy`, and integration
+adapters. Go carries enablement in `context.Context`; close each scope with its
+returned cleanup function. [Go setup](languages/go.md) explains duration and
+sparse-policy representations.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Use rustdoc for `DialCache`, registered `UseCase` values, `Policy`, `RuntimePolicy`,
+and integration traits. Rust calls use a scope and return shared `Arc<T>`
+values. [Rust setup](languages/rust.md) explains ownership and feature flags.
+
+</LanguageContent>
+
+<LanguageContent language="typescript">
+
+The following TypeScript usage notes retain the established guide anchors.
+The <a href="./reference/typescript/index.html" target="_self">generated TypeDoc reference</a> includes
+the complete exported signatures.
 
 Start with the `DialCache` instance, define a cache operation, then choose its
 policy. The feature guides explain the behavior behind these tables; the
@@ -328,3 +365,5 @@ binary contracts are in [Redis and Valkey](redis.md#custom-client-contract).
 `DialCacheMetricsAdapter` and its label/outcome types are root exports.
 [Observability](observability.md#custom-adapters) lists required and optional
 hooks, bounded labels, and the effects of omitting optional hooks.
+
+</LanguageContent>

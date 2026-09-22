@@ -78,6 +78,19 @@ describe("reviewed documentation freshness", () => {
     expect(() => check()).toThrow(/guide file inventory/);
   });
 
+  it("inventories nested native guides while excluding generated documentation", () => {
+    mkdirSync(join(directory, "docs/languages"));
+    put("docs/languages/go.md", "# Go setup\n\nNative context lifetime.\n");
+    expect(sourceSnapshot(directory).map(source => source.path)).toContain("docs/languages/go.md");
+    expect(() => check()).toThrow(/Source file inventory changed/);
+    rmSync(join(directory, "docs/languages"), { recursive: true });
+    for (const path of ["docs/generated", "docs/public", "docs/.vitepress"]) {
+      mkdirSync(join(directory, path));
+      put(`${path}/output.md`, "# Generated from reviewed sources\n");
+    }
+    expect(check()).toMatchObject({ sources: 3 });
+  });
+
   it("requires the guide collection and rejects duplicate or extra recorded files", () => {
     const { reviewedGuides: _guides, ...missing } = audit;
     expect(() => check(missing)).toThrow(/guide file inventory/);

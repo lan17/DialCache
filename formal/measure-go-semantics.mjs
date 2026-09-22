@@ -193,6 +193,9 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     });
     vectorServer = startRedisVectorServer();
     env.DIALCACHE_VECTOR_REDIS_URL = vectorServer.url;
+    // The ordinary cohort includes the tracked-invalidation docs example.
+    // Always use the shard's private server, never an inherited user endpoint.
+    env.DOCS_REDIS_URL = vectorServer.url;
     report.redisVectorImage = vectorServer.image;
     const replayBoundary = (label, history) => runBoundaryReplay({
       port: language.port, history, label, output, root, workspace, env, go,

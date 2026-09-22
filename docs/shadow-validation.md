@@ -9,7 +9,7 @@ It can also fill Redis misses while remote serving is ramped down, giving you
 a way to warm a cache before enabling it.
 
 Shadow work is opt-in, sampled by key, and detached. Configure its own ramp and
-a metrics adapter with `shadowValidation` support. The caller does not await
+an observer that opts into shadow outcomes. The caller does not await
 shadow reads, comparison, confirmation, or fills.
 
 ## What a check establishes
@@ -39,7 +39,12 @@ untracked reads and fills retain TTL-based last-writer-wins behavior.
 
 ## Configure a shadow cohort
 
-Assuming `redisClient` is a semantic adapter, `metrics` supports shadow outcomes,
+Choose a valid remote TTL, a zero remote serving ramp, and an independent shadow
+ramp. The following settings use a five-percent key cohort and capacity four.
+
+<LanguageContent language="typescript">
+
+This API excerpt assumes `redisClient` is a semantic adapter, `metrics` supports shadow outcomes,
 and `db` is your application data source:
 
 ```ts
@@ -68,9 +73,31 @@ const getUser = dialcache.cached(
 );
 ```
 
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Set `Policy.RemoteTTL` to `300 * time.Second`, `RemoteRamp` to `Ptr(0.0)`,
+and `Shadow` to `&ShadowPolicy{Ramp: Ptr(5.0)}`. Supply `WithRemote`,
+`WithShadowCapacity(4)` and `WithShadowOutcomes` alongside your observer/exporter.
+The outcome hook enables admission; if the exporter already receives all events,
+do not export the same outcome twice. See [observability](observability.md).
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Use a policy with `.remote_ttl_sec(300).remote_ramp(0.0)` and a
+`ShadowPolicy { ramp: Some(5.0), log_mismatches: None }`. Configure
+`shadow_max_in_flight(4)` on the builder and an observer whose
+`observes_shadow_outcomes` returns true. Bundled exporters opt in. See
+[observability](observability.md).
+
+</LanguageContent>
+
 Inside an enabled scope, callers use the source. Eligible keys in the independent
 5% shadow cohort exercise Redis in the background. A semantic miss authorizes a
-fill. Both bundled telemetry adapters supply the required outcome hook.
+fill. Use the selected language's outcome opt-in described above.
 
 Keep earlier layers off when the rollout needs to exercise Redis: a request-local
 or process-local hit ends traversal before shadow admission.
@@ -83,9 +110,9 @@ A job needs all of the following:
 - A configured Redis client and a valid remote TTL/policy.
 - A served Redis hit, or remote serving disabled specifically by `ramped_down`.
 - A positive shadow ramp whose stable exact-key cohort selects this key.
-- A configured `shadowValidation` metrics hook and available capacity.
+- An observer opted into shadow outcomes and available capacity.
 
-Missing policy, invalid policy, provider failure, or an omitted metrics hook
+Missing policy, invalid policy, provider failure, or an omitted outcome hook
 cannot start a shadow-only path. `logMismatches` does not enable one either.
 
 Serving and shadow cohorts are independent. Equal partial percentages do not
@@ -138,7 +165,7 @@ A semantic miss includes absent, unsupported, logically expired, future-dated,
 and watermark-fenced frames. It does not include a present payload that fails
 `load`: that is `deserialization_error`, with no repair. Miss reason and observed
 fence are independent. Core classifies logical expiry after the adapter decodes
-the wire frame, before the application serializer's `load` runs. That `expired`
+the wire frame, before the application codec decoder runs. That `expired`
 miss does not carry a watermark fence; it follows normal refill behavior.
 
 `filled` means the client accepted the write before the deadline. `fill_error`
@@ -159,19 +186,26 @@ Confirmation failure or read timeout produces `confirmation_error`.
 Confirmation bypasses logical age solely for supersession comparison. A
 future-dated `C1` records its offset but can be retained for comparing bytes; it
 cannot serve the caller. DialCache does not deserialize `C1`, compare it with `S`, or
-chase another version. Strings compare exactly, Buffers by bytes, and mixed
-string/Buffer payloads by UTF-8 bytes.
+chase another version. Payloads compare by their exact stored bytes; TypeScript string payloads use
+their UTF-8 representation when compared with binary payloads.
 
 Any non-null `C0` is observation-only. Shadow validation never repairs a mismatch
 or overwrites an undecodable present value.
 
 ## Comparison semantics
 
+Comparison is a native binding boundary. Use a deterministic, bounded,
+side-effect-free comparator, and never mutate its inputs. Each port provides a
+default; these are not equivalent for every language-native value.
+
+<LanguageContent language="typescript">
+
 The default comparator is Node's `util.isDeepStrictEqual`. Object property
 insertion order does not matter; values, array order, prototypes, constructors,
 and collection contents remain part of strict equality.
 
-For domain-specific equality, provide a typed operation option:
+This API excerpt assumes a source function `fetchVersionedUser` and compares
+only domain identity and version:
 
 ```ts
 const getVersionedUser = dialcache.cached(fetchVersionedUser, {
@@ -192,18 +226,38 @@ side-effect-free, non-mutating, and bounded. Throws and non-boolean results
 produce `comparison_error`. Accidental thenables are consumed while retaining
 the shadow slot until settlement, subject to the job deadline.
 
+</LanguageContent>
+
+<LanguageContent language="go">
+
+The default is `SemanticEqual`, which implements the supported portable value
+domain. Set `Operation.Comparator` for application-specific equality; it returns
+`(bool, error)`. Errors and callback panics report `comparison_error`.
+A native Go type or map representation still needs a codec and comparator that
+agree on its intended meaning.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+The default is `PartialEq` for the result type. Native equality can differ from
+TypeScript: NaN differs from itself in Rust. Supply the operation's comparator
+for domain-specific equality, such as comparing entity id and version. Callback
+panics report `comparison_error`; returned values must be safe to share.
+
+</LanguageContent>
+
 Comparison uses the decoded cache value and raw source value intentionally: it
 can reveal lossy serialization. Ignore differences only when they are acceptable
 application semantics.
 
 ## Data ownership and custom integrations
 
-A sampled served hit runs the serializer's `load` again in detached work. It
+A sampled served hit runs the codec decoder again in detached work. It
 must be repeatable, non-mutating, and return independently usable values.
 Returned Redis payload bytes must remain stable after the adapter read settles.
 
-DialCache retains the original `cached()` argument references or `getOrLoad()`
-closure. It cannot generically clone source-selection state. Keep arguments,
+DialCache retains source arguments or the inline loader closure. It cannot generically clone source-selection state. Keep arguments,
 captured state, and accepted source values immutable, or snapshot before the
 invocation, so detached work still refers to the key that was selected.
 
@@ -212,13 +266,13 @@ hash, or deep comparison is added to the served-hit request path.
 
 ## Capacity, deadlines, and detachment
 
-`shadowMaxInFlight` defaults to `1` per instance and must be a positive safe
+The instance shadow capacity defaults to `1` per instance and must be a positive safe
 integer. Same-key duplicates and jobs beyond capacity report `dropped`; there
 is no queue or fleet-wide cap. Confirmation and fill stay in the original slot.
 
 Each job has one monotonic budget across `C0`, the source, serialization,
-comparison, `C1`, and fill. A finite `fallbackTimeoutMs` is reused as that budget.
-When fallback is unbounded (`null`), shadow still uses 60 seconds. Each Redis
+comparison, `C1`, and fill. A finite source deadline is reused as that budget.
+When the source budget is unbounded, shadow still uses 60 seconds. Each Redis
 read separately has the effective remote-read deadline.
 
 Served-hit timing starts with the detached callback. Ramped-down timing starts
@@ -228,11 +282,33 @@ Already-started shadow-owned work keeps capacity until it settles, even after
 its DialCache deadline. A shared caller-owned loader can continue without
 holding the shadow slot after timeout.
 
-Scheduling and shadow deadline timers are unreferenced. They do not keep an
-otherwise idle process alive. Detachment uses the Node event loop, not a worker;
-synchronous loader, serializer, comparator, or logger work still consumes it.
-Underlying I/O is not generally cancellable. Give dependencies finite native
-budgets, including commands that may settle after a DialCache timeout.
+<LanguageContent language="typescript">
+
+Scheduling and shadow deadline timers are unreferenced and do not keep an
+otherwise idle Node process alive. Detachment uses the event loop, not a worker;
+synchronous source, codec, comparator and logger work still consumes it.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Shadow work runs independently of the caller. Native callbacks still consume
+CPU and can outlive the cache's bounded wait. Give dependency calls finite
+context deadlines and bound application concurrency.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+The captured runtime runs detached shadow tasks. Admitted CPU work can retain
+capacity even after an async runtime shutdown. Mismatch preview callbacks run
+through the bounded CPU executor and can run on worker threads; application
+codecs control their own scheduling.
+
+</LanguageContent>
+
+Underlying I/O is not generally canceled. Give dependencies finite native
+budgets, including commands that can settle after a DialCache timeout.
 
 ## Consistency modes and race boundaries
 
@@ -265,6 +341,13 @@ serving layers are disabled.
 
 ## Confirmed mismatch logging
 
+Opting into mismatch warnings adds one diagnostic only after a confirmed
+mismatch. Logging is default-off and independent of sampling. It can contain
+cache keys and value previews, so enable it only for data appropriate to your
+application's logging policy.
+
+<LanguageContent language="typescript">
+
 `shadow.logMismatches: true` adds one warning only after confirmed `mismatch`.
 It is default-off and independent of sampling. The logger receives the message
 `"DialCache shadow validation mismatch"` and an object with `cacheNamespace`,
@@ -282,11 +365,29 @@ not compute a diff or reuse the Redis serializer. If detail construction fails,
 DialCache still attempts the warning with the four metadata fields; all three detail
 fields can be absent.
 
-Truncation is not redaction. Keys and values can include sensitive application
-data. Native JSON may execute getters or `toJSON`, and the byte caps apply only
-after stringification; they do not bound traversal time or intermediate
-allocation. Enable diagnostics only for suitable data and your application's
-logging policy. Logger failures are isolated from cache behavior.
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Set `ShadowPolicy.LogMismatches` to `Ptr(true)`. Confirmed warnings carry bounded
+metadata, a logical-key preview (2 KiB), and JSON value previews (8 KiB each).
+A failed preview does not prevent the remaining metadata warning.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Set `ShadowPolicy.log_mismatches` to `Some(true)`. The operation's `preview`
+callback renders optional value details. Default JSON previews retain an 8 KiB
+prefix while checking serialization; they run through the bounded CPU executor
+after confirmation. Admission failure can omit previews while retaining a
+metadata warning. The logical-key preview is bounded to 2 KiB.
+
+</LanguageContent>
+
+Truncation is not redaction. Keys and values can contain sensitive application
+data. Preview byte limits do not by themselves bound serialization traversal or
+CPU cost. Logger failures are isolated from cache behavior.
 
 ## Metrics and shutdown
 
@@ -298,9 +399,9 @@ Detached Redis and serializer work uses `layer="remote_shadow"`. The original
 served read keeps `remote`; a ramped-down caller keeps its ordinary disabled
 observation. Shadow reads time Redis settlement, while ordinary remote get
 latency includes fresh deserialization. Optional age metrics do not gate jobs;
-only the `shadowValidation` hook does.
+only the native shadow-outcome opt-in does.
 
-Turn down both serving and shadow ramps to stop new Redis work, or return
-`DialCacheKeyConfig.disabled()`. Already-admitted work is not cancelled. There
+Turn down both serving and shadow ramps to stop new Redis work, or use an explicit
+disabled-policy overlay. Already-admitted work is not cancelled. There
 is no public shadow drain handle; follow [client lifecycle](redis.md#lifecycle-ownership)
 when shutting down and treat outcomes during teardown as best-effort.

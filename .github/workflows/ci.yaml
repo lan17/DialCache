@@ -15,6 +15,15 @@ concurrency:
 jobs:
   typescript:
     runs-on: ubuntu-latest
+    services:
+      docs-redis:
+        image: redis:6.2
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 1s --health-timeout 3s --health-retries 20
+    env:
+      DOCS_REDIS_URL: redis://127.0.0.1:6379
     # id-token lets the Codecov upload authenticate via OIDC instead of a
     # long-lived token secret.
     permissions:
@@ -47,6 +56,15 @@ jobs:
 
   go:
     runs-on: ubuntu-latest
+    services:
+      docs-redis:
+        image: redis:6.2
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 1s --health-timeout 3s --health-retries 20
+    env:
+      DOCS_REDIS_URL: redis://127.0.0.1:6379
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -69,6 +87,15 @@ jobs:
 
   rust:
     runs-on: ubuntu-latest
+    services:
+      docs-redis:
+        image: redis:6.2
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 1s --health-timeout 3s --health-retries 20
+    env:
+      DOCS_REDIS_URL: redis://127.0.0.1:6379
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -77,6 +104,8 @@ jobs:
           rust: "true"
       - name: Check Rust formatting, clippy and native tests including the smoke conformance run
         run: make check-rust
+      - name: Execute the documented Rust invalidation scenario against Redis
+        run: cargo test --manifest-path rust/Cargo.toml --locked --all-features --test docs_examples -- --ignored
       - name: Check real Redis, Valkey and Cluster integrations and invalidation vectors
         run: make integration-rust
 

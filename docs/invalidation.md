@@ -11,7 +11,7 @@ each key.
 
 A **watermark** is a timestamp cutoff shared by an entity's tracked results.
 Each cached Redis value carries a write timestamp, `createdAtMs`. After a source
-mutation commits, `invalidateRemote()` advances the entity's watermark.
+mutation commits, explicit invalidation advances the entity's watermark.
 Subsequent tracked Redis reads accept only values written beyond that cutoff:
 
 ```text
@@ -52,41 +52,69 @@ existing flights, or snapshots already acquired by a caller. Choose those
 
 ## Configure a tracked use case
 
-Assuming a connected semantic `dialCacheRedisClient` and an application `db`:
+The following native integration example uses real Redis. It warms a tracked
+value, commits a source change, invalidates the entity, then verifies that a
+subsequent read returns the new source value. Both local layers are disabled
+and calls run sequentially after the preceding call settles, so each read makes
+its own watermark observation.
 
-```ts
-import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
+<LanguageContent language="typescript">
 
-const dialcache = new DialCache({
-  namespace: "users-api",
-  redis: { client: dialCacheRedisClient },
-});
-const getUser = dialcache.cached(
-  (userId: string) => db.fetchUser(userId),
-  {
-    keyType: "user_id",
-    useCase: "GetUser",
-    cacheKey: (userId) => userId,
-    trackForInvalidation: true,
-    defaultConfig: new DialCacheKeyConfig({
-      ttlSec: { [CacheLayer.REMOTE]: 300 },
-      coalesce: false, // Each caller makes its own tracked read.
-    }),
-  },
-);
+<<< @/../examples/typescript/docs.mts#tracked-invalidation{typescript}
 
-// Example only: derive this from your timing and clock-skew bounds.
-const USER_INVALIDATION_BUFFER_MS = 5_000;
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/examples/typescript/docs.mts)
 
-await db.updateUser("123", patch);
-await dialcache.invalidateRemote("user_id", "123", USER_INVALIDATION_BUFFER_MS);
-const updated = await dialcache.enable(() => getUser("123"));
-```
+</LanguageContent>
 
-Call invalidation **after the source mutation commits**. It works outside an
-`enable()` scope. Missing Redis configuration and mutation failures reject;
-handle that rejection as a failed maintenance operation.
-[Redis setup](redis.md) covers connecting the client.
+<LanguageContent language="go">
+
+<<< @/../go/docs_examples_test.go#tracked-invalidation{go}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/go/docs_examples_test.go)
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+<<< @/../rust/tests/docs_examples.rs#tracked-invalidation{rust}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/rust/tests/docs_examples.rs)
+
+</LanguageContent>
+
+The complete files provide the client, source and cleanup. The example uses a zero
+buffer because it has no overlapping stale writer. That is not a production
+recommendation: choose timing bounds using the next section.
+
+<LanguageContent language="typescript">
+
+Mark the reader with `trackForInvalidation: true` and call
+`dialcache.invalidateRemote(keyType, id, futureBufferMs)` after the source commit.
+Missing Redis configuration and mutation failures reject the returned promise.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Set `Operation.Identity.Tracked` and call
+`cache.Invalidate(ctx, identity, buffer)` after the source commit. The buffer
+is a `time.Duration` in whole milliseconds. Missing remote configuration returns
+`ErrNoRemote`; handle mutation errors as failed maintenance.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Set the operation's tracked identity and call
+`cache.invalidate(key_type, id, future_buffer_ms).await` after the source commit.
+The buffer is milliseconds. `invalidate_identity` supports an explicit identity
+namespace. Handle the returned error as failed maintenance.
+
+</LanguageContent>
+
+Invalidation works outside an enabled scope. Call it **after the source mutation
+commits** and surface failures to the application's maintenance path.
+[Redis setup](redis.md) covers client connections and ownership.
 
 ## Choosing `futureBufferMs`
 
@@ -107,8 +135,7 @@ The buffer is a nonnegative safe integer up to `31_536_000_000` milliseconds
 (365 days). Its API default is zero for compatibility. Zero fences frames
 stamped no later than invalidation, but provides no protection once delayed
 stale work receives a later timestamp. Choose a named, application-owned value
-from measured or conservative timing bounds; the example's five seconds is not
-a universal recommendation.
+from measured or conservative timing bounds; a sample buffer is not a universal recommendation.
 
 A larger buffer raises fallback load. Native `MGET` still transfers existing
 fenced payloads even when replacement serialization and `SET` are skipped.
@@ -148,7 +175,7 @@ the source mutation and does not cancel work.
 ## Application clock contract
 
 Writer timestamps, invalidation proposals, and logical ages use application
-`Date.now()` clocks. DialCache does not query Redis `TIME`, calibrate an offset,
+epoch-millisecond clocks. DialCache does not query Redis `TIME`, calibrate an offset,
 or compensate for skew. External clock synchronization and monitoring are part
 of the deployment contract.
 
@@ -236,7 +263,7 @@ contract: invalidation after the initial read cannot revoke retained bytes.
 
 ### Identity and Redis Cluster placement
 
-The invalidation unit is `(namespace, keyType, String(id))`. It covers all tracked
+The invalidation unit is `(namespace, keyType, normalized id)`. It covers all tracked
 `useCase` and `args` variants of that entity. Untracked entries ignore the
 watermark.
 
@@ -291,7 +318,7 @@ already wrote. See [Upgrading](upgrading.md#tracked-protocol-cutover).
 
 Invalid buffer arguments fail before dispatch. Missing Redis configuration and
 invalidation I/O failures are logged, recorded with `error="invalidation"`, and
-rethrown. The operation metric uses `keyType` and namespace; it does not attach
+surfaced to the caller. The operation metric uses `keyType` and namespace; it does not attach
 an entity id to labels.
 
 Adapter retries reuse the original invalidation timestamp, preserve monotonicity,

@@ -27,7 +27,16 @@ For a changed file, read the changed assertions/prose and any affected fixtures,
 - Update that source's entries and fingerprint only after the review. Do not refresh fingerprints merely to satisfy the check. `sourceSnapshot()` in the checker extracts current locations and hashes; it never assigns contract dispositions.
 - Run the focused implementation and formal checks. A mapping is evidence bookkeeping, not a substitute for those checks.
 
-The `sources` inventory covers `README.md`, every current top-level `docs/*.md` page, and ordinary `test/*.test.ts` files, including real Redis/Cluster integration declarations. The formal harness/corpora test themselves. Fixture helpers have no independent case declarations; their meaning is reviewed with the consuming tests. Packed-package checks and compile-time examples retain the public binding boundary, and continue running in normal CI.
+The `sources` inventory covers `README.md`, authored Markdown pages under `docs/`
+(including native language guides), and ordinary `test/*.test.ts` files,
+including real Redis/Cluster integration declarations. It excludes generated
+content under `docs/generated`, native API output under `docs/public`, and
+VitePress internals. The generated behavior catalogue takes its reviewed claims
+from the semantic inventory; it is not a second authored contract. The formal
+harness/corpora test themselves. Fixture helpers have no independent case
+declarations; their meaning is reviewed with the consuming tests. Packed-package
+checks and executable documentation examples retain the public binding boundary
+and continue running in normal CI.
 
 ### Formal and Go guide review
 
