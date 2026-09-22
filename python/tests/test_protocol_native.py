@@ -197,3 +197,46 @@ def test_json_strings_survive_the_frame_utf8_boundary(value):
     decoded = decode_read(encode_frame(serializer.dump(value), 1))
     assert isinstance(decoded, Frame)
     assert serializer.load(decoded.payload) == value
+
+
+@pytest.mark.parametrize("size", [0, 1, 65535, 65536, 65537])
+@pytest.mark.parametrize("trailer", [b"garbage", zstandard.ZstdCompressor().compress(b"second" * 1000)])
+def test_unknown_size_decoder_stops_at_first_frame(size, trailer):
+    raw = b"a" * size
+    first = zstandard.ZstdCompressor(write_content_size=False).compress(raw)
+    result = decompress_payload(b"\x02" + first + trailer, maximum=size)
+    assert result.outcome == "decompressed"
+    assert result.payload == raw
+    assert decompress_payload(b"\x02" + first[:-1], maximum=size).outcome == "fallback_raw"
+
+
+@pytest.mark.parametrize("known_size", [False, True])
+def test_bad_checksum_preserves_output_limit_precedence(known_size):
+    encoded = zstandard.ZstdCompressor(write_content_size=known_size, write_checksum=True).compress(
+        b"a" * 100000
+    )
+    bad = b"\x02" + encoded[:-1] + bytes([encoded[-1] ^ 1])
+    assert decompress_payload(bad, maximum=65536).outcome == "read_over_limit"
+    assert decompress_payload(bad).outcome == "fallback_raw"
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_unknown_size_decode_allocates_for_output_instead_of_ceiling(corrupt):
+    import tracemalloc
+
+    raw = b"a" * 10000
+    encoded = zstandard.ZstdCompressor(write_content_size=False, write_checksum=True).compress(raw)
+    if corrupt:
+        encoded = encoded[:-1] + bytes([encoded[-1] ^ 1])
+    payload = b"\x02" + encoded
+    tracemalloc.start()
+    try:
+        result = decompress_payload(payload)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert result.outcome == ("fallback_raw" if corrupt else "decompressed")
+    assert result.payload == (payload if corrupt else raw)
+    # This small output used to allocate the 512 MiB decompression ceiling.
+    # Keep generous headroom for interpreter/dependency allocation differences.
+    assert peak < 8 * 1024 * 1024

@@ -21,4 +21,8 @@ DialCache's [Quint specification](../formal/SPEC.md) and TypeScript implementati
 
 Disabled calls bypass key selection, argument adaptation, policy resolution, deadlines and coalescing. Redis reads acquire the value and watermark atomically from a primary; writes use one native `SET` of a complete frame. None of these rules are inherited from gcache's implementation.
 
+Method decorators omit `self` from inferred key arguments by default. An explicit
+`arg_adapters={"self": ...}` includes the adapted instance identity, for example
+its tenant ID. `ignore_args` takes precedence over argument adapters.
+
 The Python API is a binding of the existing behavior, not a migration that reads existing gcache keys or envelopes. Applications sharing entries across ports must use the same namespace, entity identity, use case, argument order and payload schema.

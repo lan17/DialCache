@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, ParamSpec, TypeVar
 
 from .clock import SystemClock
-from .config import UNSET, Policy, merge_policy, resolve_layer, validate_static_policy
+from .config import UNSET, Policy, _valid_ramp, merge_policy, resolve_layer, validate_static_policy
 from .context import DialCacheContext
 from .errors import (
     ConfigError,
@@ -30,6 +30,7 @@ from .errors import (
 )
 from .key import Key, invalidation_prefix, normalize_args, ramp_sample
 from .local import LocalCache
+from .metrics import Metrics, emit_metric
 from .protocol import Frame, Miss, compress_payload, decompress_payload, escape_raw_payload, utf8_bytes
 from .redis import InvalidationRequest, ReadContext, ReadRequest, WriteRequest
 from .serializer import JsonSerializer
@@ -109,6 +110,7 @@ class AbortSignal:
 class _Flight:
     task: asyncio.Future[Any]
     started: float
+    owner: _Operation
     followers: int = 0
 
 
@@ -125,6 +127,7 @@ class _Operation:
     comparator: Callable[[Any, Any], bool]
     recovery: Callable[[BaseException], bool]
     did_timeout: bool = False
+    deliveries: set[asyncio.Future[Any]] = field(default_factory=set)
 
 
 @dataclass
@@ -150,7 +153,7 @@ class DialCache:
         namespace: str = "urn",
         redis: Any = None,
         policy_provider: Callable[[Key], Any] | None = None,
-        metrics: Any = None,
+        metrics: Metrics | None = None,
         logger: Any = None,
         clock: Any = None,
         local_max_size: int = 10_000,
@@ -273,7 +276,9 @@ class DialCache:
                     key_args = {
                         n: adapters[n](v) if n in adapters else v
                         for n, v in bound.arguments.items()
-                        if n != "self" and n not in ignored and (n != id_name or n in adapters)
+                        if (n != "self" or n in adapters)
+                        and n not in ignored
+                        and (n != id_name or n in adapters)
                     }
                     return {"id": entity_id, "args": key_args}
 
@@ -368,17 +373,7 @@ class DialCache:
         return task
 
     def _emit(self, event: str, labels: Mapping[str, Any], **fields: Any) -> None:
-        if self.metrics is None:
-            return
-        record = {"event": event, **labels, **fields}
-        try:
-            if callable(self.metrics):
-                result = self.metrics(record)
-            else:
-                result = self.metrics.observe(record)
-            self._discard_awaitable(result)
-        except Exception:
-            pass
+        emit_metric(self.metrics, {"event": event, **labels, **fields})
 
     def _log(self, message: str, error: Any = None) -> None:
         try:
@@ -454,12 +449,14 @@ class DialCache:
             pending.remove_done_callback(settled)
 
     async def _source(self, op: _Operation, layer: str) -> Any:
-        start = self.clock.monotonic_ms()
+        invoked = asyncio.get_running_loop().create_future()
 
         async def invoke() -> Any:
+            invoked.set_result(self.clock.monotonic_ms())
             return await _await(op.load())
 
         pending = self._spawn(invoke())
+        start = await asyncio.shield(invoked)
 
         def timeout_error() -> Exception:
             op.did_timeout = True
@@ -477,6 +474,39 @@ class DialCache:
         if not self.is_enabled():
             self._emit("disabled", self._labels(op, "noop"), reason="context")
             return await _await(op.load())
+        delivered = asyncio.get_running_loop().create_future()
+        self._track_delivery(op.deliveries, delivered)
+        try:
+            return await self._execute_enabled(op)
+        finally:
+            delivered.set_result(None)
+            # A cancelled task's traceback can outlive the invocation (notably
+            # with native shield bookkeeping). It need not retain this marker.
+            del delivered
+
+    @staticmethod
+    def _track_delivery(group: set[asyncio.Future[Any]], pending: asyncio.Future[Any]) -> None:
+        if not pending.done() and pending not in group:
+            group.add(pending)
+            # Register on each destination during a group transfer as well:
+            # cancelled followers must not accumulate behind unbounded work.
+            pending.add_done_callback(group.discard)
+
+    @staticmethod
+    async def _await_delivery(op: _Operation) -> None:
+        while pending := {future for future in op.deliveries if not future.done()}:
+            # wait() observes completion without cancelling inputs or raising
+            # their errors. Recheck for followers added while we were waiting.
+            await asyncio.wait(pending)
+
+    def _join_delivery(self, op: _Operation, owner: _Operation) -> None:
+        group = owner.deliveries
+        if op.deliveries is not group:
+            for pending in op.deliveries:
+                self._track_delivery(group, pending)
+            op.deliveries = group
+
+    async def _execute_enabled(self, op: _Operation) -> Any:
         try:
             selected = op.select_key()
             if isinstance(selected, Key):
@@ -526,13 +556,14 @@ class DialCache:
 
         if policy.coalesce is False:
             return await request()
-        return await self._single_flight(memo.in_flight, key, request, "request_local")
+        return await self._single_flight(memo.in_flight, key, request, "request_local", op)
 
     async def _single_flight(
-        self, table: dict[str, Any], key: Key, run: Callable[[], Awaitable[Any]], scope: str
+        self, table: dict[str, Any], key: Key, run: Callable[[], Awaitable[Any]], scope: str, op: _Operation
     ) -> Any:
         existing = table.get(key.logical)
         if existing is not None:
+            self._join_delivery(op, existing.owner)
             existing.followers += 1
             self._emit("coalesced", self._labels(key), scope=scope)
             return await asyncio.shield(existing.task)
@@ -541,7 +572,10 @@ class DialCache:
         # eager task factory can run a complete cache hit inside create_task.
         # Followers (including reentrant observers) must already have a valid
         # result to join, and completion must never resurrect a settled flight.
-        flight = _Flight(asyncio.get_running_loop().create_future(), self.clock.monotonic_ms())
+        flight = _Flight(asyncio.get_running_loop().create_future(), self.clock.monotonic_ms(), op)
+        # Keep the barrier closed if the original public caller cancels while
+        # this leader remains joinable by later callers.
+        self._track_delivery(op.deliveries, flight.task)
         flight.task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
         table[key.logical] = flight
 
@@ -596,7 +630,7 @@ class DialCache:
             return (
                 await run()
                 if policy.coalesce is False
-                else await self._single_flight(self._flights, key, run, "process")
+                else await self._single_flight(self._flights, key, run, "process", op)
             )
         if self.redis is None:
             return await self._source(op, fallback_layer)
@@ -610,7 +644,7 @@ class DialCache:
         return (
             await run_remote()
             if policy.coalesce is False
-            else await self._single_flight(self._flights, key, run_remote, "process")
+            else await self._single_flight(self._flights, key, run_remote, "process", op)
         )
 
     async def _lower(self, op: _Operation, key: Key, policy: Policy, local: Any, fallback_layer: str) -> Any:
@@ -649,8 +683,10 @@ class DialCache:
     async def _raw_read(self, key: Key, policy: Policy, job: _Shadow | None = None) -> Frame | Miss:
         budget = self._read_budget(policy)
         signal = AbortSignal()
+        invoked = asyncio.get_running_loop().create_future()
 
         async def invoke() -> Any:
+            invoked.set_result(self.clock.monotonic_ms())
             return await _await(
                 self.redis.read(ReadRequest(key.value_key, key.watermark_key), ReadContext(budget, signal))
             )
@@ -664,8 +700,13 @@ class DialCache:
                 self._release_shadow(key, job)
 
             pending.add_done_callback(finished)
+        start = await asyncio.shield(invoked)
         value = await self._deadline(
-            pending, budget, lambda: RemoteReadTimeoutError(key.use_case, budget), on_timeout=signal.abort
+            pending,
+            budget,
+            lambda: RemoteReadTimeoutError(key.use_case, budget),
+            started=start,
+            on_timeout=signal.abort,
         )
         if isinstance(value, Miss):
             fence = (
@@ -893,12 +934,7 @@ class DialCache:
             self._error(key, "remote", "config_resolution")
             return
         ramp = shadow.get("ramp", 0)
-        if (
-            not isinstance(ramp, (int, float))
-            or isinstance(ramp, bool)
-            or not math.isfinite(ramp)
-            or not 0 <= ramp <= 100
-        ):
+        if not _valid_ramp(ramp):
             self._error(key, "remote", "config_resolution")
             return
         if ramp == 0 or self.metrics is None:
@@ -962,6 +998,12 @@ class DialCache:
         log: bool,
     ) -> None:
         if source is None:
+            try:
+                await self._await_delivery(op)
+            except BaseException:
+                job.finished = True
+                self._release_shadow(key, job)
+                raise
             job.started = self.clock.monotonic_ms()
 
         def abandon() -> None:
@@ -1001,7 +1043,7 @@ class DialCache:
                         value = await self._deadline(
                             source, job.budget, lambda: TimeoutError("shadow deadline"), started=job.started
                         )
-                        await asyncio.sleep(0)
+                        await self._await_delivery(op)
                     else:
                         with self.disable():
                             value = await _await(op.load())

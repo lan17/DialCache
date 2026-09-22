@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import math
 import re
 from dataclasses import dataclass, field
@@ -207,6 +208,42 @@ def compress_payload(
     return CompressionResult(result, "compressed", len(raw), len(result))
 
 
+class _CompressedInput(io.BytesIO):
+    """Distinguish iterator input exhaustion from a completed first frame."""
+
+    exhausted = False
+
+    def read(self, size: int = -1) -> bytes:
+        chunk = super().read(size)
+        if not chunk:
+            self.exhausted = True
+        return chunk
+
+
+def _failed_frame_exceeds_limit(encoded: bytes, maximum: int) -> bool:
+    import zstandard
+
+    # The iterator already failed before completing the first frame. Replaying
+    # only this error case cannot enter a valid second frame. Read exactly up
+    # to cap+1 to preserve limit-before-later-corruption classification without
+    # allocating the cap or repeating decompression on successful reads.
+    total = 0
+    try:
+        with zstandard.ZstdDecompressor().stream_reader(
+            io.BytesIO(encoded), read_across_frames=False
+        ) as reader:
+            while total <= maximum:
+                chunk = reader.read(min(64 * 1024, maximum + 1 - total))
+                total += len(chunk)
+                if total > maximum:
+                    return True
+                if not chunk:
+                    break
+    except (zstandard.ZstdError, ValueError, OverflowError, OSError):
+        pass
+    return False
+
+
 def decompress_payload(payload: Payload, maximum: int = MAX_DECOMPRESSED_BYTES) -> DecompressionResult:
     if not isinstance(payload, bytes) or not payload:
         return DecompressionResult(payload, "passthrough")
@@ -216,8 +253,6 @@ def decompress_payload(payload: Payload, maximum: int = MAX_DECOMPRESSED_BYTES) 
         return DecompressionResult(value, "passthrough")
     if marker not in (1, 2):
         return DecompressionResult(payload, "passthrough")
-    import io
-
     import zstandard
 
     try:
@@ -225,23 +260,34 @@ def decompress_payload(payload: Payload, maximum: int = MAX_DECOMPRESSED_BYTES) 
         content_size = zstandard.frame_content_size(encoded)
         unknown_size = content_size in (-1, zstandard.CONTENTSIZE_UNKNOWN)
         if unknown_size or content_size > maximum:
-            # The one-shot decoder ignores max_output_size when the header
-            # declares a size. Probe at most cap+1 bytes before allowing an
-            # allocation, and stop at the first frame just as Node does. A
-            # truncated large frame remains fallback_raw rather than being
-            # classified from an untrusted header alone.
-            with zstandard.ZstdDecompressor().stream_reader(
-                io.BytesIO(encoded), read_across_frames=False
-            ) as reader:
-                prefix = reader.read(maximum + 1)
-            if len(prefix) > maximum:
-                return DecompressionResult(payload, "read_over_limit")
-            del prefix
-            if not unknown_size:
+            # Unlike repeated stream_reader reads, this iterator stops at the
+            # first completed frame, including an empty frame. Truncation makes
+            # it request more input and encounter EOF instead. Retain only
+            # actual output: unknown-size one-shot decode allocates its limit.
+            source = _CompressedInput(encoded)
+            chunks: list[bytes] = []
+            total = 0
+            try:
+                for chunk in zstandard.ZstdDecompressor().read_to_iter(
+                    source, write_size=min(64 * 1024, maximum + 1)
+                ):
+                    total += len(chunk)
+                    if total > maximum:
+                        return DecompressionResult(payload, "read_over_limit")
+                    chunks.append(chunk)
+            except zstandard.ZstdError:
+                chunks.clear()
+                outcome = (
+                    "read_over_limit" if _failed_frame_exceeds_limit(encoded, maximum) else "fallback_raw"
+                )
+                return DecompressionResult(payload, outcome)
+            if source.exhausted or not unknown_size:
                 return DecompressionResult(payload, "fallback_raw")
-        decoded = zstandard.ZstdDecompressor().decompress(
-            encoded, max_output_size=max(1, maximum), allow_extra_data=True
-        )
+            decoded = b"".join(chunks)
+        else:
+            decoded = zstandard.ZstdDecompressor().decompress(
+                encoded, max_output_size=max(1, maximum), allow_extra_data=True
+            )
         if len(decoded) > maximum:
             return DecompressionResult(payload, "read_over_limit")
     except (zstandard.ZstdError, ValueError, OverflowError, OSError):
