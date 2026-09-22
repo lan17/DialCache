@@ -20,7 +20,7 @@ action mappings and observation assertions. TypeScript imports those same
 modules; Go and Rust use a persistent Node process over JSON lines. A new port can
 reuse that protocol instead of translating every profile's tables.
 Existing implementations
-are examples: [the TypeScript driver](../test/formal/behavior-driver.ts),
+are examples: [the TypeScript driver](../typescript/test/formal/behavior-driver.ts),
 [the Go driver](../go/behavior_driver_test.go) and
 [the Rust driver](../rust/tests/formal/driver.rs). A port need not copy their public
 API names, threading model, internal storage, or scheduling implementation.
@@ -34,7 +34,7 @@ API names, threading model, internal storage, or scheduling implementation.
 | External effects | Hold/release actual policy, Redis read/write, serialization, and decoding operations by their invocation IDs. A held operation cannot finish until its external release or specified failure. |
 | Clock control | Control wall time and elapsed time separately. Advance or shift only the specified clock; follow the profile's timer-delivery rule. Preserve fractional units in the local-clock profile. |
 | Storage inputs | Seed the specified bytes/value/TTL or execute invalidation. The adapter must expose the requested atomic primary snapshot and maintenance result. |
-| Settle | After every command, bring the implementation to quiescence under the `causally-ready-v1` contract: every task spawned by the implementation or the driver has finished or is blocked on a driver-owned gate, a driver-owned timer that is not yet due, or a driver-owned scope gate, and nothing is runnable. This obligation falls on the library as well as the test: it must expose its detached scheduling to the test executor (Go's `Defer` hook drained under `synctest.Wait`, the Node fake-timer microtask queue drained by `advanceTimersByTimeAsync(0)`) so the driver reaches quiescence without guessing turn counts or advancing deadline time. The coordinator checks this contract by name on every behavior `observe` through the driver's settlement receipt, rules R1 to R5 in the [trace and observation contract](#trace-and-observation-contract); a failed rule is a `Settlement violation`, an infrastructure error that earns no comparison credit. Both ports include a no-settle control: [formal-settlement-control.test.ts](../test/formal-settlement-control.test.ts) skips the TypeScript drain, and [settlement_control_replay_test.go](../go/settlement_control_replay_test.go) reports the Go observation held before the drain; each must fail with a settlement violation, never an observation mismatch, on the smoke history of every behavior-driver profile. A further port carries an equivalent control against its own driver. |
+| Settle | After every command, bring the implementation to quiescence under the `causally-ready-v1` contract: every task spawned by the implementation or the driver has finished or is blocked on a driver-owned gate, a driver-owned timer that is not yet due, or a driver-owned scope gate, and nothing is runnable. This obligation falls on the library as well as the test: it must expose its detached scheduling to the test executor (Go's `Defer` hook drained under `synctest.Wait`, the Node fake-timer microtask queue drained by `advanceTimersByTimeAsync(0)`) so the driver reaches quiescence without guessing turn counts or advancing deadline time. The coordinator checks this contract by name on every behavior `observe` through the driver's settlement receipt, rules R1 to R5 in the [trace and observation contract](#trace-and-observation-contract); a failed rule is a `Settlement violation`, an infrastructure error that earns no comparison credit. Both ports include a no-settle control: [formal-settlement-control.test.ts](../typescript/test/formal-settlement-control.test.ts) skips the TypeScript drain, and [settlement_control_replay_test.go](../go/settlement_control_replay_test.go) reports the Go observation held before the drain; each must fail with a settlement violation, never an observation mismatch, on the smoke history of every behavior-driver profile. A further port carries an equivalent control against its own driver. |
 | Observe | Read actual caller outcomes, source/effect counts, event order, timestamps, values and error categories after the step. Collect observations independently of expected model state. |
 | Cleanup | Drain or release test-owned work, restore clock/fault hooks, and isolate the next history. Unfinished work must not silently leak into another history. |
 
@@ -274,7 +274,7 @@ receipt, `$defs/settlementReceipt`, describing the same instant as `observed`:
 | `runnable` | nonnegative integer | What one zero-time drain of the controlled executor found after the snapshot: 0 when nothing ran and neither the observation nor the pending-timer count changed; otherwise the driver's count of what it found |
 | `held` | seven nonnegative integers | `loaders` not yet resolved or rejected; `reads`, `writes`, `dumps`, `loads`, `policies` held by a fault and not yet released by name; `scopes` opened and not closed, setup included |
 
-The TypeScript driver ([behavior-driver.ts](../test/formal/behavior-driver.ts))
+The TypeScript driver ([behavior-driver.ts](../typescript/test/formal/behavior-driver.ts))
 takes its snapshot after the settle drain as the JSON encoding that crosses the
 wire (a value the library hands back is recorded by reference, so the encoding
 fixes what this instant reported), drains the fake-timer queue once more at
@@ -287,7 +287,7 @@ library abandons, such as a read aborted by its deadline, stay registered until
 their release command. Validate the receipt locally against the definition
 `prepare` named, as the Go transport does, before sending it.
 
-[coordinated-replay.ts](../test/formal/coordinated-replay.ts) replays any
+[coordinated-replay.ts](../typescript/test/formal/coordinated-replay.ts) replays any
 profile's history through the coordinator with the TypeScript drivers exactly as
 a native port does. The coordinator test runs every committed smoke history
 through it, so the schema is checked against real observations, not examples.

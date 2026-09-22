@@ -75,7 +75,7 @@ const report = {
   node: process.version,
   catalogSha256: createHash('sha256').update(read(language.catalog)).digest('hex'),
   // The anchors span both ports; this report fingerprints only the files this port's edits touch.
-  sourceSha256: Object.fromEntries([...sourceText].filter(([path]) => path.startsWith('src/')).map(([path, text]) => [path, createHash('sha256').update(text).digest('hex')])),
+  sourceSha256: Object.fromEntries([...sourceText].filter(([path]) => path.startsWith('typescript/src/')).map(([path, text]) => [path, createHash('sha256').update(text).digest('hex')])),
   declaredCoverage,
   baselines: {}, mutations: [],
 };
@@ -102,8 +102,8 @@ function run(label, cohort, baseline) {
   const result = spawnSync(process.execPath, [resolve(root, 'node_modules/vitest/vitest.mjs'), 'run', ...cohorts[cohort],
     // Vitest bail can cancel workers before their failing assertions reach the
     // JSON reporter. Complete each cohort so detection has recorded evidence.
-    '--coverage.enabled=false', '--reporter=json', '--reporter=./formal/semantic-reporter.mjs', `--outputFile=${json}`], {
-    cwd: workspace, env: { ...env, DIALCACHE_PROTOCOL_CORPUS: cohort === 'generated' ? 'generated' : 'fixed', DIALCACHE_SEMANTIC_RUN_META: meta },
+    '--coverage.enabled=false', '--reporter=json', '--reporter=../formal/semantic-reporter.mjs', `--outputFile=${json}`], {
+    cwd: resolve(workspace, 'typescript'), env: { ...env, DIALCACHE_PROTOCOL_CORPUS: cohort === 'generated' ? 'generated' : 'fixed', DIALCACHE_SEMANTIC_RUN_META: meta },
     encoding: 'utf8', timeout: 540_000, maxBuffer: 32 * 1024 * 1024,
   });
   writeFileSync(resolve(output, `${label}-${cohort}.log`), (result.stdout ?? '') + (result.stderr ?? ''));
@@ -129,12 +129,13 @@ try {
   vectorServer = startRedisVectorServer();
   env.DIALCACHE_VECTOR_REDIS_URL = vectorServer.url;
   report.redisVectorImage = vectorServer.image;
-  for (const path of ['src', 'test', 'formal', 'docs', 'README.md', 'go/README.md', 'package.json', 'tsconfig.json', 'vitest.config.ts']) {
+  for (const path of ['typescript/src', 'typescript/test', 'formal', 'docs', 'README.md', 'typescript/README.md', 'go/README.md', 'package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'typescript/package.json', 'typescript/tsconfig.json', 'typescript/vitest.config.ts']) {
     cpSync(resolve(root, path), resolve(workspace, path), { recursive: true, filter: source => !source.includes('/docs/.vitepress/cache') && !source.includes('/docs/.vitepress/dist') });
   }
   symlinkSync(resolve(root, 'node_modules'), resolve(workspace, 'node_modules'), 'dir');
+  symlinkSync(resolve(root, 'typescript/node_modules'), resolve(workspace, 'typescript/node_modules'), 'dir');
   report.inputs = fingerprintFiles(root, language.inputs);
-  report.configurationSha256 = Object.fromEntries(['package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'vitest.config.ts'].map(path => [path, createHash('sha256').update(read(path)).digest('hex')]));
+  report.configurationSha256 = Object.fromEntries(['package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'typescript/package.json', 'typescript/tsconfig.json', 'typescript/vitest.config.ts'].map(path => [path, createHash('sha256').update(read(path)).digest('hex')]));
   report.corpus = fingerprintFiles(root, ['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
   rmSync(resolve(output, 'witnesses'), { recursive: true, force: true });
   // Every shard measures every baseline itself: its evidence stands on the
@@ -173,7 +174,7 @@ try {
         writeFileSync(path, current.replace(edit.before, () => edit.after));
         touched.add(edit.path);
       }
-      const compile = spawnSync(process.execPath, [resolve(root, 'node_modules/typescript/bin/tsc'), '--noEmit'], { cwd: workspace, encoding: 'utf8', timeout: 60_000 });
+      const compile = spawnSync(process.execPath, [resolve(root, 'node_modules/typescript/bin/tsc'), '--noEmit'], { cwd: resolve(workspace, 'typescript'), encoding: 'utf8', timeout: 60_000 });
       // A compiler that could not run is infrastructure; a compiler that rejected the edit is a noncompiling mutant.
       if (compile.error || compile.signal) throw new Error(`${mutation.id}: compile step failed to run: ${compile.error ?? compile.signal}`);
       if (compile.status !== 0) {

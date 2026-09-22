@@ -29,7 +29,7 @@ export const targetDescriptions = {
   'formal-go': 'Complete prepared Go replay of the generated corpus with race detection',
   'formal-rust': 'Complete prepared Rust replay of the generated corpus in release mode',
   'fixtures-check': 'Recompute every committed model-derived artifact with pinned Quint',
-  'kernel-fixtures': 'Typecheck the kernel library fixtures (test/fixtures/kernel) and run every run they declare',
+  'kernel-fixtures': 'Typecheck the kernel library fixtures (formal/fixtures/kernel) and run every run they declare',
   differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions (DIFFERENTIAL_SHARD=<index>/<count> replays one shard balanced by estimated profile replay time, as the hosted lane does with four)',
   explore: 'Explore a new recorded seed and replay every port in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
@@ -136,15 +136,15 @@ export function validationPlan(target, { directory = root, environment = process
   const witnessDirectory = resolve(directory, '.formal-traces/go-parity-witnesses');
   const tsReplay = full => ({ ...pnpm(full ? 'Replay complete TypeScript corpus' : 'Replay committed TypeScript fixtures',
     'exec', 'vitest', 'run', ...replayTests, '--coverage.enabled=false',
-    ...(full ? ['--reporter=default', '--reporter=json', '--outputFile=.formal-traces/ts-replay.json'] : [])),
-    ...(full ? { env: replayEnv } : {}) });
+    ...(full ? ['--reporter=default', '--reporter=json', `--outputFile=${resolve(directory, '.formal-traces/ts-replay.json')}`] : [])),
+    cwd: 'typescript', ...(full ? { env: replayEnv } : {}) });
   // The language-neutral evaluator is the sole producer of the reusable witness
   // evidence; TypeScript replay only checks the same gate inside its suite.
   const witnesses = node('Evaluate shared witness evidence over the complete corpus', 'formal/witnesses.mjs', 'evaluate', '--profile', 'all');
   // The composition rule is a gate wherever Quint is present: a composed
   // profile must keep zero composition violations against the recorded baseline.
   const lintBaseline = node('Check the profile lint baseline', 'formal/lint-profiles.mjs', 'baseline', '--check');
-  // The kernel fixtures (test/fixtures/kernel) exercise library seams no
+  // The kernel fixtures (formal/fixtures/kernel) exercise library seams no
   // scheduled profile reaches; they run wherever Quint is present.
   const kernelFixtures = node('Check the kernel library fixtures', 'formal/check-kernel-fixtures.mjs');
   // The complete replay outlives Go's default 10-minute test timeout on a slow
@@ -222,9 +222,9 @@ export function validationPlan(target, { directory = root, environment = process
     // The Rust integration tests are #[ignore]d, so a plain cargo test reports
     // them as ignored and never needs Docker; this lane runs exactly them.
     'integration-rust': [cargo('Run Rust Redis/Valkey/Cluster integrations', 'test', '--all-features', '--test', 'redis_integration', '--', '--ignored')],
-    'package-floor': [{ label: 'Require a built package for floor checks', requireFile: 'dist/index.js', failureHint: 'Build first with make check-ts, or run make ci with NODE22_BIN set.' },
+    'package-floor': [{ label: 'Require a built package for floor checks', requireFile: 'typescript/dist/index.js', failureHint: 'Build first with make check-ts, or run make ci with NODE22_BIN set.' },
       { label: 'Check Node 22.15 zstd round trip and output ceiling', command: node22, args: ['--eval', floorSmoke], env: { PATH: floorEnvironment(environment, node22).PATH } },
-      { label: 'Check packed package on Node 22.15', command: node22, args: ['scripts/test-package.mjs'], env: { PATH: floorEnvironment(environment, node22).PATH } }],
+      { label: 'Check packed package on Node 22.15', command: node22, args: ['typescript/scripts/test-package.mjs'], env: { PATH: floorEnvironment(environment, node22).PATH } }],
   };
   return expandTargets(target).flatMap(name => plans[name]);
 }

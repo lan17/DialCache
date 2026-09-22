@@ -42,7 +42,7 @@ module dialcache_dark_layers_conformance {
   pure val MAX_CALLS = 12
   pure val JOB_CAPACITY = 1
   // One constant: the library derives the job budget from the call's fallback
-  // timeout (src/dialcache.ts `timeoutMs: fallbackTimeoutMs ?? DEFAULT_FALLBACK_TIMEOUT_MS`,
+  // timeout (typescript/src/dialcache.ts `timeoutMs: fallbackTimeoutMs ?? DEFAULT_FALLBACK_TIMEOUT_MS`,
   // go/shadow.go `budget()`), so the two cannot differ (C6 in the exclusions inventory).
   pure val SOURCE_BUDGET_MS = 10
   pure val READ_BUDGET_MS = 30000000

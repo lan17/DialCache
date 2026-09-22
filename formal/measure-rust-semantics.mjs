@@ -151,7 +151,7 @@ export function measureRustSemantics({ shard = { index: 1, count: 1 }, only } = 
     // checkout; the crate's build output is not an input and is not copied.
     // go/ is copied because a crate unit test compares the invalidation
     // script with go/redis_adapter.go byte for byte.
-    for (const path of ['formal', 'test', 'src', 'go']) cpSync(resolve(root, path), resolve(workspace, path), { recursive: true });
+    for (const path of ['formal', 'typescript/test', 'typescript/src', 'go']) cpSync(resolve(root, path), resolve(workspace, path), { recursive: true });
     const target = resolve(root, 'rust/target');
     cpSync(resolve(root, 'rust'), resolve(workspace, 'rust'), { recursive: true, filter: source => source !== target && !source.startsWith(`${target}/`) });
     const crate = resolve(workspace, 'rust');

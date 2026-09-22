@@ -67,9 +67,9 @@ file supplies imports and test setup; the source link opens the complete file.
 
 <LanguageContent language="typescript">
 
-<<< @/../examples/typescript/docs.mts#request-scope{typescript}
+<<< @/../typescript/examples/docs.mts#request-scope{typescript}
 
-[Complete executable example](https://github.com/lan17/DialCache/blob/main/examples/typescript/docs.mts)
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/typescript/examples/docs.mts)
 
 </LanguageContent>
 

@@ -514,7 +514,7 @@ export const mutantCatalogPath = 'formal/mutations.json';
 export const mutantIdPattern = /^M\d{2,}$/;
 // Where a port's edits may point and which cohorts its detections may require.
 export const mutantPorts = {
-  typescript: { label: 'TypeScript', edit: /^src\/[\w/-]+\.ts$/, cohorts: ['ordinary', 'generated', 'portable'] },
+  typescript: { label: 'TypeScript', edit: /^typescript\/src\/[\w/-]+\.ts$/, cohorts: ['ordinary', 'generated', 'portable'] },
   go: { label: 'Go', edit: /^go\/[\w-]+\.go$/, cohorts: ['ordinary', 'generated', 'fixed', 'portable'] },
 };
 const mutantFields = ['id', 'case', 'description', 'rationale', 'typescript', 'go'];
@@ -522,7 +522,7 @@ const mutantFields = ['id', 'case', 'description', 'rationale', 'typescript', 'g
 // The catalog's schema: ids, cases, descriptions, the rationale that carries
 // the port-side account, and both ports' sections with edits inside their
 // port and known cohorts. Anchors are checked separately (checkMutantAnchors),
-// so validating the manifest never depends on src/ or go/ text.
+// so validating the manifest never depends on typescript/src/ or go/ text.
 export function readMutantCatalog(readText = read) {
   const refuse = detail => { throw new Error(`Mutant catalog: ${detail}`); };
   const caseContracts = new Map(JSON.parse(readText('formal/semantic-cases.json')).cases.map(entry => [entry.id, entry.contracts]));

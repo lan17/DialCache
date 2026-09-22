@@ -1,5 +1,6 @@
 {
-  "entryPoints": ["src/index.ts", "src/node-redis.ts", "src/valkey-glide.ts", "src/prometheus.ts", "src/datadog.ts", "src/redis-protocol.ts"],
+  "entryPoints": ["typescript/src/index.ts", "typescript/src/node-redis.ts", "typescript/src/valkey-glide.ts", "typescript/src/prometheus.ts", "typescript/src/datadog.ts", "typescript/src/redis-protocol.ts"],
+  "tsconfig": "typescript/tsconfig.json",
   "out": "docs/public/reference/typescript",
   "name": "DialCache TypeScript API",
   "readme": "none",

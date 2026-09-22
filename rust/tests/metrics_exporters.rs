@@ -551,7 +551,7 @@ mod prometheus_exporter {
     ];
 
     /// Port of TestPrometheusWireSchemaMatchesTypeScriptBinding against the
-    /// Go table, which that Go test pins to src/prometheus.ts.
+    /// Go table, which that Go test pins to typescript/src/prometheus.ts.
     #[test]
     fn wire_schema_matches_the_reference_table() {
         for prefix in ["", "svc_"] {

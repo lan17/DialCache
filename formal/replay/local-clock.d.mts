@@ -1,4 +1,4 @@
-import type { Observation } from "../../test/formal/behavior-driver.js";
+import type { Observation } from "../../typescript/test/formal/behavior-driver.js";
 export type Projected=Omit<Observation,"calls">&{calls:number[]};
 export interface LocalClockStep {action:string;choice:number;expected:Projected}
 export interface LocalClockTrace {path:string;steps:LocalClockStep[]}

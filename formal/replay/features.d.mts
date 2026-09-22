@@ -1,5 +1,5 @@
-import type { Observation, Input } from "../../test/formal/behavior-driver.js";
-import type { Profile } from "../../test/formal/feature-profile.js";
+import type { Observation, Input } from "../../typescript/test/formal/behavior-driver.js";
+import type { Profile } from "../../typescript/test/formal/feature-profile.js";
 export type Projected = Omit<Observation, "calls"> & { calls: number[] };
 export interface Inspection { instance: number; activeLeaders: number; activeFollowers: number; oldestLeaderAgeMs: number | null }
 export interface Diagnostics { inspections?: Inspection[]; warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[]; configErrors?: number; futureOffsets?: Array<{ layer: string; offsetMs: number }> }

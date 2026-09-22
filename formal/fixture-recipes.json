@@ -631,7 +631,7 @@
       ]
     },
     {
-      "path": "test/fixtures/policy-shadow-witnesses.json",
+      "path": "typescript/test/fixtures/policy-shadow-witnesses.json",
       "model": "formal/dialcache-policy-conformance.qnt",
       "format": "named-map",
       "recipes": [
@@ -1171,7 +1171,7 @@
       ]
     },
     {
-      "path": "test/fixtures/effects-authority-witnesses.json",
+      "path": "typescript/test/fixtures/effects-authority-witnesses.json",
       "model": "formal/dialcache-effects-conformance.qnt",
       "format": "named-list",
       "recipes": [
@@ -1218,7 +1218,7 @@
       ]
     },
     {
-      "path": "test/fixtures/formal-runtime-boundary-witnesses.json",
+      "path": "typescript/test/fixtures/formal-runtime-boundary-witnesses.json",
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
       "format": "named-map",
       "recipes": [
@@ -1335,7 +1335,7 @@
       ]
     },
     {
-      "path": "test/fixtures/formal-runtime-witness-boundaries.json",
+      "path": "typescript/test/fixtures/formal-runtime-witness-boundaries.json",
       "format": "excerpts",
       "recipes": [
         {
@@ -1383,7 +1383,7 @@
       ]
     },
     {
-      "path": "test/fixtures/formal-witness-attribution.json",
+      "path": "typescript/test/fixtures/formal-witness-attribution.json",
       "format": "excerpts",
       "recipes": [
         {
@@ -1530,7 +1530,7 @@
       ]
     },
     {
-      "path": "test/fixtures/formal-witness-boundaries.json",
+      "path": "typescript/test/fixtures/formal-witness-boundaries.json",
       "format": "excerpts",
       "recipes": [
         {
@@ -1900,7 +1900,7 @@
       ]
     },
     {
-      "path": "test/fixtures/local-failure-witnesses.json",
+      "path": "typescript/test/fixtures/local-failure-witnesses.json",
       "model": "formal/dialcache-local-failure-conformance.qnt",
       "format": "named-list",
       "recipes": [
@@ -1932,7 +1932,7 @@
       ]
     },
     {
-      "path": "test/fixtures/recovery-admission-witnesses.json",
+      "path": "typescript/test/fixtures/recovery-admission-witnesses.json",
       "model": "formal/dialcache-recovery-read-conformance.qnt",
       "format": "named-list",
       "recipes": [
@@ -1949,7 +1949,7 @@
       ]
     },
     {
-      "path": "test/fixtures/recovery-read-witnesses.json",
+      "path": "typescript/test/fixtures/recovery-read-witnesses.json",
       "model": "formal/dialcache-recovery-read-conformance.qnt",
       "format": "named-list",
       "recipes": [
@@ -2076,7 +2076,7 @@
       ]
     },
     {
-      "path": "test/fixtures/shadow-diagnostics-witnesses.json",
+      "path": "typescript/test/fixtures/shadow-diagnostics-witnesses.json",
       "model": "formal/dialcache-shadow-conformance.qnt",
       "format": "named-list",
       "recipes": [
@@ -2113,7 +2113,7 @@
       ]
     },
     {
-      "path": "test/fixtures/shadow-layers-witnesses.json",
+      "path": "typescript/test/fixtures/shadow-layers-witnesses.json",
       "model": "formal/dialcache-shadow-layers-conformance.qnt",
       "format": "named-list",
       "recipes": [
@@ -2230,7 +2230,7 @@
       ]
     },
     {
-      "path": "test/fixtures/source-budgets-witnesses.json",
+      "path": "typescript/test/fixtures/source-budgets-witnesses.json",
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "format": "named-list",
       "recipes": [
@@ -2272,7 +2272,7 @@
       ]
     },
     {
-      "path": "test/fixtures/policy-witnesses.json",
+      "path": "typescript/test/fixtures/policy-witnesses.json",
       "model": "formal/dialcache-policy-conformance.qnt",
       "format": "named-map",
       "recipes": [
@@ -2500,7 +2500,7 @@
       ]
     },
     {
-      "path": "test/fixtures/layers-witnesses.json",
+      "path": "typescript/test/fixtures/layers-witnesses.json",
       "model": "formal/dialcache-layers-conformance.qnt",
       "format": "named-map",
       "recipes": [
@@ -2512,7 +2512,7 @@
       ]
     },
     {
-      "path": "test/fixtures/independent-witnesses.json",
+      "path": "typescript/test/fixtures/independent-witnesses.json",
       "model": "formal/dialcache-independent-conformance.qnt",
       "format": "named-map",
       "recipes": [
@@ -2644,7 +2644,7 @@
       ]
     },
     {
-      "path": "test/fixtures/independent-shadow-witnesses.json",
+      "path": "typescript/test/fixtures/independent-shadow-witnesses.json",
       "model": "formal/dialcache-independent-conformance.qnt",
       "format": "named-map",
       "recipes": [
@@ -2830,7 +2830,7 @@
       ]
     },
     {
-      "path": "test/fixtures/dark-layers-witnesses.json",
+      "path": "typescript/test/fixtures/dark-layers-witnesses.json",
       "model": "formal/dialcache-dark-layers-conformance.qnt",
       "format": "named-list",
       "recipes": [
@@ -2982,7 +2982,7 @@
       ]
     },
     {
-      "path": "test/fixtures/admission-budget-witnesses.json",
+      "path": "typescript/test/fixtures/admission-budget-witnesses.json",
       "model": "formal/dialcache-admission-conformance.qnt",
       "format": "named-list",
       "recipes": [
@@ -3006,7 +3006,7 @@
       ]
     },
     {
-      "path": "test/fixtures/shadow-read-deadlines-witnesses.json",
+      "path": "typescript/test/fixtures/shadow-read-deadlines-witnesses.json",
       "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
       "format": "named-list",
       "recipes": [

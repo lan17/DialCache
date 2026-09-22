@@ -45,7 +45,7 @@ export function checkFeatureCoverage(inventory = parse('formal/feature-coverage.
         if (ref.sha256 !== createHash('sha256').update(source).digest('hex')) throw new Error(`${c.id}: stale native evidence ${ref.path}`);
         if (!substantive(ref.scope)) throw new Error(`${c.id}: evidence scope is missing`);
         if (ref.command) {
-          if (language !== 'typescript' || ref.command !== 'corepack pnpm test:package' || ref.path !== 'scripts/test-package.mjs') {
+          if (language !== 'typescript' || ref.command !== 'corepack pnpm test:package' || ref.path !== 'typescript/scripts/test-package.mjs') {
             throw new Error(`${c.id}: unknown native validation command`);
           }
           continue;

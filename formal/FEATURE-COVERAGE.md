@@ -95,8 +95,8 @@ consequence. Some examples of the boundaries reviewed in this expansion are:
 
 Negative classifier controls keep the fixture or phase and remove or contradict
 its public consequence. They must reject that witness. The tests in
-[formal-witness-boundaries.test.ts](../test/formal-witness-boundaries.test.ts)
-and [formal-witness-attribution.test.ts](../test/formal-witness-attribution.test.ts)
+[formal-witness-boundaries.test.ts](../typescript/test/formal-witness-boundaries.test.ts)
+and [formal-witness-attribution.test.ts](../typescript/test/formal-witness-attribution.test.ts)
 exercise this distinction. They test evidence attribution, so they receive no
 positive behavioral-case or mutation-detection credit.
 

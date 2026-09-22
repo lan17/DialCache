@@ -288,14 +288,14 @@ function shardsMarkdown(report) {
 // report records the regression list (the Go report does; the TypeScript
 // report only fails on it).
 export const languages = {
-  ts: { name: 'TypeScript', port: 'typescript', output: '.formal-traces/semantic', catalog: mutantCatalogPath, inputs: ['src', 'test', 'formal'],
+  ts: { name: 'TypeScript', port: 'typescript', output: '.formal-traces/semantic', catalog: mutantCatalogPath, inputs: ['typescript/src', 'typescript/test', 'formal'],
     detection: (mutations, directory) => typescriptDetection(mutations, JSON.parse(readFileSync(resolve(directory, 'formal/semantic-cases.json'), 'utf8')).cases),
     markdown: typescriptMarkdown, recordsRegressions: false },
-  go: { name: 'Go', port: 'go', output: '.formal-traces/go-semantic', catalog: mutantCatalogPath, inputs: ['formal', 'go', 'test', 'src'],
+  go: { name: 'Go', port: 'go', output: '.formal-traces/go-semantic', catalog: mutantCatalogPath, inputs: ['formal', 'go', 'typescript/test', 'typescript/src'],
     detection: mutations => goDetection(mutations), markdown: goMarkdown, recordsRegressions: true },
   // The crate's unit tests read go/redis_adapter.go (script byte equality), so
   // the Go source is an input of the ordinary cohort as well.
-  rust: { name: 'Rust', boundaryEvidence: false, output: '.formal-traces/rust-semantic', catalog: 'formal/rust-mutations.json', inputs: ['formal', 'rust', 'test', 'src', 'go'], exclude: ['rust/target'],
+  rust: { name: 'Rust', boundaryEvidence: false, output: '.formal-traces/rust-semantic', catalog: 'formal/rust-mutations.json', inputs: ['formal', 'rust', 'typescript/test', 'typescript/src', 'go'], exclude: ['rust/target'],
     detection: mutations => goDetection(mutations), markdown: rustMarkdown, recordsRegressions: true },
 };
 
@@ -316,7 +316,7 @@ export function validateBoundaryReportFreshness(report, { directory = root } = {
     throw new Error(`Boundary gate: ${language.name} source inputs differ from the measured report`);
   }
   if (typescript) {
-    const configuration = ['package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'vitest.config.ts'];
+    const configuration = ['package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'typescript/package.json', 'typescript/tsconfig.json', 'typescript/vitest.config.ts'];
     const recorded = report.configurationSha256;
     if (!recorded || typeof recorded !== 'object' || Array.isArray(recorded) ||
         Object.keys(recorded).sort().join() !== [...configuration].sort().join() ||

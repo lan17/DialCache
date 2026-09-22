@@ -160,7 +160,7 @@ would catch that mistake in a port, not only that the model would. See the
 [authoring rules](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
 
 The weekly full workflow shards each mutation lane over the workflow matrix;
-`test/formal-validation.test.ts` pins how many mutants a shard may hold within
+`typescript/test/formal-validation.test.ts` pins how many mutants a shard may hold within
 its timeout, so catalog growth fails the pull request until the matrix grows.
 The Go lane bounded the whole run
 when it had 13 mutants on three shards (25 minutes on a fast runner, 47 to 48

@@ -187,14 +187,14 @@ Replay one failing feature history in TypeScript or Go:
 
 ```sh
 DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/regressions/shadow/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest.itf.json \
-  corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false
+  corepack pnpm --dir typescript exec vitest run test/formal-features.test.ts --coverage.enabled=false
 DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/regressions/shadow/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest.itf.json" \
   go -C go test -race -count=1 -run '^TestFeatureConformance$' ./...
 ```
 
 Core/effects use `DIALCACHE_MBT_TRACE_FILE` or `DIALCACHE_EFFECTS_TRACE_FILE`
 and their corresponding tests. Local-clock uses feature selectors with
-`test/formal-local-clock.test.ts` and the Go local-clock replay.
+`typescript/test/formal-local-clock.test.ts` and the Go local-clock replay.
 The [walkthrough](./WALKTHROUGH.md#run-this-example) shows one history replayed
 in all three languages, including Rust's feature-history selectors.
 

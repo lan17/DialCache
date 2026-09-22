@@ -56,7 +56,7 @@ export function snapshotSources(directory, destination, paths) {
   for (const path of [...new Set(paths)].sort()) {
     if (typeof path !== 'string' || !path || path.startsWith('/') || path.includes('\\')
       || path.split('/').some(part => !part || part === '.' || part === '..')) throw new Error(`Invalid exploration source path: ${path}`);
-    if (['.git', 'node_modules', '.formal-traces'].some(name => path === name || path.startsWith(name + '/'))) {
+    if (['.git', 'node_modules', 'typescript/node_modules', '.formal-traces'].some(name => path === name || path.startsWith(name + '/'))) {
       throw new Error(`Generated/runtime inputs cannot enter the source snapshot: ${path}`);
     }
     let source = sourceRoot, missing = false;
@@ -240,12 +240,19 @@ function savedExploration(path) {
 }
 
 function linkDependencies(directory, workspace, sources, replay) {
-  if (replay) for (const path of ['package.json', 'pnpm-lock.yaml']) {
+  if (replay) for (const path of ['package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'typescript/package.json']) {
     if (!Object.hasOwn(sources, path) || hash(readFileSync(resolve(directory, path))) !== sources[path]) {
       throw new Error(`Saved ${path} differs from the current dependency runtime; replay requires matching package and lockfile bytes.`);
     }
   }
   symlinkSync(resolve(directory, 'node_modules'), resolve(workspace, 'node_modules'), 'dir');
+  try {
+    mkdirSync(resolve(workspace, 'typescript'), { recursive: true });
+    symlinkSync(resolve(directory, 'typescript/node_modules'), resolve(workspace, 'typescript/node_modules'), 'dir');
+  } catch (error) {
+    unlinkSync(resolve(workspace, 'node_modules'));
+    throw error;
+  }
 }
 
 export async function explore(seed, options = {}) {
@@ -375,7 +382,9 @@ async function executeExploration(seed, { directory = root, environment = proces
     // Unlink only the known runtime link. Initialization errors also receive a
     // finished report and cannot leave a permanently "running" artifact.
     let cleanupError;
-    try { if (dependencyLink) unlinkSync(resolve(workspace, 'node_modules')); }
+    try {
+      if (dependencyLink) for (const path of ['typescript/node_modules', 'node_modules']) unlinkSync(resolve(workspace, path));
+    }
     catch (error) { cleanupError = error; report.status = 'infrastructure-failure'; report.cleanupError = String(error); }
     report.finishedAt = new Date().toISOString(); save();
     if (cleanupError) throw cleanupError;

@@ -7,10 +7,10 @@ import { CommandFailure, printGroup, runPool, seconds, spawnBuffered } from './q
 // The kernel library's transitions are pure, so the seams a scheduled profile
 // may not reach yet (held policy replies, release order, coalescing off,
 // closure between admission and release) are exercised by small profiles under
-// test/fixtures/kernel. Each typechecks and every declared run passes; the
+// formal/fixtures/kernel. Each typechecks and every declared run passes; the
 // check runs wherever Quint is present (the model check and the differential
 // lanes) so a library change cannot move them unnoticed.
-export const fixtureDirectory = 'test/fixtures/kernel';
+export const fixtureDirectory = 'formal/fixtures/kernel';
 
 export function kernelFixtures(directory = root) {
   return readdirSync(resolve(directory, fixtureDirectory)).filter(name => name.endsWith('.qnt')).sort()

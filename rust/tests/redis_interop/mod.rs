@@ -42,13 +42,13 @@ impl TypeScript {
         let script = Self { directory, root };
         // Use tsup's declared esbuild dependency, exactly as the Go integration
         // does, and import current production TypeScript rather than a fixture codec.
-        let build = "const {createRequire}=require('node:module');const {buildSync}=createRequire(require.resolve('tsup'))('esbuild');buildSync({entryPoints:[process.argv[1]],outfile:process.argv[2],bundle:true,platform:'node',format:'cjs'});";
+        let build = "const {createRequire}=require('node:module');const {buildSync}=createRequire(require.resolve('tsup'))('esbuild');buildSync({entryPoints:[process.argv[1]],outfile:process.argv[2],bundle:true,platform:'node',format:'cjs',nodePaths:[require('node:path').resolve('node_modules')]});";
         let output = Command::new("node")
             .arg("-e")
             .arg(build)
             .arg(script.root.join("go/redis_interop.ts"))
             .arg(script.directory.join("interop.cjs"))
-            .current_dir(&script.root)
+            .current_dir(script.root.join("typescript"))
             .output()
             .expect("bundle TypeScript interop");
         assert!(

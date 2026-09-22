@@ -60,9 +60,9 @@ its own watermark observation.
 
 <LanguageContent language="typescript">
 
-<<< @/../examples/typescript/docs.mts#tracked-invalidation{typescript}
+<<< @/../typescript/examples/docs.mts#tracked-invalidation{typescript}
 
-[Complete executable example](https://github.com/lan17/DialCache/blob/main/examples/typescript/docs.mts)
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/typescript/examples/docs.mts)
 
 </LanguageContent>
 

@@ -1,6 +1,6 @@
 module compression {
   // The compression channel: the outcome each decode reports as it is
-  // dispatched (`src/internal/compression.ts`: "decompressed" for a compressed
+  // dispatched (`typescript/src/internal/compression.ts`: "decompressed" for a compressed
   // frame, "fallback_raw" for one whose compressed bytes fail to decode,
   // nothing for an uncompressed frame), what the drivers' `compression`
   // channel records. The held remote lifecycle holds a decode at two

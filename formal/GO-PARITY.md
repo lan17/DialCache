@@ -144,7 +144,7 @@ case inventory, required witnesses, and reports together.
 `sourceInventory` maps each TypeScript production file to reviewed Go
 bindings: the named Go symbols, a mapping rationale and the hashes of both
 sides, which reject a stale review. The file's declarations are scanned from
-`src/` at check time and counted in `inventory.sourceDeclarations`; they are
+`typescript/src/` at check time and counted in `inventory.sourceDeclarations`; they are
 navigation, not stored rows, and a mapping is a review record, not an
 equivalence claim. `reviewedTestAndDocumentationAudit` gives each test and
 documentation file in [source-audit.json](source-audit.json) an explicit

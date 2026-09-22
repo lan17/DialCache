@@ -1,9 +1,9 @@
 module metrics {
   // The observer's metric events over the remote layer (C30, C57 to C59):
   // the ordered trail the implementations report to their metrics callback
-  // (`src/internal/redis-cache.ts` `getWithResolvedConfig`,
+  // (`typescript/src/internal/redis-cache.ts` `getWithResolvedConfig`,
   // `startRawPayloadRead`, `putWithLayer`, `deserializePayload`;
-  // `src/dialcache.ts` the `disabled`, `coalesced`, `fallback` and
+  // `typescript/src/dialcache.ts` the `disabled`, `coalesced`, `fallback` and
   // `invalidation` metrics; `go/engine.go` the same) and the effects drivers
   // compare as `events`, one record per event: its name, the layer or scope
   // it names, its detail (a reason, an error category or an operation) and
@@ -142,7 +142,7 @@ module metrics {
     if (stamp > Clock::wallOf(state)) stamp - Clock::wallOf(state) else 0
   }
   // The reason a visible frame the read declined reports, the stored frame's
-  // stamp or a queued frame reply's judged alike (`src/internal/redis-cache.ts`
+  // stamp or a queued frame reply's judged alike (`typescript/src/internal/redis-cache.ts`
   // `frameAge` and `getWithResolvedConfig`, `go/engine.go` `readServing`):
   // `unclassified` for a stamp ahead of the wall clock, `expired` for an age
   // that reached the freshness (`cache_rules.freshAgeAllowed` declines the

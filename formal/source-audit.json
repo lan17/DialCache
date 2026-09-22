@@ -3,14 +3,14 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "c57210b637682308d7d5d16a01cdaa768ecf4a1949793d6cff3aa20e0836c978",
+      "sha256": "1d0274d140bd92908d92636aa7a08b298086f51c88d0b804ac98d7818d3d0e89",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01"]},
-        {"line":30,"title":"Install","contracts":["B01"]},
-        {"line":43,"title":"Usage","contracts":["C01","C05","W01"]},
-        {"line":87,"title":"How reads work","contracts":["C05","C31"]},
-        {"line":111,"title":"Runtime control","contracts":["C16","C18"]},
-        {"line":130,"title":"Documentation","contracts":["B01"]}
+        {"line":41,"title":"Install TypeScript","contracts":["B01"]},
+        {"line":54,"title":"Usage","contracts":["C01","C05","W01"]},
+        {"line":98,"title":"How reads work","contracts":["C05","C31"]},
+        {"line":122,"title":"Runtime control","contracts":["C16","C18"]},
+        {"line":141,"title":"Documentation","contracts":["B01"]}
       ]
     },
     {
@@ -37,7 +37,7 @@
     },
     {
       "path": "docs/authoring.md",
-      "sha256": "c35d73efa5ce269767b7d604110ac279e15c45e268eba34219a2d43ff3ca65e5",
+      "sha256": "e7eae5878313cbf0d3bfb40ea1061422b191092f98a9807c7ebbfd7745ece87b",
       "entries": [
         {"line":1,"title":"Writing shared documentation","contracts":["B01"]},
         {"line":8,"title":"Change a feature guide","contracts":["B01"]},
@@ -90,7 +90,7 @@
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "b1c46085d6874f132bdab3948eea7736014c0c95d90d4a619f7d1450d2552e3a",
+      "sha256": "db39e3695b74b7f4954897cba7f4eb0e7b95a9abc38f5a372305c8356f8bcd5e",
       "entries": [
         {"line":1,"title":"Configuration and rollout","contracts":["C16"]},
         {"line":11,"title":"What belongs where","contracts":["C16","B01"]},
@@ -105,7 +105,7 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "6398f11ab7014788c16d556d1a35e61a6a8cff90b57d80227af43ddbc776064d",
+      "sha256": "cc36915412c814ae3419cb7ed810797064e120ca69e93a0a9ff5e9f9534a9324",
       "entries": [
         {"line":1,"title":"Getting started","contracts":["B01"]},
         {"line":13,"title":"Install","contracts":["B01"]},
@@ -130,7 +130,7 @@
     },
     {
       "path": "docs/invalidation.md",
-      "sha256": "50e7285a64dcd2ab7eda3da84935fc92213274c0ac7049355e041946dabf31f4",
+      "sha256": "3e47aa71fb2e1a6bd8e98e76c0373a8f79085f8fc2a93182ec8ea8bac6c4e110",
       "entries": [
         {"line":1,"title":"Targeted invalidation","contracts":["C32"]},
         {"line":10,"title":"Watermarks: an entity-wide cutoff","contracts":["C32","C33"]},
@@ -191,7 +191,7 @@
     },
     {
       "path": "docs/languages/typescript.md",
-      "sha256": "d70b582af357505d4a67073c9b72e2a385c4993a4cc858ce0716ae6740ae7641",
+      "sha256": "8f6706c33d8e712a9ef70acec8d212a4db20cd206c1b2d04a0c7b2f18f0f1bb7",
       "entries": [
         {"line":1,"title":"TypeScript integration","contracts":["B01"]},
         {"line":9,"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -203,17 +203,17 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "ef9c0a2efe6ab64a40078fe6e19a1f4dd4d381189e9188268d66b3c3f7ee008f",
+      "sha256": "a58711063ad6dab84b70b5e4be6a8201c6595f7e0b2ca262e930b7993269be1e",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
         {"line":61,"title":"Maintaining the reference","contracts":["E05","B01"]},
-        {"line":85,"title":"Run the documentation site","contracts":["B01"]},
-        {"line":112,"title":"Publish to GitHub Pages","contracts":["B01"]},
-        {"line":128,"title":"Cache-path benchmark","contracts":["X02"]},
-        {"line":150,"title":"Redis write benchmark","contracts":["X02"]},
-        {"line":173,"title":"Stale-on-error benchmark","contracts":["X02"]},
-        {"line":201,"title":"Releasing","contracts":["B01","E05"]}
+        {"line":107,"title":"Run the documentation site","contracts":["B01"]},
+        {"line":134,"title":"Publish to GitHub Pages","contracts":["B01"]},
+        {"line":150,"title":"Cache-path benchmark","contracts":["X02"]},
+        {"line":172,"title":"Redis write benchmark","contracts":["X02"]},
+        {"line":195,"title":"Stale-on-error benchmark","contracts":["X02"]},
+        {"line":223,"title":"Releasing","contracts":["B01","E05"]}
       ]
     },
     {
@@ -312,14 +312,26 @@
       ]
     },
     {
-      "path": "test/compression-error.test.ts",
+      "path": "typescript/README.md",
+      "sha256": "c57210b637682308d7d5d16a01cdaa768ecf4a1949793d6cff3aa20e0836c978",
+      "entries": [
+        {"line":1,"title":"DialCache","contracts":["B01"]},
+        {"line":30,"title":"Install","contracts":["B01"]},
+        {"line":43,"title":"Usage","contracts":["C01","C05","W01"]},
+        {"line":87,"title":"How reads work","contracts":["C05","C31"]},
+        {"line":111,"title":"Runtime control","contracts":["C16","C18"]},
+        {"line":130,"title":"Documentation","contracts":["B01"]}
+      ]
+    },
+    {
+      "path": "typescript/test/compression-error.test.ts",
       "sha256": "583e166affcc0066341bea9278ea345441aa9bde6f9fec2d14a70e207b52519d",
       "entries": [
         {"line":45,"title":"records the compression error kind once, fails open, and stores nothing","contracts":["C27","X02"]}
       ]
     },
     {
-      "path": "test/compression-guard.test.ts",
+      "path": "typescript/test/compression-guard.test.ts",
       "sha256": "36ce809ae856d31fbaaabcdc005583c8f25f6e9a4a620abe98c25a2984c44556",
       "entries": [
         {"line":14,"title":"fails fast at construction when compression is enabled","contracts":["X02"]},
@@ -327,7 +339,7 @@
       ]
     },
     {
-      "path": "test/compression.test.ts",
+      "path": "typescript/test/compression.test.ts",
       "sha256": "f959a21148ad1803f7c4870ee0ceacf494a1b43aa6b558974541dd9dab7612bf",
       "entries": [
         {"line":28,"title":"enables compression with documented defaults when unset","contracts":["W07","B01"]},
@@ -358,7 +370,7 @@
       ]
     },
     {
-      "path": "test/datadog.test.ts",
+      "path": "typescript/test/datadog.test.ts",
       "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65",
       "entries": [
         {"line":158,"title":"maps every DialCache metric to the default metric namespace with exact names, values, and tags","contracts":["X01"]},
@@ -377,7 +389,7 @@
       ]
     },
     {
-      "path": "test/dialcache-coalescing.test.ts",
+      "path": "typescript/test/dialcache-coalescing.test.ts",
       "sha256": "f782ce3db6051a6b46dc3403311e247f7752eddbafbd20fdbbcd54c0fa7f0fdb",
       "entries": [
         {"line":51,"title":"coalesces concurrent local misses when the local layer is active","contracts":["C11"]},
@@ -403,7 +415,7 @@
       ]
     },
     {
-      "path": "test/dialcache-compression.test.ts",
+      "path": "typescript/test/dialcache-compression.test.ts",
       "sha256": "8a7235d78ba4cdc0526d04c2e4901b86fc1a79e683b40af5cc9bdbad0a0418fa",
       "entries": [
         {"line":76,"title":"skips a fenced large tracked refill before serialization and compression","contracts":["C34"]},
@@ -421,7 +433,7 @@
       ]
     },
     {
-      "path": "test/dialcache-config-ramp.test.ts",
+      "path": "typescript/test/dialcache-config-ramp.test.ts",
       "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa",
       "entries": [
         {"line":30,"title":"rejects the removed public ramp sampler override","contracts":["B01"]},
@@ -463,7 +475,7 @@
       ]
     },
     {
-      "path": "test/dialcache-get-or-load.test.ts",
+      "path": "typescript/test/dialcache-get-or-load.test.ts",
       "sha256": "e80d66b1f509806a3a7dc6beb02eb05ed154516999a886d8a6168cfd557ddc67",
       "entries": [
         {"line":69,"title":"reuses a stable use case without registering it and still rejects the reserved name","contracts":["B01"]},
@@ -479,7 +491,7 @@
       ]
     },
     {
-      "path": "test/dialcache-invalidation.test.ts",
+      "path": "typescript/test/dialcache-invalidation.test.ts",
       "sha256": "1eb03e2a07f10abfb60fd522a17f8949d762a48d0432adff8b44a38745547105",
       "entries": [
         {"line":87,"title":"invalidates all tracked use cases sharing a key type and id","contracts":["C32"]},
@@ -510,7 +522,7 @@
       ]
     },
     {
-      "path": "test/dialcache-liveness.test.ts",
+      "path": "typescript/test/dialcache-liveness.test.ts",
       "sha256": "2d51e3a6123f4b056fdfbaabb3847ddcfdc8493d73a0f93c3d00c7ba425a809f",
       "entries": [
         {"line":78,"title":"defaults to 60 seconds and shares the leader deadline with process followers","contracts":["C23","C24"]},
@@ -543,7 +555,7 @@
       ]
     },
     {
-      "path": "test/dialcache-local.test.ts",
+      "path": "typescript/test/dialcache-local.test.ts",
       "sha256": "743f881019970183e744c8c848b9ca9651a21635d2310dcb3e11c2993bc7337e",
       "entries": [
         {"line":40,"title":"keeps caching disabled by default","contracts":["C01"]},
@@ -587,7 +599,7 @@
       ]
     },
     {
-      "path": "test/dialcache-logger.test.ts",
+      "path": "typescript/test/dialcache-logger.test.ts",
       "sha256": "ce801ec2f2dd8b028092ed240fef5b7db4a50d245e28a04fe24cb08873c4c502",
       "entries": [
         {"line":34,"title":"consumes rejecting thenables returned by every logger method without awaiting them","contracts":["C30","B02"]},
@@ -600,7 +612,7 @@
       ]
     },
     {
-      "path": "test/dialcache-metrics.test.ts",
+      "path": "typescript/test/dialcache-metrics.test.ts",
       "sha256": "ce0e770bbaf97621c97ea329fd513e27810a9fc27aa6f736f1ad1e1f8ffb528e",
       "entries": [
         {"line":25,"title":"accepts only the bounded miss reasons, not inherited keys or non-string values","contracts":["C55","C58"]},
@@ -631,7 +643,7 @@
       ]
     },
     {
-      "path": "test/dialcache-observability-internals.test.ts",
+      "path": "typescript/test/dialcache-observability-internals.test.ts",
       "sha256": "70e8901dd77e950362f14085989cd0560b9c9bb01f013cdca4bf5b3a9903eb8e",
       "entries": [
         {"line":13,"title":"merges every runtime policy leaf independently","contracts":["C16"]},
@@ -640,7 +652,7 @@
       ]
     },
     {
-      "path": "test/dialcache-redis-read-deadline.test.ts",
+      "path": "typescript/test/dialcache-redis-read-deadline.test.ts",
       "sha256": "177808835689a92414d37b6aaf0c03dd63d771854e6a182869fe0ad193da62a6",
       "entries": [
         {"line":96,"title":"uses the library default and resolves instance, static, and runtime precedence","contracts":["C23"]},
@@ -661,7 +673,7 @@
       ]
     },
     {
-      "path": "test/dialcache-redis.test.ts",
+      "path": "typescript/test/dialcache-redis.test.ts",
       "sha256": "f0adbf2e0fbc9e1359ba255ce7b29019568e534a20d1e27af5a3177a4df061a0",
       "entries": [
         {"line":51,"title":"reads local miss from Redis and populates the local layer","contracts":["C05"]},
@@ -694,7 +706,7 @@
       ]
     },
     {
-      "path": "test/dialcache-request-local.test.ts",
+      "path": "typescript/test/dialcache-request-local.test.ts",
       "sha256": "1384b1755481a5fcc2234b2d38361c411751e651745f8d22f58a0ccd2c21b200",
       "entries": [
         {"line":25,"title":"memoizes sequential request-local-only reads without sharing across outer scopes","contracts":["C07"]},
@@ -712,7 +724,7 @@
       ]
     },
     {
-      "path": "test/dialcache-shadow-confirmation.test.ts",
+      "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
       "sha256": "98d38eaf23999cdb1072ba0f9136c7ef028f59f45f58984b41fe2969920b36b1",
       "entries": [
         {"line":275,"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
@@ -768,7 +780,7 @@
       ]
     },
     {
-      "path": "test/dialcache-shadow-validation.test.ts",
+      "path": "typescript/test/dialcache-shadow-validation.test.ts",
       "sha256": "be19562adbd0ec05f0f5c3113fb03331e1506b21cbcb046da7b5055f7aa42f31",
       "entries": [
         {"line":182,"title":"returns a Redis hit before starting the detached source read","contracts":["C48"]},
@@ -810,7 +822,7 @@
       ]
     },
     {
-      "path": "test/dialcache-stale-on-error.test.ts",
+      "path": "typescript/test/dialcache-stale-on-error.test.ts",
       "sha256": "4a7f88315dd6b4c4728f159d173bc9b3b3a5ded341a943130683847e9894c601",
       "entries": [
         {"line":183,"title":"serves the raw stale candidate retained by the initial Redis read without publication","contracts":["C40","C43"]},
@@ -847,7 +859,7 @@
       ]
     },
     {
-      "path": "test/dialcache-stale-recovery-policy.test.ts",
+      "path": "typescript/test/dialcache-stale-recovery-policy.test.ts",
       "sha256": "0cd3257da5c88748802579c663b3c5e3bad13a53fadb8e1ed448a1b2a92a65e8",
       "entries": [
         {"line":86,"title":"validates the instance predicate at construction","contracts":["B01"]},
@@ -867,7 +879,7 @@
       ]
     },
     {
-      "path": "test/duration.test.ts",
+      "path": "typescript/test/duration.test.ts",
       "sha256": "0595adefcbe4fbb8e66fbd9c97c7530f6628a64b861e1be000bb0ad904c03453",
       "entries": [
         {"line":14,"title":"uses one fixed 365-day ceiling for TTLs and invalidation buffers","contracts":["W05","C39"]},
@@ -877,7 +889,7 @@
       ]
     },
     {
-      "path": "test/node-redis.test.ts",
+      "path": "typescript/test/node-redis.test.ts",
       "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f",
       "entries": [
         {"line":92,"title":"keeps invalidation independent of the Redis server clock","contracts":["E01","C39"]},
@@ -910,7 +922,7 @@
       ]
     },
     {
-      "path": "test/prometheus.test.ts",
+      "path": "typescript/test/prometheus.test.ts",
       "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602",
       "entries": [
         {"line":151,"title":"keeps default DialCache construction detached from Prometheus","contracts":["X01"]},
@@ -935,7 +947,7 @@
       ]
     },
     {
-      "path": "test/redis-cluster.integration.test.ts",
+      "path": "typescript/test/redis-cluster.integration.test.ts",
       "sha256": "7c6f642d578cab1b1237743a305bc8d9c315267e94057c61fd67ed2ba4f8bc66",
       "entries": [
         {"line":152,"title":"routes cache operations across slots and reloads invalidation scripts per node","contracts":["E01","W09"]},
@@ -946,7 +958,7 @@
       ]
     },
     {
-      "path": "test/redis-payload.test.ts",
+      "path": "typescript/test/redis-payload.test.ts",
       "sha256": "6e672444310a10ca4bd806e37db5b9118c0e6784dbb0b2f7074e81689e23f03f",
       "entries": [
         {"line":31,"title":"shares one nonnegative safe-integer timestamp domain without coercing values","contracts":["W04"]},
@@ -971,8 +983,8 @@
       ]
     },
     {
-      "path": "test/redis-real.integration.test.ts",
-      "sha256": "cb04c5891e64534319a983e45176e83ffe4c53e6cc6e2f1decd89b87ce636e5a",
+      "path": "typescript/test/redis-real.integration.test.ts",
+      "sha256": "37e311c65c2329cef4942b7e485d5e652cdaf5738a19dc4b7c3a269a917c480c",
       "entries": [
         {"line":204,"title":"`portable invalidation: ${vector.name}`","contracts":["W09"]},
         {"line":265,"title":"round-trips untracked UTF-8, binary, and inline-loader values","contracts":["W04","B01"]},
@@ -1011,7 +1023,7 @@
       ]
     },
     {
-      "path": "test/shadow-log-json.test.ts",
+      "path": "typescript/test/shadow-log-json.test.ts",
       "sha256": "97d2a80d23bbe76574f97b0f569307a203279de4fa770a253603648325801467",
       "entries": [
         {"line":13,"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
@@ -1021,7 +1033,7 @@
       ]
     },
     {
-      "path": "test/valkey-glide.test.ts",
+      "path": "typescript/test/valkey-glide.test.ts",
       "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db",
       "entries": [
         {"line":137,"title":"uses GET and a non-atomic primary MGET batch that preserves caller WATCH state","contracts":["E01"]},
@@ -1053,7 +1065,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "075518a6ba47105559d73adc04d44fb29213626ebca9bb102991d24745d895fd",
+      "sha256": "bb0a72dd729b4b5f3cb2b922bb92233c2e6aac0a7dcd4b2038c1b54b489d4086",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":20,"title":"Reading a model"},
@@ -1075,7 +1087,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "8efeb741c004ee558f7d1d64b9cccc059577a25f9d0fbe62b9f9612206cb64d7",
+      "sha256": "ee7e2809fe5a06a3252ffcd6089cf2e9b4f78548008b56853e5641889121896b",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1202,7 +1214,7 @@
     },
     {
       "path": "formal/CONTRACTS.md",
-      "sha256": "022a0f5ad14944f3cdfd34ef0bf4ed7a621fd3d16bdfcc97a809ff89515707cf",
+      "sha256": "6c760c76f666b32cdacab7e65822529de0d24b241c0b463327ea8eaff61b8b8f",
       "entries": [
         {"line":1,"title":"Portable contract inventory"},
         {"line":11,"title":"Where the boundary lies"},
@@ -1305,7 +1317,7 @@
     },
     {
       "path": "formal/FEATURE-COVERAGE.md",
-      "sha256": "7fd6d5342cade1c22661461377cc7efa8e493e4b96d34f0b9580e9beac260329",
+      "sha256": "ef55f7f4ac68fe36051eb92f210c3bc9979e20819714f842e5b52338cd15b63c",
       "entries": [
         {"line":1,"title":"DialCache features and known behavioral corners"},
         {"line":16,"title":"What is accounted for"},
@@ -1321,7 +1333,7 @@
     },
     {
       "path": "formal/GO-PARITY.md",
-      "sha256": "2db023f6fa8c8c7c654cb52a53499cd1041615be300eda4925b1ef7420db4e31",
+      "sha256": "70604b4aad0e3e2c538105eb36d8c4f349c11935ae3fdae9469c7117e4e3e4a1",
       "entries": [
         {"line":1,"title":"Go parity acceptance"},
         {"line":52,"title":"Required evidence"},
@@ -1336,7 +1348,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "162d0705af154099408b23b1df229ecde54df610d02cf91c7ca5989f5f7d9b12",
+      "sha256": "6c22b3278ea14136fbf3dbcdc8725d053666cbead44a79683023b3f4235be0a9",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1395,7 +1407,7 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "adbbb453df3db158427d1672d13a9c643bc0848208f3d89acd18923757f6f1ef",
+      "sha256": "4b9114d19cf627e6d1c3b8bf6d82f193633ae6cec8986a4147f46bedacb161af",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
@@ -1412,7 +1424,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "cdaf28072d154b3503be5939ef7828073832ff8044546019fa4c35b988781810",
+      "sha256": "c428c045c3df5d97cb0badff4d31e24d66ff0e0e963dbef4c8b91c87d6074a3a",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1521,7 +1533,7 @@
     },
     {
       "path": "formal/TEST-AUDIT.md",
-      "sha256": "f47b807c67457895122a24fa3a57cafc11738320ff9675e446d65f1a00430cf5",
+      "sha256": "fda74847092b768ceb216d34f43465f5323b2bea3ddf9f97871d9fba17fca714",
       "entries": [
         {"line":1,"title":"Docs and test behavior audit"},
         {"line":13,"title":"Keeping the audit current"},
@@ -1530,12 +1542,12 @@
       ],
       "review": {
         "kind": "coverage-guide",
-        "scope": "Public test/documentation applicability and formal/Go guide review, with freshness guards and explicit limits of section-level mapping. Removed historical expansion logs; current evidence and versioned historical records are linked."
+        "scope": "Public typescript/test/documentation applicability and formal/Go guide review, with freshness guards and explicit limits of section-level mapping. Removed historical expansion logs; current evidence and versioned historical records are linked."
       }
     },
     {
       "path": "formal/TEST-MAP.md",
-      "sha256": "ae631913cf2665ef0971b56a40d400905268d35e91e92724ef6f4fe32b573b77",
+      "sha256": "1882a0a430c22b5d1a50741a3121cc77b7810cb2f9b0cb65500489d479bbd883",
       "entries": [
         {"line":1,"title":"Formal contract and implementation evidence map"},
         {"line":18,"title":"Behavioral map"},
@@ -1551,7 +1563,7 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "2feaf2ec97a22b0d4da5eb8c79302cbb4e12416e86762be90b5ab2ff632ee952",
+      "sha256": "38668ddd9b3a64dbf821018b6bd638eae8fea0c524275fcc754c165de2376fdf",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
@@ -1568,7 +1580,7 @@
     },
     {
       "path": "formal/WALKTHROUGH.md",
-      "sha256": "9473a46ff340a9f601fcfa41bb7c58656e3ee5e6eda12347b9ee1d0b1f8ad1b5",
+      "sha256": "e186d17ae2d9bea13c21863ae1c1f1bd7aa20f63f3aed06db72df4a2de7aba2d",
       "entries": [
         {"line":1,"title":"Follow one behavior from Quint to every port"},
         {"line":14,"title":"Read the named run first"},
