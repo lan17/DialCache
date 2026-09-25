@@ -350,7 +350,7 @@ pub fn percent_encode_component(text: &str) -> String {
 }
 
 /// Behavior profile versions this port implements, from
-/// `go/behavior_registry_test.go`.
+/// `go/internal/dialcache/behavior_registry_test.go`.
 pub const BEHAVIOR_PROFILE_VERSIONS: [(&str, i64); 16] = [
     ("recovery-read", 1),
     ("local-failure", 1),

@@ -17,7 +17,7 @@ import (
 func vectors(t *testing.T) map[string]json.RawMessage {
 	t.Helper()
 	requireRegistry(t)
-	raw, err := os.ReadFile("../formal/protocol-vectors.json")
+	raw, err := os.ReadFile("../../../formal/protocol-vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}

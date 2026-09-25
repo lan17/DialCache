@@ -82,11 +82,11 @@ using the published mapping, rather than supplying the predicted call result.
 | --- | --- |
 | Shared command mapping and fixture | [source-budgets.mjs](./replay/profiles/source-budgets.mjs), `sourceBudgetsProfile` |
 | TS real API execution | [behavior-driver.ts](../typescript/test/formal/behavior-driver.ts), `BehaviorDriver.apply` and `snapshot` |
-| Go real API execution | [behavior_driver_test.go](../go/behavior_driver_test.go), `behaviorDriver.apply` and `observation` |
+| Go real API execution | [behavior_driver_test.go](../go/internal/dialcache/behavior_driver_test.go), `behaviorDriver.apply` and `observation` |
 | Rust real API execution | [driver.rs](../rust/tests/formal/driver.rs), `Driver::apply` and `Driver::observation` |
 | Shared projection and per-step assertion | [features.mjs](./replay/features.mjs), `projectObservation` and `assertFeatureObservation` |
 | TS replay | [formal-features.test.ts](../typescript/test/formal-features.test.ts), `replay` |
-| Go replay transport | [feature_replay_test.go](../go/feature_replay_test.go), `TestFeatureConformance`, and [replay_coordinator_test.go](../go/replay_coordinator_test.go) |
+| Go replay transport | [feature_replay_test.go](../go/internal/dialcache/feature_replay_test.go), `TestFeatureConformance`, and [replay_coordinator_test.go](../go/internal/dialcache/replay_coordinator_test.go) |
 | Rust replay transport | [conformance.rs](../rust/tests/conformance.rs), `Run::replay_behavior`, and [transport.rs](../rust/tests/formal/transport.rs), `Coordinator::execute` |
 
 The shared fixture installs a real cache with a local TTL and a held runtime-policy

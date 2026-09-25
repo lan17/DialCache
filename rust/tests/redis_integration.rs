@@ -1,5 +1,5 @@
 //! Real-server tests of the `redis` adapter, mirroring
-//! `go/redis_integration_test.go`: Docker-started Redis 6.2, Redis 7 and
+//! `go/internal/dialcache/redis_integration_test.go`: Docker-started Redis 6.2, Redis 7 and
 //! Valkey 8 standalone servers plus a single-node Redis 7 cluster, each
 //! exercised for complete-frame round trips, watermark fencing, the
 //! `EVALSHA` to `EVAL` recovery after `SCRIPT FLUSH`, and the full
@@ -282,7 +282,7 @@ async fn primary_integer<C: RedisConnection>(connection: &C, key: &str, cmd: red
     }
 }
 
-/// `go/redis_integration_test.go` `testPrimaryRead` plus untracked reads:
+/// `go/internal/dialcache/redis_integration_test.go` `testPrimaryRead` plus untracked reads:
 /// stored bytes are the exact frame, a value write never extends the
 /// watermark, the fence is observed on the primary, and `SCRIPT FLUSH`
 /// forces the `EVALSHA` recovery through the real server.
@@ -804,7 +804,7 @@ async fn wait_for_replica_frame(replica: &mut MultiplexedConnection, key: &str, 
     }
 }
 
-/// `go/redis_integration_test.go` `testPrimaryRead`'s routing assertion on
+/// `go/internal/dialcache/redis_integration_test.go` `testPrimaryRead`'s routing assertion on
 /// a cluster that has a replica: with replica reads enabled on the client,
 /// every tracked `MGET` still executes on the slot primary and none on the
 /// replica, so a lagging replica can never hide a watermark. Each node's own

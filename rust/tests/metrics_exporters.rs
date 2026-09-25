@@ -178,7 +178,7 @@ fn datadog_metric_names_units_and_labels() {
     .expect("valid options");
     assert!(observer.observes_shadow_outcomes());
 
-    // (kind, suffix, method, value), copied from go/metrics_test.go.
+    // (kind, suffix, method, value), copied from go/internal/dialcache/metrics_test.go.
     let cases: [(MetricKind, &str, &str, f64); 19] = [
         (MetricKind::Request, "request.count", "increment", 1.0),
         (MetricKind::Miss, "miss.count", "increment", 1.0),
@@ -403,7 +403,7 @@ mod prometheus_exporter {
     const LAYER: &[&str] = &["cache_namespace", "use_case", "key_type", "layer"];
     const OUTCOME: &[&str] = &["cache_namespace", "use_case", "key_type", "outcome"];
 
-    /// Copied from go/metrics_prometheus.go PrometheusCollectorSchemas, in order.
+    /// Copied from go/internal/dialcache/metrics_prometheus.go PrometheusCollectorSchemas, in order.
     const EXPECTED: [Expected; 19] = [
         Expected {
             kind: "disabled",

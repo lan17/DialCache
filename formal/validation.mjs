@@ -166,7 +166,7 @@ export function validationPlan(target, { directory = root, environment = process
   // report can keep rejecting every actual skip, including required cases.
   const nativeGo = (full, { coverage = false } = {}) => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
     'test', '-race', '-count=1', ...(coverage ? ['-covermode=atomic', '-coverprofile=coverage-unit.out'] : []), ...(full ? ['-json', '-timeout=35m',
-      '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver|TestDocsTrackedInvalidation)$'] : []), './...'),
+      '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver)$'] : []), full ? './internal/dialcache' : './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   // The Rust conformance harness is one cargo test target. Without directory
   // selectors it replays the committed smoke histories; with them it replays

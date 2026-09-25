@@ -515,7 +515,7 @@ export const mutantIdPattern = /^M\d{2,}$/;
 // Where a port's edits may point and which cohorts its detections may require.
 export const mutantPorts = {
   typescript: { label: 'TypeScript', edit: /^typescript\/src\/[\w/-]+\.ts$/, cohorts: ['ordinary', 'generated', 'portable'] },
-  go: { label: 'Go', edit: /^go\/[\w-]+\.go$/, cohorts: ['ordinary', 'generated', 'fixed', 'portable'] },
+  go: { label: 'Go', edit: /^go\/(?:internal\/dialcache\/)?[\w-]+\.go$/, cohorts: ['ordinary', 'generated', 'fixed', 'portable'] },
 };
 const mutantFields = ['id', 'case', 'description', 'rationale', 'typescript', 'go'];
 

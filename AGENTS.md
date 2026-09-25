@@ -29,7 +29,8 @@ typescript/             # Published npm package, README and build configuration
   test/                 # Unit, Redis integration and shared-corpus replay tests
   examples/             # Executable native documentation examples
   scripts/              # Package checks and TypeScript benchmarks
-go/                     # Go module, public cache and adapters, shared-corpus replay
+go/                     # Go module and public API (stable import path)
+  internal/dialcache/    # Go implementation and native/shared-corpus tests
 rust/                   # Rust crate, public cache and adapters, shared-corpus replay (tests/conformance.rs)
 python/                 # Async Python package, borrowed Redis adapter, native tests and shared-corpus replay
 formal/                 # Quint behavioral source of truth, contracts and portable vectors
@@ -65,6 +66,9 @@ pnpm-lock.yaml          # Shared workspace dependency lockfile
   behavior in `docs/` and link it from `docs/index.md`.
 - Keep Redis client-specific behavior in adapters; core code depends on `DialCacheRedisClient`.
 - Public TypeScript exports belong in `typescript/src/index.ts` or an explicit integration entry point such as `typescript/src/node-redis.ts`, `typescript/src/prometheus.ts`, or `typescript/src/redis-protocol.ts`.
+- Public Go exports belong in `go/api.go`, `go/adapters.go`, or `go/protocol.go`.
+  Keep implementation and same-package tests in `go/internal/dialcache/`;
+  public examples and API compatibility checks use the root Go package.
 - Use `corepack pnpm` for project commands.
 - Run shared `make` targets and pnpm commands from the repository root; the
   private workspace package dispatches native TypeScript commands. Keep npm

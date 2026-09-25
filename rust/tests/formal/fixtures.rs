@@ -1,7 +1,7 @@
 //! Shared loading of the portable protocol vector corpus.
 //!
-//! Mirrors `go/protocol_test.go` `vectors()` and
-//! `go/generated_protocol_test.go`: the fixed vectors in
+//! Mirrors `go/internal/dialcache/protocol_test.go` `vectors()` and
+//! `go/internal/dialcache/generated_protocol_test.go`: the fixed vectors in
 //! `formal/protocol-vectors.json` are merged with every generated protocol
 //! artifact registered in `formal/execution.json`, after the artifact's
 //! provenance fingerprints are verified against the model sources.
@@ -112,7 +112,7 @@ pub use crate::digest::sha256_hex;
 
 /// Every generated protocol vector group registered in `formal/execution.json`,
 /// keyed by field name, after validating each artifact's schema, provenance
-/// and case inventory the way `go/generated_protocol_test.go` does.
+/// and case inventory the way `go/internal/dialcache/generated_protocol_test.go` does.
 pub fn quint_protocol_groups() -> BTreeMap<String, Vec<Value>> {
     let manifest: Value = serde_json::from_str(&read_repo_text("formal/execution.json"))
         .expect("parse formal/execution.json");
@@ -215,7 +215,7 @@ pub fn corpus_selection(default: &str) -> String {
 
 /// The fixed protocol vectors merged with the generated groups, keyed by
 /// group name. `selection` is the default corpus (`all`, `generated` or
-/// `fixed`); `DIALCACHE_PROTOCOL_CORPUS` overrides it like `go/protocol_test.go`.
+/// `fixed`); `DIALCACHE_PROTOCOL_CORPUS` overrides it like `go/internal/dialcache/protocol_test.go`.
 pub fn protocol_groups(selection: &str) -> BTreeMap<String, Vec<Value>> {
     let selection = corpus_selection(selection);
     assert!(

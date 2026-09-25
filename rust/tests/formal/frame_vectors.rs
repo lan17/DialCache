@@ -1,6 +1,6 @@
 //! Runners for the frame, decode, timestamp, duration and envelope vector
 //! groups of the portable protocol corpus. Each mirrors the corresponding
-//! part of `go/protocol_test.go` field for field.
+//! part of `go/internal/dialcache/protocol_test.go` field for field.
 
 use dialcache::limits::MAX_DECOMPRESSED_BYTES;
 use dialcache::observe::CompressionOutcome;

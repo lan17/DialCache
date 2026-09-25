@@ -64,7 +64,7 @@ func settlementControlProfiles(t *testing.T, coordinator *replayCoordinator) []s
 // if any, instead of failing the test: the caller decides what the error means.
 func replaySettlementControl(t *testing.T, coordinator *replayCoordinator, profile string, settle bool) error {
 	t.Helper()
-	prepared, err := coordinator.prepare(profile, filepath.Join("..", "formal", profile+"-smoke.itf.json"), nil)
+	prepared, err := coordinator.prepare(profile, filepath.Join("../../..", "formal", profile+"-smoke.itf.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

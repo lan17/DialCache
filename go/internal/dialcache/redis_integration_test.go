@@ -281,7 +281,7 @@ type invalidationState struct {
 }
 
 func testInvalidationVectors(t *testing.T, environment redisEnvironment) {
-	raw, err := os.ReadFile("../formal/invalidation-vectors.json")
+	raw, err := os.ReadFile("../../../formal/invalidation-vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func testInvalidationVectors(t *testing.T, environment redisEnvironment) {
 	// emitted by Quint; ordinary Redis runs reject stale model/generator inputs.
 	generated := corpus
 	generated.Vectors = nil
-	raw, err = os.ReadFile("../formal/quint-invalidation-vectors.json")
+	raw, err = os.ReadFile("../../../formal/quint-invalidation-vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func testInvalidationVectors(t *testing.T, environment redisEnvironment) {
 		t.Fatal("invalid Quint invalidation provenance")
 	}
 	for _, path := range []string{model, generator} {
-		source, err := os.ReadFile(filepath.Join("..", path))
+		source, err := os.ReadFile(filepath.Join("../../..", path))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -412,7 +412,7 @@ return {kind,content,ttl,tonumber(now[1])*1000+math.floor(tonumber(now[2])/1000)
 
 func runTypeScript(t *testing.T, environment redisEnvironment, actions []map[string]any) []map[string]any {
 	t.Helper()
-	root, err := filepath.Abs("..")
+	root, err := filepath.Abs("../../..")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +423,7 @@ func runTypeScript(t *testing.T, environment redisEnvironment, actions []map[str
 	// tsup is a declared dev dependency and owns the esbuild version. Bundling
 	// imports the current production TS source, never a duplicate fixture codec.
 	build := `const {createRequire}=require('node:module');const {buildSync}=createRequire(require.resolve('tsup'))('esbuild');buildSync({entryPoints:[process.argv[1]],outfile:process.argv[2],bundle:true,platform:'node',format:'cjs',nodePaths:[require('node:path').resolve('node_modules')]});`
-	command := exec.Command("node", "-e", build, filepath.Join(root, "go/redis_interop.ts"), bundle)
+	command := exec.Command("node", "-e", build, filepath.Join(root, "go/internal/dialcache/redis_interop.ts"), bundle)
 	command.Dir = filepath.Join(root, "typescript")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("bundle TS interop: %v\n%s", err, output)

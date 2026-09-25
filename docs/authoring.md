@@ -111,9 +111,9 @@ the full validation requirements in the formal authoring guide.
 
 ## Generated references and evidence
 
-TypeDoc reads TypeScript's exported entry points, `go doc -all` reads Go's public
-package, rustdoc reads the Rust crate with all features, and standard-library
-`pydoc` reads Python's public package and integration modules. Python uses the
+TypeDoc reads TypeScript's entry points. `go doc -all` reads Go's implementation
+behind its public aliases, using the public import in the generated header.
+rustdoc reads Rust with all features; `pydoc` reads Python's public modules. Python uses the
 interpreter in `PYTHON`, or `python/.venv/bin/python` by default. Their output and the
 [behavior catalogue](generated/behavior.md) are generated on every site build,
 ignored by Git, and published with the site. Edit public doc comments or the

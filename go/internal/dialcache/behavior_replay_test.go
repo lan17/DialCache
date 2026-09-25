@@ -9,7 +9,7 @@ import (
 )
 
 func loadBehaviorScenarios() ([]any, error) {
-	raw, err := os.ReadFile("../formal/behavioral-scenarios.json")
+	raw, err := os.ReadFile("../../../formal/behavioral-scenarios.json")
 	if err != nil {
 		return nil, err
 	}

@@ -2,11 +2,11 @@
 // imports. Inputs are operations and serialized values, never expected state.
 import { readFileSync } from "node:fs";
 import { createClient, createCluster } from "redis";
-import { createNodeRedisDialCacheClient } from "../typescript/src/node-redis.js";
-import { DialCacheKey, normalizeArgs } from "../typescript/src/key.js";
-import { JsonSerializer } from "../typescript/src/serializer.js";
-import { compressPayload, decompressPayload, escapeRawPayload } from "../typescript/src/internal/compression.js";
-import { isRedisReadMiss } from "../typescript/src/redis-client.js";
+import { createNodeRedisDialCacheClient } from "../../../typescript/src/node-redis.js";
+import { DialCacheKey, normalizeArgs } from "../../../typescript/src/key.js";
+import { JsonSerializer } from "../../../typescript/src/serializer.js";
+import { compressPayload, decompressPayload, escapeRawPayload } from "../../../typescript/src/internal/compression.js";
+import { isRedisReadMiss } from "../../../typescript/src/redis-client.js";
 
 async function main() {
   const input = JSON.parse(readFileSync(0, "utf8"));

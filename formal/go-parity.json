@@ -9,9 +9,9 @@
   },
   "inputs": {
     "semanticCasesSha256": "f3989f3032706ec6880ea29805dd1634964d868a2c3d99188adc6eaa1aac68ca",
-    "executionSha256": "bdb8428c4fc4b34d7eed84d60f53fce53331bc3d3f16433c720e34331a9ea64f",
-    "sourceAuditSha256": "27975bae3abdf8143f18d2d161982d35154cd74c597c1960404b8179e94a5ad9",
-    "featureCoverageSha256": "92c2961ec6a97d0bc0c7aeeac3041404ee3a7ed358b1a09ccab9de84b6abf047",
+    "executionSha256": "155d0626bc9279ca8580901798e3629ed6436f1dbf242cd6d73a0199c78fbc4f",
+    "sourceAuditSha256": "5cc5ee97e69724762b813ecb8ce77ae3d136dee1694b6c4b2827bd1bfec5b8b4",
+    "featureCoverageSha256": "38e722cd40359a84a35e4caedd67b5e0a2ca32b33be39d73b972f8970d9def15",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "15fbdb476b5ee9f39ea017ef5668d9c26cb7d53ebc96a6b7c4f531cccfa8d897"
   },
@@ -801,7 +801,7 @@
         "typescript": ".formal-traces/ts-replay.json",
         "go": ".formal-traces/go-replay.jsonl",
         "nativeGo": [
-          "go/clock_precision_test.go"
+          "go/internal/dialcache/clock_precision_test.go"
         ],
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof.",
         "nativeScope": "Native TestPreciseSourceDeadline preserves the full source-relative budget when an invocation begins between millisecond boundaries, including submillisecond success/error completion and source-relative diagnostics; TestPreciseDeadlineRechecksEarlyTimer rejects early timer delivery as an independent deadline authority. This supplements the existing Quint source-start obligation; it does not add generated witnesses or independently prove exclusion of earlier cache-read time."
@@ -864,7 +864,7 @@
         "typescript": ".formal-traces/ts-replay.json",
         "go": ".formal-traces/go-replay.jsonl",
         "nativeGo": [
-          "go/clock_precision_test.go"
+          "go/internal/dialcache/clock_precision_test.go"
         ],
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof.",
         "nativeScope": "Native TestPreciseSourceDeadline supplements the existing exclusive settlement boundary with fractional invocation origins and success at or after the exact budget. This is clock-binding evidence; the existing Quint histories separately cover late settlement before timer delivery. No new generated coverage is claimed."
@@ -879,7 +879,7 @@
         "typescript": ".formal-traces/ts-replay.json",
         "go": ".formal-traces/go-replay.jsonl",
         "nativeGo": [
-          "go/clock_precision_test.go"
+          "go/internal/dialcache/clock_precision_test.go"
         ],
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof.",
         "nativeScope": "Native TestPreciseSourceDeadline preserves the original source error before the full source-relative budget and returns timeout at or after its exact boundary from a fractional invocation origin. This is clock-binding evidence; the existing Quint histories separately cover delayed timer delivery. No new generated coverage is claimed."
@@ -990,7 +990,7 @@
         "typescript": ".formal-traces/ts-replay.json",
         "go": ".formal-traces/go-replay.jsonl",
         "nativeGo": [
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       }
@@ -3097,7 +3097,7 @@
         "typescript": ".formal-traces/ts-replay.json",
         "go": ".formal-traces/go-replay.jsonl",
         "nativeGo": [
-          "go/redis_integration_test.go:TestRedisIntegration"
+          "go/internal/dialcache/redis_integration_test.go:TestRedisIntegration"
         ],
         "scope": "Only linked finite scenarios, required witnesses, scoped model checks and explicit native boundaries; not universal case proof."
       },
@@ -3259,10 +3259,10 @@
         "rationale": "One Go package exposes one non-generic Cache with generic Cached[T]/GetOrLoad[T] functions, a typed Operation[T] with a typed Codec and comparator, a time.Duration Policy with a typed or JSON-shaped runtime overlay, functional options and sentinel errors. Enable returns a scoped context and its close function, with callback helpers for the TypeScript shape; New returns ErrInvalidOption instead of panicking, operation validation returns errors, and functional options distinguish an omitted setting from an explicit zero or empty value. TypeScript entry-point/typechecking tests remain language-specific; observable validation and failure consequences still require Go tests.",
         "references": [
           "go/README.md",
-          "go/api.go",
-          "go/bindings.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ]
       },
       {
@@ -3270,12 +3270,12 @@
         "rationale": "Explicit context propagation, live callback-scoped holders, channels, goroutines and TimerClock/DeferredExecutor replace AsyncLocalStorage, promises and Node timer handles. Callback panics become typed errors, telemetry failures are contained, and abandonment cannot prove raw work or a Redis command stopped. Shared histories check deadline, ownership and failure consequences; native race and callback tests complement them. Native precision tests additionally bind the existing C23/C25 elapsed-time rules to fractional invocation origins: the default clock retains monotonic duration precision before subtraction, while legacy custom clocks retain their declared integer-millisecond resolution. The local-clock profile separately supplies fractional insertion/expiry and shared-instance-grid histories. Native tests supplement that generated local scope with precise source/read/shadow deadlines, early timer delivery and custom-clock compatibility; integer-tick profiles do not establish those additional precision boundaries.",
         "references": [
           "go/README.md",
-          "go/cache.go",
-          "go/deadline.go",
-          "go/cache_test.go",
-          "go/api_boundary_test.go",
-          "go/redis_adapter_test.go",
-          "go/clock_precision_test.go"
+          "go/internal/dialcache/cache.go",
+          "go/internal/dialcache/deadline.go",
+          "go/internal/dialcache/cache_test.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/redis_adapter_test.go",
+          "go/internal/dialcache/clock_precision_test.go"
         ]
       },
       {
@@ -3284,9 +3284,9 @@
         "references": [
           "go/README.md",
           "formal/PROTOCOL.md",
-          "go/codec.go",
-          "go/codec_test.go",
-          "go/protocol_test.go"
+          "go/internal/dialcache/codec.go",
+          "go/internal/dialcache/codec_test.go",
+          "go/internal/dialcache/protocol_test.go"
         ]
       },
       {
@@ -3294,11 +3294,11 @@
         "rationale": "Go exporter adapters preserve metric schemas through public client APIs. Prometheus reuse requires explicit truthful collector schema and registered identity because an empty native histogram cannot expose buckets; registry construction must not race with reconfiguration. Logger/observer panics are isolated, shadow previews are bounded, and exporter tests complement rather than replace portable diagnostic histories.",
         "references": [
           "go/README.md",
-          "go/metrics_prometheus.go",
-          "go/metrics_datadog.go",
-          "go/metrics_test.go",
-          "go/logging.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/metrics_prometheus.go",
+          "go/internal/dialcache/metrics_datadog.go",
+          "go/internal/dialcache/metrics_test.go",
+          "go/internal/dialcache/logging.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ]
       },
       {
@@ -3307,9 +3307,9 @@
         "references": [
           "go/README.md",
           "formal/PROTOCOL.md",
-          "go/codec_test.go",
-          "go/redis_adapter_test.go",
-          "go/redis_integration_test.go"
+          "go/internal/dialcache/codec_test.go",
+          "go/internal/dialcache/redis_adapter_test.go",
+          "go/internal/dialcache/redis_integration_test.go"
         ]
       }
     ]
@@ -3319,8 +3319,8 @@
       "path": "typescript/src/config.ts",
       "sha256": "3ece031f00acee5067f18db6a8eab35a725fd87e1525c60dfd9c578741953cbf",
       "candidateGoFiles": [
-        "go/policy.go",
-        "go/api.go"
+        "go/internal/dialcache/policy.go",
+        "go/internal/dialcache/api.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3331,7 +3331,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/policy.go",
+            "path": "go/internal/dialcache/policy.go",
             "symbols": [
               "Policy",
               "ShadowPolicy",
@@ -3343,7 +3343,7 @@
             "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
           },
           {
-            "path": "go/api.go",
+            "path": "go/internal/dialcache/api.go",
             "symbols": [
               "Option",
               "Operation",
@@ -3359,7 +3359,7 @@
       "path": "typescript/src/context.ts",
       "sha256": "11ba0a9181aa8bdd171d668a3d2909843c5e44c775425141741413dfb80c9631",
       "candidateGoFiles": [
-        "go/cache.go"
+        "go/internal/dialcache/cache.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3370,7 +3370,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/cache.go",
+            "path": "go/internal/dialcache/cache.go",
             "symbols": [
               "scope",
               "scopeState",
@@ -3389,8 +3389,8 @@
       "path": "typescript/src/datadog.ts",
       "sha256": "078ee508e948dcf997b556e6ab34d6c5e779c057dd588f2b7b16dee40fcf2c41",
       "candidateGoFiles": [
-        "go/metrics_datadog.go",
-        "go/metrics.go"
+        "go/internal/dialcache/metrics_datadog.go",
+        "go/internal/dialcache/metrics.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3401,7 +3401,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/metrics_datadog.go",
+            "path": "go/internal/dialcache/metrics_datadog.go",
             "symbols": [
               "DogStatsDClient",
               "DatadogMetricsOptions",
@@ -3411,7 +3411,7 @@
             "sha256": "84f56821e1234a7ae77569c1429d2385a13bedb1ce7d1a5186a1d808ebe6809b"
           },
           {
-            "path": "go/metrics.go",
+            "path": "go/internal/dialcache/metrics.go",
             "symbols": [
               "FailureIsolatedObserver",
               "metricLabels",
@@ -3426,13 +3426,13 @@
       "path": "typescript/src/dialcache.ts",
       "sha256": "90e83928537806591b4de1553c81dc542bb59615150b90d5897d929532e15702",
       "candidateGoFiles": [
-        "go/cache.go",
-        "go/bindings.go",
-        "go/engine.go",
-        "go/deadline.go",
-        "go/shadow.go",
-        "go/api.go",
-        "go/logging.go"
+        "go/internal/dialcache/cache.go",
+        "go/internal/dialcache/bindings.go",
+        "go/internal/dialcache/engine.go",
+        "go/internal/dialcache/deadline.go",
+        "go/internal/dialcache/shadow.go",
+        "go/internal/dialcache/api.go",
+        "go/internal/dialcache/logging.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3445,7 +3445,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/cache.go",
+            "path": "go/internal/dialcache/cache.go",
             "symbols": [
               "Cache",
               "New",
@@ -3457,7 +3457,7 @@
             "sha256": "ebe455e9e37f34ff2a96739dcc41ef17cd9309d05e7b38b5af16412cb1c6070c"
           },
           {
-            "path": "go/bindings.go",
+            "path": "go/internal/dialcache/bindings.go",
             "symbols": [
               "Cached",
               "GetCoalescingState",
@@ -3466,7 +3466,7 @@
             "sha256": "9bdd3c1c2639e9f888487adbece22c2e1eacaa465e5bb48f1a13e005629b2e32"
           },
           {
-            "path": "go/engine.go",
+            "path": "go/internal/dialcache/engine.go",
             "symbols": [
               "GetOrLoad",
               "singleFlight",
@@ -3479,7 +3479,7 @@
             "sha256": "dec40ccf22a779219c2ab8f02a96d7cf342294083d836c8b45f67c14afcc69f3"
           },
           {
-            "path": "go/deadline.go",
+            "path": "go/internal/dialcache/deadline.go",
             "symbols": [
               "awaitDeadline",
               "callSafely"
@@ -3487,7 +3487,7 @@
             "sha256": "4c96942152e994adc4171e4d30de2de8be83ab6b3a33ed62793cc86819ce2b97"
           },
           {
-            "path": "go/shadow.go",
+            "path": "go/internal/dialcache/shadow.go",
             "symbols": [
               "darkSource",
               "scheduleShadow",
@@ -3496,7 +3496,7 @@
             "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
           },
           {
-            "path": "go/api.go",
+            "path": "go/internal/dialcache/api.go",
             "symbols": [
               "Option",
               "Operation",
@@ -3505,7 +3505,7 @@
             "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
-            "path": "go/logging.go",
+            "path": "go/internal/dialcache/logging.go",
             "symbols": [
               "defaultLogger"
             ],
@@ -3518,8 +3518,8 @@
       "path": "typescript/src/errors.ts",
       "sha256": "a3ebca8ae9ed370d6601132fa69878696685ce12f5bb021e49df3ca746f369d3",
       "candidateGoFiles": [
-        "go/api.go",
-        "go/redis_adapter.go"
+        "go/internal/dialcache/api.go",
+        "go/internal/dialcache/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3530,7 +3530,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/api.go",
+            "path": "go/internal/dialcache/api.go",
             "symbols": [
               "FallbackTimeoutError",
               "RemoteReadTimeoutError",
@@ -3540,7 +3540,7 @@
             "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
-            "path": "go/redis_adapter.go",
+            "path": "go/internal/dialcache/redis_adapter.go",
             "symbols": [
               "RedisPayloadError",
               "RedisProtocolError"
@@ -3554,12 +3554,12 @@
       "path": "typescript/src/index.ts",
       "sha256": "bbf222cec750670240b0475f1e4ab8a071d86fee2a10c3e1d30b8d314d38be5d",
       "candidateGoFiles": [
-        "go/api.go",
-        "go/bindings.go",
-        "go/cache.go",
-        "go/policy.go",
-        "go/protocol.go",
-        "go/codec.go"
+        "go/internal/dialcache/api.go",
+        "go/internal/dialcache/bindings.go",
+        "go/internal/dialcache/cache.go",
+        "go/internal/dialcache/policy.go",
+        "go/internal/dialcache/protocol.go",
+        "go/internal/dialcache/codec.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3569,7 +3569,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/api.go",
+            "path": "go/internal/dialcache/api.go",
             "symbols": [
               "Option",
               "Operation",
@@ -3579,35 +3579,35 @@
             "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
-            "path": "go/bindings.go",
+            "path": "go/internal/dialcache/bindings.go",
             "symbols": [
               "Cached"
             ],
             "sha256": "9bdd3c1c2639e9f888487adbece22c2e1eacaa465e5bb48f1a13e005629b2e32"
           },
           {
-            "path": "go/cache.go",
+            "path": "go/internal/dialcache/cache.go",
             "symbols": [
               "New"
             ],
             "sha256": "ebe455e9e37f34ff2a96739dcc41ef17cd9309d05e7b38b5af16412cb1c6070c"
           },
           {
-            "path": "go/policy.go",
+            "path": "go/internal/dialcache/policy.go",
             "symbols": [
               "Policy"
             ],
             "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
           },
           {
-            "path": "go/protocol.go",
+            "path": "go/internal/dialcache/protocol.go",
             "symbols": [
               "Identity"
             ],
             "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
           },
           {
-            "path": "go/codec.go",
+            "path": "go/internal/dialcache/codec.go",
             "symbols": [
               "JSONCodec"
             ],
@@ -3620,8 +3620,8 @@
       "path": "typescript/src/internal/cache-result.ts",
       "sha256": "15c64e72fddce519c1c7c1135d69dc0207da9b0c374a18c9bd8e206765cb0773",
       "candidateGoFiles": [
-        "go/protocol.go",
-        "go/engine.go"
+        "go/internal/dialcache/protocol.go",
+        "go/internal/dialcache/engine.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3632,7 +3632,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/protocol.go",
+            "path": "go/internal/dialcache/protocol.go",
             "symbols": [
               "ReadResult",
               "RawReadResult",
@@ -3641,7 +3641,7 @@
             "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
           },
           {
-            "path": "go/engine.go",
+            "path": "go/internal/dialcache/engine.go",
             "symbols": [
               "remoteValue",
               "localResult"
@@ -3655,7 +3655,7 @@
       "path": "typescript/src/internal/compression.ts",
       "sha256": "3d4e2bcdeafb297e2f4b677b6d4ef82bde7b962d03362c810f095278ccb94320",
       "candidateGoFiles": [
-        "go/codec.go"
+        "go/internal/dialcache/codec.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3666,7 +3666,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/codec.go",
+            "path": "go/internal/dialcache/codec.go",
             "symbols": [
               "CompressionConfig",
               "ResolveCompressionConfig",
@@ -3684,8 +3684,8 @@
       "path": "typescript/src/internal/deadline.ts",
       "sha256": "5c5d218d7ec2b1f08745c9d9234e4523af8c3af3f2e6c3dd9620730ae5a2584c",
       "candidateGoFiles": [
-        "go/deadline.go",
-        "go/api.go"
+        "go/internal/dialcache/deadline.go",
+        "go/internal/dialcache/api.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3695,7 +3695,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/deadline.go",
+            "path": "go/internal/dialcache/deadline.go",
             "symbols": [
               "pending",
               "startPending",
@@ -3707,7 +3707,7 @@
             "sha256": "4c96942152e994adc4171e4d30de2de8be83ab6b3a33ed62793cc86819ce2b97"
           },
           {
-            "path": "go/api.go",
+            "path": "go/internal/dialcache/api.go",
             "symbols": [
               "Clock",
               "PreciseClock",
@@ -3723,8 +3723,8 @@
       "path": "typescript/src/internal/duration.ts",
       "sha256": "fb9333221f4e0dbb0815e75451df36d659d27e21d6cfb537cdf86746cdb5be91",
       "candidateGoFiles": [
-        "go/protocol.go",
-        "go/policy.go"
+        "go/internal/dialcache/protocol.go",
+        "go/internal/dialcache/policy.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3734,7 +3734,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/protocol.go",
+            "path": "go/internal/dialcache/protocol.go",
             "symbols": [
               "MaxSafeInteger",
               "MaxSupportedDurationMS",
@@ -3745,7 +3745,7 @@
             "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
           },
           {
-            "path": "go/policy.go",
+            "path": "go/internal/dialcache/policy.go",
             "symbols": [
               "MaxDeadlineMS",
               "policyTTLMS",
@@ -3760,9 +3760,9 @@
       "path": "typescript/src/internal/local-cache.ts",
       "sha256": "506914e17cfdddacbf2c84e01c6893fe0dc87d509e7688cfc1718d0584470527",
       "candidateGoFiles": [
-        "go/cache.go",
-        "go/engine.go",
-        "go/api.go"
+        "go/internal/dialcache/cache.go",
+        "go/internal/dialcache/engine.go",
+        "go/internal/dialcache/api.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3774,7 +3774,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/cache.go",
+            "path": "go/internal/dialcache/cache.go",
             "symbols": [
               "entry",
               "localGet",
@@ -3783,7 +3783,7 @@
             "sha256": "ebe455e9e37f34ff2a96739dcc41ef17cd9309d05e7b38b5af16412cb1c6070c"
           },
           {
-            "path": "go/engine.go",
+            "path": "go/internal/dialcache/engine.go",
             "symbols": [
               "putLocal",
               "shared"
@@ -3791,7 +3791,7 @@
             "sha256": "dec40ccf22a779219c2ab8f02a96d7cf342294083d836c8b45f67c14afcc69f3"
           },
           {
-            "path": "go/api.go",
+            "path": "go/internal/dialcache/api.go",
             "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f",
             "symbols": [
               "systemClock",
@@ -3805,8 +3805,8 @@
       "path": "typescript/src/internal/ramp.ts",
       "sha256": "830576aa71716bc57afd8aace8fb67654dcb7bd6ae8fc4e443e4beb8780730ae",
       "candidateGoFiles": [
-        "go/protocol.go",
-        "go/policy.go"
+        "go/internal/dialcache/protocol.go",
+        "go/internal/dialcache/policy.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3814,14 +3814,14 @@
         "nativeAdaptations": [],
         "goBindings": [
           {
-            "path": "go/protocol.go",
+            "path": "go/internal/dialcache/protocol.go",
             "symbols": [
               "Cohort"
             ],
             "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
           },
           {
-            "path": "go/policy.go",
+            "path": "go/internal/dialcache/policy.go",
             "symbols": [
               "ResolvePolicy"
             ],
@@ -3834,10 +3834,10 @@
       "path": "typescript/src/internal/redis-cache.ts",
       "sha256": "6fd0f9d16289efd66d60cfdf538d44fb520301a45634f72c5aaaaf4f79deae79",
       "candidateGoFiles": [
-        "go/engine.go",
-        "go/shadow.go",
-        "go/codec.go",
-        "go/redis_adapter.go"
+        "go/internal/dialcache/engine.go",
+        "go/internal/dialcache/shadow.go",
+        "go/internal/dialcache/codec.go",
+        "go/internal/dialcache/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3848,7 +3848,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/engine.go",
+            "path": "go/internal/dialcache/engine.go",
             "symbols": [
               "rawRead",
               "readServing",
@@ -3861,14 +3861,14 @@
             "sha256": "dec40ccf22a779219c2ab8f02a96d7cf342294083d836c8b45f67c14afcc69f3"
           },
           {
-            "path": "go/shadow.go",
+            "path": "go/internal/dialcache/shadow.go",
             "symbols": [
               "runShadow"
             ],
             "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
           },
           {
-            "path": "go/codec.go",
+            "path": "go/internal/dialcache/codec.go",
             "symbols": [
               "CompressPayload",
               "DecompressPayload"
@@ -3876,7 +3876,7 @@
             "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
           },
           {
-            "path": "go/redis_adapter.go",
+            "path": "go/internal/dialcache/redis_adapter.go",
             "symbols": [
               "Read",
               "Write"
@@ -3890,8 +3890,8 @@
       "path": "typescript/src/internal/redis-invalidation.ts",
       "sha256": "be560a4614091d88c69dc9ddf792551c9ace8bcfd4da49f5e24cfd69aa6d412d",
       "candidateGoFiles": [
-        "go/cache.go",
-        "go/redis_adapter.go"
+        "go/internal/dialcache/cache.go",
+        "go/internal/dialcache/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3902,14 +3902,14 @@
         ],
         "goBindings": [
           {
-            "path": "go/cache.go",
+            "path": "go/internal/dialcache/cache.go",
             "symbols": [
               "Invalidate"
             ],
             "sha256": "ebe455e9e37f34ff2a96739dcc41ef17cd9309d05e7b38b5af16412cb1c6070c"
           },
           {
-            "path": "go/redis_adapter.go",
+            "path": "go/internal/dialcache/redis_adapter.go",
             "symbols": [
               "Invalidate",
               "InvalidateDecimal",
@@ -3924,7 +3924,7 @@
       "path": "typescript/src/internal/redis-payload.ts",
       "sha256": "dee3b1eb48fd425116b94a9ce3d76fa72a6ca38b2471e99abe9c97a0e706d0b3",
       "candidateGoFiles": [
-        "go/protocol.go"
+        "go/internal/dialcache/protocol.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3934,7 +3934,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/protocol.go",
+            "path": "go/internal/dialcache/protocol.go",
             "symbols": [
               "Frame",
               "EncodeFrame",
@@ -3951,7 +3951,7 @@
       "path": "typescript/src/internal/redis-script-reply.ts",
       "sha256": "ed209f330943aa158a3ae31ba59b7a2acd8f0d7d082f8cdef77bbb9338ed7dbb",
       "candidateGoFiles": [
-        "go/redis_adapter.go"
+        "go/internal/dialcache/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3962,7 +3962,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/redis_adapter.go",
+            "path": "go/internal/dialcache/redis_adapter.go",
             "symbols": [
               "ValidateRedisSetReply",
               "ValidateRedisInvalidationReply",
@@ -3977,7 +3977,7 @@
       "path": "typescript/src/internal/redis-scripts.ts",
       "sha256": "53fb01ec57150f1e51d46047164ba2149407f7b9884b364258249012d5a463f3",
       "candidateGoFiles": [
-        "go/redis_adapter.go"
+        "go/internal/dialcache/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -3988,7 +3988,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/redis_adapter.go",
+            "path": "go/internal/dialcache/redis_adapter.go",
             "symbols": [
               "InvalidationScript",
               "InvalidateDecimal"
@@ -4002,7 +4002,7 @@
       "path": "typescript/src/internal/runtime-config.ts",
       "sha256": "7fbf42ce9d346f30d65b431b546649d9592405073dd5c900559f1e4e3c6fb703",
       "candidateGoFiles": [
-        "go/policy.go"
+        "go/internal/dialcache/policy.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4013,7 +4013,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/policy.go",
+            "path": "go/internal/dialcache/policy.go",
             "symbols": [
               "ParsePolicy",
               "SnapshotPolicy",
@@ -4029,8 +4029,8 @@
       "path": "typescript/src/internal/shadow-log-json.ts",
       "sha256": "6fae44c08e79ea2fe63bed8de91c621c1ec59672a415608ade3acf63b18ac91a",
       "candidateGoFiles": [
-        "go/metrics.go",
-        "go/codec.go"
+        "go/internal/dialcache/metrics.go",
+        "go/internal/dialcache/codec.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4042,7 +4042,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/metrics.go",
+            "path": "go/internal/dialcache/metrics.go",
             "symbols": [
               "PreviewShadowLogKey",
               "PreviewShadowLogJSON",
@@ -4051,7 +4051,7 @@
             "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
           },
           {
-            "path": "go/codec.go",
+            "path": "go/internal/dialcache/codec.go",
             "symbols": [
               "appendJSON"
             ],
@@ -4064,7 +4064,7 @@
       "path": "typescript/src/key.ts",
       "sha256": "72d52df06f1e96e08a83fbb266e2106085c36f096eb86757b71f50f24d999c43",
       "candidateGoFiles": [
-        "go/protocol.go"
+        "go/internal/dialcache/protocol.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4075,7 +4075,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/protocol.go",
+            "path": "go/internal/dialcache/protocol.go",
             "symbols": [
               "Identity",
               "NormalizeArgs",
@@ -4092,10 +4092,10 @@
       "path": "typescript/src/metrics.ts",
       "sha256": "6c2607ec512c10362f1906ff082799d8b770f34cb3d61d5523dba908349d90d8",
       "candidateGoFiles": [
-        "go/api.go",
-        "go/metrics.go",
-        "go/engine.go",
-        "go/shadow.go"
+        "go/internal/dialcache/api.go",
+        "go/internal/dialcache/metrics.go",
+        "go/internal/dialcache/engine.go",
+        "go/internal/dialcache/shadow.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4107,7 +4107,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/api.go",
+            "path": "go/internal/dialcache/api.go",
             "symbols": [
               "Event",
               "Option",
@@ -4116,7 +4116,7 @@
             "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
-            "path": "go/metrics.go",
+            "path": "go/internal/dialcache/metrics.go",
             "symbols": [
               "MetricsAdapter",
               "FailureIsolatedObserver",
@@ -4125,7 +4125,7 @@
             "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
           },
           {
-            "path": "go/engine.go",
+            "path": "go/internal/dialcache/engine.go",
             "symbols": [
               "event",
               "errorEvent",
@@ -4134,7 +4134,7 @@
             "sha256": "dec40ccf22a779219c2ab8f02a96d7cf342294083d836c8b45f67c14afcc69f3"
           },
           {
-            "path": "go/shadow.go",
+            "path": "go/internal/dialcache/shadow.go",
             "symbols": [
               "shadowEvent"
             ],
@@ -4147,7 +4147,7 @@
       "path": "typescript/src/node-redis.ts",
       "sha256": "b57b4db9b75d12e3da7c4b388cb736927c4301753c082cd4e160d913b041b991",
       "candidateGoFiles": [
-        "go/redis_adapter.go"
+        "go/internal/dialcache/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4159,7 +4159,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/redis_adapter.go",
+            "path": "go/internal/dialcache/redis_adapter.go",
             "symbols": [
               "RedisAdapter",
               "NewRedisAdapter",
@@ -4176,7 +4176,7 @@
       "path": "typescript/src/prometheus.ts",
       "sha256": "56c11cd6fba362c4b0ab16b222cd5785a37bdc81fdde67ae920557ba05ed5ec7",
       "candidateGoFiles": [
-        "go/metrics_prometheus.go"
+        "go/internal/dialcache/metrics_prometheus.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4187,7 +4187,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/metrics_prometheus.go",
+            "path": "go/internal/dialcache/metrics_prometheus.go",
             "symbols": [
               "PrometheusCollectorSchema",
               "PrometheusCollectorSchemas",
@@ -4205,9 +4205,9 @@
       "path": "typescript/src/redis-client.ts",
       "sha256": "2b07115b1f35f82b857ed9ee4dd27656eb636e7426c60cbfb31b39903b084b30",
       "candidateGoFiles": [
-        "go/api.go",
-        "go/protocol.go",
-        "go/redis_adapter.go"
+        "go/internal/dialcache/api.go",
+        "go/internal/dialcache/protocol.go",
+        "go/internal/dialcache/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4218,7 +4218,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/api.go",
+            "path": "go/internal/dialcache/api.go",
             "symbols": [
               "Remote",
               "ReadBudget"
@@ -4226,7 +4226,7 @@
             "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
-            "path": "go/protocol.go",
+            "path": "go/internal/dialcache/protocol.go",
             "symbols": [
               "Frame",
               "ReadResult",
@@ -4235,7 +4235,7 @@
             "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
           },
           {
-            "path": "go/redis_adapter.go",
+            "path": "go/internal/dialcache/redis_adapter.go",
             "symbols": [
               "RedisPayloadError",
               "RedisProtocolError"
@@ -4249,8 +4249,8 @@
       "path": "typescript/src/redis-protocol.ts",
       "sha256": "d68a674346fd61f4b14f3a5315baf3e171835b964a895192a6cc3590e58fdba1",
       "candidateGoFiles": [
-        "go/protocol.go",
-        "go/redis_adapter.go"
+        "go/internal/dialcache/protocol.go",
+        "go/internal/dialcache/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4260,7 +4260,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/protocol.go",
+            "path": "go/internal/dialcache/protocol.go",
             "symbols": [
               "EncodeFrame",
               "DecodeFrame"
@@ -4268,7 +4268,7 @@
             "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
           },
           {
-            "path": "go/redis_adapter.go",
+            "path": "go/internal/dialcache/redis_adapter.go",
             "symbols": [
               "InvalidationScript"
             ],
@@ -4281,8 +4281,8 @@
       "path": "typescript/src/serializer.ts",
       "sha256": "b41dc9f3ba888faaece599a5f5e643b4cb5f90aebdf864526f316560bb9cb763",
       "candidateGoFiles": [
-        "go/api.go",
-        "go/codec.go"
+        "go/internal/dialcache/api.go",
+        "go/internal/dialcache/codec.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4294,7 +4294,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/api.go",
+            "path": "go/internal/dialcache/api.go",
             "symbols": [
               "Codec",
               "ContextCodec"
@@ -4302,7 +4302,7 @@
             "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
-            "path": "go/codec.go",
+            "path": "go/internal/dialcache/codec.go",
             "symbols": [
               "JSONCodec",
               "Absent",
@@ -4320,7 +4320,7 @@
       "path": "typescript/src/valkey-glide.ts",
       "sha256": "0cb2e03925f55e53057fa666ac41060abf5445fdfcda1ae25792bd75986d30c8",
       "candidateGoFiles": [
-        "go/redis_adapter.go"
+        "go/internal/dialcache/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
@@ -4332,7 +4332,7 @@
         ],
         "goBindings": [
           {
-            "path": "go/redis_adapter.go",
+            "path": "go/internal/dialcache/redis_adapter.go",
             "symbols": [
               "RedisAdapter",
               "NewRedisAdapter",
@@ -4354,12 +4354,12 @@
       {
         "path": "README.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go",
-          "go/policy.go",
-          "go/protocol.go"
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/protocol.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4371,12 +4371,12 @@
       {
         "path": "docs/api.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go",
-          "go/policy.go",
-          "go/protocol.go"
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/protocol.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4389,7 +4389,7 @@
         "path": "docs/authoring.md",
         "goFiles": [
           "go/docs_examples_test.go",
-          "go/feature_replay_test.go"
+          "go/internal/dialcache/feature_replay_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4401,12 +4401,12 @@
       {
         "path": "docs/coalescing.md",
         "goFiles": [
-          "go/cache.go",
-          "go/bindings.go",
-          "go/cache_test.go",
-          "go/bindings_test.go",
-          "go/core_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/internal/dialcache/cache.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/cache_test.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/core_replay_test.go",
+          "go/internal/dialcache/feature_replay_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4418,12 +4418,12 @@
       {
         "path": "docs/concepts.md",
         "goFiles": [
-          "go/cache.go",
-          "go/bindings.go",
-          "go/cache_test.go",
-          "go/bindings_test.go",
-          "go/core_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/internal/dialcache/cache.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/cache_test.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/core_replay_test.go",
+          "go/internal/dialcache/feature_replay_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4435,10 +4435,10 @@
       {
         "path": "docs/configuration.md",
         "goFiles": [
-          "go/policy.go",
-          "go/policy_test.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/policy_test.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4449,12 +4449,12 @@
       {
         "path": "docs/getting-started.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go",
-          "go/policy.go",
-          "go/protocol.go"
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/protocol.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4466,12 +4466,12 @@
       {
         "path": "docs/index.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go",
-          "go/policy.go",
-          "go/protocol.go"
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/protocol.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4483,11 +4483,11 @@
       {
         "path": "docs/invalidation.md",
         "goFiles": [
-          "go/cache.go",
-          "go/engine.go",
-          "go/redis_adapter.go",
-          "go/redis_integration_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/cache.go",
+          "go/internal/dialcache/engine.go",
+          "go/internal/dialcache/redis_adapter.go",
+          "go/internal/dialcache/redis_integration_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4498,10 +4498,10 @@
       {
         "path": "docs/keys.md",
         "goFiles": [
-          "go/protocol.go",
-          "go/protocol_test.go",
-          "go/bindings.go",
-          "go/bindings_test.go"
+          "go/internal/dialcache/protocol.go",
+          "go/internal/dialcache/protocol_test.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4512,12 +4512,12 @@
       {
         "path": "docs/languages/go.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/policy.go",
-          "go/codec.go",
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/codec.go",
           "go/docs_examples_test.go",
-          "go/redis_adapter.go"
+          "go/internal/dialcache/redis_adapter.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4529,12 +4529,12 @@
       {
         "path": "docs/languages/python.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/policy.go",
-          "go/codec.go",
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/codec.go",
           "go/docs_examples_test.go",
-          "go/redis_adapter.go"
+          "go/internal/dialcache/redis_adapter.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4546,12 +4546,12 @@
       {
         "path": "docs/languages/rust.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/policy.go",
-          "go/codec.go",
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/codec.go",
           "go/docs_examples_test.go",
-          "go/redis_adapter.go"
+          "go/internal/dialcache/redis_adapter.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4563,10 +4563,10 @@
       {
         "path": "docs/languages/typescript.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/policy.go",
-          "go/codec.go",
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/codec.go",
           "go/docs_examples_test.go"
         ],
         "nativeAdaptations": [
@@ -4579,12 +4579,12 @@
       {
         "path": "docs/maintainers.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go",
-          "go/policy.go",
-          "go/protocol.go"
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/protocol.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4596,12 +4596,12 @@
       {
         "path": "docs/observability.md",
         "goFiles": [
-          "go/engine.go",
-          "go/shadow.go",
-          "go/metrics.go",
-          "go/metrics_test.go",
-          "go/effects_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/internal/dialcache/engine.go",
+          "go/internal/dialcache/shadow.go",
+          "go/internal/dialcache/metrics.go",
+          "go/internal/dialcache/metrics_test.go",
+          "go/internal/dialcache/effects_replay_test.go",
+          "go/internal/dialcache/feature_replay_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -4612,11 +4612,11 @@
       {
         "path": "docs/redis.md",
         "goFiles": [
-          "go/redis_adapter.go",
-          "go/redis_adapter_test.go",
-          "go/redis_integration_test.go",
-          "go/protocol_test.go",
-          "go/codec.go"
+          "go/internal/dialcache/redis_adapter.go",
+          "go/internal/dialcache/redis_adapter_test.go",
+          "go/internal/dialcache/redis_integration_test.go",
+          "go/internal/dialcache/protocol_test.go",
+          "go/internal/dialcache/codec.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4629,12 +4629,12 @@
       {
         "path": "docs/shadow-validation.md",
         "goFiles": [
-          "go/shadow.go",
-          "go/codec.go",
-          "go/metrics.go",
-          "go/feature_replay_test.go",
-          "go/behavior_replay_test.go",
-          "go/codec_test.go"
+          "go/internal/dialcache/shadow.go",
+          "go/internal/dialcache/codec.go",
+          "go/internal/dialcache/metrics.go",
+          "go/internal/dialcache/feature_replay_test.go",
+          "go/internal/dialcache/behavior_replay_test.go",
+          "go/internal/dialcache/codec_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -4646,10 +4646,10 @@
       {
         "path": "docs/stale-on-error.md",
         "goFiles": [
-          "go/engine.go",
-          "go/api.go",
-          "go/feature_replay_test.go",
-          "go/behavior_replay_test.go"
+          "go/internal/dialcache/engine.go",
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/feature_replay_test.go",
+          "go/internal/dialcache/behavior_replay_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -4660,12 +4660,12 @@
       {
         "path": "docs/upgrading.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go",
-          "go/policy.go",
-          "go/protocol.go"
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/protocol.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4677,12 +4677,12 @@
       {
         "path": "typescript/README.md",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go",
-          "go/policy.go",
-          "go/protocol.go"
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/protocol.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4694,10 +4694,10 @@
       {
         "path": "typescript/test/compression-error.test.ts",
         "goFiles": [
-          "go/codec.go",
-          "go/codec_test.go",
-          "go/protocol_test.go",
-          "go/engine.go"
+          "go/internal/dialcache/codec.go",
+          "go/internal/dialcache/codec_test.go",
+          "go/internal/dialcache/protocol_test.go",
+          "go/internal/dialcache/engine.go"
         ],
         "nativeAdaptations": [
           "B03",
@@ -4708,10 +4708,10 @@
       {
         "path": "typescript/test/compression-guard.test.ts",
         "goFiles": [
-          "go/codec.go",
-          "go/codec_test.go",
-          "go/protocol_test.go",
-          "go/engine.go"
+          "go/internal/dialcache/codec.go",
+          "go/internal/dialcache/codec_test.go",
+          "go/internal/dialcache/protocol_test.go",
+          "go/internal/dialcache/engine.go"
         ],
         "nativeAdaptations": [
           "B03",
@@ -4722,10 +4722,10 @@
       {
         "path": "typescript/test/compression.test.ts",
         "goFiles": [
-          "go/codec.go",
-          "go/codec_test.go",
-          "go/protocol_test.go",
-          "go/engine.go"
+          "go/internal/dialcache/codec.go",
+          "go/internal/dialcache/codec_test.go",
+          "go/internal/dialcache/protocol_test.go",
+          "go/internal/dialcache/engine.go"
         ],
         "nativeAdaptations": [
           "B03",
@@ -4736,11 +4736,11 @@
       {
         "path": "typescript/test/datadog.test.ts",
         "goFiles": [
-          "go/metrics.go",
-          "go/metrics_prometheus.go",
-          "go/metrics_datadog.go",
-          "go/metrics_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/metrics.go",
+          "go/internal/dialcache/metrics_prometheus.go",
+          "go/internal/dialcache/metrics_datadog.go",
+          "go/internal/dialcache/metrics_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -4751,12 +4751,12 @@
       {
         "path": "typescript/test/dialcache-coalescing.test.ts",
         "goFiles": [
-          "go/cache.go",
-          "go/bindings.go",
-          "go/cache_test.go",
-          "go/bindings_test.go",
-          "go/core_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/internal/dialcache/cache.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/cache_test.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/core_replay_test.go",
+          "go/internal/dialcache/feature_replay_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4768,10 +4768,10 @@
       {
         "path": "typescript/test/dialcache-compression.test.ts",
         "goFiles": [
-          "go/codec.go",
-          "go/codec_test.go",
-          "go/protocol_test.go",
-          "go/engine.go"
+          "go/internal/dialcache/codec.go",
+          "go/internal/dialcache/codec_test.go",
+          "go/internal/dialcache/protocol_test.go",
+          "go/internal/dialcache/engine.go"
         ],
         "nativeAdaptations": [
           "B03",
@@ -4782,10 +4782,10 @@
       {
         "path": "typescript/test/dialcache-config-ramp.test.ts",
         "goFiles": [
-          "go/policy.go",
-          "go/policy_test.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/policy_test.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4796,12 +4796,12 @@
       {
         "path": "typescript/test/dialcache-get-or-load.test.ts",
         "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go",
-          "go/policy.go",
-          "go/protocol.go"
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/protocol.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4813,11 +4813,11 @@
       {
         "path": "typescript/test/dialcache-invalidation.test.ts",
         "goFiles": [
-          "go/cache.go",
-          "go/engine.go",
-          "go/redis_adapter.go",
-          "go/redis_integration_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/cache.go",
+          "go/internal/dialcache/engine.go",
+          "go/internal/dialcache/redis_adapter.go",
+          "go/internal/dialcache/redis_integration_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4828,12 +4828,12 @@
       {
         "path": "typescript/test/dialcache-liveness.test.ts",
         "goFiles": [
-          "go/deadline.go",
-          "go/engine.go",
-          "go/shadow.go",
-          "go/api_boundary_test.go",
-          "go/effects_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/internal/dialcache/deadline.go",
+          "go/internal/dialcache/engine.go",
+          "go/internal/dialcache/shadow.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/effects_replay_test.go",
+          "go/internal/dialcache/feature_replay_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4844,12 +4844,12 @@
       {
         "path": "typescript/test/dialcache-local.test.ts",
         "goFiles": [
-          "go/cache.go",
-          "go/bindings.go",
-          "go/cache_test.go",
-          "go/bindings_test.go",
-          "go/core_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/internal/dialcache/cache.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/cache_test.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/core_replay_test.go",
+          "go/internal/dialcache/feature_replay_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4861,11 +4861,11 @@
       {
         "path": "typescript/test/dialcache-logger.test.ts",
         "goFiles": [
-          "go/metrics.go",
-          "go/metrics_prometheus.go",
-          "go/metrics_datadog.go",
-          "go/metrics_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/metrics.go",
+          "go/internal/dialcache/metrics_prometheus.go",
+          "go/internal/dialcache/metrics_datadog.go",
+          "go/internal/dialcache/metrics_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -4876,11 +4876,11 @@
       {
         "path": "typescript/test/dialcache-metrics.test.ts",
         "goFiles": [
-          "go/metrics.go",
-          "go/metrics_prometheus.go",
-          "go/metrics_datadog.go",
-          "go/metrics_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/metrics.go",
+          "go/internal/dialcache/metrics_prometheus.go",
+          "go/internal/dialcache/metrics_datadog.go",
+          "go/internal/dialcache/metrics_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -4891,10 +4891,10 @@
       {
         "path": "typescript/test/dialcache-observability-internals.test.ts",
         "goFiles": [
-          "go/policy.go",
-          "go/policy_test.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/policy_test.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4905,12 +4905,12 @@
       {
         "path": "typescript/test/dialcache-redis-read-deadline.test.ts",
         "goFiles": [
-          "go/deadline.go",
-          "go/engine.go",
-          "go/shadow.go",
-          "go/api_boundary_test.go",
-          "go/effects_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/internal/dialcache/deadline.go",
+          "go/internal/dialcache/engine.go",
+          "go/internal/dialcache/shadow.go",
+          "go/internal/dialcache/api_boundary_test.go",
+          "go/internal/dialcache/effects_replay_test.go",
+          "go/internal/dialcache/feature_replay_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4921,10 +4921,10 @@
       {
         "path": "typescript/test/dialcache-redis.test.ts",
         "goFiles": [
-          "go/redis_adapter.go",
-          "go/redis_adapter_test.go",
-          "go/redis_integration_test.go",
-          "go/protocol_test.go"
+          "go/internal/dialcache/redis_adapter.go",
+          "go/internal/dialcache/redis_adapter_test.go",
+          "go/internal/dialcache/redis_integration_test.go",
+          "go/internal/dialcache/protocol_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4936,12 +4936,12 @@
       {
         "path": "typescript/test/dialcache-request-local.test.ts",
         "goFiles": [
-          "go/cache.go",
-          "go/bindings.go",
-          "go/cache_test.go",
-          "go/bindings_test.go",
-          "go/core_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/internal/dialcache/cache.go",
+          "go/internal/dialcache/bindings.go",
+          "go/internal/dialcache/cache_test.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/core_replay_test.go",
+          "go/internal/dialcache/feature_replay_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4953,12 +4953,12 @@
       {
         "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
         "goFiles": [
-          "go/shadow.go",
-          "go/codec.go",
-          "go/metrics.go",
-          "go/feature_replay_test.go",
-          "go/behavior_replay_test.go",
-          "go/codec_test.go"
+          "go/internal/dialcache/shadow.go",
+          "go/internal/dialcache/codec.go",
+          "go/internal/dialcache/metrics.go",
+          "go/internal/dialcache/feature_replay_test.go",
+          "go/internal/dialcache/behavior_replay_test.go",
+          "go/internal/dialcache/codec_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -4970,12 +4970,12 @@
       {
         "path": "typescript/test/dialcache-shadow-validation.test.ts",
         "goFiles": [
-          "go/shadow.go",
-          "go/codec.go",
-          "go/metrics.go",
-          "go/feature_replay_test.go",
-          "go/behavior_replay_test.go",
-          "go/codec_test.go"
+          "go/internal/dialcache/shadow.go",
+          "go/internal/dialcache/codec.go",
+          "go/internal/dialcache/metrics.go",
+          "go/internal/dialcache/feature_replay_test.go",
+          "go/internal/dialcache/behavior_replay_test.go",
+          "go/internal/dialcache/codec_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -4987,10 +4987,10 @@
       {
         "path": "typescript/test/dialcache-stale-on-error.test.ts",
         "goFiles": [
-          "go/engine.go",
-          "go/api.go",
-          "go/feature_replay_test.go",
-          "go/behavior_replay_test.go"
+          "go/internal/dialcache/engine.go",
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/feature_replay_test.go",
+          "go/internal/dialcache/behavior_replay_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -5001,10 +5001,10 @@
       {
         "path": "typescript/test/dialcache-stale-recovery-policy.test.ts",
         "goFiles": [
-          "go/engine.go",
-          "go/api.go",
-          "go/feature_replay_test.go",
-          "go/behavior_replay_test.go"
+          "go/internal/dialcache/engine.go",
+          "go/internal/dialcache/api.go",
+          "go/internal/dialcache/feature_replay_test.go",
+          "go/internal/dialcache/behavior_replay_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -5015,10 +5015,10 @@
       {
         "path": "typescript/test/duration.test.ts",
         "goFiles": [
-          "go/policy.go",
-          "go/policy_test.go",
-          "go/bindings_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/policy.go",
+          "go/internal/dialcache/policy_test.go",
+          "go/internal/dialcache/bindings_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -5029,10 +5029,10 @@
       {
         "path": "typescript/test/node-redis.test.ts",
         "goFiles": [
-          "go/redis_adapter.go",
-          "go/redis_adapter_test.go",
-          "go/redis_integration_test.go",
-          "go/protocol_test.go"
+          "go/internal/dialcache/redis_adapter.go",
+          "go/internal/dialcache/redis_adapter_test.go",
+          "go/internal/dialcache/redis_integration_test.go",
+          "go/internal/dialcache/protocol_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -5044,11 +5044,11 @@
       {
         "path": "typescript/test/prometheus.test.ts",
         "goFiles": [
-          "go/metrics.go",
-          "go/metrics_prometheus.go",
-          "go/metrics_datadog.go",
-          "go/metrics_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/metrics.go",
+          "go/internal/dialcache/metrics_prometheus.go",
+          "go/internal/dialcache/metrics_datadog.go",
+          "go/internal/dialcache/metrics_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -5059,10 +5059,10 @@
       {
         "path": "typescript/test/redis-cluster.integration.test.ts",
         "goFiles": [
-          "go/redis_adapter.go",
-          "go/redis_adapter_test.go",
-          "go/redis_integration_test.go",
-          "go/protocol_test.go"
+          "go/internal/dialcache/redis_adapter.go",
+          "go/internal/dialcache/redis_adapter_test.go",
+          "go/internal/dialcache/redis_integration_test.go",
+          "go/internal/dialcache/protocol_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -5074,10 +5074,10 @@
       {
         "path": "typescript/test/redis-payload.test.ts",
         "goFiles": [
-          "go/redis_adapter.go",
-          "go/redis_adapter_test.go",
-          "go/redis_integration_test.go",
-          "go/protocol_test.go"
+          "go/internal/dialcache/redis_adapter.go",
+          "go/internal/dialcache/redis_adapter_test.go",
+          "go/internal/dialcache/redis_integration_test.go",
+          "go/internal/dialcache/protocol_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -5089,10 +5089,10 @@
       {
         "path": "typescript/test/redis-real.integration.test.ts",
         "goFiles": [
-          "go/redis_adapter.go",
-          "go/redis_adapter_test.go",
-          "go/redis_integration_test.go",
-          "go/protocol_test.go"
+          "go/internal/dialcache/redis_adapter.go",
+          "go/internal/dialcache/redis_adapter_test.go",
+          "go/internal/dialcache/redis_integration_test.go",
+          "go/internal/dialcache/protocol_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -5104,11 +5104,11 @@
       {
         "path": "typescript/test/shadow-log-json.test.ts",
         "goFiles": [
-          "go/metrics.go",
-          "go/metrics_prometheus.go",
-          "go/metrics_datadog.go",
-          "go/metrics_test.go",
-          "go/api_boundary_test.go"
+          "go/internal/dialcache/metrics.go",
+          "go/internal/dialcache/metrics_prometheus.go",
+          "go/internal/dialcache/metrics_datadog.go",
+          "go/internal/dialcache/metrics_test.go",
+          "go/internal/dialcache/api_boundary_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -5119,10 +5119,10 @@
       {
         "path": "typescript/test/valkey-glide.test.ts",
         "goFiles": [
-          "go/redis_adapter.go",
-          "go/redis_adapter_test.go",
-          "go/redis_integration_test.go",
-          "go/protocol_test.go"
+          "go/internal/dialcache/redis_adapter.go",
+          "go/internal/dialcache/redis_adapter_test.go",
+          "go/internal/dialcache/redis_integration_test.go",
+          "go/internal/dialcache/protocol_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -5183,15 +5183,15 @@
       "goStatus": "reviewed-native-binding",
       "goTreatment": "Goroutines, contexts, timers and completion channels replace JavaScript promises and AsyncLocalStorage. Shared generated histories exercise deadlines, late work, ownership and publication. Primitive promise identity and scheduling APIs are native mechanisms. Source/read/shadow budgets and elapsed diagnostics retain fractional milliseconds before subtraction. Local cache insertion and lookup use whole monotonic milliseconds, matching TypeScript; default instances share the same millisecond grid. Native tests distinguish before/exact boundaries, early timer delivery and local quantization, including fractional construction phases and custom integer clocks with large origins. The local-clock profile now supplies fractional insertion/expiry and shared-instance-grid histories. Fractional source/read/shadow deadlines, early timer delivery and custom-clock compatibility retain additional native evidence; other integer-tick profiles do not establish those precision boundaries.",
       "nativeTests": [
-        "go/clock_precision_test.go:TestPreciseSourceDeadline",
-        "go/clock_precision_test.go:TestPreciseRemoteReadDeadline",
-        "go/clock_precision_test.go:TestPreciseShadowDeadline",
-        "go/clock_precision_test.go:TestLocalInsertionExpiryUsesWholeMilliseconds",
-        "go/clock_precision_test.go:TestPreciseCoalescingAge",
-        "go/clock_precision_test.go:TestPreciseDeadlineRechecksEarlyTimer",
-        "go/clock_precision_test.go:TestPreciseClockPreservesIntegerClockCompatibility",
-        "go/clock_precision_test.go:TestPreciseLocalTTLAcceptsLargeIntegerClockOrigin",
-        "go/clock_precision_test.go:TestDefaultInstancesShareLocalMillisecondGrid"
+        "go/internal/dialcache/clock_precision_test.go:TestPreciseSourceDeadline",
+        "go/internal/dialcache/clock_precision_test.go:TestPreciseRemoteReadDeadline",
+        "go/internal/dialcache/clock_precision_test.go:TestPreciseShadowDeadline",
+        "go/internal/dialcache/clock_precision_test.go:TestLocalInsertionExpiryUsesWholeMilliseconds",
+        "go/internal/dialcache/clock_precision_test.go:TestPreciseCoalescingAge",
+        "go/internal/dialcache/clock_precision_test.go:TestPreciseDeadlineRechecksEarlyTimer",
+        "go/internal/dialcache/clock_precision_test.go:TestPreciseClockPreservesIntegerClockCompatibility",
+        "go/internal/dialcache/clock_precision_test.go:TestPreciseLocalTTLAcceptsLargeIntegerClockOrigin",
+        "go/internal/dialcache/clock_precision_test.go:TestDefaultInstancesShareLocalMillisecondGrid"
       ]
     },
     {
@@ -5208,12 +5208,12 @@
       "goStatus": "explicit-native-binding-adaptation",
       "goTreatment": "Portable diagnostics require shared generated histories. Native metric names, labels, buckets, units, counts and bounded logging have focused Go tests. NewPrometheusMetricsWithBindings reuses caller-owned individually registered CounterVec/HistogramVec objects after checking declared construction schema, public descriptors and registry identity; new collectors register atomically. Because client_golang exposes no bucket configuration for an empty histogram, accurate caller-supplied schema is an explicit binding precondition; construction must not race with collector registration/reconfiguration. No private-field inspection or temporary series is used.",
       "nativeTests": [
-        "go/metrics_test.go:TestPrometheusWireSchemaMatchesTypeScriptBinding",
-        "go/metrics_test.go:TestPrometheusReuseAndConflictIsolation",
-        "go/metrics_test.go:TestPrometheusExplicitBindingsPreserveExistingObservations",
-        "go/metrics_test.go:TestPrometheusBindingsRejectIncompatibleOrUnregisteredCollectors",
-        "go/metrics_test.go:TestDatadogMetricNamesUnitsAndLabels",
-        "go/metrics_test.go:TestObserverIsolationAndBoundedNativeJSONLogs"
+        "go/internal/dialcache/metrics_test.go:TestPrometheusWireSchemaMatchesTypeScriptBinding",
+        "go/internal/dialcache/metrics_test.go:TestPrometheusReuseAndConflictIsolation",
+        "go/internal/dialcache/metrics_test.go:TestPrometheusExplicitBindingsPreserveExistingObservations",
+        "go/internal/dialcache/metrics_test.go:TestPrometheusBindingsRejectIncompatibleOrUnregisteredCollectors",
+        "go/internal/dialcache/metrics_test.go:TestDatadogMetricNamesUnitsAndLabels",
+        "go/internal/dialcache/metrics_test.go:TestObserverIsolationAndBoundedNativeJSONLogs"
       ]
     },
     {

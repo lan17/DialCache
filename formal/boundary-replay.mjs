@@ -99,7 +99,7 @@ export function runBoundaryReplay({ port, history, label, output, root, workspac
   } else if (port === 'go') {
     const selected = goBoundarySelection(profile, path);
     command = go;
-    args = ['test', '-json', '-count=1', '-timeout=480s', '-run', `^${selected.test}$`, '.'];
+    args = ['test', '-json', '-count=1', '-timeout=480s', '-run', `^${selected.test}$`, './internal/dialcache'];
     cwd = resolve(workspace, 'go');
     selection = { ...selected.env, DIALCACHE_REPLAY_DIVERGENCES: file };
   } else throw new Error(`Unknown boundary replay port: ${port}`);

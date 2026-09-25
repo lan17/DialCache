@@ -46,7 +46,7 @@ use crate::remote::{
 };
 
 /// The version-1 wire invalidation transition, byte-identical to the Go
-/// `InvalidationScript` (a unit test pins this against `go/redis_adapter.go`).
+/// `InvalidationScript` (a unit test pins this against `go/internal/dialcache/redis_adapter.go`).
 /// TypeScript's `INVALIDATE_CACHE_SCRIPT` is the same Lua with different
 /// whitespace and a comment, so its `EVALSHA` digest differs; every port
 /// self-heals through the `EVAL` fallback, so mixed-language clusters need no
@@ -538,7 +538,8 @@ mod tests {
     }
 
     fn go_invalidation_script() -> String {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../go/redis_adapter.go");
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../go/internal/dialcache/redis_adapter.go");
         let source = std::fs::read_to_string(&path)
             .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
         let start = source

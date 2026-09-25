@@ -110,7 +110,8 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     const replay = validationPlan("formal-go", { directory }).find(goTest)!;
     expect(replay.args).toContain("-skip");
     const skipped = new RegExp(replay.args![replay.args!.indexOf("-skip") + 1]!);
-    for (const worker of ["TestGeneratedInvalidationVectors", "TestVectorBoundaryDriver", "TestDocsTrackedInvalidation"]) {
+    expect(replay.args!.at(-1)).toBe("./internal/dialcache");
+    for (const worker of ["TestGeneratedInvalidationVectors", "TestVectorBoundaryDriver"]) {
       expect(skipped.test(worker), worker).toBe(true);
       expect(skipped.test(`${worker}Required`), worker).toBe(false);
       expect(skipped.test(`Other${worker}`), worker).toBe(false);

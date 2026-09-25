@@ -17,7 +17,7 @@ func TestGeneratedFixtureFreshness(t *testing.T) {
 		Inputs        map[string]string `json:"inputs"`
 		Artifacts     map[string]string `json:"artifacts"`
 	}
-	raw, err := os.ReadFile("../formal/generated-fixtures.lock.json")
+	raw, err := os.ReadFile("../../../formal/generated-fixtures.lock.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestGeneratedFixtureFreshness(t *testing.T) {
 			Path string `json:"path"`
 		} `json:"artifacts"`
 	}
-	raw, err = os.ReadFile("../formal/fixture-recipes.json")
+	raw, err = os.ReadFile("../../../formal/fixture-recipes.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestGeneratedFixtureFreshness(t *testing.T) {
 			if filepath.IsAbs(path) || strings.Contains(path, "..") {
 				t.Fatal("invalid fixture source path")
 			}
-			actual, err := witnessHash(filepath.Join("..", path))
+			actual, err := witnessHash(filepath.Join("../../..", path))
 			if err != nil {
 				t.Fatal(err)
 			}

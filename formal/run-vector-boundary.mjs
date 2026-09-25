@@ -15,7 +15,7 @@ export function runVectorBoundary({ evidence, port, history, label, output, root
   const result = port === 'typescript'
     ? spawnSync(process.execPath, [resolve(root, 'node_modules/vitest/vitest.mjs'), 'run', 'test/formal-vector-boundary.test.ts', '--coverage.enabled=false'],
       { cwd: resolve(workspace, 'typescript'), env: selected, encoding: 'utf8', timeout: 120_000 })
-    : spawnSync(go, ['test', '-count=1', '-timeout=60s', '-run', '^TestVectorBoundaryDriver$', '.'],
+    : spawnSync(go, ['test', '-count=1', '-timeout=60s', '-run', '^TestVectorBoundaryDriver$', './internal/dialcache'],
       { cwd: resolve(workspace, 'go'), env: selected, encoding: 'utf8', timeout: 120_000 });
   writeFileSync(`${prefix}.log`, (result.stdout ?? '') + (result.stderr ?? ''));
   const recording = { history, path: evidence.vector.artifact, via: 'vector', completed: false, lastStep: -1, divergences: [] };

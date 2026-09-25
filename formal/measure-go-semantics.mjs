@@ -55,30 +55,35 @@ export function causalPropertyAssertion(output) {
 
 // A compiler error, test crash, deadlock, timeout, skipped test, missing package
 // completion, or failing corpus audit is not an assertion-based detection.
-export function evaluateGoTestEvents(lines, exitCode) {
+export function evaluateGoTestEvents(lines, exitCode, expectedPackages = 1) {
   const events = lines.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
   if (lines.includes('INVALIDATION_INFRASTRUCTURE:')) throw new Error('Redis vector infrastructure failure, not detection');
   if (!events.length) throw new Error('empty Go test event stream');
-  const outputs = new Map(), tests = new Map(), packages = [];
+  const outputs = new Map(), tests = new Map(), testPackages = new Map(), packages = new Map();
   const append = (name, value) => outputs.set(name, (outputs.get(name) ?? '') + value);
   for (const event of events) {
     if (event.Output) append(event.Test ?? '', event.Output);
     if (event.Test && event.Action === 'run') {
       if (tests.has(event.Test)) throw new Error(`duplicate test execution ${event.Test}`);
       tests.set(event.Test, 'running');
+      testPackages.set(event.Test, event.Package);
     }
     if (event.Test && ['pass', 'fail', 'skip'].includes(event.Action)) {
-      if (!tests.has(event.Test) || tests.get(event.Test) !== 'running') throw new Error(`unexpected completion ${event.Test}`);
+      if (!tests.has(event.Test) || tests.get(event.Test) !== 'running' || testPackages.get(event.Test) !== event.Package) throw new Error(`unexpected completion ${event.Test}`);
       tests.set(event.Test, event.Action);
     }
-    if (!event.Test && ['pass', 'fail', 'skip'].includes(event.Action)) packages.push(event.Action);
+    if (!event.Test && ['pass', 'fail', 'skip'].includes(event.Action)) {
+      if (packages.has(event.Package)) throw new Error(`duplicate Go package completion ${event.Package}`);
+      packages.set(event.Package, event.Action);
+    }
     if (event.Action === 'build-fail') throw new Error('Go package build failed');
   }
   const allOutput = [...outputs.values()].join('\n');
   if (/panic:|fatal error:|runtime error:|test timed out|all goroutines are asleep|DATA RACE|\[build failed\]/i.test(allOutput)) {
     throw new Error('crash, timeout, race, or build error is not mutation detection');
   }
-  if (packages.length !== 1 || packages[0] === 'skip' || [...tests.values()].some(state => state === 'skip' || state === 'running')) {
+  if (packages.size !== expectedPackages || [...packages.values()].includes('skip') || [...tests.values()].some(state => state === 'skip' || state === 'running')
+    || [...testPackages.values()].some(name => !packages.has(name))) {
     throw new Error('incomplete or skipped Go test execution');
   }
   const names = [...tests.keys()];
@@ -119,7 +124,11 @@ export function evaluateGoTestEvents(lines, exitCode) {
     }
   }
   const failed = failedLeaves.length;
-  if (exitCode !== (failed ? 1 : 0) || packages[0] !== (failed ? 'fail' : 'pass')) throw new Error('Go exit code and assertion results disagree');
+  if (exitCode !== (failed ? 1 : 0)) throw new Error('Go exit code and assertion results disagree');
+  for (const [name, status] of packages) {
+    const packageFailed = failedLeaves.some(test => testPackages.get(test) === name);
+    if (status !== (packageFailed ? 'fail' : 'pass')) throw new Error(`Go package status and assertion results disagree: ${name}`);
+  }
   return { state: failed ? 'detected' : 'survived', passed: leaves.length - failed, failed,
     failingTests: failedLeaves, assertionKinds, assertionEvidence: Object.fromEntries(failedLeaves.map(name => [name, outputs.get(name)])),
     executedTests: leaves };
@@ -178,7 +187,8 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     const selected = selectMutations(catalog.mutations, { shard, only });
     const evidence = boundaryEvidence().filter(entry => selected.some(mutation => mutation.id === entry.mutant));
     if (!only && shard.count > 1) report.shard = { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) };
-    const ordinaryFiles = readdirSync(moduleDirectory).filter(file => file.endsWith('_test.go') && !infrastructureTestFile.test(file)).sort();
+    const ordinaryFiles = ['', 'internal/dialcache/'].flatMap(prefix => readdirSync(resolve(moduleDirectory, prefix))
+      .filter(file => file.endsWith('_test.go') && !infrastructureTestFile.test(file)).map(file => prefix + file)).sort();
     const ordinary = ordinaryFiles.flatMap(file => [...readFileSync(resolve(moduleDirectory, file), 'utf8').matchAll(/^func (Test\w+)\(t \*testing\.T\)/gm)].map(match => match[1]));
     if (!ordinary.length || new Set(ordinary).size !== ordinary.length) throw new Error('invalid ordinary Go test selection');
     const cohorts = { ordinary, generated: generatedNames, fixed: fixedNames };
@@ -213,7 +223,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     report.selections = cohorts;
     report.ordinaryFiles = ordinaryFiles;
     const compile = label => {
-      const result = spawnSync(go, ['test', '-run', '^$', '-count=1', '.'], { cwd: moduleDirectory, env, encoding: 'utf8', timeout, maxBuffer: 32 * 1024 * 1024 });
+      const result = spawnSync(go, ['test', '-run', '^$', '-count=1', './...'], { cwd: moduleDirectory, env, encoding: 'utf8', timeout, maxBuffer: 32 * 1024 * 1024 });
       writeFileSync(resolve(output, `${label}-compile.log`), (result.stdout ?? '') + (result.stderr ?? ''));
       // A compiler that could not run is infrastructure; one that rejected the edit is a noncompiling mutant.
       if (result.error || result.signal) throw new Error(`${label}: compile step failed to run: ${result.error ?? result.signal}`);
@@ -222,7 +232,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     const run = (label, cohort, baseline) => {
       // Faults can make instance state process-global. Keep independent
       // synctest histories isolated; separate mutation shards still parallelize.
-      const result = spawnSync(go, ['test', '-json', '-count=1', '-parallel=1', '-timeout=480s', '-run', `^(${cohorts[cohort].join('|')})$`, '.'], {
+      const result = spawnSync(go, ['test', '-json', '-count=1', '-parallel=1', '-timeout=480s', '-run', `^(${cohorts[cohort].join('|')})$`, cohort === 'ordinary' ? './...' : './internal/dialcache'], {
         cwd: moduleDirectory, env: { ...env, DIALCACHE_PROTOCOL_CORPUS: cohort === 'generated' ? 'generated' : 'fixed' }, encoding: 'utf8', timeout, maxBuffer: 128 * 1024 * 1024,
       });
       writeFileSync(resolve(output, `${label}-${cohort}.jsonl`), result.stdout ?? '');
@@ -231,7 +241,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
       // A hung cohort is a measurement bound, not a crash the fault explains: it
       // ends the shard, which is what the shard budget assumes.
       if (/panic: test timed out/.test(result.stdout ?? '')) throw new Error(`${label}/${cohort}: go test hit its timeout; a hung cohort is not measured`);
-      const parsed = classifyCohort({ baseline, cohort }, () => evaluateGoTestEvents(result.stdout, result.status));
+      const parsed = classifyCohort({ baseline, cohort }, () => evaluateGoTestEvents(result.stdout, result.status, cohort === 'ordinary' ? 2 : 1));
       if (parsed.state === 'crashed') {
         // Name the panic or the failing test so the report stands on its own.
         const cause = /panic: [^"\\]+|fatal error: [^"\\]+|--- FAIL: \S+/.exec(result.stdout ?? '')?.[0];

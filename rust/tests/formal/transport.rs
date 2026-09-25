@@ -1,6 +1,6 @@
 //! JSON-lines client for the shared Node replay coordinator.
 //!
-//! Ports `replayCoordinator` from `go/replay_coordinator_test.go`: one request
+//! Ports `replayCoordinator` from `go/internal/dialcache/replay_coordinator_test.go`: one request
 //! per line on the child's stdin, one reply per line on its stdout, a strictly
 //! increasing request id, exact envelope checks and a real-time watchdog that
 //! kills a child which leaves a request pending longer than the timeout.

@@ -35,7 +35,7 @@ func validateBehaviorProfileRegistry(raw []byte, name string, version int64) err
 }
 func requireBehaviorProfile(t *testing.T, name string) {
 	t.Helper()
-	raw, err := os.ReadFile("../formal/profiles.json")
+	raw, err := os.ReadFile("../../../formal/profiles.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func requireBehaviorProfile(t *testing.T, name string) {
 	}
 }
 func TestBehaviorProfileRegistryRejectsDrift(t *testing.T) {
-	raw, err := os.ReadFile("../formal/profiles.json")
+	raw, err := os.ReadFile("../../../formal/profiles.json")
 	if err != nil {
 		t.Fatal(err)
 	}

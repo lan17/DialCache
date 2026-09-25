@@ -89,7 +89,7 @@ func (d *behaviorDriver) assertEffectsHistory() error {
 // Scheduled regressions are part of the corpus, including when their witness
 // consequence is absent from every randomly sampled history.
 func effectsPaths() ([]string, error) {
-	paths := []string{"../formal/effects-smoke.itf.json"}
+	paths := []string{"../../../formal/effects-smoke.itf.json"}
 	if file := os.Getenv("DIALCACHE_EFFECTS_TRACE_FILE"); file != "" {
 		paths = []string{file}
 	} else if dir := os.Getenv("DIALCACHE_EFFECTS_TRACE_DIR"); dir != "" {
@@ -165,7 +165,7 @@ func TestEffectsConformance(t *testing.T) {
 }
 func TestEffectsParserRejectsMissingDiagnostics(t *testing.T) {
 	coordinator := newReplayCoordinator(t)
-	raw, err := os.ReadFile("../formal/effects-smoke.itf.json")
+	raw, err := os.ReadFile("../../../formal/effects-smoke.itf.json")
 	if err != nil {
 		t.Fatal(err)
 	}

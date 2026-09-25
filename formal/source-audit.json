@@ -37,7 +37,7 @@
     },
     {
       "path": "docs/authoring.md",
-      "sha256": "d7ab1c2906e3a6441b46adb677a4fcb7eb55f04810a1530b909d2c701a0a84b1",
+      "sha256": "d7095a91ae65a3fc5e991865eec27442cb106b24f999f3dfdbe91778f2dbc4ad",
       "entries": [
         {"line":1,"title":"Writing shared documentation","contracts":["B01"]},
         {"line":8,"title":"Change a feature guide","contracts":["B01"]},
@@ -1352,7 +1352,7 @@
     },
     {
       "path": "formal/GO-PARITY.md",
-      "sha256": "70604b4aad0e3e2c538105eb36d8c4f349c11935ae3fdae9469c7117e4e3e4a1",
+      "sha256": "c1f7b51d0df607f724237a47bd4ed15194215d1dbdec05a62c7a41aaa601ef35",
       "entries": [
         {"line":1,"title":"Go parity acceptance"},
         {"line":52,"title":"Required evidence"},
@@ -1367,7 +1367,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "6c22b3278ea14136fbf3dbcdc8725d053666cbead44a79683023b3f4235be0a9",
+      "sha256": "f969c601a6546992c55630c420a403431f892002abf2e0e1705b4f53d4139a0d",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1599,7 +1599,7 @@
     },
     {
       "path": "formal/WALKTHROUGH.md",
-      "sha256": "e186d17ae2d9bea13c21863ae1c1f1bd7aa20f63f3aed06db72df4a2de7aba2d",
+      "sha256": "08cc87b12d60aeac634956b3970fb45d9dc1127d239a679b07000ef075b15d95",
       "entries": [
         {"line":1,"title":"Follow one behavior from Quint to every port"},
         {"line":14,"title":"Read the named run first"},
