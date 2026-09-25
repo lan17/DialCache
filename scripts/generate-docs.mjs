@@ -17,16 +17,13 @@ if (!process.argv.includes('--catalogue-only')) {
   rmSync(destination, { recursive: true, force: true });
   mkdirSync(destination, { recursive: true });
   run('corepack', ['pnpm', 'exec', 'typedoc']);
-  // go doc does not expand aliases to show their fields and methods. Read their
-  // implementations, keeping the supported public import in the reference.
-  const go = execFileSync('go', ['doc', '-all', './internal/dialcache'], { cwd: resolve(root, 'go'), encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
-    .replace('package dialcache // import "github.com/lan17/DialCache/go/internal/dialcache"', 'package dialcache // import "github.com/lan17/DialCache/go"');
+  const go = execFileSync('go', ['doc', '-all', '.'], { cwd: resolve(root, 'go'), encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
   mkdirSync(resolve(destination, 'go'), { recursive: true });
   writeFileSync(resolve(destination, 'go/index.html'), `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DialCache Go API</title><style>body{font:16px/1.6 system-ui;margin:2rem auto;padding:0 1rem;max-width:80rem}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}a{color:#3451b2}@media(prefers-color-scheme:dark){body{background:#1b1b1f;color:#dfdfd6}a{color:#a8b1ff}}</style></head>
 <body><nav><a href="../../api.html">All languages</a> · <a href="../../languages/go.html">Go guide</a></nav>
-<h1>DialCache Go API</h1><p>Generated with <code>go doc -all</code> from the <a href="${source('go/internal/dialcache')}">public API implementations at ${revision.slice(0, 7)}</a>. Use your browser's Find command to locate a symbol.</p>
+<h1>DialCache Go API</h1><p>Generated with <code>go doc -all</code> from <a href="${source('go')}">${revision.slice(0, 7)}</a>. Use your browser's Find command to locate a symbol.</p>
 <pre>${escape(go)}</pre></body></html>\n`);
   run('cargo', ['doc', '--locked', '--all-features', '--no-deps'], resolve(root, 'rust'));
   const metadata = JSON.parse(execFileSync('cargo', ['metadata', '--format-version=1', '--no-deps'], { cwd: resolve(root, 'rust'), encoding: 'utf8' }));
@@ -74,7 +71,7 @@ const pages = ['---', 'editLink: false', '---', '', '# Behavior catalogue', '',
   'These links describe registered evidence and its scope. They are not a fresh test result or a claim of exhaustive coverage. ' +
   'See the [validation guide](' + source('formal/VALIDATION.md') + ') for how a completed run is established.', '',
   'All supported ports replay the shared histories through their native drivers. ' +
-  [link('TypeScript replay tests', 'typescript/test/formal-features.test.ts'), link('Go replay tests', 'go/internal/dialcache/feature_replay_test.go'), link('Rust replay tests', 'rust/tests/conformance.rs'), link('Python replay tests', 'python/tests/test_conformance.py')].join(' · ') + '.', '',
+  [link('TypeScript replay tests', 'typescript/test/formal-features.test.ts'), link('Go replay tests', 'go/feature_replay_test.go'), link('Rust replay tests', 'rust/tests/conformance.rs'), link('Python replay tests', 'python/tests/test_conformance.py')].join(' · ') + '.', '',
   '| Case | Behavior | Model and regression evidence | Shared replay evidence |',
   '| --- | --- | --- | --- |'];
 for (const item of inventory.cases) {

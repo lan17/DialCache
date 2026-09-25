@@ -13,7 +13,7 @@ import (
 // committed Quint expectations. It does not compute any expected wire result.
 func generatedProtocolGroups(t *testing.T) map[string][]json.RawMessage {
 	t.Helper()
-	raw, err := os.ReadFile("../../../formal/execution.json")
+	raw, err := os.ReadFile("../formal/execution.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func generatedProtocolGroups(t *testing.T) map[string][]json.RawMessage {
 			continue
 		}
 		export := model.VectorExport
-		raw, err := os.ReadFile(filepath.Join("../../..", export.Artifact))
+		raw, err := os.ReadFile(filepath.Join("..", export.Artifact))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,7 +54,7 @@ func generatedProtocolGroups(t *testing.T) map[string][]json.RawMessage {
 			t.Fatal("invalid generated protocol provenance")
 		}
 		for _, source := range export.Sources {
-			bytes, err := os.ReadFile(filepath.Join("../../..", source))
+			bytes, err := os.ReadFile(filepath.Join("..", source))
 			if err != nil {
 				t.Fatal(err)
 			}

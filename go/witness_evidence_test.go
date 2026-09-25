@@ -56,7 +56,7 @@ func witnessHash(path string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 func checkWitnessEvidence(profile, directory string, paths []string) error {
-	return checkWitnessEvidenceAt("../../..", profile, directory, paths)
+	return checkWitnessEvidenceAt("..", profile, directory, paths)
 }
 
 func checkWitnessEvidenceAt(root, profile, directory string, paths []string) error {

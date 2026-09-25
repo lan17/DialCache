@@ -1,8 +1,9 @@
-package dialcache
+package dialcache_test
 
 import (
 	"context"
 	"errors"
+	. "github.com/lan17/DialCache/go"
 	"testing"
 	"testing/synctest"
 	"time"

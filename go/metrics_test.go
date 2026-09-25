@@ -100,7 +100,7 @@ func TestDatadogMetricNamesUnitsAndLabels(t *testing.T) {
 }
 
 func TestPrometheusWireSchemaMatchesTypeScriptBinding(t *testing.T) {
-	source, err := os.ReadFile("../../../typescript/src/prometheus.ts")
+	source, err := os.ReadFile("../typescript/src/prometheus.ts")
 	if err != nil {
 		t.Fatal(err)
 	}

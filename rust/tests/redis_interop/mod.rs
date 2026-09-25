@@ -46,7 +46,7 @@ impl TypeScript {
         let output = Command::new("node")
             .arg("-e")
             .arg(build)
-            .arg(script.root.join("go/internal/dialcache/redis_interop.ts"))
+            .arg(script.root.join("go/internal/testsuite/redis_interop.ts"))
             .arg(script.directory.join("interop.cjs"))
             .current_dir(script.root.join("typescript"))
             .output()

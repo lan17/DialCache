@@ -1,7 +1,7 @@
 //! Witness-evidence check.
 //!
 //! Ports `checkWitnessEvidenceAt`, `witnessTraceKind` and `sharedReplaySources`
-//! from `go/internal/dialcache/witness_evidence_test.go`. Required reachability witnesses have one
+//! from `go/witness_evidence_test.go`. Required reachability witnesses have one
 //! evaluator shared by the language drivers (`node formal/witnesses.mjs
 //! evaluate`); reusing its result requires the exact corpus and definition
 //! hashes recorded in `<directory>/<profile>.json` to match this checkout byte

@@ -1,7 +1,7 @@
 //! Controls for the replay infrastructure itself: the coordinator transport,
 //! strict JSON, schema validation, inventory ids and the witness-evidence check.
-//! These port the harness tests of `go/internal/dialcache/replay_coordinator_test.go`,
-//! `go/internal/dialcache/behavior_replay_test.go` and `go/internal/dialcache/witness_evidence_test.go`.
+//! These port the harness tests of `go/replay_coordinator_test.go`,
+//! `go/behavior_replay_test.go` and `go/witness_evidence_test.go`.
 //!
 //! The transport tests spawn `node`; `node` on `PATH` must be Node 24 (see
 //! `formal::transport`). Prepend `/opt/homebrew/opt/node@24/bin` to `PATH`

@@ -109,9 +109,10 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     const goTest = (step: Step) => step.command === "go" && step.args?.includes("test");
     const replay = validationPlan("formal-go", { directory }).find(goTest)!;
     expect(replay.args).toContain("-skip");
+    // Only the root package owns the corpus report; helper packages have no tests.
+    expect(replay.args!.at(-1)).toBe(".");
     const skipped = new RegExp(replay.args![replay.args!.indexOf("-skip") + 1]!);
-    expect(replay.args!.at(-1)).toBe("./internal/dialcache");
-    for (const worker of ["TestGeneratedInvalidationVectors", "TestVectorBoundaryDriver"]) {
+    for (const worker of ["TestGeneratedInvalidationVectors", "TestVectorBoundaryDriver", "TestDocsTrackedInvalidation"]) {
       expect(skipped.test(worker), worker).toBe(true);
       expect(skipped.test(`${worker}Required`), worker).toBe(false);
       expect(skipped.test(`Other${worker}`), worker).toBe(false);

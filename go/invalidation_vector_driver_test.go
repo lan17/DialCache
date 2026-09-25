@@ -124,7 +124,7 @@ func TestGeneratedInvalidationVectors(t *testing.T) {
 	if os.Getenv("DIALCACHE_VECTOR_REDIS_URL") == "" {
 		t.Skip("this native vector lane runs in mutation campaigns")
 	}
-	raw, err := os.ReadFile("../../../formal/quint-invalidation-vectors.json")
+	raw, err := os.ReadFile("../formal/quint-invalidation-vectors.json")
 	if err != nil {
 		t.Fatal("INVALIDATION_INFRASTRUCTURE:", err)
 	}
@@ -151,7 +151,7 @@ func TestGeneratedInvalidationVectors(t *testing.T) {
 		t.Fatal("INVALIDATION_INFRASTRUCTURE: invalid provenance")
 	}
 	for _, path := range []string{model, "formal/generate-invalidation-vectors.mjs"} {
-		source, err := os.ReadFile(filepath.Join("../../..", path))
+		source, err := os.ReadFile(filepath.Join("..", path))
 		if err != nil || fmt.Sprintf("%x", sha256.Sum256(source)) != corpus.Provenance.SourceSHA256[path] {
 			t.Fatal("INVALIDATION_INFRASTRUCTURE: stale provenance", path, err)
 		}

@@ -33,7 +33,7 @@ const replaySettlement = "causally-ready-v1"
 var replayRecordDefinitions = map[string]string{"behaviorObservation": "observation", "coreObservation": "observation", "localClockObservation": "observation", "settlementReceipt": "receipt"}
 
 func readReplaySchema() (obj, error) {
-	raw, err := os.ReadFile("../../../formal/replay/protocol.schema.json")
+	raw, err := os.ReadFile("../formal/replay/protocol.schema.json")
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func newReplayCoordinator(t *testing.T) *replayCoordinator {
 	if err != nil {
 		t.Fatal("shared replay requires Node on PATH: ", err)
 	}
-	program, err := filepath.Abs("../../../formal/replay/coordinator.mjs")
+	program, err := filepath.Abs("../formal/replay/coordinator.mjs")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -850,11 +850,11 @@ func TestReplayCoordinatorMutationEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	original, err := os.ReadFile("../../../formal/conformance-smoke.itf.json")
+	original, err := os.ReadFile("../formal/conformance-smoke.itf.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	evaluator, err := filepath.Abs("../../../formal/measure-go-semantics.mjs")
+	evaluator, err := filepath.Abs("../formal/measure-go-semantics.mjs")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -887,7 +887,7 @@ func TestReplayCoordinatorMutationEvidence(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
-			command := exec.CommandContext(ctx, "go", "tool", "test2json", "-t", "-p", "github.com/lan17/DialCache/go/internal/dialcache", executable,
+			command := exec.CommandContext(ctx, "go", "tool", "test2json", "-t", "-p", "github.com/lan17/DialCache/go", executable,
 				"-test.v=test2json", "-test.run=^TestCoreConformance$", "-test.count=1")
 			for _, value := range os.Environ() {
 				if !strings.HasPrefix(value, "DIALCACHE_") {

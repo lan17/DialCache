@@ -187,7 +187,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     const selected = selectMutations(catalog.mutations, { shard, only });
     const evidence = boundaryEvidence().filter(entry => selected.some(mutation => mutation.id === entry.mutant));
     if (!only && shard.count > 1) report.shard = { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) };
-    const ordinaryFiles = ['', 'internal/dialcache/'].flatMap(prefix => readdirSync(resolve(moduleDirectory, prefix))
+    const ordinaryFiles = ['', 'internal/testsuite/'].flatMap(prefix => readdirSync(resolve(moduleDirectory, prefix))
       .filter(file => file.endsWith('_test.go') && !infrastructureTestFile.test(file)).map(file => prefix + file)).sort();
     const ordinary = ordinaryFiles.flatMap(file => [...readFileSync(resolve(moduleDirectory, file), 'utf8').matchAll(/^func (Test\w+)\(t \*testing\.T\)/gm)].map(match => match[1]));
     if (!ordinary.length || new Set(ordinary).size !== ordinary.length) throw new Error('invalid ordinary Go test selection');
@@ -232,7 +232,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     const run = (label, cohort, baseline) => {
       // Faults can make instance state process-global. Keep independent
       // synctest histories isolated; separate mutation shards still parallelize.
-      const result = spawnSync(go, ['test', '-json', '-count=1', '-parallel=1', '-timeout=480s', '-run', `^(${cohorts[cohort].join('|')})$`, cohort === 'ordinary' ? './...' : './internal/dialcache'], {
+      const result = spawnSync(go, ['test', '-json', '-count=1', '-parallel=1', '-timeout=480s', '-run', `^(${cohorts[cohort].join('|')})$`, ...(cohort === 'ordinary' ? ['.', './internal/testsuite'] : ['.'])], {
         cwd: moduleDirectory, env: { ...env, DIALCACHE_PROTOCOL_CORPUS: cohort === 'generated' ? 'generated' : 'fixed' }, encoding: 'utf8', timeout, maxBuffer: 128 * 1024 * 1024,
       });
       writeFileSync(resolve(output, `${label}-${cohort}.jsonl`), result.stdout ?? '');

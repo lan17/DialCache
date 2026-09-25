@@ -293,7 +293,7 @@ export const languages = {
     markdown: typescriptMarkdown, recordsRegressions: false },
   go: { name: 'Go', port: 'go', output: '.formal-traces/go-semantic', catalog: mutantCatalogPath, inputs: ['formal', 'go', 'typescript/test', 'typescript/src'],
     detection: mutations => goDetection(mutations), markdown: goMarkdown, recordsRegressions: true },
-  // The crate's unit tests read go/internal/dialcache/redis_adapter.go (script byte equality), so
+  // The crate's unit tests read go/redis_adapter.go (script byte equality), so
   // the Go source is an input of the ordinary cohort as well.
   rust: { name: 'Rust', boundaryEvidence: false, output: '.formal-traces/rust-semantic', catalog: 'formal/rust-mutations.json', inputs: ['formal', 'rust', 'typescript/test', 'typescript/src', 'go'], exclude: ['rust/target'],
     detection: mutations => goDetection(mutations), markdown: rustMarkdown, recordsRegressions: true },

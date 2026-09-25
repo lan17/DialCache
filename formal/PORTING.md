@@ -21,7 +21,7 @@ modules; Go and Rust use a persistent Node process over JSON lines. A new port c
 reuse that protocol instead of translating every profile's tables.
 Existing implementations
 are examples: [the TypeScript driver](../typescript/test/formal/behavior-driver.ts),
-[the Go driver](../go/internal/dialcache/behavior_driver_test.go) and
+[the Go driver](../go/behavior_driver_test.go) and
 [the Rust driver](../rust/tests/formal/driver.rs). A port need not copy their public
 API names, threading model, internal storage, or scheduling implementation.
 
@@ -34,7 +34,7 @@ API names, threading model, internal storage, or scheduling implementation.
 | External effects | Hold/release actual policy, Redis read/write, serialization, and decoding operations by their invocation IDs. A held operation cannot finish until its external release or specified failure. |
 | Clock control | Control wall time and elapsed time separately. Advance or shift only the specified clock; follow the profile's timer-delivery rule. Preserve fractional units in the local-clock profile. |
 | Storage inputs | Seed the specified bytes/value/TTL or execute invalidation. The adapter must expose the requested atomic primary snapshot and maintenance result. |
-| Settle | After every command, bring the implementation to quiescence under the `causally-ready-v1` contract: every task spawned by the implementation or the driver has finished or is blocked on a driver-owned gate, a driver-owned timer that is not yet due, or a driver-owned scope gate, and nothing is runnable. This obligation falls on the library as well as the test: it must expose its detached scheduling to the test executor (Go's `Defer` hook drained under `synctest.Wait`, the Node fake-timer microtask queue drained by `advanceTimersByTimeAsync(0)`) so the driver reaches quiescence without guessing turn counts or advancing deadline time. The coordinator checks this contract by name on every behavior `observe` through the driver's settlement receipt, rules R1 to R5 in the [trace and observation contract](#trace-and-observation-contract); a failed rule is a `Settlement violation`, an infrastructure error that earns no comparison credit. Both ports include a no-settle control: [formal-settlement-control.test.ts](../typescript/test/formal-settlement-control.test.ts) skips the TypeScript drain, and [settlement_control_replay_test.go](../go/internal/dialcache/settlement_control_replay_test.go) reports the Go observation held before the drain; each must fail with a settlement violation, never an observation mismatch, on the smoke history of every behavior-driver profile. A further port carries an equivalent control against its own driver. |
+| Settle | After every command, bring the implementation to quiescence under the `causally-ready-v1` contract: every task spawned by the implementation or the driver has finished or is blocked on a driver-owned gate, a driver-owned timer that is not yet due, or a driver-owned scope gate, and nothing is runnable. This obligation falls on the library as well as the test: it must expose its detached scheduling to the test executor (Go's `Defer` hook drained under `synctest.Wait`, the Node fake-timer microtask queue drained by `advanceTimersByTimeAsync(0)`) so the driver reaches quiescence without guessing turn counts or advancing deadline time. The coordinator checks this contract by name on every behavior `observe` through the driver's settlement receipt, rules R1 to R5 in the [trace and observation contract](#trace-and-observation-contract); a failed rule is a `Settlement violation`, an infrastructure error that earns no comparison credit. Both ports include a no-settle control: [formal-settlement-control.test.ts](../typescript/test/formal-settlement-control.test.ts) skips the TypeScript drain, and [settlement_control_replay_test.go](../go/settlement_control_replay_test.go) reports the Go observation held before the drain; each must fail with a settlement violation, never an observation mismatch, on the smoke history of every behavior-driver profile. A further port carries an equivalent control against its own driver. |
 | Observe | Read actual caller outcomes, source/effect counts, event order, timestamps, values and error categories after the step. Collect observations independently of expected model state. |
 | Cleanup | Drain or release test-owned work, restore clock/fault hooks, and isolate the next history. Unfinished work must not silently leak into another history. |
 
@@ -89,7 +89,7 @@ native fractional precision remains a separate binding check.
 The shared command definitions and per-profile bindings are in
 [replay/bindings.mjs](./replay/bindings.mjs). Their normalization, dynamic input
 selection and assertions are maintained once. The Go transport adapter is
-[replay_coordinator_test.go](../go/internal/dialcache/replay_coordinator_test.go); native environment
+[replay_coordinator_test.go](../go/replay_coordinator_test.go); native environment
 control remains in the driver. Node is a test-tool dependency, not a dependency
 of the Go cache library.
 
@@ -280,7 +280,7 @@ wire (a value the library hands back is recorded by reference, so the encoding
 fixes what this instant reported), drains the fake-timer queue once more at
 zero time, and reports 1 if that encoding changed plus the change in the
 pending fake-timer count. The Go driver
-([behavior_driver_test.go](../go/internal/dialcache/behavior_driver_test.go)) snapshots under its
+([behavior_driver_test.go](../go/behavior_driver_test.go)) snapshots under its
 lock, waits for every goroutine in the `synctest` bubble to block, and reports
 the deferred functions found plus 1 if the observation changed. Gates the
 library abandons, such as a read aborted by its deadline, stay registered until

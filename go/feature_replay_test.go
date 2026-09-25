@@ -32,7 +32,7 @@ func featurePaths(p string) ([]string, error) {
 		paths = append(paths, regressions...)
 		return paths, nil
 	}
-	return []string{filepath.Join("../../..", "formal", p+"-smoke.itf.json")}, nil
+	return []string{filepath.Join("..", "formal", p+"-smoke.itf.json")}, nil
 }
 
 // The exported regressions of a profile are the histories under
@@ -142,7 +142,7 @@ func TestFeatureConformance(t *testing.T) {
 
 func TestFeatureParserRejectsMissingAndUnsafeInputs(t *testing.T) {
 	coordinator := newReplayCoordinator(t)
-	raw, err := os.ReadFile("../../../formal/scope-smoke.itf.json")
+	raw, err := os.ReadFile("../formal/scope-smoke.itf.json")
 	if err != nil {
 		t.Fatal(err)
 	}

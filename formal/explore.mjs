@@ -213,8 +213,7 @@ export async function runExplorationSteps(plan, { directory, environment = proce
     let commandError;
     try { await execute([step], { directory, environment }); } catch (error) { commandError = String(error); }
     if (readFileSync(contextPath, 'utf8') !== contextText) throw new Error('Prepared exploration context changed during native execution.');
-    const moduleName = /^module\s+(\S+)\s*$/m.exec(readFileSync(resolve(directory, 'go/go.mod'), 'utf8'))?.[1];
-    const packageName = moduleName && `${moduleName}/internal/dialcache`;
+    const packageName = /^module\s+(\S+)\s*$/m.exec(readFileSync(resolve(directory, 'go/go.mod'), 'utf8'))?.[1];
     let result;
     try { result = nativeExplorationResult(language, readFileSync(path, 'utf8'), context, directory, packageName); }
     catch (cause) { throw new Error(`Invalid or missing ${language} native assertion report${commandError ? ` after ${commandError}` : ''}: ${cause}`, { cause }); }

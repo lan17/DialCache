@@ -47,8 +47,7 @@ export function loadGoReplayInventory() {
   validateExecution(manifest);
   const execution = scheduleExecution(manifest);
   const read = path => readFileSync(root + path, 'utf8');
-  const moduleName = /^module\s+(\S+)\s*$/m.exec(read('go/go.mod'))?.[1];
-  const packageName = moduleName && `${moduleName}/internal/dialcache`;
+  const packageName = /^module\s+(\S+)\s*$/m.exec(read('go/go.mod'))?.[1];
   return buildGoReplayInventory({ execution, packageName,
     scenarios: JSON.parse(read('formal/behavioral-scenarios.json')),
     protocol: protocolCorpus(execution) });

@@ -1,7 +1,7 @@
 //! Real-server replay of the invalidation transition vectors
 //! (`formal/PROTOCOL.md`, "Invalidation vector schema 2").
 //!
-//! Mirrors `go/internal/dialcache/redis_integration_test.go` `testInvalidationVectors`: the 49
+//! Mirrors `go/internal/testsuite/redis_integration_test.go` `testInvalidationVectors`: the 49
 //! fixed vectors of `formal/invalidation-vectors.json` are merged with the
 //! 288 Quint-generated vectors of `formal/quint-invalidation-vectors.json`
 //! after the generated corpus's provenance fingerprints are verified. Each

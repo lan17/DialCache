@@ -150,7 +150,7 @@ export function measureRustSemantics({ shard = { index: 1, count: 1 }, only } = 
     // Copies keep repo-relative paths while mutations stay outside the shared
     // checkout; the crate's build output is not an input and is not copied.
     // go/ is copied because a crate unit test compares the invalidation
-    // script with go/internal/dialcache/redis_adapter.go byte for byte.
+    // script with go/redis_adapter.go byte for byte.
     for (const path of ['formal', 'typescript/test', 'typescript/src', 'go']) cpSync(resolve(root, path), resolve(workspace, path), { recursive: true });
     const target = resolve(root, 'rust/target');
     cpSync(resolve(root, 'rust'), resolve(workspace, 'rust'), { recursive: true, filter: source => source !== target && !source.startsWith(`${target}/`) });

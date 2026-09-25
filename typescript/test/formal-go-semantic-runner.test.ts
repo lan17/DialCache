@@ -5,7 +5,7 @@ const { evaluateGoTestEvents } = await import(moduleUrl) as {
   evaluateGoTestEvents(events: string, exitCode: number, expectedPackages?: number): { state: string; assertionKinds: Record<string, string> };
 };
 const publicPackage = "github.com/lan17/DialCache/go";
-const internalPackage = `${publicPackage}/internal/dialcache`;
+const suitePackage = `${publicPackage}/internal/testsuite`;
 
 function replayFailure(parent: string, file: string, output: string): string {
   const leaf = `${parent}/trace.itf.json`;
@@ -16,33 +16,33 @@ function replayFailure(parent: string, file: string, output: string): string {
     { Action: "fail", Test: leaf },
     { Action: "fail", Test: parent },
     { Action: "fail" },
-  ].map(event => JSON.stringify({ Package: internalPackage, ...event })).join("\n");
+  ].map(event => JSON.stringify({ Package: publicPackage, ...event })).join("\n");
 }
 const localClockFailure = (output: string) => replayFailure("TestLocalClockConformance", "local_clock_profile_test.go", output);
 
-it("requires both public and internal package completion for ordinary Go mutations", () => {
-  const publicTests = [
-    { Action: "run", Test: "TestDocsRequestScope" },
-    { Action: "pass", Test: "TestDocsRequestScope" },
+it("requires both root and moved-test package completion for ordinary Go mutations", () => {
+  const suiteTests = [
+    { Action: "run", Test: "TestObserversFanOutAndMetricsAdapterIsIsolated" },
+    { Action: "pass", Test: "TestObserversFanOutAndMetricsAdapterIsIsolated" },
     { Action: "pass" },
-  ].map(event => JSON.stringify({ Package: publicPackage, ...event })).join("\n");
-  const internalFailure = replayFailure("TestCache", "cache_test.go", "unexpected value");
-  const both = `${publicTests}\n${internalFailure}`;
+  ].map(event => JSON.stringify({ Package: suitePackage, ...event })).join("\n");
+  const rootFailure = replayFailure("TestCache", "cache_test.go", "unexpected value");
+  const both = `${suiteTests}\n${rootFailure}`;
   expect(evaluateGoTestEvents(both, 1, 2)).toMatchObject({ state: "detected" });
-  expect(() => evaluateGoTestEvents(internalFailure, 1, 2)).toThrow(/incomplete or skipped/);
+  expect(() => evaluateGoTestEvents(rootFailure, 1, 2)).toThrow(/incomplete or skipped/);
   expect(() => evaluateGoTestEvents(both, 1)).toThrow(/incomplete or skipped/);
   expect(() => evaluateGoTestEvents(both.replace('"Action":"pass"}', '"Action":"skip"}'), 1, 2)).toThrow(/incomplete or skipped/);
 });
 
 it("does not let one package's assertion failure hide another package's crash", () => {
-  const internalFailure = replayFailure("TestCache", "cache_test.go", "unexpected value");
-  const publicCrash = [
-    { Action: "run", Test: "TestPublicCacheAndErrors" },
-    { Action: "pass", Test: "TestPublicCacheAndErrors" },
+  const rootFailure = replayFailure("TestCache", "cache_test.go", "unexpected value");
+  const suiteCrash = [
+    { Action: "run", Test: "TestObserversFanOutAndMetricsAdapterIsIsolated" },
+    { Action: "pass", Test: "TestObserversFanOutAndMetricsAdapterIsIsolated" },
     { Action: "output", Output: "signal: killed\n" },
     { Action: "fail" },
-  ].map(event => JSON.stringify({ Package: publicPackage, ...event })).join("\n");
-  expect(() => evaluateGoTestEvents(`${internalFailure}\n${publicCrash}`, 1, 2)).toThrow(/package status and assertion results disagree/);
+  ].map(event => JSON.stringify({ Package: suitePackage, ...event })).join("\n");
+  expect(() => evaluateGoTestEvents(`${rootFailure}\n${suiteCrash}`, 1, 2)).toThrow(/package status and assertion results disagree/);
 });
 
 describe("Go local-clock mutation assertion attribution", () => {

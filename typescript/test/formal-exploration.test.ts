@@ -26,8 +26,7 @@ const inventory: Entry[] = [
   { id: "sampled/recovery/0", category: "sampled", profile: "recovery", path: ".formal-traces/features/recovery/trace_0.itf.json" },
   { id: "witness/recovery", category: "witness", profile: "recovery" },
 ];
-const moduleName = "example.com/exploration";
-const packageName = `${moduleName}/internal/dialcache`;
+const packageName = "example.com/exploration";
 const context = (language: string) => ({ kind: "exploration", language, createdAt: 1, inventory,
   specification: {}, implementation: {}, corpus: language === "python" ? Object.fromEntries(inventory.filter(entry => entry.path)
     .map(entry => [entry.path!, createHash("sha256").update("synthetic exploratory history").digest("hex")])) : {} });
@@ -229,7 +228,7 @@ describe("isolated exploratory validation", () => {
     const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-run-"));
     try {
       mkdirSync(join(directory, ".formal-traces")); mkdirSync(join(directory, "go"));
-      writeFileSync(join(directory, "go/go.mod"), `module ${moduleName}\n`);
+      writeFileSync(join(directory, "go/go.mod"), `module ${packageName}\n`);
       for (const [language, prefix] of [["typescript", "ts"], ["go", "go"]]) {
         writeFileSync(join(directory, `.formal-traces/${prefix}-context.json`), JSON.stringify(context(language!)));
       }

@@ -184,7 +184,7 @@ constructed at different fractional times share one process grid. Native tests
 separately distinguish precise source/read/shadow budgets; integer-tick traces
 in other profiles cannot establish these binding boundaries.
 
-[`clock_precision_test.go`](../go/internal/dialcache/clock_precision_test.go) uses deterministic
+[`clock_precision_test.go`](../go/clock_precision_test.go) uses deterministic
 native clock phases to exercise source and read completion before and at their
 budgets, served and dark shadow deadlines, insertion expiry, coalescing age,
 early timer delivery, and integer-clock compatibility. These native regressions retain their own C23/C25 and B02 evidence. The separate

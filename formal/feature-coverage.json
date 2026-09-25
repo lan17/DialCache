@@ -590,13 +590,13 @@
       "go": [
         {
           "test": "TestCachedRegistrationAndCapturedDefaults",
-          "path": "go/internal/dialcache/bindings_test.go",
+          "path": "go/internal/testsuite/bindings_test.go",
           "scope": "Duplicate Cached registration rejects; mutated caller-owned ramp does not alter the captured default; disabled calls skip the key selector and dynamic key failure fails open.",
-          "sha256": "a3a9f7200700d54c58311bd9f012a1da18c6b9fec353ae97a110ee77c7f2f1a1"
+          "sha256": "8a68b7191adb9085a22b834055e58c29d5cce2b27ef01c947a5d1d435c5b28df"
         },
         {
           "test": "TestReservedIdentityValidationBoundary",
-          "path": "go/internal/dialcache/identity_boundary_test.go",
+          "path": "go/identity_boundary_test.go",
           "scope": "Static reserved use cases reject before callbacks; computed invalid identity skips policy/cache work and preserves source success/error in enabled and disabled calls.",
           "sha256": "ebd328cca89b2856e6954efa0895c57072471a80856bf623c41d6c1495303b61"
         }
@@ -644,24 +644,24 @@
       "go": [
         {
           "test": "TestInlineFallbackDeadlineSnapshot",
-          "path": "go/internal/dialcache/api_boundary_test.go",
+          "path": "go/api_boundary_test.go",
           "scope": "Per-invocation fallback deadline remains captured while the policy provider or initial remote read is pending.",
           "sha256": "89b23524111ef2a2519c6bde19f015fe19565658fcd78774d7a9b4f5594e349f"
         },
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestCachedRegistrationAfterInlineUseCase",
           "scope": "Inline calls do not reserve registration; a later compatible Cached wrapper sees the same entry, duplicate wrapper registration rejects, and inline reuse continues.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         },
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestInlineOperationCodecOverridesDefaultOnReadAndWrite",
           "scope": "Public inline calls select a valid operation codec over the JSONCodec default for both Encode and Decode; exact stored text/binary bytes, source/read/write counts and codec call counters distinguish override from the default.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         },
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestInlinePolicySnapshotsMutableRampPerInvocation",
           "scope": "While the first GetOrLoad waits at a provider barrier, mutating the caller-owned default ramp cannot revoke its captured policy; later calls see rampdown and reenablement reuses the first value without an extra source.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
@@ -698,7 +698,7 @@
       "go": [
         {
           "test": "TestReservedIdentityValidationBoundary",
-          "path": "go/internal/dialcache/identity_boundary_test.go",
+          "path": "go/identity_boundary_test.go",
           "scope": "Static reserved use cases reject before callbacks; computed invalid identity skips policy/cache work and preserves source success/error in enabled and disabled calls.",
           "sha256": "ebd328cca89b2856e6954efa0895c57072471a80856bf623c41d6c1495303b61"
         }
@@ -771,15 +771,15 @@
       "go": [
         {
           "test": "TestPolicyStaticValidation",
-          "path": "go/internal/dialcache/policy_test.go",
+          "path": "go/internal/testsuite/policy_test.go",
           "scope": "Malformed option types and combinations reject; the maximum supported remote TTL/read budget is accepted and fractional-second static TTL is rejected.",
-          "sha256": "baeb5c2514d70acc4e0e2a1f37de94302eac8a3b398dcec00dcefa536c53b462"
+          "sha256": "91439ed1fd62de50007188a14751d45a2c5424be384d6ac393a8226644793c57"
         },
         {
           "test": "TestRuntimePolicyFailureScopes",
-          "path": "go/internal/dialcache/policy_test.go",
+          "path": "go/internal/testsuite/policy_test.go",
           "scope": "Malformed invocation-wide leaves fail resolution; invalid layer/recovery leaves retain the other active layers and their failure categories.",
-          "sha256": "baeb5c2514d70acc4e0e2a1f37de94302eac8a3b398dcec00dcefa536c53b462"
+          "sha256": "91439ed1fd62de50007188a14751d45a2c5424be384d6ac393a8226644793c57"
         }
       ],
       "adaptation": "Native number and optional-value encodings differ; each binding must distinguish absent, explicitly disabled, malformed, and boundary values.",
@@ -831,9 +831,9 @@
       "go": [
         {
           "test": "TestPolicySparseResolutionAndSnapshots",
-          "path": "go/internal/dialcache/policy_test.go",
+          "path": "go/internal/testsuite/policy_test.go",
           "scope": "Nested runtime leaves merge independently, omitted leaves inherit, and captured nested pointer-valued defaults survive caller mutation.",
-          "sha256": "baeb5c2514d70acc4e0e2a1f37de94302eac8a3b398dcec00dcefa536c53b462"
+          "sha256": "91439ed1fd62de50007188a14751d45a2c5424be384d6ac393a8226644793c57"
         }
       ],
       "adaptation": "Eager defaulting can erase inherited leaves even when ordinary effective-policy examples pass.",
@@ -885,12 +885,12 @@
       "go": [
         {
           "test": "TestInstanceCapacitySafeIntegerBounds",
-          "path": "go/internal/dialcache/api_boundary_test.go",
+          "path": "go/api_boundary_test.go",
           "scope": "On 64-bit Go, WithLocalCapacity and WithShadowCapacity above the safe-integer maximum return ErrInvalidOption from New, and the exact maximum constructs without eager allocation.",
           "sha256": "89b23524111ef2a2519c6bde19f015fe19565658fcd78774d7a9b4f5594e349f"
         },
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestCapacityConstructionOmissionAndBounds",
           "scope": "Omitted options resolve to local 10000 and shadow 1; WithLocalCapacity(0) retains no settled value while coalescing continues; negative local and shadow capacities return ErrInvalidOption from New.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
@@ -934,13 +934,13 @@
       "go": [
         {
           "test": "TestNestedDisablePreservesMemoAndOutsideDoesNotShare",
-          "path": "go/internal/dialcache/cache_test.go",
+          "path": "go/cache_test.go",
           "scope": "Nested reenablement reuses the outer request memo while disabled/outside calls load independently.",
           "sha256": "fda50bd19147894c1d750f6e2d2e99a456faa9621e1485d6c60c897fa82f85bc"
         },
         {
           "test": "TestClosedScopeCannotPublishIntoReplacement",
-          "path": "go/internal/dialcache/cache_test.go",
+          "path": "go/cache_test.go",
           "scope": "Late closed-scope source completion cannot overwrite replacement-scope memo; reusing the closed context bypasses caching.",
           "sha256": "fda50bd19147894c1d750f6e2d2e99a456faa9621e1485d6c60c897fa82f85bc"
         }
@@ -982,7 +982,7 @@
       "go": [
         {
           "test": "TestRedisAdapterReadsAndBoundaries",
-          "path": "go/internal/dialcache/redis_adapter_test.go",
+          "path": "go/redis_adapter_test.go",
           "scope": "Tracked native MGET validates pair length and element types; mutation validators reject non-OK and non-integer-one reply domains.",
           "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
         }
@@ -1018,15 +1018,15 @@
       "go": [
         {
           "test": "TestLoggerFailuresPreserveSourceAndMaintenanceResults",
-          "path": "go/internal/dialcache/api_boundary_test.go",
+          "path": "go/api_boundary_test.go",
           "scope": "Failing native loggers preserve original source values/errors and explicit invalidation errors.",
           "sha256": "89b23524111ef2a2519c6bde19f015fe19565658fcd78774d7a9b4f5594e349f"
         },
         {
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
-          "path": "go/internal/dialcache/metrics_test.go",
+          "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "b22ccca4a489baf2298c5da274a7bfc7716d2038cc583e66e6a869c3e430d59b"
+          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
         }
       ],
       "adaptation": "Observability must remain diagnostic even when both the primary operation and logger fail.",
@@ -1092,42 +1092,42 @@
       "go": [
         {
           "test": "TestPreciseSourceDeadline",
-          "path": "go/internal/dialcache/clock_precision_test.go",
+          "path": "go/clock_precision_test.go",
           "scope": "Fractional native elapsed starts preserve source budget just before its boundary and reject settlement at the boundary.",
           "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestPreciseRemoteReadDeadline",
-          "path": "go/internal/dialcache/clock_precision_test.go",
+          "path": "go/clock_precision_test.go",
           "scope": "Fractional native elapsed starts preserve the remote-read budget and cancel at the effective boundary.",
           "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestPreciseShadowDeadline",
-          "path": "go/internal/dialcache/clock_precision_test.go",
+          "path": "go/clock_precision_test.go",
           "scope": "Served and dark shadow budgets preserve fractional elapsed time and suppress publication after the boundary.",
           "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestLocalInsertionExpiryUsesWholeMilliseconds",
-          "path": "go/internal/dialcache/clock_precision_test.go",
+          "path": "go/clock_precision_test.go",
           "scope": "A local entry inserted at 0.7ms is hit at 999.9ms and missed at 1000ms, matching the TypeScript whole-millisecond monotonic expiry boundary.",
           "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestPreciseDeadlineRechecksEarlyTimer",
-          "path": "go/internal/dialcache/clock_precision_test.go",
+          "path": "go/clock_precision_test.go",
           "scope": "An early native timer callback rechecks elapsed deadline and schedules remaining time.",
           "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestPreciseLocalTTLAcceptsLargeIntegerClockOrigin",
-          "path": "go/internal/dialcache/clock_precision_test.go",
+          "path": "go/clock_precision_test.go",
           "scope": "Large supported integer elapsed origins preserve local TTL without duration overflow.",
           "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
-          "path": "go/internal/dialcache/clock_precision_test.go",
+          "path": "go/clock_precision_test.go",
           "test": "TestDefaultInstancesShareLocalMillisecondGrid",
           "scope": "Default instances constructed 0.4ms apart use the same monotonic millisecond grid: same-time insertion hits just before the common boundary and reloads in both instances at equality; default elapsed time remains nonnegative.",
           "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
@@ -1162,7 +1162,7 @@
       ],
       "go": [
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestBorrowedReferencesSurviveFollowersAndCacheHits",
           "scope": "Map and pointer identities survive leader/follower returns and request/local cache hits; local reuse also crosses enabled request scopes without another source call.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
@@ -1204,9 +1204,9 @@
       "go": [
         {
           "test": "TestJSONCodecNativeSemantics",
-          "path": "go/internal/dialcache/codec_test.go",
+          "path": "go/internal/testsuite/codec_test.go",
           "scope": "Default codec asserts explicit absent/null/sentinel, native JSON lossy values and ordering, invalid/cyclic values, and typed-destination representation boundaries.",
-          "sha256": "c50ea59c78bfe50e1182c347bd2918d99e0598a52d463b116e6ab33f671e2e0a"
+          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
         }
       ],
       "adaptation": "Default codec absence is a binding convention beyond the abstract cache presence bit.",
@@ -1239,9 +1239,9 @@
       "go": [
         {
           "test": "TestJSONCodecNativeSemantics",
-          "path": "go/internal/dialcache/codec_test.go",
+          "path": "go/internal/testsuite/codec_test.go",
           "scope": "Default codec asserts explicit absent/null/sentinel, native JSON lossy values and ordering, invalid/cyclic values, and typed-destination representation boundaries.",
-          "sha256": "c50ea59c78bfe50e1182c347bd2918d99e0598a52d463b116e6ab33f671e2e0a"
+          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
         }
       ],
       "adaptation": "NaN, infinities, absent array/object members, byte-buffer conversion and unsupported types must have a declared cross-language domain.",
@@ -1273,9 +1273,9 @@
       "go": [
         {
           "test": "TestJSONCodecUnicodeScalarDomain",
-          "path": "go/internal/dialcache/codec_test.go",
+          "path": "go/internal/testsuite/codec_test.go",
           "scope": "Valid JSON surrogate pairs and literal escapes decode; lone escaped surrogates in values or keys reject for generic and typed Go destinations.",
-          "sha256": "c50ea59c78bfe50e1182c347bd2918d99e0598a52d463b116e6ab33f671e2e0a"
+          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
         }
       ],
       "adaptation": "Direct frame text replacement is a wire rule; JSON escaped lone-surrogate support differs by language and is explicitly outside the shared value domain.",
@@ -1301,12 +1301,12 @@
       "go": [
         {
           "test": "TestSemanticEqualPortableDomain",
-          "path": "go/internal/dialcache/codec_test.go",
+          "path": "go/internal/testsuite/codec_test.go",
           "scope": "Direct native comparator table distinguishes absent/null, signed zero, NaN, nested maps, missing fields and binary/array values.",
-          "sha256": "c50ea59c78bfe50e1182c347bd2918d99e0598a52d463b116e6ab33f671e2e0a"
+          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
         },
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestDefaultShadowComparatorNativeValueBoundaries",
           "scope": "The same ten native value corners execute through public cache shadow validation with the default comparator; exact source/decode/read/write and terminal outcome counts are asserted.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
@@ -1343,9 +1343,9 @@
       "go": [
         {
           "test": "TestPrometheusWireSchemaMatchesTypeScriptBinding",
-          "path": "go/internal/dialcache/metrics_test.go",
+          "path": "go/metrics_test.go",
           "scope": "All nineteen Go collector names, help text, label order, kinds and bucket boundaries are checked against the TS binding schema.",
-          "sha256": "b22ccca4a489baf2298c5da274a7bfc7716d2038cc583e66e6a869c3e430d59b"
+          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
         }
       ],
       "adaptation": "Exporter schema changes break dashboards even when portable event semantics still pass; current Go schema check derives its expectation from TS source, not Quint.",
@@ -1383,9 +1383,9 @@
       "go": [
         {
           "test": "TestPrometheusReuseAndConflictIsolation",
-          "path": "go/internal/dialcache/metrics_test.go",
+          "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "b22ccca4a489baf2298c5da274a7bfc7716d2038cc583e66e6a869c3e430d59b"
+          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
         }
       ],
       "adaptation": "Registry ownership and collector reuse avoid global pollution and duplicate collectors in multi-instance deployments.",
@@ -1423,21 +1423,21 @@
       "go": [
         {
           "test": "TestPrometheusReuseAndConflictIsolation",
-          "path": "go/internal/dialcache/metrics_test.go",
+          "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "b22ccca4a489baf2298c5da274a7bfc7716d2038cc583e66e6a869c3e430d59b"
+          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
         },
         {
           "test": "TestPrometheusExplicitBindingsPreserveExistingObservations",
-          "path": "go/internal/dialcache/metrics_test.go",
+          "path": "go/metrics_test.go",
           "scope": "Explicit compatible externally created collectors preserve pre-existing counter and histogram observations when bound by an adapter.",
-          "sha256": "b22ccca4a489baf2298c5da274a7bfc7716d2038cc583e66e6a869c3e430d59b"
+          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
         },
         {
           "test": "TestPrometheusBindingsRejectIncompatibleOrUnregisteredCollectors",
-          "path": "go/internal/dialcache/metrics_test.go",
+          "path": "go/metrics_test.go",
           "scope": "Explicit collector bindings reject malformed schema, conflicting registry state or unregistered collector identities.",
-          "sha256": "b22ccca4a489baf2298c5da274a7bfc7716d2038cc583e66e6a869c3e430d59b"
+          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
         }
       ],
       "adaptation": "Go requires explicit collector bindings/schema because client_golang cannot expose empty histogram bucket schema; no destructive compatibility probing is permitted.",
@@ -1477,9 +1477,9 @@
       "go": [
         {
           "test": "TestDatadogMetricNamesUnitsAndLabels",
-          "path": "go/internal/dialcache/metrics_test.go",
+          "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "b22ccca4a489baf2298c5da274a7bfc7716d2038cc583e66e6a869c3e430d59b"
+          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
         }
       ],
       "adaptation": "Different observation modes have different backend semantics and require a namespace migration; current schema source remains native integration code.",
@@ -1518,9 +1518,9 @@
       "go": [
         {
           "test": "TestDatadogMetricNamesUnitsAndLabels",
-          "path": "go/internal/dialcache/metrics_test.go",
+          "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "b22ccca4a489baf2298c5da274a7bfc7716d2038cc583e66e6a869c3e430d59b"
+          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
         }
       ],
       "adaptation": "Typed Go methods replace TS duck-typed method validation, but namespace and cardinality constraints remain observable integration contracts.",
@@ -1558,9 +1558,9 @@
       "go": [
         {
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
-          "path": "go/internal/dialcache/metrics_test.go",
+          "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "b22ccca4a489baf2298c5da274a7bfc7716d2038cc583e66e6a869c3e430d59b"
+          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
         }
       ],
       "adaptation": "C60 covers whether a warning happens; bounded formatting and native JSON failures are separate observability behavior.",
@@ -1595,18 +1595,18 @@
       "go": [
         {
           "test": "TestProcessCoalescingInspectionTracksLiveOwnership",
-          "path": "go/internal/dialcache/bindings_test.go",
+          "path": "go/internal/testsuite/bindings_test.go",
           "scope": "One process leader and follower appear in a live snapshot with nonnil age; settlement clears counts and age.",
-          "sha256": "a3a9f7200700d54c58311bd9f012a1da18c6b9fec353ae97a110ee77c7f2f1a1"
+          "sha256": "8a68b7191adb9085a22b834055e58c29d5cce2b27ef01c947a5d1d435c5b28df"
         },
         {
           "test": "TestPreciseCoalescingAge",
-          "path": "go/internal/dialcache/clock_precision_test.go",
+          "path": "go/clock_precision_test.go",
           "scope": "Reported oldest process-flight age is computed from elapsed interval before rounding, across fractional native clock origins.",
           "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestCoalescingInspectionSeparatesKeysInstancesAndRequestWork",
           "scope": "Two keys aggregate leaders and followers with distinct start ages; settling the oldest source selects the remaining age, source rejection cleans up, another instance stays isolated, and request-only sharing never appears in process inspection.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
@@ -1644,9 +1644,9 @@
       "go": [
         {
           "test": "TestCompressionLimitsAndIndependentLoads",
-          "path": "go/internal/dialcache/codec_test.go",
+          "path": "go/internal/testsuite/codec_test.go",
           "scope": "Controllable expansion limits retain raw input and report over-limit outcomes; repeated decompression/escape loads do not mutate retained input; threshold and level reject invalid settings.",
-          "sha256": "c50ea59c78bfe50e1182c347bd2918d99e0598a52d463b116e6ab33f671e2e0a"
+          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
         }
       ],
       "adaptation": "Resource-limit outcomes are tested with controllable caps; this is not a performance or arbitrary decompression-bomb proof.",
@@ -1697,12 +1697,12 @@
       "go": [
         {
           "test": "TestCompressionLimitsAndIndependentLoads",
-          "path": "go/internal/dialcache/codec_test.go",
+          "path": "go/internal/testsuite/codec_test.go",
           "scope": "Controllable expansion limits retain raw input and report over-limit outcomes; repeated decompression/escape loads do not mutate retained input; threshold and level reject invalid settings.",
-          "sha256": "c50ea59c78bfe50e1182c347bd2918d99e0598a52d463b116e6ab33f671e2e0a"
+          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
         },
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestCompressionConstructionDefaultsAndExplicitDisable",
           "scope": "New rejects invalid enabled compression; documented 4096-byte/level-3 defaults select raw versus compressed writes at the serialized byte boundary; explicit disable preserves a large raw JSON write without compression outcomes.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
@@ -1745,9 +1745,9 @@
       "go": [
         {
           "test": "TestZstdFirstFrameAndMalformedBodies",
-          "path": "go/internal/dialcache/codec_test.go",
+          "path": "go/internal/testsuite/codec_test.go",
           "scope": "The tested CRC! trailer and concatenated copy preserve the first decoded frame. The tested empty bodies for both markers and truncated compressed body return fallback_raw with unchanged bytes.",
-          "sha256": "c50ea59c78bfe50e1182c347bd2918d99e0598a52d463b116e6ab33f671e2e0a"
+          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
         }
       ],
       "adaptation": "Legacy marker collisions can be indistinguishable from envelopes. Native codecs can differ in whether empty or truncated input is accepted; rejection preserves the marked bytes, while acceptance follows the decoder result and envelope type. Shared Quint envelope cases 135-170 cover rejected ff, 28b5 and 28b52ffd bodies under both markers, with native runners verifying the codec inputs before checking wrapper fallback. Selected first-frame and trailing-byte behaviors remain native adaptation evidence.",
@@ -1784,13 +1784,13 @@
       "go": [
         {
           "test": "TestCompressionLimitsAndIndependentLoads",
-          "path": "go/internal/dialcache/codec_test.go",
+          "path": "go/internal/testsuite/codec_test.go",
           "scope": "Controllable expansion limits retain raw input and report over-limit outcomes; repeated decompression/escape loads do not mutate retained input; threshold and level reject invalid settings.",
-          "sha256": "c50ea59c78bfe50e1182c347bd2918d99e0598a52d463b116e6ab33f671e2e0a"
+          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
         },
         {
           "test": "TestBinaryCodecRemoteRoundTripPreservesBytesAndTag",
-          "path": "go/internal/dialcache/cache_test.go",
+          "path": "go/cache_test.go",
           "scope": "A custom binary codec crosses remote publication/read with exact invalid-UTF8 bytes and binary tag, reusing one source result.",
           "sha256": "fda50bd19147894c1d750f6e2d2e99a456faa9621e1485d6c60c897fa82f85bc"
         }
@@ -1834,7 +1834,7 @@
       "go": [
         {
           "test": "TestRedisAdapterMutationDispatch",
-          "path": "go/internal/dialcache/redis_adapter_test.go",
+          "path": "go/redis_adapter_test.go",
           "scope": "Native SET uses the supplied complete frame and ceil-PX TTL; invalid TTL never dispatches; EVALSHA rejection retries identical EVAL arguments and an invalid reply does not retry.",
           "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
         }
@@ -1876,13 +1876,13 @@
       "go": [
         {
           "test": "TestRedisIntegration",
-          "path": "go/internal/dialcache/redis_integration_test.go",
+          "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "04eec7bca2b580bf08347eb3ab85eb743398674f0dd7b104bcd59543648dd5cd"
+          "sha256": "f1919eacccda5cc36ac2d91c5d9afa415e230e68cfb35307ce640324631f6874"
         },
         {
           "test": "TestRedisAdapterReadsAndBoundaries",
-          "path": "go/internal/dialcache/redis_adapter_test.go",
+          "path": "go/redis_adapter_test.go",
           "scope": "Tracked native MGET validates pair length and element types; mutation validators reject non-OK and non-integer-one reply domains.",
           "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
         }
@@ -1930,12 +1930,12 @@
       "go": [
         {
           "test": "TestRedisAdapterMutationDispatch",
-          "path": "go/internal/dialcache/redis_adapter_test.go",
+          "path": "go/redis_adapter_test.go",
           "scope": "Native SET uses the supplied complete frame and ceil-PX TTL; invalid TTL never dispatches; EVALSHA rejection retries identical EVAL arguments and an invalid reply does not retry.",
           "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
         },
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestRedisAdapterSurfacesInvalidationRetryError",
           "scope": "A NOSCRIPT EVALSHA rejection causes exactly one EVAL with unchanged logical arguments; terminal EVAL error identity and existing cause are returned unchanged, without attaching the earlier NOSCRIPT error.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
@@ -1970,7 +1970,7 @@
       ],
       "go": [
         {
-          "path": "go/internal/dialcache/feature_boundary_test.go",
+          "path": "go/feature_boundary_test.go",
           "test": "TestRedisAdapterForwardsReadContextCancellation",
           "scope": "Hooked GET and tracked MGET receive the supplied cancellation channel and context metadata; cancelling after dispatch returns context.Canceled through the adapter.",
           "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
@@ -2023,9 +2023,9 @@
       "go": [
         {
           "test": "TestRedisIntegration",
-          "path": "go/internal/dialcache/redis_integration_test.go",
+          "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "04eec7bca2b580bf08347eb3ab85eb743398674f0dd7b104bcd59543648dd5cd"
+          "sha256": "f1919eacccda5cc36ac2d91c5d9afa415e230e68cfb35307ce640324631f6874"
         }
       ],
       "adaptation": "Real-server dispatch, Lua semantics, topology and mixed-language data are outside an in-memory conformance driver.",

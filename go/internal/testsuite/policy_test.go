@@ -1,6 +1,7 @@
-package dialcache
+package dialcache_test
 
 import (
+	. "github.com/lan17/DialCache/go"
 	"math"
 	"testing"
 	"time"

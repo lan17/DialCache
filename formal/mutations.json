@@ -5,7 +5,7 @@
       "id": "M01",
       "case": "C45.maximum-age-exclusive",
       "description": "Accept a retained candidate at the exact maximum age after decoding",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.recoverRetainedCandidate and Go go/internal/dialcache/engine.go recover make the post-decode age check inclusive, so a retained candidate whose re-sampled age equals the configured maximum is served instead of rejected. The ports check the ceiling at initial-read retention, before decode and after decode; flipping an earlier site alone is masked by the post-decode recheck because ages only grow, so this is the one observable single-site inclusive edit.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.recoverRetainedCandidate and Go go/engine.go recover make the post-decode age check inclusive, so a retained candidate whose re-sampled age equals the configured maximum is served instead of rejected. The ports check the ceiling at initial-read retention, before decode and after decode; flipping an earlier site alone is masked by the post-decode recheck because ages only grow, so this is the one observable single-site inclusive edit.",
       "typescript": {
         "edits": [
           {
@@ -23,7 +23,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age >= maxAge {",
             "after": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age > maxAge {"
           }
@@ -38,7 +38,7 @@
       "id": "M02",
       "case": "C45.recheck-after-decode",
       "description": "Reuse the pre-decode age instead of observing age after asynchronous decoding",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.recoverRetainedCandidate reuses the pre-decode age as the serving age, and Go go/internal/dialcache/engine.go recover keeps the pre-decode age and validity instead of re-sampling after decoding. A retained candidate that crosses the maximum age while it is being decoded is therefore served.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.recoverRetainedCandidate reuses the pre-decode age as the serving age, and Go go/engine.go recover keeps the pre-decode age and validity instead of re-sampling after decoding. A retained candidate that crosses the maximum age while it is being decoded is therefore served.",
       "typescript": {
         "edits": [
           {
@@ -56,7 +56,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "age, valid = x.frameAge(frame, \"remote\")",
             "after": "// Fault injection: retain the pre-decode age and validity."
           }
@@ -71,7 +71,7 @@
       "id": "M03",
       "case": "C25.late-source-rejected",
       "description": "Accept an externally settled result after its elapsed deadline when the timer has not run",
-      "rationale": "TypeScript typescript/src/internal/deadline.ts withMonotonicDeadline stops checking elapsed time when the operation settles, and Go go/internal/dialcache/deadline.go awaitDeadline accepts every result that arrives on its done channel. A source that settles after its deadline but before the timer fires is accepted instead of timed out; timer-delivered timeouts are unchanged.",
+      "rationale": "TypeScript typescript/src/internal/deadline.ts withMonotonicDeadline stops checking elapsed time when the operation settles, and Go go/deadline.go awaitDeadline accepts every result that arrives on its done channel. A source that settles after its deadline but before the timer fires is accepted instead of timed out; timer-delivered timeouts are unchanged.",
       "typescript": {
         "edits": [
           {
@@ -89,7 +89,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/deadline.go",
+            "path": "go/deadline.go",
             "before": "case <-p.done:\n\t\t\ttimer.Stop()\n\t\t\tif elapsedNow(clock)-started < duration {",
             "after": "case <-p.done:\n\t\t\ttimer.Stop()\n\t\t\tif true {"
           }
@@ -104,7 +104,7 @@
       "id": "M04",
       "case": "C34.second-fence",
       "description": "Skip the tracked fence recheck after serialization",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.putWithLayer and Go go/internal/dialcache/engine.go putRemote skip the fence recheck that runs after serialization, so a frame stamped at or before a watermark observed during the dump is written anyway. The shadow fill reaches the same line through putForShadow in TypeScript and putRemote in Go, so a fenced dark fill writes and reports filled instead of fill_fenced.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.putWithLayer and Go go/engine.go putRemote skip the fence recheck that runs after serialization, so a frame stamped at or before a watermark observed during the dump is written anyway. The shadow fill reaches the same line through putForShadow in TypeScript and putRemote in Go, so a fenced dark fill writes and reports filled instead of fill_fenced.",
       "typescript": {
         "edits": [
           {
@@ -122,7 +122,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if fence != nil && uint64(stamp) <= *fence {",
             "after": "if false && fence != nil && uint64(stamp) <= *fence {"
           }
@@ -137,7 +137,7 @@
       "id": "M05",
       "case": "C03.detached-bypass",
       "description": "Treat a detached context whose outer scope closed as still enabled",
-      "rationale": "TypeScript typescript/src/context.ts DialCacheContext.isEnabled and Go go/internal/dialcache/cache.go IsEnabled report an enabled scope without checking that its owning holder is still live. A detached continuation whose outer enable call already returned is therefore treated as still inside the request and keeps caching.",
+      "rationale": "TypeScript typescript/src/context.ts DialCacheContext.isEnabled and Go go/cache.go IsEnabled report an enabled scope without checking that its owning holder is still live. A detached continuation whose outer enable call already returned is therefore treated as still inside the request and keeps caching.",
       "typescript": {
         "edits": [
           {
@@ -155,7 +155,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/cache.go",
+            "path": "go/cache.go",
             "before": "return state.enabled && state.owner != nil && state.owner.live",
             "after": "return state.enabled"
           }
@@ -170,7 +170,7 @@
       "id": "M06",
       "case": "W04.strict-fence",
       "description": "Accept a tracked frame timestamp equal to its watermark",
-      "rationale": "TypeScript typescript/src/internal/redis-payload.ts decodeTrackedFrame and Go go/internal/dialcache/protocol.go DecodeFrame make the tracked fence comparison strict, so a frame whose timestamp equals the observed watermark decodes as a hit instead of being fenced.",
+      "rationale": "TypeScript typescript/src/internal/redis-payload.ts decodeTrackedFrame and Go go/protocol.go DecodeFrame make the tracked fence comparison strict, so a frame whose timestamp equals the observed watermark decodes as a hit instead of being fenced.",
       "typescript": {
         "edits": [
           {
@@ -188,7 +188,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/protocol.go",
+            "path": "go/protocol.go",
             "before": "if tracked && fence != nil && stamp <= *fence {",
             "after": "if tracked && fence != nil && stamp < *fence {"
           }
@@ -203,7 +203,7 @@
       "id": "M07",
       "case": "C51.changed-confirmation",
       "description": "Confirm an unequal shadow result even when C1 contains different payload bytes",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.runShadowValidation and Go go/internal/dialcache/shadow.go runShadow confirm a shadow mismatch whenever the confirmation read returns a frame, no longer requiring its payload bytes to equal the original. A C1 frame whose payload changed between the two reads is therefore reported as a confirmed mismatch rather than a changed value.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.runShadowValidation and Go go/shadow.go runShadow confirm a shadow mismatch whenever the confirmation read returns a frame, no longer requiring its payload bytes to equal the original. A C1 frame whose payload changed between the two reads is therefore reported as a confirmed mismatch rather than a changed value.",
       "typescript": {
         "edits": [
           {
@@ -221,7 +221,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "confirmation.Kind == \"miss\" || !bytes.Equal(frame.Payload, confirmation.Frame.Payload)",
             "after": "confirmation.Kind == \"miss\" || false && !bytes.Equal(frame.Payload, confirmation.Frame.Payload)"
           }
@@ -236,7 +236,7 @@
       "id": "M08",
       "case": "C60.invalid-logging-policy",
       "description": "Enable mismatch logging after a malformed runtime logging flag",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.resolveShadowLogging returns true after recording the config_resolution error for a malformed runtime logging flag, and Go go/internal/dialcache/policy.go ResolvePolicy turns LogMismatches on when the flag is invalid. A malformed logMismatches value therefore enables mismatch logging instead of leaving it off.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.resolveShadowLogging returns true after recording the config_resolution error for a malformed runtime logging flag, and Go go/policy.go ResolvePolicy turns LogMismatches on when the flag is invalid. A malformed logMismatches value therefore enables mismatch logging instead of leaving it off.",
       "typescript": {
         "edits": [
           {
@@ -254,7 +254,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/policy.go",
+            "path": "go/policy.go",
             "before": "resolved.Shadow.LogMismatches = flag\n\t\t\tresolved.Shadow.LoggingConfigError = !valid",
             "after": "resolved.Shadow.LogMismatches = flag || !valid\n\t\t\tresolved.Shadow.LoggingConfigError = !valid"
           }
@@ -269,7 +269,7 @@
       "id": "M09",
       "case": "C60.logging-default-off",
       "description": "Enable mismatch logging when its flag is omitted",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.resolveShadowLogging returns true when the runtime logging flag is omitted, and Go go/internal/dialcache/policy.go ResolvePolicy starts the resolved policy with LogMismatches on. Mismatch logging is therefore enabled by default instead of off.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.resolveShadowLogging returns true when the runtime logging flag is omitted, and Go go/policy.go ResolvePolicy starts the resolved policy with LogMismatches on. Mismatch logging is therefore enabled by default instead of off.",
       "typescript": {
         "edits": [
           {
@@ -287,7 +287,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/policy.go",
+            "path": "go/policy.go",
             "before": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeout: defaults.RemoteReadTimeout}",
             "after": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeout: defaults.RemoteReadTimeout, Shadow: ResolvedShadow{LogMismatches: true}}"
           }
@@ -302,7 +302,7 @@
       "id": "M10",
       "case": "C31.tracked-no-local-fill",
       "description": "Publish an unvalidated tracked source value directly into local storage",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain no longer suppresses the local write for a tracked key that reached the Redis write path, and Go go/internal/dialcache/engine.go shared publishes the source value locally regardless of the Tracked flag. A tracked source value is therefore written into process-local storage before any watermark validation.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain no longer suppresses the local write for a tracked key that reached the Redis write path, and Go go/engine.go shared publishes the source value locally regardless of the Tracked flag. A tracked source value is therefore written into process-local storage before any watermark validation.",
       "typescript": {
         "edits": [
           {
@@ -320,7 +320,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if localMiss && !x.op.Identity.Tracked {",
             "after": "if localMiss {"
           }
@@ -335,7 +335,7 @@
       "id": "M11",
       "case": "C09.fixed-local-ttl",
       "description": "Renew the local insertion TTL on every cache hit",
-      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.constructor turns on the lru-cache option that refreshes an entry's age on every read, and Go go/internal/dialcache/cache.go localGet re-stamps the insertion time and re-adds the entry on a hit. A local entry that is read often therefore never expires on its insertion TTL.",
+      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.constructor turns on the lru-cache option that refreshes an entry's age on every read, and Go go/internal/localcache/cache.go Store.Get re-stamps the insertion time and re-adds the entry on a hit. A local entry that is read often therefore never expires on its insertion TTL.",
       "typescript": {
         "edits": [
           {
@@ -353,9 +353,9 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/cache.go",
-            "before": "\tc.local.Get(key)\n\treturn item.value, true",
-            "after": "\titem.insertedMS = c.settings.clock.ElapsedMS()\n\tc.local.Add(key, item)\n\treturn item.value, true"
+            "path": "go/internal/localcache/cache.go",
+            "before": "\ts.entries.Get(key)\n\treturn item.value, true",
+            "after": "\titem.insertedMS = s.elapsedMS()\n\ts.entries.Add(key, item)\n\treturn item.value, true"
           }
         ],
         "requiredDetections": [
@@ -368,7 +368,7 @@
       "id": "M12",
       "case": "W02.sorted-arguments",
       "description": "Reverse the prescribed argument-name ordering",
-      "rationale": "TypeScript typescript/src/key.ts normalizeArgs and Go go/internal/dialcache/protocol.go NormalizeArgs sort argument names in descending order instead of the prescribed ascending UTF-16 code-unit order. Keys with more than one named argument therefore serialize differently from the protocol vectors.",
+      "rationale": "TypeScript typescript/src/key.ts normalizeArgs and Go go/protocol.go NormalizeArgs sort argument names in descending order instead of the prescribed ascending UTF-16 code-unit order. Keys with more than one named argument therefore serialize differently from the protocol vectors.",
       "typescript": {
         "edits": [
           {
@@ -385,7 +385,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/protocol.go",
+            "path": "go/protocol.go",
             "before": "return utf16Less(result[i][0], result[j][0])",
             "after": "return utf16Less(result[j][0], result[i][0])"
           }
@@ -400,7 +400,7 @@
       "id": "M13",
       "case": "C54.expired-before-start",
       "description": "Dispatch dark shadow reads after the job deadline already elapsed before deferred work starts",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.runShadowValidation and Go go/internal/dialcache/shadow.go runShadow drop the expiry check that runs before deferred shadow work starts. A dark read is therefore dispatched even when the job deadline elapsed while the job was queued.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.runShadowValidation and Go go/shadow.go runShadow drop the expiry check that runs before deferred shadow work starts. A dark read is therefore dispatched even when the job deadline elapsed while the job was queued.",
       "typescript": {
         "edits": [
           {
@@ -418,7 +418,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "if expired() {\n\t\t\treturn out(\"timeout\")\n\t\t}\n\t\tfill := false",
             "after": "if false && expired() {\n\t\t\treturn out(\"timeout\")\n\t\t}\n\t\tfill := false"
           }
@@ -433,7 +433,7 @@
       "id": "M14",
       "case": "C01.no-deadline",
       "description": "Bound a disabled or outside call's source with the configured fallback deadline",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.executeCacheOperation wraps the raw fallback of a disabled or outside call in withFallbackTimeout, and Go go/internal/dialcache/engine.go GetOrLoad runs it under awaitDeadline with the operation's budget. A call that bypasses the cache is therefore bounded by the configured fallback deadline instead of running unbounded.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.executeCacheOperation wraps the raw fallback of a disabled or outside call in withFallbackTimeout, and Go go/engine.go GetOrLoad runs it under awaitDeadline with the operation's budget. A call that bypasses the cache is therefore bounded by the configured fallback deadline instead of running unbounded.",
       "typescript": {
         "edits": [
           {
@@ -450,7 +450,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\t\treturn callSafely(func() (T, error) { return load(ctx) })",
             "after": "\t\treturn awaitDeadline(c.settings.clock, startPending(func() (T, error) { return load(ctx) }), elapsedNow(c.settings.clock), x.budget(), func() error { return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(x.budget()) * time.Millisecond} }, nil)"
           }
@@ -465,7 +465,7 @@
       "id": "M15",
       "case": "C02.reenabled-memo",
       "description": "Evict the enclosing request's memo when a nested enable() completes",
-      "rationale": "TypeScript typescript/src/context.ts DialCacheContext.enable deletes the enclosing holder's request-local cache when a nested enable call completes, and Go go/internal/dialcache/cache.go Enable's done closure clears the scope's memo on its not-owned branch. A completed nested scope therefore evicts the outer request's memo while the outer scope is still open; the TypeScript edit also drops the outer in-flight registry. A nested handle can only reach its own enclosing row, so the port evicts one outer row rather than every row.",
+      "rationale": "TypeScript typescript/src/context.ts DialCacheContext.enable deletes the enclosing holder's request-local cache when a nested enable call completes, and Go go/cache.go Enable's done closure clears the scope's memo on its not-owned branch. A completed nested scope therefore evicts the outer request's memo while the outer scope is still open; the TypeScript edit also drops the outer in-flight registry. A nested handle can only reach its own enclosing row, so the port evicts one outer row rather than every row.",
       "typescript": {
         "edits": [
           {
@@ -482,7 +482,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/cache.go",
+            "path": "go/cache.go",
             "before": "\tdone := func() {\n\t\tif !owned {\n\t\t\treturn\n\t\t}",
             "after": "\tdone := func() {\n\t\tif !owned {\n\t\t\tc.mu.Lock()\n\t\t\tclear(s.memo)\n\t\t\tc.mu.Unlock()\n\t\t\treturn\n\t\t}"
           }
@@ -497,7 +497,7 @@
       "id": "M17",
       "case": "C05.local-hit-stops-traversal",
       "description": "Serve a local hit with a value the layer never stored while still skipping the loader",
-      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.getWithResolvedConfig reports a hit whose value is undefined, and Go go/internal/dialcache/engine.go shared builds its localResult literal without the asserted value, so a found entry serves the zero value. The loader is still bypassed, so a local hit serves a value the layer never stored while loader counts stay unchanged. The Go runner records the ordinary (unit) cohort as crashed because TestBorrowedReferencesSurviveFollowersAndCacheHits dereferences the nil pointer a hit now returns inside its synctest bubble, a panic rather than a failed assertion; the generated cohort is the required detection.",
+      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.getWithResolvedConfig reports a hit whose value is undefined, and Go go/engine.go shared builds its localResult literal without the asserted value, so a found entry serves the zero value. The loader is still bypassed, so a local hit serves a value the layer never stored while loader counts stay unchanged. The Go runner records the ordinary (unit) cohort as crashed because TestBorrowedReferencesSurviveFollowersAndCacheHits dereferences the nil pointer a hit now returns inside its synctest bubble, a panic rather than a failed assertion; the generated cohort is the required detection.",
       "typescript": {
         "edits": [
           {
@@ -514,7 +514,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\t\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil",
             "after": "\t\t\t\t_, ok := assertValue[T](raw)\n\t\t\t\treturn localResult[T]{found: ok, mismatch: !ok}, nil"
           }
@@ -529,7 +529,7 @@
       "id": "M18",
       "case": "C09.fixed-local-ttl",
       "description": "Serve a local entry at its exact insertion expiry",
-      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.put drops the one-millisecond reduction from the lru-cache ttl that encodes the exclusive expiry boundary, and Go go/internal/dialcache/cache.go localGet makes the expiry comparison strict. A local entry is therefore served at the exact millisecond its insertion TTL elapses.",
+      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.put drops the one-millisecond reduction from the lru-cache ttl that encodes the exclusive expiry boundary, and Go go/internal/localcache/cache.go Store.Get makes the expiry comparison strict. A local entry is therefore served at the exact millisecond its insertion TTL elapses.",
       "typescript": {
         "edits": [
           {
@@ -546,9 +546,9 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/cache.go",
-            "before": "if c.settings.clock.ElapsedMS()-item.insertedMS >= item.ttlMS {",
-            "after": "if c.settings.clock.ElapsedMS()-item.insertedMS > item.ttlMS {"
+            "path": "go/internal/localcache/cache.go",
+            "before": "if s.elapsedMS()-item.insertedMS >= item.ttlMS {",
+            "after": "if s.elapsedMS()-item.insertedMS > item.ttlMS {"
           }
         ],
         "requiredDetections": [
@@ -561,7 +561,7 @@
       "id": "M19",
       "case": "C09.fractional-clock-grid",
       "description": "Compute local insertion and expiry on the precise clock instead of the whole-millisecond grid",
-      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.constructor stops flooring the performance clock and LocalCache.put shortens the ttl by a microsecond instead of a millisecond; Go go/internal/dialcache/cache.go localGet compares the precise clock against a nanosecond ttl and localPut stamps the precise instant. Insertion and expiry therefore fall on the fractional clock instead of the whole-millisecond grid. The feature-profile driver clocks are integer, so the fault is silent outside the local-clock profile.",
+      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.constructor stops flooring the performance clock and LocalCache.put shortens the ttl by a microsecond instead of a millisecond; Go go/cache.go New supplies the precise nanosecond clock to the local store, and go/internal/localcache/cache.go Store.Get converts the insertion TTL to nanoseconds for comparison; Store.Put stamps that same precise clock. Insertion and expiry therefore fall on the fractional clock instead of the whole-millisecond grid. The feature-profile driver clocks are integer, so the fault is silent outside the local-clock profile.",
       "typescript": {
         "edits": [
           {
@@ -583,14 +583,14 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/cache.go",
-            "before": "if c.settings.clock.ElapsedMS()-item.insertedMS >= item.ttlMS {",
-            "after": "if int64(elapsedNow(c.settings.clock))-item.insertedMS >= item.ttlMS*int64(time.Millisecond) {"
+            "path": "go/cache.go",
+            "before": "localcache.New(s.localCapacity, s.clock.ElapsedMS)",
+            "after": "localcache.New(s.localCapacity, func() int64 { return int64(elapsedNow(s.clock)) })"
           },
           {
-            "path": "go/internal/dialcache/cache.go",
-            "before": "insertedMS: c.settings.clock.ElapsedMS()",
-            "after": "insertedMS: int64(elapsedNow(c.settings.clock))"
+            "path": "go/internal/localcache/cache.go",
+            "before": "if s.elapsedMS()-item.insertedMS >= item.ttlMS {",
+            "after": "if s.elapsedMS()-item.insertedMS >= item.ttlMS*1_000_000 {"
           }
         ],
         "requiredDetections": [
@@ -603,7 +603,7 @@
       "id": "M20",
       "case": "C11.distinct-keys",
       "description": "Register process flights in one process-wide registry so a flight on one instance is joined from another (detection rests on sampled layers histories and the different-instances-own-distinct-flights witness, not on the case's exported replay)",
-      "rationale": "TypeScript typescript/src/dialcache.ts makes the DialCache processFlights field an alias of one static Map shared by every instance, and Go go/internal/dialcache/cache.go New takes its flights map from a package-level holder. A pending flight on one instance is therefore joined from another instance with the same key. In Go the process flights of every instance run under one package-level lock (singleFlight locks it instead of the instance mutex when the scope owner is nil), so the shared registry is race-free even when two instances' goroutines run in one synctest bubble; the first encoding shared only the map and crashed a hosted shard with a concurrent map write. The C11 quintReplay survives, so detection rests on sampled layers histories and the witness layers:different-instances-own-distinct-flights.",
+      "rationale": "TypeScript typescript/src/dialcache.ts makes the DialCache processFlights field an alias of one static Map shared by every instance, and Go go/cache.go New takes its flights map from a package-level holder. A pending flight on one instance is therefore joined from another instance with the same key. In Go the process flights of every instance run under one package-level lock (singleFlight locks it instead of the instance mutex when the scope owner is nil), so the shared registry is race-free even when two instances' goroutines run in one synctest bubble; the first encoding shared only the map and crashed a hosted shard with a concurrent map write. The C11 quintReplay survives, so detection rests on sampled layers histories and the witness layers:different-instances-own-distinct-flights.",
       "typescript": {
         "edits": [
           {
@@ -620,17 +620,17 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/cache.go",
+            "path": "go/cache.go",
             "before": "type scopeState struct {\n\tenabled bool\n\towner   *scope\n}",
             "after": "type scopeState struct {\n\tenabled bool\n\towner   *scope\n}\n\n// Fault injection: one process-wide flight registry shared by every instance,\n// guarded by one lock in singleFlight so the shared map stays race-free.\nvar sharedProcessFlights = make(map[string]*flight)\nvar sharedProcessFlightsMu sync.Mutex"
           },
           {
-            "path": "go/internal/dialcache/cache.go",
+            "path": "go/cache.go",
             "before": "c := &Cache{settings: s, flights: make(map[string]*flight), shadows:",
             "after": "c := &Cache{settings: s, flights: sharedProcessFlights, shadows:"
           },
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\tstarted := elapsedNow(c.settings.clock)\n\tc.mu.Lock()\n\tif owner != nil && !owner.live {\n\t\tc.mu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tc.mu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tc.mu.Unlock()\n\tvalue, err := callSafely(run)\n\tf.value, f.err = value, err\n\tc.mu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tc.mu.Unlock()\n\treturn value, err\n}",
             "after": "\tstarted := elapsedNow(c.settings.clock)\n\t// Fault injection: process flights live in one registry shared by every\n\t// instance, guarded by one lock so the shared map itself stays race-free.\n\tmu := &c.mu\n\tif owner == nil {\n\t\tmu = &sharedProcessFlightsMu\n\t}\n\tmu.Lock()\n\tif owner != nil && !owner.live {\n\t\tmu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tmu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tmu.Unlock()\n\tvalue, err := callSafely(run)\n\tf.value, f.err = value, err\n\tmu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tmu.Unlock()\n\treturn value, err\n}"
           }
@@ -645,7 +645,7 @@
       "id": "M21",
       "case": "C13.uncoalesced-caching",
       "description": "Serve a live local entry before joining the pending process flight",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.getThroughSharedLayers peeks LocalCache.getWithResolvedConfig before deciding whether to join the process flight, and Go go/internal/dialcache/engine.go shared peeks localGet before its coalesce branch. A live local entry is therefore served ahead of a pending process flight registered for the key.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.getThroughSharedLayers peeks LocalCache.getWithResolvedConfig before deciding whether to join the process flight, and Go go/engine.go shared peeks local.Get before its coalesce branch. A live local entry is therefore served ahead of a pending process flight registered for the key.",
       "typescript": {
         "edits": [
           {
@@ -662,9 +662,9 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\tif p.Local.Enabled {\n\t\tif p.Coalesce {",
-            "after": "\tif p.Local.Enabled {\n\t\tif early, _ := callSafely(func() (localResult[T], error) {\n\t\t\traw, found := c.localGet(x.key)\n\t\t\tif !found {\n\t\t\t\treturn localResult[T]{}, nil\n\t\t\t}\n\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil\n\t\t}); early.found {\n\t\t\treturn run()\n\t\t}\n\t\tif p.Coalesce {"
+            "after": "\tif p.Local.Enabled {\n\t\tif early, _ := callSafely(func() (localResult[T], error) {\n\t\t\traw, found := c.local.Get(x.key)\n\t\t\tif !found {\n\t\t\t\treturn localResult[T]{}, nil\n\t\t\t}\n\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil\n\t\t}); early.found {\n\t\t\treturn run()\n\t\t}\n\t\tif p.Coalesce {"
           }
         ],
         "requiredDetections": [
@@ -677,7 +677,7 @@
       "id": "M22",
       "case": "C13.uncoalesced-caching",
       "description": "Join a pending process flight from a non-coalescing caller while registration still respects coalesce",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.getThroughSharedLayers and Go go/internal/dialcache/engine.go shared also enter the single-flight path when a flight for the key is already pending, even though coalesce is false. A non-coalescing caller therefore joins a pending process flight while registration still respects coalesce.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.getThroughSharedLayers and Go go/engine.go shared also enter the single-flight path when a flight for the key is already pending, even though coalesce is false. A non-coalescing caller therefore joins a pending process flight while registration still respects coalesce.",
       "typescript": {
         "edits": [
           {
@@ -694,7 +694,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\t\tif p.Coalesce {\n\t\t\treturn x.singleFlight(c.flights, nil, \"process\", run)\n\t\t}\n\t\treturn run()\n\t}",
             "after": "\t\tc.mu.Lock()\n\t\tpending := c.flights[x.key] != nil\n\t\tc.mu.Unlock()\n\t\tif p.Coalesce || pending {\n\t\t\treturn x.singleFlight(c.flights, nil, \"process\", run)\n\t\t}\n\t\treturn run()\n\t}"
           }
@@ -709,7 +709,7 @@
       "id": "M23",
       "case": "C13.local-last-writer",
       "description": "Never let a local publication replace an entry already occupying the slot, even an expired one",
-      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.put writes only when a peek that allows stale entries finds the slot empty, and Go go/internal/dialcache/cache.go localPut writes only when Peek finds no entry. Both therefore skip a local publication when any entry already occupies the slot, even an expired one. The formal fault sits in local_storage.putLocal, shared by layered and local-only publication. Both native caches purge expired entries on a read, so only live-slot replacement demonstrates the common native boundary.",
+      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.put writes only when a peek that allows stale entries finds the slot empty, and Go go/internal/localcache/cache.go Store.Put writes only when Peek finds no entry. Both therefore skip a local publication when any entry already occupies the slot, even an expired one. The formal fault sits in local_storage.putLocal, shared by layered and local-only publication. Both native caches purge expired entries on a read, so only live-slot replacement demonstrates the common native boundary.",
       "typescript": {
         "edits": [
           {
@@ -726,9 +726,9 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/cache.go",
-            "before": "\tc.local.Add(key, entry{value: value, insertedMS: c.settings.clock.ElapsedMS(), ttlMS: ttl})",
-            "after": "\tif _, present := c.local.Peek(key); !present {\n\t\tc.local.Add(key, entry{value: value, insertedMS: c.settings.clock.ElapsedMS(), ttlMS: ttl})\n\t}"
+            "path": "go/internal/localcache/cache.go",
+            "before": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})",
+            "after": "\tif _, present := s.entries.Peek(key); !present {\n\t\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n\t}"
           }
         ],
         "requiredDetections": [
@@ -741,7 +741,7 @@
       "id": "M24",
       "case": "C13.local-last-writer",
       "description": "Clear the key's local entry when a source settlement fails",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain deletes the key's local entry before rethrowing a rejected source, and Go go/internal/dialcache/engine.go shared removes the local entry on its no-Redis-client, non-ramped remote-disabled and remote-read error paths. A failed active source can therefore discard another source's accepted local publication. The model removes the value, expiry and LRU membership together. Native scope differs: Go also clears after a remote-read failure, before a recovery attempt, and without a Redis client; TypeScript clears only after finishRedisChain cannot recover. Ramped-down dark-source paths and outside bypass calls do not execute these edits.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain deletes the key's local entry before rethrowing a rejected source, and Go go/engine.go shared removes the local entry on its no-Redis-client, non-ramped remote-disabled and remote-read error paths. A mutation-only Store.Remove method in go/internal/localcache/cache.go preserves removal of the complete entry under the store mutex. A failed active source can therefore discard another source's accepted local publication. The model removes the value, expiry and LRU membership together. Native scope differs: Go also clears after a remote-read failure, before a recovery attempt, and without a Redis client; TypeScript clears only after finishRedisChain cannot recover. Ramped-down dark-source paths and outside bypass calls do not execute these edits.",
       "typescript": {
         "edits": [
           {
@@ -758,19 +758,24 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, e\n\t\t}",
-            "after": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.mu.Lock()\n\t\t\t\tif c.local != nil {\n\t\t\t\t\tc.local.Remove(x.key)\n\t\t\t\t}\n\t\t\t\tc.mu.Unlock()\n\t\t\t}\n\t\t\treturn v, e\n\t\t}"
+            "after": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.local.Remove(x.key)\n\t\t\t}\n\t\t\treturn v, e\n\t\t}"
           },
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\t\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t\t}\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, e",
-            "after": "\t\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t\t}\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.mu.Lock()\n\t\t\t\tif c.local != nil {\n\t\t\t\t\tc.local.Remove(x.key)\n\t\t\t\t}\n\t\t\t\tc.mu.Unlock()\n\t\t\t}\n\t\t\treturn v, e"
+            "after": "\t\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t\t}\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.local.Remove(x.key)\n\t\t\t}\n\t\t\treturn v, e"
           },
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n",
-            "after": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n\t\t\tc.mu.Lock()\n\t\t\tif c.local != nil {\n\t\t\t\tc.local.Remove(x.key)\n\t\t\t}\n\t\t\tc.mu.Unlock()\n"
+            "after": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n\t\t\tc.local.Remove(x.key)\n"
+          },
+          {
+            "path": "go/internal/localcache/cache.go",
+            "before": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n}",
+            "after": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n}\n\n// Fault injection: remove the complete entry after an active source failure.\nfunc (s *Store) Remove(key string) {\n\tif s == nil {\n\t\treturn\n\t}\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\ts.entries.Remove(key)\n}"
           }
         ],
         "requiredDetections": [
@@ -783,7 +788,7 @@
       "id": "M25",
       "case": "C15.shared-error-retry",
       "description": "Keep a rejected request-local flight registered so a later same-scope caller receives the rejection instead of retrying",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.singleFlightRequestLocal no longer clears the in-flight registry entry when the promise rejects, and Go go/internal/dialcache/engine.go singleFlight keeps a request-scoped flight registered when it ended in error. A later same-scope caller therefore receives the rejection instead of retrying the source. Neither memo can hold an error (TypeScript RequestLocalCache.set runs only on success and Go writes the memo only without an error), so the request in-flight registry is the only request-scoped error carrier.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.singleFlightRequestLocal no longer clears the in-flight registry entry when the promise rejects, and Go go/engine.go singleFlight keeps a request-scoped flight registered when it ended in error. A later same-scope caller therefore receives the rejection instead of retrying the source. Neither memo can hold an error (TypeScript RequestLocalCache.set runs only on success and Go writes the memo only without an error), so the request in-flight registry is the only request-scoped error carrier.",
       "typescript": {
         "edits": [
           {
@@ -800,7 +805,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if flights[x.key] == f {",
             "after": "if flights[x.key] == f && (owner == nil || f.err == nil) {"
           }
@@ -815,7 +820,7 @@
       "id": "M26",
       "case": "C15.shared-error-retry",
       "description": "Never remove a settled process flight from the registry so later same-key callers join finished work",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.singleFlightProcess inverts the identity check in its clear routine so a settled flight stays in the registry, and Go go/internal/dialcache/engine.go singleFlight deletes a process flight only when an owner is present. Later same-key callers therefore join finished work and receive its stale outcome. Joiners complete rather than strand because a blocked follower would deadlock synctest and the Go runner would classify that as a crash.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.singleFlightProcess inverts the identity check in its clear routine so a settled flight stays in the registry, and Go go/engine.go singleFlight deletes a process flight only when an owner is present. Later same-key callers therefore join finished work and receive its stale outcome. Joiners complete rather than strand because a blocked follower would deadlock synctest and the Go runner would classify that as a crash.",
       "typescript": {
         "edits": [
           {
@@ -832,7 +837,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if flights[x.key] == f {",
             "after": "if flights[x.key] == f && owner != nil {"
           }
@@ -847,7 +852,7 @@
       "id": "M27",
       "case": "C16.runtime-enables-coalescing",
       "description": "Capture the operation's coalesce default as true so an omitted runtime leaf or null provider inherits sharing over a configured false",
-      "rationale": "TypeScript typescript/src/dialcache.ts snapshotDefaultConfig records the operation's coalesce default as true whenever it is set, and Go go/internal/dialcache/policy.go staticPolicyMap always publishes coalesce as true. An omitted runtime leaf or a null provider therefore inherits sharing over a configured false. The TypeScript edit is deliberately in snapshotDefaultConfig rather than the identical text in runtime-config.ts mergeKeyConfig.",
+      "rationale": "TypeScript typescript/src/dialcache.ts snapshotDefaultConfig records the operation's coalesce default as true whenever it is set, and Go go/policy.go staticPolicyMap always publishes coalesce as true. An omitted runtime leaf or a null provider therefore inherits sharing over a configured false. The TypeScript edit is deliberately in snapshotDefaultConfig rather than the identical text in runtime-config.ts mergeKeyConfig.",
       "typescript": {
         "edits": [
           {
@@ -864,7 +869,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/policy.go",
+            "path": "go/policy.go",
             "before": "\t\tcoalesce = *p.Coalesce\n\t}",
             "after": "\t\tcoalesce = true\n\t}"
           }
@@ -879,7 +884,7 @@
       "id": "M28",
       "case": "C17.library-defaults",
       "description": "Default coalescing off when the static coalesce leaf is omitted while an explicit true still shares",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.getThroughSharedLayers and DialCache.getThroughRequestLocal treat coalescing as on only when the static leaf is explicitly true, and Go go/internal/dialcache/policy.go ParsePolicy sets Coalesce to false when the static coalesce leaf is absent. An omitted leaf therefore defaults to no sharing while an explicit true still shares. Go ParsePolicy returns the zero Policy when the fixture supplies no static policy map at all, so that corner keeps coalescing on; both Go drivers pass the fixture's policy map through ParsePolicy, so an omitted leaf inside a supplied map resolves to no sharing.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.getThroughSharedLayers and DialCache.getThroughRequestLocal treat coalescing as on only when the static leaf is explicitly true, and Go go/policy.go ParsePolicy sets Coalesce to false when the static coalesce leaf is absent. An omitted leaf therefore defaults to no sharing while an explicit true still shares. Go ParsePolicy returns the zero Policy when the fixture supplies no static policy map at all, so that corner keeps coalescing on; both Go drivers pass the fixture's policy map through ParsePolicy, so an omitted leaf inside a supplied map resolves to no sharing.",
       "typescript": {
         "edits": [
           {
@@ -901,7 +906,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/policy.go",
+            "path": "go/policy.go",
             "before": "\t\tv, present := optionalLeaf(m, field)\n\t\tif !present {\n\t\t\tcontinue\n\t\t}",
             "after": "\t\tv, present := optionalLeaf(m, field)\n\t\tif !present {\n\t\t\tif field == \"coalesce\" {\n\t\t\t\tp.Coalesce = Ptr(false)\n\t\t\t}\n\t\t\tcontinue\n\t\t}"
           }
@@ -916,7 +921,7 @@
       "id": "M29",
       "case": "C18.captured-shadow-fill",
       "description": "Re-resolve the runtime policy at fill time and write the dark fill with the retention then in force",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.runShadowValidation re-fetches the key config through fetchKeyConfig at fill time instead of using the captured shadowFillConfig, and Go go/internal/dialcache/shadow.go runShadow re-runs ResolvePolicy before putRemote and overwrites the remote TTL and retention. The dark fill is therefore written with the retention in force at fill time rather than the one captured at admission.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.runShadowValidation re-fetches the key config through fetchKeyConfig at fill time instead of using the captured shadowFillConfig, and Go go/shadow.go runShadow re-runs ResolvePolicy before putRemote and overwrites the remote TTL and retention. The dark fill is therefore written with the retention in force at fill time rather than the one captured at admission.",
       "typescript": {
         "edits": [
           {
@@ -933,7 +938,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "if fill {\n\t\t\tfilled, writeErr := x.putRemote(value, fence, \"remote_shadow\", func() bool { return !expired() })",
             "after": "if fill {\n\t\t\tif provider := x.cache.settings.policyProvider; provider != nil {\n\t\t\t\tif overlay, err := callSafely(func() (RuntimePolicy, error) { return provider(x.ctx, x.op.Identity) }); err == nil {\n\t\t\t\t\tif current, err := ResolvePolicy(x.op.Policy, overlay, x.op.Identity, PolicyDefaults{RemoteReadTimeout: x.cache.settings.remoteReadTimeout}); err == nil {\n\t\t\t\t\t\tx.policy.Remote.TTL, x.policy.StaleOnErrorMaxAge = current.Remote.TTL, current.StaleOnErrorMaxAge\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tfilled, writeErr := x.putRemote(value, fence, \"remote_shadow\", func() bool { return !expired() })"
           }
@@ -948,7 +953,7 @@
       "id": "M30",
       "case": "C22.freshness-boundary",
       "description": "Serve a remote frame whose age equals the fresh TTL as a hit",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.getWithResolvedConfig and Go go/internal/dialcache/engine.go readServing make the freshness comparison strict, so a remote frame whose age equals the fresh TTL is served as a hit instead of starting a source. When no stale-on-error retention is configured the maximum-age check runs first and masks the flip.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.getWithResolvedConfig and Go go/engine.go readServing make the freshness comparison strict, so a remote frame whose age equals the fresh TTL is served as a hit instead of starting a source. When no stale-on-error retention is configured the maximum-age check runs first and masks the flip.",
       "typescript": {
         "edits": [
           {
@@ -965,7 +970,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if age >= ms(x.policy.Remote.TTL) {",
             "after": "if age > ms(x.policy.Remote.TTL) {"
           }
@@ -980,7 +985,7 @@
       "id": "M31",
       "case": "C22.freshness-boundary",
       "description": "Acquire a dark C0 frame whose age equals the fresh TTL instead of treating it as expired",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.validateFrameAge, reached only through the shadow read path, accepts an age equal to the maximum, and Go go/internal/dialcache/shadow.go runShadow treats a C0 frame as expired only when its age exceeds the fresh TTL. A dark C0 frame exactly at the fresh TTL is therefore acquired instead of treated as expired.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.validateFrameAge, reached only through the shadow read path, accepts an age equal to the maximum, and Go go/shadow.go runShadow treats a C0 frame as expired only when its age exceeds the fresh TTL. A dark C0 frame exactly at the fresh TTL is therefore acquired instead of treated as expired.",
       "typescript": {
         "edits": [
           {
@@ -997,7 +1002,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "} else if maxAge && age >= ms(x.policy.Remote.TTL) {",
             "after": "} else if maxAge && age > ms(x.policy.Remote.TTL) {"
           }
@@ -1012,7 +1017,7 @@
       "id": "M32",
       "case": "C22.physical-vs-logical",
       "description": "Write every remote frame with the fresh TTL, ignoring stale-on-error retention",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts retentionTtlSecFor returns the fresh TTL instead of the stale-on-error maximum age, and Go go/internal/dialcache/engine.go putRemote sets the physical ttl to the fresh TTL. Every remote frame is therefore written with the fresh TTL, so no retained candidate survives for stale recovery.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts retentionTtlSecFor returns the fresh TTL instead of the stale-on-error maximum age, and Go go/engine.go putRemote sets the physical ttl to the fresh TTL. Every remote frame is therefore written with the fresh TTL, so no retained candidate survives for stale recovery.",
       "typescript": {
         "edits": [
           {
@@ -1029,7 +1034,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "ttl = x.policy.StaleOnErrorMaxAge",
             "after": "ttl = x.policy.Remote.TTL"
           }
@@ -1044,7 +1049,7 @@
       "id": "M33",
       "case": "C23.policy-does-not-spend-source-budget",
       "description": "Judge a source settlement against a deadline anchored at the clock origin instead of the source start; the timer still fires at the source's own deadline",
-      "rationale": "TypeScript typescript/src/internal/deadline.ts withMonotonicDeadline (its settleBeforeDeadline closure) judges a settlement by comparing the current reading of performance.now with the budget instead of the time elapsed since the source started, and Go go/internal/dialcache/deadline.go awaitDeadline compares the clock's elapsed reading with the budget in its settlement branch instead of subtracting the start, so in both ports the settlement is judged against a deadline anchored at the clock origin. Only the settlement judgement changes; the timers still fire at the source's own deadline. typescript/src/internal/deadline.ts imports performance from node:perf_hooks, and every TypeScript driver in the generated cohort mocks that object: typescript/test/formal/behavior-driver.ts:154 for the feature and the effects profiles, typescript/test/formal/local-clock-profile.ts:16 for local-clock, and typescript/test/formal-conformance.test.ts:163 pins it to 0 for the core profile, where the fault is therefore inert. So, like Go's manual clocks that start at 0, any settlement at history time at or past the budget is rejected regardless of when its source started. In the ordinary unit suite the clock is real, so detection there depends on worker uptime and is not required.",
+      "rationale": "TypeScript typescript/src/internal/deadline.ts withMonotonicDeadline (its settleBeforeDeadline closure) judges a settlement by comparing the current reading of performance.now with the budget instead of the time elapsed since the source started, and Go go/deadline.go awaitDeadline compares the clock's elapsed reading with the budget in its settlement branch instead of subtracting the start, so in both ports the settlement is judged against a deadline anchored at the clock origin. Only the settlement judgement changes; the timers still fire at the source's own deadline. typescript/src/internal/deadline.ts imports performance from node:perf_hooks, and every TypeScript driver in the generated cohort mocks that object: typescript/test/formal/behavior-driver.ts:154 for the feature and the effects profiles, typescript/test/formal/local-clock-profile.ts:16 for local-clock, and typescript/test/formal-conformance.test.ts:163 pins it to 0 for the core profile, where the fault is therefore inert. So, like Go's manual clocks that start at 0, any settlement at history time at or past the budget is rejected regardless of when its source started. In the ordinary unit suite the clock is real, so detection there depends on worker uptime and is not required.",
       "typescript": {
         "edits": [
           {
@@ -1061,7 +1066,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/deadline.go",
+            "path": "go/deadline.go",
             "before": "\t\tcase <-p.done:\n\t\t\ttimer.Stop()\n\t\t\tif elapsedNow(clock)-started < duration {",
             "after": "\t\tcase <-p.done:\n\t\t\ttimer.Stop()\n\t\t\tif elapsedNow(clock) < duration {"
           }
@@ -1076,7 +1081,7 @@
       "id": "M34",
       "case": "C24.follower-source",
       "description": "Complete followers of a joined flight with an undefined or zero value instead of the leader's accepted value while errors still propagate",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.singleFlightProcess and DialCache.singleFlightRequestLocal resolve a follower's promise to undefined instead of the leader's value, and Go go/internal/dialcache/engine.go singleFlight returns the zero value to followers once the flight completes. Errors still propagate, so followers of a joined flight receive an undefined or zero value instead of the accepted value. Followers complete with a wrong value rather than staying pending because a blocked follower would deadlock synctest and the Go runner would classify that as a crash. The Go runner records the ordinary (unit) cohort as crashed because TestBorrowedReferencesSurviveFollowersAndCacheHits dereferences the nil pointer a follower now receives inside its synctest bubble, a panic rather than a failed assertion; the generated cohort is the required detection.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.singleFlightProcess and DialCache.singleFlightRequestLocal resolve a follower's promise to undefined instead of the leader's value, and Go go/engine.go singleFlight returns the zero value to followers once the flight completes. Errors still propagate, so followers of a joined flight receive an undefined or zero value instead of the accepted value. Followers complete with a wrong value rather than staying pending because a blocked follower would deadlock synctest and the Go runner would classify that as a crash. The Go runner records the ordinary (unit) cohort as crashed because TestBorrowedReferencesSurviveFollowersAndCacheHits dereferences the nil pointer a follower now receives inside its synctest bubble, a panic rather than a failed assertion; the generated cohort is the required detection.",
       "typescript": {
         "edits": [
           {
@@ -1098,7 +1103,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "<-f.done\n\t\treturn followerResult[T](f)",
             "after": "<-f.done\n\t\tvar zero T\n\t\treturn zero, f.err"
           }
@@ -1113,7 +1118,7 @@
       "id": "M35",
       "case": "C25.late-source-rejected",
       "description": "Accept a settlement observed at exactly the elapsed deadline",
-      "rationale": "TypeScript typescript/src/internal/deadline.ts withMonotonicDeadline and Go go/internal/dialcache/deadline.go awaitDeadline accept a settlement observed at exactly the elapsed deadline, making the settlement-time boundary inclusive while timer-delivered timeouts are unchanged. M03 shares this anchor as the coarse late-acceptance fault and stays a separate entry.",
+      "rationale": "TypeScript typescript/src/internal/deadline.ts withMonotonicDeadline and Go go/deadline.go awaitDeadline accept a settlement observed at exactly the elapsed deadline, making the settlement-time boundary inclusive while timer-delivered timeouts are unchanged. M03 shares this anchor as the coarse late-acceptance fault and stays a separate entry.",
       "typescript": {
         "edits": [
           {
@@ -1130,7 +1135,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/deadline.go",
+            "path": "go/deadline.go",
             "before": "case <-p.done:\n\t\t\ttimer.Stop()\n\t\t\tif elapsedNow(clock)-started < duration {",
             "after": "case <-p.done:\n\t\t\ttimer.Stop()\n\t\t\tif elapsedNow(clock)-started <= duration {"
           }
@@ -1145,7 +1150,7 @@
       "id": "M36",
       "case": "C25.late-source-rejected",
       "description": "Stamp the serialization-start receipt one millisecond late so the dump duration is measured short",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.putWithLayer and Go go/internal/dialcache/engine.go putRemote take the serialization-start receipt one millisecond late, so the dump duration is measured one millisecond short. The connection monitor's acceptance receipt is model bookkeeping with no native line, so this stamp is the only native acceptance receipt.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.putWithLayer and Go go/engine.go putRemote take the serialization-start receipt one millisecond late, so the dump duration is measured one millisecond short. The connection monitor's acceptance receipt is model bookkeeping with no native line, so this stamp is the only native acceptance receipt.",
       "typescript": {
         "edits": [
           {
@@ -1162,7 +1167,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "start := elapsedNow(clock)\n\tpayload, err := callSafely(func() (Payload, error) {",
             "after": "start := elapsedNow(clock) + time.Millisecond\n\tpayload, err := callSafely(func() (Payload, error) {"
           }
@@ -1177,7 +1182,7 @@
       "id": "M37",
       "case": "C27.source-error-no-publication",
       "description": "Publish a rejected source's result into process-local storage before rethrowing",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain publishes the absent result of a rejected source into local storage before rethrowing. Go go/internal/dialcache/engine.go shared publishes its nil result on the Redis-chain error branch. Both edits seed a local hit without an accepted source; the next caller observes the cached absent result instead of starting source work. The absent value is portable in both drivers, so an observation comparison detects the fault without a schema failure.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain publishes the absent result of a rejected source into local storage before rethrowing. Go go/engine.go shared publishes its nil result on the Redis-chain error branch. Both edits seed a local hit without an accepted source; the next caller observes the cached absent result instead of starting source work. The absent value is portable in both drivers, so an observation comparison detects the fault without a schema failure.",
       "typescript": {
         "edits": [
           {
@@ -1194,7 +1199,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\t\t\treturn v, err\n\t\t}\n\t\tif remote.kind != \"error\" {",
             "after": "\t\t\tif localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, err\n\t\t}\n\t\tif remote.kind != \"error\" {"
           }
@@ -1209,7 +1214,7 @@
       "id": "M38",
       "case": "C28.no-refill-after-read-failure",
       "description": "Skip the Redis publication after a semantic miss, including a decode failure, so only retained-candidate misses refill",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain writes to Redis only when a retained frame exists, and Go go/internal/dialcache/engine.go shared also skips the publication for miss and decode_error reads. After a semantic miss, including a decode failure, the source value is therefore never published to Redis; only retained-candidate misses refill.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain writes to Redis only when a retained frame exists, and Go go/engine.go shared also skips the publication for miss and decode_error reads. After a semantic miss, including a decode failure, the source value is therefore never published to Redis; only retained-candidate misses refill.",
       "typescript": {
         "edits": [
           {
@@ -1226,7 +1231,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if remote.kind != \"error\" {",
             "after": "if remote.kind != \"error\" && remote.kind != \"miss\" && remote.kind != \"decode_error\" {"
           }
@@ -1241,7 +1246,7 @@
       "id": "M39",
       "case": "C34.first-fence",
       "description": "Drop the pre-serialization fence check so a source accepted behind an observed fence is serialized while the post-serialization recheck still blocks the write",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.putWithLayer and Go go/internal/dialcache/engine.go putRemote drop the fence check that runs before serialization. A source accepted behind an observed fence is therefore serialized, while the post-serialization recheck still blocks the write.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.putWithLayer and Go go/engine.go putRemote drop the fence check that runs before serialization. A source accepted behind an observed fence is therefore serialized, while the post-serialization recheck still blocks the write.",
       "typescript": {
         "edits": [
           {
@@ -1258,7 +1263,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if stamp <= int64(*fence) {",
             "after": "if false && stamp <= int64(*fence) {"
           }
@@ -1273,7 +1278,7 @@
       "id": "M40",
       "case": "C40.future-rejected",
       "description": "Classify a frame dated after the reader clock as a valid frame of age zero instead of rejecting it as future",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.frameAge and Go go/internal/dialcache/engine.go frameAge classify a frame dated after the reader clock as valid with age zero instead of rejecting it as future. The age is clamped to zero because the drivers' observation schema rejects a negative age before any comparison, which the measurement would classify as a malformed observation rather than detection. Both ports implement the future clause once in frameAge and use it for serving, retained-candidate recovery and shadow reads, so a recovery-only edit is not expressible.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.frameAge and Go go/engine.go frameAge classify a frame dated after the reader clock as valid with age zero instead of rejecting it as future. The age is clamped to zero because the drivers' observation schema rejects a negative age before any comparison, which the measurement would classify as a malformed observation rather than detection. Both ports implement the future clause once in frameAge and use it for serving, retained-candidate recovery and shadow reads, so a recovery-only edit is not expressible.",
       "typescript": {
         "edits": [
           {
@@ -1290,7 +1295,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "\t\treturn age, false\n",
             "after": "\t\treturn 0, true\n"
           }
@@ -1305,7 +1310,7 @@
       "id": "M41",
       "case": "C43.independent-values",
       "description": "Decode the retained candidate but serve an undefined or zero value instead of it from stale recovery",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.recoverRetainedCandidate decodes the retained candidate but returns a hit whose value is undefined, and Go go/internal/dialcache/engine.go recover discards the decoded value and serves the zero value. Stale recovery therefore serves a value other than the decoded candidate. The port is generic in its value type, so the zero value is the only expressible wrong constant.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.recoverRetainedCandidate decodes the retained candidate but returns a hit whose value is undefined, and Go go/engine.go recover discards the decoded value and serves the zero value. Stale recovery therefore serves a value other than the decoded candidate. The port is generic in its value type, so the zero value is the only expressible wrong constant.",
       "typescript": {
         "edits": [
           {
@@ -1322,7 +1327,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "value, err := x.decode(*frame, \"remote\")",
             "after": "_, err := x.decode(*frame, \"remote\")\n\tvalue := zero"
           }
@@ -1337,7 +1342,7 @@
       "id": "M42",
       "case": "C43.request-memo",
       "description": "Publish a recovered stale value into process-local storage",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain publishes a recovered stale value into local storage on a local miss before returning it, and Go go/internal/dialcache/engine.go shared calls putLocal under localMiss once recover succeeds. A recovered value therefore warms process-local storage. The recovery profile has no local TTL, so detection rests on the recovery-read profile with its 1 s local TTL.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain publishes a recovered stale value into local storage on a local miss before returning it, and Go go/engine.go shared calls putLocal under localMiss once recover succeeds. A recovered value therefore warms process-local storage. The recovery profile has no local TTL, so detection rests on the recovery-read profile with its 1 s local TTL.",
       "typescript": {
         "edits": [
           {
@@ -1354,7 +1359,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if value, ok := x.recover(remote.frame); ok {\n\t\t\t\t\treturn value, nil",
             "after": "if value, ok := x.recover(remote.frame); ok {\n\t\t\t\t\tif localMiss {\n\t\t\t\t\t\tx.putLocal(value)\n\t\t\t\t\t}\n\t\t\t\t\treturn value, nil"
           }
@@ -1369,7 +1374,7 @@
       "id": "M43",
       "case": "C44.retained-invalidation",
       "description": "Retain the stale candidate with a creation timestamp one millisecond after the acquired frame",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.getWithResolvedConfig retains the stale candidate as a copy whose creation timestamp is one millisecond later than the acquired frame, and Go go/internal/dialcache/engine.go readServing retains a Frame copy with CreatedAtMS advanced by one. The candidate's recorded snapshot therefore differs from the acquired frame by one millisecond. M44 shares this anchor with a different wrong behavior and stays a distinct entry.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.getWithResolvedConfig retains the stale candidate as a copy whose creation timestamp is one millisecond later than the acquired frame, and Go go/engine.go readServing retains a Frame copy with CreatedAtMS advanced by one. The candidate's recorded snapshot therefore differs from the acquired frame by one millisecond. M44 shares this anchor with a different wrong behavior and stays a distinct entry.",
       "typescript": {
         "edits": [
           {
@@ -1386,7 +1391,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "return remoteValue[T]{kind: \"retained\", frame: &r.Frame}",
             "after": "return remoteValue[T]{kind: \"retained\", frame: &Frame{CreatedAtMS: r.Frame.CreatedAtMS + 1, Binary: r.Frame.Binary, Payload: r.Frame.Payload}}"
           }
@@ -1401,7 +1406,7 @@
       "id": "M44",
       "case": "C44.retained-invalidation",
       "description": "Stamp the retained candidate with the read time instead of its frame timestamp",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.getWithResolvedConfig retains the stale candidate with its creation timestamp replaced by the wall clock at read time, and Go go/internal/dialcache/engine.go readServing copies the frame with CreatedAtMS set to the injected clock's wall reading. TypeScript reads Date.now, which the drivers fake, while Go reads the injected clock, so both stamps are the history's wall time. The retained candidate therefore appears to have been created at the read and always passes the recovery maximum.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.getWithResolvedConfig retains the stale candidate with its creation timestamp replaced by the wall clock at read time, and Go go/engine.go readServing copies the frame with CreatedAtMS set to the injected clock's wall reading. TypeScript reads Date.now, which the drivers fake, while Go reads the injected clock, so both stamps are the history's wall time. The retained candidate therefore appears to have been created at the read and always passes the recovery maximum.",
       "typescript": {
         "edits": [
           {
@@ -1418,7 +1423,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "return remoteValue[T]{kind: \"retained\", frame: &r.Frame}",
             "after": "return remoteValue[T]{kind: \"retained\", frame: &Frame{CreatedAtMS: uint64(x.cache.settings.clock.WallMS()), Binary: r.Frame.Binary, Payload: r.Frame.Payload}}"
           }
@@ -1433,7 +1438,7 @@
       "id": "M45",
       "case": "C45.captured-policy",
       "description": "Admit calls with a recovery maximum one second larger than the configured policy",
-      "rationale": "TypeScript typescript/src/internal/runtime-config.ts resolveRemoteLayerConfigResult admits the call with a stale-on-error maximum one second larger than configured, and Go go/internal/dialcache/policy.go ResolvePolicy adds one second to the resolved StaleOnErrorMaxAge. TypeScript config granularity is seconds, so one second is the smallest unit and Go mirrors it.",
+      "rationale": "TypeScript typescript/src/internal/runtime-config.ts resolveRemoteLayerConfigResult admits the call with a stale-on-error maximum one second larger than configured, and Go go/policy.go ResolvePolicy adds one second to the resolved StaleOnErrorMaxAge. TypeScript config granularity is seconds, so one second is the smallest unit and Go mirrors it.",
       "typescript": {
         "edits": [
           {
@@ -1450,7 +1455,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/policy.go",
+            "path": "go/policy.go",
             "before": "resolved.StaleOnErrorMaxAge = time.Duration(ms) * time.Millisecond",
             "after": "resolved.StaleOnErrorMaxAge = time.Duration(ms)*time.Millisecond + time.Second"
           }
@@ -1465,7 +1470,7 @@
       "id": "M46",
       "case": "C45.captured-policy",
       "description": "Capture the static default recovery maximum at admission, ignoring the runtime overlay (in the policy profile this also hides overlay configuration errors)",
-      "rationale": "TypeScript typescript/src/internal/runtime-config.ts mergeKeyConfig takes the stale-on-error maximum from the static default only, ignoring the runtime overlay, and Go go/internal/dialcache/policy.go ResolvePolicy drops staleOnErrorMaxAgeSec from its runtime leaf merge loop. The admitted recovery maximum is therefore the static default even when the overlay changes it. The port has no constant to substitute for a generic policy, so ignoring the overlay is the faithful analog; in the policy profile the mutant is broader because it also hides overlay configuration errors.",
+      "rationale": "TypeScript typescript/src/internal/runtime-config.ts mergeKeyConfig takes the stale-on-error maximum from the static default only, ignoring the runtime overlay, and Go go/policy.go ResolvePolicy drops staleOnErrorMaxAgeSec from its runtime leaf merge loop. The admitted recovery maximum is therefore the static default even when the overlay changes it. The port has no constant to substitute for a generic policy, so ignoring the overlay is the faithful analog; in the policy profile the mutant is broader because it also hides overlay configuration errors.",
       "typescript": {
         "edits": [
           {
@@ -1482,7 +1487,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/policy.go",
+            "path": "go/policy.go",
             "before": "for _, name := range []string{\"requestLocal\", \"coalesce\", \"staleOnErrorMaxAgeSec\", \"remoteReadTimeoutMs\"} {",
             "after": "for _, name := range []string{\"requestLocal\", \"coalesce\", \"remoteReadTimeoutMs\"} {"
           }
@@ -1497,7 +1502,7 @@
       "id": "M47",
       "case": "C49.dark-source-reuse",
       "description": "Continue dark shadow work without waiting for the caller source",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.runShadowValidation replaces the branch that waits for the caller's source with an already-resolved undefined value, and Go go/internal/dialcache/shadow.go runShadow replaces the case that waits on the source's done channel with a default case. Dark shadow work therefore compares and fills with an undefined or zero value without waiting for the source.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.runShadowValidation replaces the branch that waits for the caller's source with an already-resolved undefined value, and Go go/shadow.go runShadow replaces the case that waits on the source's done channel with a default case. Dark shadow work therefore compares and fills with an undefined or zero value without waiting for the source.",
       "typescript": {
         "edits": [
           {
@@ -1514,7 +1519,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "\t\t\tcase <-source.done:\n\t\t\t\tvalue, err = source.result.value, source.result.err",
             "after": "\t\t\tdefault:"
           }
@@ -1529,7 +1534,7 @@
       "id": "M48",
       "case": "C54.deduplication",
       "description": "Admit a shadow job for an identity that already has a live job",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.scheduleShadowValidation and Go go/internal/dialcache/shadow.go scheduleShadow drop the live-job check from the admission guard. A shadow job is therefore admitted for an identity that already has one, subject only to capacity.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.scheduleShadowValidation and Go go/shadow.go scheduleShadow drop the live-job check from the admission guard. A shadow job is therefore admitted for an identity that already has one, subject only to capacity.",
       "typescript": {
         "edits": [
           {
@@ -1546,7 +1551,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "if c.shadows[x.key] != nil || len(c.shadows) >= c.settings.shadowCapacity {",
             "after": "if len(c.shadows) >= c.settings.shadowCapacity {"
           }
@@ -1561,7 +1566,7 @@
       "id": "M49",
       "case": "C54.instance-isolation",
       "description": "Admit one shadow job beyond the per-instance capacity",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.scheduleShadowValidation and Go go/internal/dialcache/shadow.go scheduleShadow make the capacity comparison strict. One shadow job beyond the per-instance capacity is therefore admitted.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.scheduleShadowValidation and Go go/shadow.go scheduleShadow make the capacity comparison strict. One shadow job beyond the per-instance capacity is therefore admitted.",
       "typescript": {
         "edits": [
           {
@@ -1578,7 +1583,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "len(c.shadows) >= c.settings.shadowCapacity",
             "after": "len(c.shadows) > c.settings.shadowCapacity"
           }
@@ -1593,7 +1598,7 @@
       "id": "M50",
       "case": "W01.key-identity",
       "description": "Reject braces in keyType and id for untracked keys as well",
-      "rationale": "TypeScript typescript/src/key.ts DialCacheKey.constructor builds the untracked prefix through invalidationPrefix, which throws on braces, instead of joinUrnComponents, and Go go/internal/dialcache/protocol.go Keys always includes KeyType and ID among the hash-tag components instead of only for tracked keys. Braces in keyType or id are therefore rejected for untracked keys as well.",
+      "rationale": "TypeScript typescript/src/key.ts DialCacheKey.constructor builds the untracked prefix through invalidationPrefix, which throws on braces, instead of joinUrnComponents, and Go go/protocol.go Keys always includes KeyType and ID among the hash-tag components instead of only for tracked keys. Braces in keyType or id are therefore rejected for untracked keys as well.",
       "typescript": {
         "edits": [
           {
@@ -1610,7 +1615,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/protocol.go",
+            "path": "go/protocol.go",
             "before": "\tparts := []string{id.Namespace}\n\tif id.Tracked {\n\t\tparts = append(parts, id.KeyType, id.ID)\n\t}",
             "after": "\tparts := []string{id.Namespace, id.KeyType, id.ID}"
           }
@@ -1625,7 +1630,7 @@
       "id": "M51",
       "case": "W03.cohort-assignment",
       "description": "Admit a key whose cohort sample equals the configured ramp",
-      "rationale": "TypeScript typescript/src/internal/runtime-config.ts resolveLayerConfigResult and Go go/internal/dialcache/policy.go ResolvePolicy make the serving-layer cohort comparison inclusive, so a key whose cohort sample equals the configured ramp is admitted. The shadow-cohort comparison is a separate site left to a follow-up.",
+      "rationale": "TypeScript typescript/src/internal/runtime-config.ts resolveLayerConfigResult and Go go/policy.go ResolvePolicy make the serving-layer cohort comparison inclusive, so a key whose cohort sample equals the configured ramp is admitted. The shadow-cohort comparison is a separate site left to a follow-up.",
       "typescript": {
         "edits": [
           {
@@ -1642,7 +1647,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/policy.go",
+            "path": "go/policy.go",
             "before": "Cohort(logical, layer) < ramp",
             "after": "Cohort(logical, layer) <= ramp"
           }
@@ -1657,7 +1662,7 @@
       "id": "M52",
       "case": "W04.untracked-decoder",
       "description": "Read and apply the entity watermark fence on untracked keys",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.startRawPayloadRead and Go go/internal/dialcache/engine.go execution.rawRead always request the grouped entity watermark, including for untracked keys. Go go/internal/dialcache/protocol.go DecodeFrame additionally applies an explicitly supplied watermark without consulting tracked, preserving the direct decoder-vector challenge. Both edits express the same wrong behavior at the actual cache-read and direct-codec API boundaries. Correct Go request construction otherwise supplies no watermark and masks the decoder-only fault from shared behavioral histories.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.startRawPayloadRead and Go go/engine.go execution.rawRead always request the grouped entity watermark, including for untracked keys. Go go/protocol.go DecodeFrame additionally applies an explicitly supplied watermark without consulting tracked, preserving the direct decoder-vector challenge. Both edits express the same wrong behavior at the actual cache-read and direct-codec API boundaries. Correct Go request construction otherwise supplies no watermark and masks the decoder-only fault from shared behavioral histories.",
       "typescript": {
         "edits": [
           {
@@ -1674,12 +1679,12 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "raw := startPending(func() (ReadResult, error) { return x.cache.settings.remote.Read(ctx, x.remoteKey, x.watermark) })",
             "after": "watermark := \"{\" + escape(x.op.Identity.Namespace) + \":\" + escape(x.op.Identity.KeyType) + \":\" + escape(x.op.Identity.ID) + \"}#watermark\"\n\traw := startPending(func() (ReadResult, error) { return x.cache.settings.remote.Read(ctx, x.remoteKey, watermark) })"
           },
           {
-            "path": "go/internal/dialcache/protocol.go",
+            "path": "go/protocol.go",
             "before": "if tracked && fence != nil && stamp <= *fence {",
             "after": "if f, _ := parseWatermark(watermark); f != nil && stamp <= *f {"
           }
@@ -1694,7 +1699,7 @@
       "id": "M53",
       "case": "W06.envelope-markers",
       "description": "Leave the escape prefix in place before an escaped binary-zstd marker",
-      "rationale": "TypeScript typescript/src/internal/compression.ts decompressPayload and Go go/internal/dialcache/codec.go DecompressPayload stop treating the binary-zstd marker as an escapable byte. The escape prefix is therefore left in place before an escaped binary-zstd marker.",
+      "rationale": "TypeScript typescript/src/internal/compression.ts decompressPayload and Go go/codec.go DecompressPayload stop treating the binary-zstd marker as an escapable byte. The escape prefix is therefore left in place before an escaped binary-zstd marker.",
       "typescript": {
         "edits": [
           {
@@ -1711,7 +1716,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/codec.go",
+            "path": "go/codec.go",
             "before": "if len(payload.Bytes) > 1 && payload.Bytes[1] <= 2 {",
             "after": "if len(payload.Bytes) > 1 && payload.Bytes[1] <= 1 {"
           }
@@ -1726,7 +1731,7 @@
       "id": "M54",
       "case": "W06.envelope-markers",
       "description": "Strip a leading zero byte even when the next byte is not an envelope marker",
-      "rationale": "TypeScript typescript/src/internal/compression.ts decompressPayload and Go go/internal/dialcache/codec.go DecompressPayload strip a leading zero byte whenever a second byte exists, no longer requiring it to be an envelope marker. M53 shares this anchor with a different edit and stays a distinct entry.",
+      "rationale": "TypeScript typescript/src/internal/compression.ts decompressPayload and Go go/codec.go DecompressPayload strip a leading zero byte whenever a second byte exists, no longer requiring it to be an envelope marker. M53 shares this anchor with a different edit and stays a distinct entry.",
       "typescript": {
         "edits": [
           {
@@ -1743,7 +1748,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/codec.go",
+            "path": "go/codec.go",
             "before": "if len(payload.Bytes) > 1 && payload.Bytes[1] <= 2 {",
             "after": "if len(payload.Bytes) > 1 {"
           }
@@ -1758,7 +1763,7 @@
       "id": "M55",
       "case": "W07.compression-selection",
       "description": "Store a compressed payload whose marked size ties the escaped raw size",
-      "rationale": "TypeScript typescript/src/internal/compression.ts compressPayload and Go go/internal/dialcache/codec.go CompressPayload make the size comparison strict, so a compressed payload whose marked size ties the escaped raw size is stored compressed instead of raw.",
+      "rationale": "TypeScript typescript/src/internal/compression.ts compressPayload and Go go/codec.go CompressPayload make the size comparison strict, so a compressed payload whose marked size ties the escaped raw size is stored compressed instead of raw.",
       "typescript": {
         "edits": [
           {
@@ -1775,7 +1780,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/codec.go",
+            "path": "go/codec.go",
             "before": "if len(compressed)+1 >= len(raw.Bytes) {",
             "after": "if len(compressed)+1 > len(raw.Bytes) {"
           }
@@ -1790,7 +1795,7 @@
       "id": "M56",
       "case": "C37.physical-cap",
       "description": "Write a tracked value for its full configured retention above the one-hour cap",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.putWithLayer writes a tracked value with its configured TTL instead of the smaller of that and MAX_TRACKED_REDIS_VALUE_TTL_MS, and Go go/internal/dialcache/engine.go putRemote skips the one-hour clamp (tracked_ttl_clamped) for a tracked write. A tracked value is therefore retained for its full configured retention, which its watermark, kept for twice the cap, need not outlive.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts RedisCache.putWithLayer writes a tracked value with its configured TTL instead of the smaller of that and MAX_TRACKED_REDIS_VALUE_TTL_MS, and Go go/engine.go putRemote skips the one-hour clamp (tracked_ttl_clamped) for a tracked write. A tracked value is therefore retained for its full configured retention, which its watermark, kept for twice the cap, need not outlive.",
       "typescript": {
         "edits": [
           {
@@ -1807,7 +1812,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if x.op.Identity.Tracked && ttl > time.Hour {",
             "after": "if false {"
           }
@@ -1839,7 +1844,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "if err != nil {\n\t\tverdict = shadowVerdict{outcome: \"timeout\"}\n\t}",
             "after": "if err != nil {\n\t\tverdict = shadowVerdict{outcome: \"timeout\"}\n\t\tx.cache.mu.Lock()\n\t\tif x.cache.shadows[x.key] == f {\n\t\t\tdelete(x.cache.shadows, x.key)\n\t\t}\n\t\tx.cache.mu.Unlock()\n\t}"
           }
@@ -1854,7 +1859,7 @@
       "id": "M57",
       "case": "C22.adapter-frame-expiry",
       "description": "Report a frame at its maximum age as an unclassified miss instead of expired",
-      "rationale": "TypeScript typescript/src/internal/redis-cache.ts getWithResolvedConfig and Go go/internal/dialcache/engine.go readServing change the first maximum-age guard's miss diagnostic from expired to unclassified. Source fallback, refill authority and later reuse remain unchanged; the generated held-adapter history distinguishes the diagnostic at exactly 60000ms, before any source settlement.",
+      "rationale": "TypeScript typescript/src/internal/redis-cache.ts getWithResolvedConfig and Go go/engine.go readServing change the first maximum-age guard's miss diagnostic from expired to unclassified. Source fallback, refill authority and later reuse remain unchanged; the generated held-adapter history distinguishes the diagnostic at exactly 60000ms, before any source settlement.",
       "typescript": {
         "edits": [
           {
@@ -1871,7 +1876,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/engine.go",
+            "path": "go/engine.go",
             "before": "if age >= maxAge {\n\t\tx.event(\"miss\", \"remote\", map[string]any{\"reason\": \"expired\"})",
             "after": "if age >= maxAge {\n\t\tx.event(\"miss\", \"remote\", map[string]any{\"reason\": \"unclassified\"})"
           }
@@ -1886,7 +1891,7 @@
       "id": "M59",
       "case": "C11.process-inspection",
       "description": "Include process leaders in the reported follower count",
-      "rationale": "TypeScript typescript/src/dialcache.ts getCoalescingState adds the registered leader count to activeProcessFollowers; Go go/internal/dialcache/bindings.go GetCoalescingState counts one extra follower per registered flight. The snapshot reports initiating callers as followers while caller outcomes and sharing remain unchanged.",
+      "rationale": "TypeScript typescript/src/dialcache.ts getCoalescingState adds the registered leader count to activeProcessFollowers; Go go/bindings.go GetCoalescingState counts one extra follower per registered flight. The snapshot reports initiating callers as followers while caller outcomes and sharing remain unchanged.",
       "typescript": {
         "edits": [
           {
@@ -1903,7 +1908,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/bindings.go",
+            "path": "go/bindings.go",
             "before": "state.ActiveFollowers += f.followers",
             "after": "state.ActiveFollowers += f.followers + 1"
           }
@@ -1918,7 +1923,7 @@
       "id": "M60",
       "case": "C11.process-inspection",
       "description": "Measure the oldest process leader age with the application wall clock",
-      "rationale": "TypeScript typescript/src/dialcache.ts getCoalescingState uses Date.now instead of performance.now, while Go go/internal/dialcache/bindings.go GetCoalescingState uses Clock.WallMS instead of elapsedNow. Both subtract a monotonic registration instant from an unrelated application wall clock; the public snapshot changes under wall shifts.",
+      "rationale": "TypeScript typescript/src/dialcache.ts getCoalescingState uses Date.now instead of performance.now, while Go go/bindings.go GetCoalescingState uses Clock.WallMS instead of elapsedNow. Both subtract a monotonic registration instant from an unrelated application wall clock; the public snapshot changes under wall shifts.",
       "typescript": {
         "edits": [
           {
@@ -1935,7 +1940,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/bindings.go",
+            "path": "go/bindings.go",
             "before": "age := elapsedNow(c.settings.clock) - f.started",
             "after": "age := time.Duration(c.settings.clock.WallMS())*time.Millisecond - f.started"
           }
@@ -1967,7 +1972,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "bounded, raw := x.rawRead()\n\t\treads = append(reads, raw)",
             "after": "bounded, raw := x.rawRead()\n\t\tbounded = raw\n\t\treads = append(reads, raw)"
           }
@@ -1999,7 +2004,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/shadow.go",
+            "path": "go/shadow.go",
             "before": "\t\t\t\tfor _, r := range reads {\n\t\t\t\t\t<-r.done\n\t\t\t\t}\n",
             "after": ""
           }
@@ -2031,7 +2036,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/redis_adapter.go",
+            "path": "go/redis_adapter.go",
             "before": "local watermark = math.max(current_watermark, proposed_watermark)",
             "after": "local watermark = proposed_watermark"
           }
@@ -2063,7 +2068,7 @@
       "go": {
         "edits": [
           {
-            "path": "go/internal/dialcache/redis_adapter.go",
+            "path": "go/redis_adapter.go",
             "before": "future_buffer_ms > 31536000000",
             "after": "future_buffer_ms >= 31536000000"
           }

@@ -374,7 +374,7 @@ func TestCoreConformance(t *testing.T) {
 		coreActions[bs(action)] = true
 	}
 	requireRegistry(t)
-	paths := []string{"../../../formal/conformance-smoke.itf.json"}
+	paths := []string{"../formal/conformance-smoke.itf.json"}
 	file, directory := os.Getenv("DIALCACHE_MBT_TRACE_FILE"), os.Getenv("DIALCACHE_MBT_TRACE_DIR")
 	if file != "" && directory != "" {
 		t.Fatal("select either a trace file or directory")
@@ -428,11 +428,11 @@ func TestCoreConformance(t *testing.T) {
 
 func TestCoreParserAndObservationBoundary(t *testing.T) {
 	coordinator := newReplayCoordinator(t)
-	raw, err := os.ReadFile("../../../formal/conformance-smoke.itf.json")
+	raw, err := os.ReadFile("../formal/conformance-smoke.itf.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := coordinator.prepare("core", "../../../formal/conformance-smoke.itf.json", raw)
+	prepared, err := coordinator.prepare("core", "../formal/conformance-smoke.itf.json", raw)
 	if err != nil {
 		t.Fatal(err)
 	}
