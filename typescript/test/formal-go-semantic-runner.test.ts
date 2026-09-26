@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 const moduleUrl = new URL("../../formal/measure-go-semantics.mjs", import.meta.url).href;
 const { evaluateGoTestEvents } = await import(moduleUrl) as {
-  evaluateGoTestEvents(events: string, exitCode: number): { state: string; assertionKinds: Record<string, string> };
+  evaluateGoTestEvents(events: string, exitCode: number, expectedPackages?: number): { state: string; assertionKinds: Record<string, string> };
 };
+const publicPackage = "github.com/lan17/DialCache/go";
+const suitePackage = `${publicPackage}/internal/testsuite`;
 
 function replayFailure(parent: string, file: string, output: string): string {
   const leaf = `${parent}/trace.itf.json`;
@@ -14,9 +16,34 @@ function replayFailure(parent: string, file: string, output: string): string {
     { Action: "fail", Test: leaf },
     { Action: "fail", Test: parent },
     { Action: "fail" },
-  ].map(event => JSON.stringify(event)).join("\n");
+  ].map(event => JSON.stringify({ Package: publicPackage, ...event })).join("\n");
 }
 const localClockFailure = (output: string) => replayFailure("TestLocalClockConformance", "local_clock_profile_test.go", output);
+
+it("requires both root and moved-test package completion for ordinary Go mutations", () => {
+  const suiteTests = [
+    { Action: "run", Test: "TestObserversFanOutAndMetricsAdapterIsIsolated" },
+    { Action: "pass", Test: "TestObserversFanOutAndMetricsAdapterIsIsolated" },
+    { Action: "pass" },
+  ].map(event => JSON.stringify({ Package: suitePackage, ...event })).join("\n");
+  const rootFailure = replayFailure("TestCache", "cache_test.go", "unexpected value");
+  const both = `${suiteTests}\n${rootFailure}`;
+  expect(evaluateGoTestEvents(both, 1, 2)).toMatchObject({ state: "detected" });
+  expect(() => evaluateGoTestEvents(rootFailure, 1, 2)).toThrow(/incomplete or skipped/);
+  expect(() => evaluateGoTestEvents(both, 1)).toThrow(/incomplete or skipped/);
+  expect(() => evaluateGoTestEvents(both.replace('"Action":"pass"}', '"Action":"skip"}'), 1, 2)).toThrow(/incomplete or skipped/);
+});
+
+it("does not let one package's assertion failure hide another package's crash", () => {
+  const rootFailure = replayFailure("TestCache", "cache_test.go", "unexpected value");
+  const suiteCrash = [
+    { Action: "run", Test: "TestObserversFanOutAndMetricsAdapterIsIsolated" },
+    { Action: "pass", Test: "TestObserversFanOutAndMetricsAdapterIsIsolated" },
+    { Action: "output", Output: "signal: killed\n" },
+    { Action: "fail" },
+  ].map(event => JSON.stringify({ Package: suitePackage, ...event })).join("\n");
+  expect(() => evaluateGoTestEvents(`${rootFailure}\n${suiteCrash}`, 1, 2)).toThrow(/package status and assertion results disagree/);
+});
 
 describe("Go local-clock mutation assertion attribution", () => {
   it("requires an observable replay mismatch for the new clock profile", () => {

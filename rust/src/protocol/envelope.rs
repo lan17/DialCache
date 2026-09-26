@@ -406,7 +406,7 @@ mod tests {
         }
     }
 
-    /// Port of go/codec_test.go TestCompressionLimitsAndIndependentLoads.
+    /// Port of go/internal/testsuite/codec_test.go TestCompressionLimitsAndIndependentLoads.
     #[test]
     fn compression_limits_and_independent_loads() {
         let raw = text(4096);
@@ -457,7 +457,7 @@ mod tests {
         );
     }
 
-    /// Port of go/codec_test.go TestZstdFirstFrameAndMalformedBodies.
+    /// Port of go/internal/testsuite/codec_test.go TestZstdFirstFrameAndMalformedBodies.
     #[test]
     fn first_frame_and_malformed_bodies() {
         let source = Payload::text("first".repeat(100));

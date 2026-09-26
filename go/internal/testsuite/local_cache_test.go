@@ -1,7 +1,9 @@
-package dialcache
+package dialcache_test
 
 import (
 	"context"
+	. "github.com/lan17/DialCache/go"
+	"github.com/lan17/DialCache/go/internal/localcache"
 	"strconv"
 	"sync"
 	"testing"
@@ -172,15 +174,19 @@ func benchmarkKeys(first, count int) []string {
 // evict the least recently used entry, on the process-local storage.
 func BenchmarkLocalPutEviction(b *testing.B) {
 	const capacity = 10000
-	cache := MustNew(WithLocalCapacity(capacity))
+	origin := time.Now()
+	cache, err := localcache.New(capacity, func() int64 { return time.Since(origin).Milliseconds() })
+	if err != nil {
+		b.Fatal(err)
+	}
 	for i := 0; i < capacity; i++ {
-		cache.localPut(strconv.Itoa(i), i, 60000)
+		cache.Put(strconv.Itoa(i), i, 60000)
 	}
 	keys := benchmarkKeys(capacity, b.N)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cache.localPut(keys[i], i, 60000)
+		cache.Put(keys[i], i, 60000)
 	}
 }
 

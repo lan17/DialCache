@@ -335,7 +335,7 @@
       "id": "M11",
       "case": "C09.fixed-local-ttl",
       "description": "Renew the local insertion TTL on every cache hit",
-      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.constructor turns on the lru-cache option that refreshes an entry's age on every read, and Go go/cache.go localGet re-stamps the insertion time and re-adds the entry on a hit. A local entry that is read often therefore never expires on its insertion TTL.",
+      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.constructor turns on the lru-cache option that refreshes an entry's age on every read, and Go go/internal/localcache/cache.go Store.Get re-stamps the insertion time and re-adds the entry on a hit. A local entry that is read often therefore never expires on its insertion TTL.",
       "typescript": {
         "edits": [
           {
@@ -353,9 +353,9 @@
       "go": {
         "edits": [
           {
-            "path": "go/cache.go",
-            "before": "\tc.local.Get(key)\n\treturn item.value, true",
-            "after": "\titem.insertedMS = c.settings.clock.ElapsedMS()\n\tc.local.Add(key, item)\n\treturn item.value, true"
+            "path": "go/internal/localcache/cache.go",
+            "before": "\ts.entries.Get(key)\n\treturn item.value, true",
+            "after": "\titem.insertedMS = s.elapsedMS()\n\ts.entries.Add(key, item)\n\treturn item.value, true"
           }
         ],
         "requiredDetections": [
@@ -529,7 +529,7 @@
       "id": "M18",
       "case": "C09.fixed-local-ttl",
       "description": "Serve a local entry at its exact insertion expiry",
-      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.put drops the one-millisecond reduction from the lru-cache ttl that encodes the exclusive expiry boundary, and Go go/cache.go localGet makes the expiry comparison strict. A local entry is therefore served at the exact millisecond its insertion TTL elapses.",
+      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.put drops the one-millisecond reduction from the lru-cache ttl that encodes the exclusive expiry boundary, and Go go/internal/localcache/cache.go Store.Get makes the expiry comparison strict. A local entry is therefore served at the exact millisecond its insertion TTL elapses.",
       "typescript": {
         "edits": [
           {
@@ -546,9 +546,9 @@
       "go": {
         "edits": [
           {
-            "path": "go/cache.go",
-            "before": "if c.settings.clock.ElapsedMS()-item.insertedMS >= item.ttlMS {",
-            "after": "if c.settings.clock.ElapsedMS()-item.insertedMS > item.ttlMS {"
+            "path": "go/internal/localcache/cache.go",
+            "before": "if s.elapsedMS()-item.insertedMS >= item.ttlMS {",
+            "after": "if s.elapsedMS()-item.insertedMS > item.ttlMS {"
           }
         ],
         "requiredDetections": [
@@ -561,7 +561,7 @@
       "id": "M19",
       "case": "C09.fractional-clock-grid",
       "description": "Compute local insertion and expiry on the precise clock instead of the whole-millisecond grid",
-      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.constructor stops flooring the performance clock and LocalCache.put shortens the ttl by a microsecond instead of a millisecond; Go go/cache.go localGet compares the precise clock against a nanosecond ttl and localPut stamps the precise instant. Insertion and expiry therefore fall on the fractional clock instead of the whole-millisecond grid. The feature-profile driver clocks are integer, so the fault is silent outside the local-clock profile.",
+      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.constructor stops flooring the performance clock and LocalCache.put shortens the ttl by a microsecond instead of a millisecond; Go go/cache.go New supplies the precise nanosecond clock to the local store, and go/internal/localcache/cache.go Store.Get converts the insertion TTL to nanoseconds for comparison; Store.Put stamps that same precise clock. Insertion and expiry therefore fall on the fractional clock instead of the whole-millisecond grid. The feature-profile driver clocks are integer, so the fault is silent outside the local-clock profile.",
       "typescript": {
         "edits": [
           {
@@ -584,13 +584,13 @@
         "edits": [
           {
             "path": "go/cache.go",
-            "before": "if c.settings.clock.ElapsedMS()-item.insertedMS >= item.ttlMS {",
-            "after": "if int64(elapsedNow(c.settings.clock))-item.insertedMS >= item.ttlMS*int64(time.Millisecond) {"
+            "before": "localcache.New(s.localCapacity, s.clock.ElapsedMS)",
+            "after": "localcache.New(s.localCapacity, func() int64 { return int64(elapsedNow(s.clock)) })"
           },
           {
-            "path": "go/cache.go",
-            "before": "insertedMS: c.settings.clock.ElapsedMS()",
-            "after": "insertedMS: int64(elapsedNow(c.settings.clock))"
+            "path": "go/internal/localcache/cache.go",
+            "before": "if s.elapsedMS()-item.insertedMS >= item.ttlMS {",
+            "after": "if s.elapsedMS()-item.insertedMS >= item.ttlMS*1_000_000 {"
           }
         ],
         "requiredDetections": [
@@ -645,7 +645,7 @@
       "id": "M21",
       "case": "C13.uncoalesced-caching",
       "description": "Serve a live local entry before joining the pending process flight",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.getThroughSharedLayers peeks LocalCache.getWithResolvedConfig before deciding whether to join the process flight, and Go go/engine.go shared peeks localGet before its coalesce branch. A live local entry is therefore served ahead of a pending process flight registered for the key.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.getThroughSharedLayers peeks LocalCache.getWithResolvedConfig before deciding whether to join the process flight, and Go go/engine.go shared peeks local.Get before its coalesce branch. A live local entry is therefore served ahead of a pending process flight registered for the key.",
       "typescript": {
         "edits": [
           {
@@ -664,7 +664,7 @@
           {
             "path": "go/engine.go",
             "before": "\tif p.Local.Enabled {\n\t\tif p.Coalesce {",
-            "after": "\tif p.Local.Enabled {\n\t\tif early, _ := callSafely(func() (localResult[T], error) {\n\t\t\traw, found := c.localGet(x.key)\n\t\t\tif !found {\n\t\t\t\treturn localResult[T]{}, nil\n\t\t\t}\n\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil\n\t\t}); early.found {\n\t\t\treturn run()\n\t\t}\n\t\tif p.Coalesce {"
+            "after": "\tif p.Local.Enabled {\n\t\tif early, _ := callSafely(func() (localResult[T], error) {\n\t\t\traw, found := c.local.Get(x.key)\n\t\t\tif !found {\n\t\t\t\treturn localResult[T]{}, nil\n\t\t\t}\n\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil\n\t\t}); early.found {\n\t\t\treturn run()\n\t\t}\n\t\tif p.Coalesce {"
           }
         ],
         "requiredDetections": [
@@ -709,7 +709,7 @@
       "id": "M23",
       "case": "C13.local-last-writer",
       "description": "Never let a local publication replace an entry already occupying the slot, even an expired one",
-      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.put writes only when a peek that allows stale entries finds the slot empty, and Go go/cache.go localPut writes only when Peek finds no entry. Both therefore skip a local publication when any entry already occupies the slot, even an expired one. The formal fault sits in local_storage.putLocal, shared by layered and local-only publication. Both native caches purge expired entries on a read, so only live-slot replacement demonstrates the common native boundary.",
+      "rationale": "TypeScript typescript/src/internal/local-cache.ts LocalCache.put writes only when a peek that allows stale entries finds the slot empty, and Go go/internal/localcache/cache.go Store.Put writes only when Peek finds no entry. Both therefore skip a local publication when any entry already occupies the slot, even an expired one. The formal fault sits in local_storage.putLocal, shared by layered and local-only publication. Both native caches purge expired entries on a read, so only live-slot replacement demonstrates the common native boundary.",
       "typescript": {
         "edits": [
           {
@@ -726,9 +726,9 @@
       "go": {
         "edits": [
           {
-            "path": "go/cache.go",
-            "before": "\tc.local.Add(key, entry{value: value, insertedMS: c.settings.clock.ElapsedMS(), ttlMS: ttl})",
-            "after": "\tif _, present := c.local.Peek(key); !present {\n\t\tc.local.Add(key, entry{value: value, insertedMS: c.settings.clock.ElapsedMS(), ttlMS: ttl})\n\t}"
+            "path": "go/internal/localcache/cache.go",
+            "before": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})",
+            "after": "\tif _, present := s.entries.Peek(key); !present {\n\t\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n\t}"
           }
         ],
         "requiredDetections": [
@@ -741,7 +741,7 @@
       "id": "M24",
       "case": "C13.local-last-writer",
       "description": "Clear the key's local entry when a source settlement fails",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain deletes the key's local entry before rethrowing a rejected source, and Go go/engine.go shared removes the local entry on its no-Redis-client, non-ramped remote-disabled and remote-read error paths. A failed active source can therefore discard another source's accepted local publication. The model removes the value, expiry and LRU membership together. Native scope differs: Go also clears after a remote-read failure, before a recovery attempt, and without a Redis client; TypeScript clears only after finishRedisChain cannot recover. Ramped-down dark-source paths and outside bypass calls do not execute these edits.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain deletes the key's local entry before rethrowing a rejected source, and Go go/engine.go shared removes the local entry on its no-Redis-client, non-ramped remote-disabled and remote-read error paths. A mutation-only Store.Remove method in go/internal/localcache/cache.go preserves removal of the complete entry under the store mutex. A failed active source can therefore discard another source's accepted local publication. The model removes the value, expiry and LRU membership together. Native scope differs: Go also clears after a remote-read failure, before a recovery attempt, and without a Redis client; TypeScript clears only after finishRedisChain cannot recover. Ramped-down dark-source paths and outside bypass calls do not execute these edits.",
       "typescript": {
         "edits": [
           {
@@ -760,17 +760,22 @@
           {
             "path": "go/engine.go",
             "before": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, e\n\t\t}",
-            "after": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.mu.Lock()\n\t\t\t\tif c.local != nil {\n\t\t\t\t\tc.local.Remove(x.key)\n\t\t\t\t}\n\t\t\t\tc.mu.Unlock()\n\t\t\t}\n\t\t\treturn v, e\n\t\t}"
+            "after": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.local.Remove(x.key)\n\t\t\t}\n\t\t\treturn v, e\n\t\t}"
           },
           {
             "path": "go/engine.go",
             "before": "\t\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t\t}\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, e",
-            "after": "\t\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t\t}\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.mu.Lock()\n\t\t\t\tif c.local != nil {\n\t\t\t\t\tc.local.Remove(x.key)\n\t\t\t\t}\n\t\t\t\tc.mu.Unlock()\n\t\t\t}\n\t\t\treturn v, e"
+            "after": "\t\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t\t}\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.local.Remove(x.key)\n\t\t\t}\n\t\t\treturn v, e"
           },
           {
             "path": "go/engine.go",
             "before": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n",
-            "after": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n\t\t\tc.mu.Lock()\n\t\t\tif c.local != nil {\n\t\t\t\tc.local.Remove(x.key)\n\t\t\t}\n\t\t\tc.mu.Unlock()\n"
+            "after": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n\t\t\tc.local.Remove(x.key)\n"
+          },
+          {
+            "path": "go/internal/localcache/cache.go",
+            "before": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n}",
+            "after": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n}\n\n// Fault injection: remove the complete entry after an active source failure.\nfunc (s *Store) Remove(key string) {\n\tif s == nil {\n\t\treturn\n\t}\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\ts.entries.Remove(key)\n}"
           }
         ],
         "requiredDetections": [

@@ -231,7 +231,7 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 		if p.Local.Enabled {
 			start := elapsedNow(c.settings.clock)
 			item, readErr := callSafely(func() (localResult[T], error) {
-				raw, found := c.localGet(x.key)
+				raw, found := c.local.Get(x.key)
 				if !found {
 					return localResult[T]{}, nil
 				}
@@ -326,7 +326,7 @@ type localResult[T any] struct {
 
 func (x *execution[T]) putLocal(value T) {
 	_, err := callSafely(func() (struct{}, error) {
-		x.cache.localPut(x.key, value, ms(x.policy.Local.TTL))
+		x.cache.local.Put(x.key, value, ms(x.policy.Local.TTL))
 		return struct{}{}, nil
 	})
 	if err != nil {

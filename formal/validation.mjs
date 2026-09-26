@@ -165,8 +165,8 @@ export function validationPlan(target, { directory = root, environment = process
   // Exclude exactly those roots from the full corpus command so the completed
   // report can keep rejecting every actual skip, including required cases.
   const nativeGo = (full, { coverage = false } = {}) => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
-    'test', '-race', '-count=1', ...(coverage ? ['-covermode=atomic', '-coverprofile=coverage-unit.out'] : []), ...(full ? ['-json', '-timeout=35m',
-      '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver|TestDocsTrackedInvalidation)$'] : []), './...'),
+    'test', '-race', '-count=1', ...(coverage ? ['-covermode=atomic', '-coverpkg=./...', '-coverprofile=coverage-unit.out'] : []), ...(full ? ['-json', '-timeout=35m',
+      '-skip', '^(TestGeneratedInvalidationVectors|TestVectorBoundaryDriver|TestDocsTrackedInvalidation)$'] : []), full ? '.' : './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   // The Rust conformance harness is one cargo test target. Without directory
   // selectors it replays the committed smoke histories; with them it replays
@@ -241,7 +241,7 @@ export function validationPlan(target, { directory = root, environment = process
     'mutations-merge-go': [node('Merge Go mutation shards', 'formal/merge-mutation-reports.mjs', 'go')],
     'mutations-merge-rust': [node('Merge Rust mutation shards', 'formal/merge-mutation-reports.mjs', 'rust')],
     'integration-ts': [pnpm('Run TypeScript Redis/Valkey/Cluster integrations', 'test:integration')],
-    'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-covermode=atomic', '-coverprofile=coverage-integration.out', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
+    'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-covermode=atomic', '-coverpkg=./...', '-coverprofile=coverage-integration.out', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
     // The Rust integration tests are #[ignore]d, so a plain cargo test reports
     // them as ignored and never needs Docker; this lane runs exactly them.
     'integration-rust': [cargo('Run Rust Redis/Valkey/Cluster integrations', 'test', '--all-features', '--test', 'redis_integration', '--', '--ignored')],

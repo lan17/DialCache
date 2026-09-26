@@ -1,7 +1,8 @@
-package dialcache
+package dialcache_test
 
 import (
 	"bytes"
+	. "github.com/lan17/DialCache/go"
 	"math"
 	"math/big"
 	"strings"
@@ -19,9 +20,9 @@ func TestJSONCodecNativeSemantics(t *testing.T) {
 		{"negative zero", math.Copysign(0, -1), "0"}, {"nan", math.NaN(), "null"}, {"infinity", math.Inf(1), "null"},
 		{"undefined sentinel string", JSONUndefinedSentinel, `"__dialcache_json_undefined_v1__"`},
 		{"array absent", []any{Absent, nil, false, math.NaN()}, `[null,null,false,null]`},
-		{"object absent", JSONObject{{"z", 1}, {"missing", Absent}, {"a", nil}}, `{"z":1,"a":null}`},
-		{"integer key order", JSONObject{{"x", 1}, {"10", 2}, {"2", 3}, {"01", 4}}, `{"2":3,"10":2,"x":1,"01":4}`},
-		{"duplicate property", JSONObject{{"a", 1}, {"b", 2}, {"a", 3}}, `{"a":3,"b":2}`},
+		{"object absent", JSONObject{{Name: "z", Value: 1}, {Name: "missing", Value: Absent}, {Name: "a", Value: nil}}, `{"z":1,"a":null}`},
+		{"integer key order", JSONObject{{Name: "x", Value: 1}, {Name: "10", Value: 2}, {Name: "2", Value: 3}, {Name: "01", Value: 4}}, `{"2":3,"10":2,"x":1,"01":4}`},
+		{"duplicate property", JSONObject{{Name: "a", Value: 1}, {Name: "b", Value: 2}, {Name: "a", Value: 3}}, `{"a":3,"b":2}`},
 		{"native text escaping", "<>&\u2028\u2029\n\u0000", "\"<>&\u2028\u2029\\n\\u0000\""},
 		{"native buffer", []byte{0, 1, 255}, `{"type":"Buffer","data":[0,1,255]}`},
 		{"numeric boundaries", []any{1e-7, 1e-6, 1e20, 1e21, 9007199254740991.0}, `[1e-7,0.000001,100000000000000000000,1e+21,9007199254740991]`},
@@ -129,8 +130,8 @@ func TestSemanticEqualPortableDomain(t *testing.T) {
 		{map[string]any{"a": 1, "b": []any{nil, Absent}}, map[string]any{"b": []any{nil, Absent}, "a": float64(1)}, true},
 		{map[string]any{"a": Absent}, map[string]any{}, false},
 		{[]byte{1, 2}, []byte{1, 2}, true}, {[]byte{1, 2}, []any{1, 2}, false},
-		{JSONObject{{"b", 2}, {"a", 1}}, map[string]any{"a": 1, "b": 2}, true},
-		{[]any{JSONObject{{"b", 2}, {"a", 1}}}, []any{map[string]any{"a": 1, "b": 2}}, true},
+		{JSONObject{{Name: "b", Value: 2}, {Name: "a", Value: 1}}, map[string]any{"a": 1, "b": 2}, true},
+		{[]any{JSONObject{{Name: "b", Value: 2}, {Name: "a", Value: 1}}}, []any{map[string]any{"a": 1, "b": 2}}, true},
 	}
 	for i, test := range tests {
 		if got := SemanticEqual(test.a, test.b); got != test.equal {
@@ -140,7 +141,7 @@ func TestSemanticEqualPortableDomain(t *testing.T) {
 }
 func TestCompressionLimitsAndIndependentLoads(t *testing.T) {
 	raw := Payload{Bytes: []byte(strings.Repeat("x", 4096))}
-	compressed, err := CompressPayload(raw, CompressionConfig{1, 3})
+	compressed, err := CompressPayload(raw, CompressionConfig{ThresholdBytes: 1, Level: 3})
 	if err != nil || compressed.Outcome != "compressed" {
 		t.Fatal(compressed, err)
 	}
@@ -148,7 +149,7 @@ func TestCompressionLimitsAndIndependentLoads(t *testing.T) {
 	if tooLarge.Outcome != "read_over_limit" || !bytes.Equal(tooLarge.Payload.Bytes, compressed.Payload.Bytes) {
 		t.Fatal(tooLarge)
 	}
-	refused, err := CompressPayload(raw, CompressionConfig{1, 3}, 4095)
+	refused, err := CompressPayload(raw, CompressionConfig{ThresholdBytes: 1, Level: 3}, 4095)
 	if err != nil || refused.Outcome != "write_over_limit" || !bytes.Equal(refused.Payload.Bytes, raw.Bytes) {
 		t.Fatal(refused, err)
 	}
@@ -164,16 +165,16 @@ func TestCompressionLimitsAndIndependentLoads(t *testing.T) {
 	if !bytes.Equal(DecompressPayload(escaped).Payload.Bytes, []byte{1, 2, 3}) {
 		t.Fatal("retained escaped input mutated")
 	}
-	if _, err := ResolveCompressionConfig(&CompressionConfig{-1, 3}); err == nil {
+	if _, err := ResolveCompressionConfig(&CompressionConfig{ThresholdBytes: -1, Level: 3}); err == nil {
 		t.Fatal("invalid threshold")
 	}
-	if _, err := ResolveCompressionConfig(&CompressionConfig{1, 23}); err == nil {
+	if _, err := ResolveCompressionConfig(&CompressionConfig{ThresholdBytes: 1, Level: 23}); err == nil {
 		t.Fatal("invalid level")
 	}
 }
 
 func TestZstdFirstFrameAndMalformedBodies(t *testing.T) {
-	payload, err := CompressPayload(Payload{Bytes: []byte(strings.Repeat("first", 100))}, CompressionConfig{1, 3})
+	payload, err := CompressPayload(Payload{Bytes: []byte(strings.Repeat("first", 100))}, CompressionConfig{ThresholdBytes: 1, Level: 3})
 	if err != nil || payload.Outcome != "compressed" {
 		t.Fatal(payload, err)
 	}
