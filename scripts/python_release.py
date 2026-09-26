@@ -257,10 +257,13 @@ def pending(version: str, dist_dir: Path, upload_dir: Path) -> bool:
     return bool(missing)
 
 
-def verify_published(version: str, dist_dir: Path, *, attempts: int = 6, delay: float = 5) -> None:
+def verify_published(version: str, dist_dir: Path, *, attempts: int = 12, delay: float = 15) -> None:
     files = artifacts(dist_dir, version)
     if attempts < 1:
         raise ReleaseError("At least one publication verification attempt is required")
+    # Accepted uploads can take longer than 25 seconds to appear in PyPI's JSON
+    # API. Poll only for missing files; identity conflicts and HTTP errors still
+    # fail immediately, and verification never uploads or rebuilds anything.
     for attempt in range(attempts):
         missing = missing_artifacts(version, files, registry_release(version))
         if not missing:
