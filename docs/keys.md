@@ -92,11 +92,34 @@ See the [Rust guide](languages/rust.md).
 
 <LanguageContent language="python">
 
-The `cached` decorator takes `key_type`, `use_case`, and either a `cache_key`
-callback or `id_arg`. `id_arg=(name, adapter)` extracts an ID from a native object;
-other bound arguments use `arg_adapters` and `ignore_args`. Inline calls accept
-a structured `Key` or an ID plus normalized argument mapping. See the
-[Python guide](languages/python.md#identity-and-policy).
+For `@cache.cached(...)`, prefer `cache_key`: it receives the loader's arguments
+and returns a bare ID or `{"id": ..., "args": {...}}`. `get_or_load()` accepts
+the same shape directly as `key`. This API excerpt assumes an application `db`:
+
+```python
+from dialcache import DialCache, Policy
+
+cache = DialCache(namespace="users-api")
+
+
+@cache.cached(
+    key_type="user_id",
+    use_case="GetUser",
+    cache_key=lambda user_id, locale: {"id": user_id, "args": {"locale": locale}},
+    default_config=Policy(ttl_sec={"local": 60}),
+)
+async def get_user(user_id: str, locale: str):
+    return await db.fetch_user(user_id, locale)
+
+
+async with cache.enable():
+    await get_user("123", "en")
+```
+
+The selector must accept the loader's positional and keyword call forms; loader
+defaults are not automatically supplied to it. Inferred identity through
+`id_arg`, `arg_adapters`, and `ignore_args` remains supported. See the
+[Python guide](languages/python.md#identity-and-policy) for these binding details.
 
 </LanguageContent>
 

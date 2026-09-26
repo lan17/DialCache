@@ -5,9 +5,19 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import NotRequired, TypeAlias, TypedDict
 from urllib.parse import quote
 
-from .serializer import UNDEFINED
+from .serializer import UNDEFINED, _Undefined
+
+KeyScalar: TypeAlias = str | int | float | bool | None
+
+
+class CacheKeySpec(TypedDict):
+    """An entity id and the explicit result dimensions selected for a cache key."""
+
+    id: KeyScalar
+    args: NotRequired[Mapping[str, KeyScalar | _Undefined]]
 
 
 def _integer_string(value: int) -> str:

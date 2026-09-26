@@ -9,6 +9,37 @@ from dialcache import DialCache, Policy
 from dialcache.redis import RedisAdapter
 
 
+async def test_explicit_key_identity():
+    cache = DialCache(namespace="users-api")
+    source_calls = []
+
+    @cache.cached(
+        key_type="user_id",
+        use_case="GetUser",
+        # Repeat the loader default so omitted and explicit locales agree.
+        cache_key=lambda user_id, locale="en", *, trace_id=None: {
+            "id": user_id,
+            "args": {"locale": locale},
+        },
+        default_config=Policy(request_local=True),
+    )
+    async def get_user(user_id: str, locale: str = "en", *, trace_id=None):
+        source_calls.append((user_id, locale, trace_id))
+        return {"id": user_id, "locale": locale}
+
+    async with cache.enable():
+        assert await get_user("123", trace_id="first") == {"id": "123", "locale": "en"}
+        assert await get_user(user_id="123", locale="en", trace_id="second") == {
+            "id": "123",
+            "locale": "en",
+        }
+        assert await get_user("123", "fr") == {"id": "123", "locale": "fr"}
+        assert await get_user("456") == {"id": "456", "locale": "en"}
+
+    # Trace metadata does not alter the result, so it is omitted from identity.
+    assert source_calls == [("123", "en", "first"), ("123", "fr", None), ("456", "en", None)]
+
+
 async def test_request_scope():
     # region request-scope
     cache = DialCache()
@@ -17,7 +48,7 @@ async def test_request_scope():
     @cache.cached(
         key_type="user",
         use_case="requestScope",
-        id_arg="id",
+        cache_key=lambda id: id,
         # Only request-local storage is enabled; shared layers stay off.
         default_config=Policy(request_local=True),
     )
@@ -49,7 +80,7 @@ async def test_runtime_policy():
     @cache.cached(
         key_type="user",
         use_case="runtimePolicy",
-        id_arg="id",
+        cache_key=lambda id: id,
         default_config=Policy(request_local=True, ttl_sec={"local": 60}, ramp={"local": 100}),
     )
     async def lookup(id):
@@ -92,7 +123,7 @@ async def test_tracked_invalidation():
         @cache.cached(
             key_type="user",
             use_case="profileVersion",
-            id_arg="id",
+            cache_key=lambda id: id,
             track_for_invalidation=True,
             # Keep local layers off so each request observes the watermark.
             default_config=Policy(ttl_sec={"remote": 60}, ramp={"remote": 100}),

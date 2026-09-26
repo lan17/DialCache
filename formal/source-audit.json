@@ -152,15 +152,15 @@
     },
     {
       "path": "docs/keys.md",
-      "sha256": "9848b0713587794f0fb7f92c7143b1fae50fc2684242c0cdeb6c97804f8fb24f",
+      "sha256": "09446ece068184cd0828ccb6f726a95b59d970d509a342ff3c6cff5d3d587504",
       "entries": [
         {"line":1,"title":"Keys and identity","contracts":["W01"]},
         {"line":14,"title":"Anatomy of a key","contracts":["W01"]},
         {"line":42,"title":"Define a result identity","contracts":["W01","E04"]},
-        {"line":120,"title":"Normalization and encoding","contracts":["W02"]},
-        {"line":181,"title":"Namespace","contracts":["W01"]},
-        {"line":188,"title":"Changing a namespace","contracts":["W01","E05"]},
-        {"line":205,"title":"The key passed to runtime policy","contracts":["C16","B01"]}
+        {"line":143,"title":"Normalization and encoding","contracts":["W02"]},
+        {"line":204,"title":"Namespace","contracts":["W01"]},
+        {"line":211,"title":"Changing a namespace","contracts":["W01","E05"]},
+        {"line":228,"title":"The key passed to runtime policy","contracts":["C16","B01"]}
       ]
     },
     {
@@ -178,16 +178,16 @@
     },
     {
       "path": "docs/languages/python.md",
-      "sha256": "4d4e0f898e167c50299d264dcec88e73bd7fc4e47e30141556a75f00c474086b",
+      "sha256": "6b0625588d4028207e8069241a64a2d73e825d07f56e2d23111ee24fd4b5ad90",
       "entries": [
         {"line":1,"title":"Python integration","contracts":["B01"]},
         {"line":10,"title":"Installation and runtime","contracts":["B01","B02"]},
         {"line":29,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
         {"line":46,"title":"Identity and policy","contracts":["W01","W02","C16","C18","C20","B01"]},
-        {"line":69,"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
-        {"line":87,"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
-        {"line":106,"title":"Sharing Redis with other languages","contracts":["W01","W02","E04","B03","B01"]},
-        {"line":116,"title":"Validation","contracts":["B01"]}
+        {"line":97,"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
+        {"line":115,"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
+        {"line":134,"title":"Sharing Redis with other languages","contracts":["W01","W02","E04","B03","B01"]},
+        {"line":144,"title":"Validation","contracts":["B01"]}
       ]
     },
     {
