@@ -2,6 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/dialcache.svg)](https://www.npmjs.com/package/dialcache)
 [![crates.io](https://img.shields.io/crates/v/dialcache.svg)](https://crates.io/crates/dialcache)
+[![PyPI version](https://img.shields.io/pypi/v/dialcache.svg)](https://pypi.org/project/dialcache/)
 [![TypeScript coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=typescript&label=TypeScript%20coverage)](https://codecov.io/gh/lan17/DialCache)
 [![Go coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=go&label=Go%20coverage)](https://codecov.io/gh/lan17/DialCache)
 [![Rust coverage](https://img.shields.io/codecov/c/github/lan17/DialCache/main?flag=rust&label=Rust%20coverage)](https://codecov.io/gh/lan17/DialCache)
@@ -39,7 +40,7 @@ behavioral contracts and documentation.
 | TypeScript | [`typescript/`](typescript/) — reference implementation | [TypeScript and npm](typescript/README.md) |
 | Go | [`go/`](go/) — experimental | [Go guide](go/README.md) |
 | Rust | [`rust/`](rust/) — experimental | [Rust guide](rust/README.md) · [crates.io](https://crates.io/crates/dialcache) |
-| Python | [`python/`](python/) — experimental | [Python guide](python/README.md) |
+| Python | [`python/`](python/) — experimental | [Python guide](python/README.md) · [PyPI](https://pypi.org/project/dialcache/) |
 
 Shared contracts and portable test histories live in [`formal/`](formal/).
 Run repository validation from the root; see the
