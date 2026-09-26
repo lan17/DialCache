@@ -14,9 +14,9 @@ import inspect
 import json
 import logging
 import math
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from dataclasses import dataclass, field
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, ParamSpec, Protocol, TypeVar, overload
 
 from .clock import SystemClock
 from .config import UNSET, Policy, _valid_ramp, merge_policy, resolve_layer, validate_static_policy
@@ -29,7 +29,7 @@ from .errors import (
     UseCaseIsAlreadyRegisteredError,
     UseCaseNameIsReservedError,
 )
-from .key import Key, invalidation_prefix, normalize_args, ramp_sample
+from .key import CacheKeySpec, Key, KeyScalar, invalidation_prefix, normalize_args, ramp_sample
 from .local import LocalCache
 from .metrics import Metrics, emit_metric
 from .protocol import Frame, Miss, compress_payload, decompress_payload, escape_raw_payload, utf8_bytes
@@ -39,6 +39,14 @@ from .serializer import JsonSerializer
 T = TypeVar("T")
 P = ParamSpec("P")
 MAX_SAFE = 9_007_199_254_740_991
+
+
+class _CachedDecorator(Protocol):
+    @overload
+    def __call__(self, fn: Callable[P, Awaitable[T]], /) -> Callable[P, Coroutine[Any, Any, T]]: ...
+
+    @overload
+    def __call__(self, fn: Callable[P, T], /) -> Callable[P, Coroutine[Any, Any, T]]: ...
 
 
 async def _await(value: Any) -> Any:
@@ -243,22 +251,31 @@ class DialCache:
         self,
         *,
         key_type: str,
-        cache_key: Callable[..., Any] | None = None,
+        cache_key: Callable[..., CacheKeySpec | KeyScalar | Key] | None = None,
         id_arg: str | tuple[str, Callable[[Any], Any]] | None = None,
         use_case: str | None = None,
         arg_adapters: Mapping[str, Callable[[Any], Any]] | None = None,
         ignore_args: list[str] | tuple[str, ...] = (),
         **options: Any,
-    ) -> Callable[..., Any]:
-        """Decorate a loader using an explicit selector or gcache-style arguments.
+    ) -> _CachedDecorator:
+        """Decorate a loader with explicit cache_key selection (recommended) or id_arg.
 
         The wrapper is always awaitable, including for a synchronous loader.
         Key callbacks and argument adapters are never called while disabled.
+        An explicit selector receives the original positional and keyword
+        arguments, including self for methods. Loader defaults are not injected:
+        declare matching defaults on the selector when callers can omit them.
         """
         if (cache_key is None) == (id_arg is None):
             raise ConfigError("Supply exactly one of cache_key or id_arg")
 
-        def decorate(fn: Callable[P, T | Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+        @overload
+        def decorate(fn: Callable[P, Awaitable[T]]) -> Callable[P, Coroutine[Any, Any, T]]: ...
+
+        @overload
+        def decorate(fn: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]: ...
+
+        def decorate(fn: Callable[P, T | Awaitable[T]]) -> Callable[P, Coroutine[Any, Any, T]]:
             name = use_case or f"{fn.__module__}.{fn.__qualname__}"
             self._check_use_case(name)
             if name in self._registered:
