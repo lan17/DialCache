@@ -45,13 +45,41 @@ the public API.
 
 ## Identity and policy
 
-Specify `cache_key=` for explicit identity selection or `id_arg=` for a named
-function argument. An `id_arg=(name, adapter)` pair converts a native object
-into a primitive entity ID. Other bound arguments, including default values,
-participate in identity; `arg_adapters` converts them and `ignore_args` excludes
-inputs that do not affect the result. The default use-case name is the source
-function's module and qualified name. Explicit names provide stability across
-refactoring.
+Prefer `cache_key=` to select identity explicitly, as shown in the shared
+[keys guide](../keys.md#define-a-result-identity). Return a bare entity ID or
+`{"id": ..., "args": {...}}`; a structured `Key` is also accepted. Choose a
+stable `use_case` and argument names instead of tying cache identity to Python
+function names. Include every input that affects the returned value.
+
+The selector receives the invocation's original positional and keyword
+arguments, including `self` for a decorated method. Match the loader's parameter
+names and defaults: a loader default such as `locale="en"` must also appear on
+its selector if callers may omit it. DialCache does not fill in loader defaults
+before invoking `cache_key`. Select any instance state that affects the result,
+such as `self.tenant_id`, explicitly. A selector failure bypasses caching for
+that invocation.
+
+Use `CacheKeySpec` to annotate a named selector. For a loader that also defaults
+`locale` to `"en"`, pass this function as `cache_key=user_key`:
+
+```python
+from dialcache import CacheKeySpec
+
+
+def user_key(user_id: str, locale: str = "en") -> CacheKeySpec:
+    return {"id": user_id, "args": {"locale": locale}}
+```
+
+The decorated function preserves the loader's parameter types and returns an
+awaitable of its result type, including for synchronous loaders.
+
+`id_arg=` remains a supported alternative for inferred identity. An
+`id_arg=(name, adapter)` pair converts a native object into a primitive entity
+ID. Other bound arguments, including default values, participate in identity;
+`arg_adapters` converts them and `ignore_args` excludes inputs that do not affect
+the result. Inferred method arguments omit `self` unless explicitly adapted.
+The default use-case name is the source function's module and qualified name;
+explicit names remain stable across refactoring.
 
 `Policy` uses snake_case fields such as `ttl_sec`, `request_local`, and
 `remote_read_timeout_ms`. Static settings are captured when registering the

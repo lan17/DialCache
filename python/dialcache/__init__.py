@@ -12,7 +12,7 @@ from .errors import (
     UseCaseIsAlreadyRegisteredError,
     UseCaseNameIsReservedError,
 )
-from .key import Key, normalize_args
+from .key import CacheKeySpec, Key, KeyScalar, normalize_args
 from .serializer import UNDEFINED, JsonSerializer, Serializer
 
 __all__ = [
@@ -22,6 +22,8 @@ __all__ = [
     "DialCacheKeyConfig",
     "CacheLayer",
     "Key",
+    "CacheKeySpec",
+    "KeyScalar",
     "normalize_args",
     "Serializer",
     "JsonSerializer",

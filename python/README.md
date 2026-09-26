@@ -23,6 +23,9 @@ any Redis client connections.
 
 ## A cached function
 
+Select cache identity explicitly with `cache_key`. This API excerpt assumes an
+application `database`:
+
 ```python
 from dialcache import DialCache, Policy
 
@@ -32,19 +35,32 @@ cache = DialCache(namespace="my-service")
 @cache.cached(
     use_case="user-profile",
     key_type="user",
-    id_arg="user_id",
+    cache_key=lambda user_id, locale: {"id": user_id, "args": {"locale": locale}},
     default_config=Policy(ttl_sec={"local": 5}, request_local=True),
 )
-async def get_profile(user_id: str) -> dict:
-    return await database.fetch_profile(user_id)
+async def get_profile(user_id: str, locale: str) -> dict:
+    return await database.fetch_profile(user_id, locale)
 
 
-async def handle_request(user_id: str) -> dict:
+async def handle_request(user_id: str, locale: str) -> dict:
     async with cache.enable():
-        first = await get_profile(user_id)
-        second = await get_profile(user_id)  # Same request memo.
+        first = await get_profile(user_id, locale)
+        second = await get_profile(user_id, locale)  # Same request memo.
         return second
 ```
+
+The selector returns an entity ID, or `{"id": ..., "args": {...}}` when the
+result has additional dimensions. Here, `id` groups the user's tracked values
+for invalidation; `args` distinguishes locales within this use case. Include
+every input that affects the result, including tenant or authorization scope
+when relevant. Explicit `use_case` and argument names keep identity stable
+across function refactors and languages.
+
+The selector receives the same positional and keyword arguments as the loader.
+Match their parameter names and repeat any defaults the loader accepts; loader
+defaults are not filled in before calling the selector. For inferred identity,
+`id_arg`, `arg_adapters`, and `ignore_args` remain supported alternatives; see
+the [Python identity guide](https://lan17.github.io/DialCache/languages/python.html#identity-and-policy).
 
 Calls outside `enable()` go directly to the source. They do not construct cache
 keys, resolve policy, share concurrent work, or apply a DialCache source
@@ -130,7 +146,7 @@ cache = DialCache(redis=RedisAdapter(client))
 @cache.cached(
     use_case="user-profile",
     key_type="user",
-    id_arg="user_id",
+    cache_key=lambda user_id: user_id,
     track_for_invalidation=True,
     default_config=Policy(ttl_sec={"remote": 60}),
 )
