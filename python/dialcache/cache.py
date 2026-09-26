@@ -29,7 +29,7 @@ from .errors import (
     UseCaseIsAlreadyRegisteredError,
     UseCaseNameIsReservedError,
 )
-from .key import CacheKeySpec, Key, KeyScalar, invalidation_prefix, normalize_args, ramp_sample
+from .key import Key, KeyScalar, invalidation_prefix, normalize_args, ramp_sample
 from .local import LocalCache
 from .metrics import Metrics, emit_metric
 from .protocol import Frame, Miss, compress_payload, decompress_payload, escape_raw_payload, utf8_bytes
@@ -46,7 +46,7 @@ class _CachedDecorator(Protocol):
     def __call__(self, fn: Callable[P, Awaitable[T]], /) -> Callable[P, Coroutine[Any, Any, T]]: ...
 
     @overload
-    def __call__(self, fn: Callable[P, T], /) -> Callable[P, Coroutine[Any, Any, T]]: ...
+    def __call__(self, fn: Callable[P, T | Awaitable[T]], /) -> Callable[P, Coroutine[Any, Any, T]]: ...
 
 
 async def _await(value: Any) -> Any:
@@ -251,7 +251,7 @@ class DialCache:
         self,
         *,
         key_type: str,
-        cache_key: Callable[..., CacheKeySpec | KeyScalar | Key] | None = None,
+        cache_key: Callable[..., Mapping[str, object] | KeyScalar | Key] | None = None,
         id_arg: str | tuple[str, Callable[[Any], Any]] | None = None,
         use_case: str | None = None,
         arg_adapters: Mapping[str, Callable[[Any], Any]] | None = None,
@@ -273,7 +273,7 @@ class DialCache:
         def decorate(fn: Callable[P, Awaitable[T]]) -> Callable[P, Coroutine[Any, Any, T]]: ...
 
         @overload
-        def decorate(fn: Callable[P, T]) -> Callable[P, Coroutine[Any, Any, T]]: ...
+        def decorate(fn: Callable[P, T | Awaitable[T]]) -> Callable[P, Coroutine[Any, Any, T]]: ...
 
         def decorate(fn: Callable[P, T | Awaitable[T]]) -> Callable[P, Coroutine[Any, Any, T]]:
             name = use_case or f"{fn.__module__}.{fn.__qualname__}"
