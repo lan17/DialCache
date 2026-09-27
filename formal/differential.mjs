@@ -230,6 +230,30 @@ export function loadHistories(directory, descriptor) {
     .map(name => (descriptor.parseTrace ?? parseTrace)(JSON.parse(readFileSync(resolve(directory, name), 'utf8')), name, descriptor));
 }
 
+// Before exact-key deletion, the shared observation did not record its
+// counter. Those non-deletion profiles cannot dispatch a deletion, so their
+// reference projection has a zero baseline. Apply this bridge only when the
+// pinned reference source declares the older record; candidate traces and
+// reference sources that already declare the counter keep the strict parser.
+// Remove it once supported reference revisions all declare `deletions`.
+export function referenceDescriptor(tree, profileId, descriptor) {
+  const source = resolve(tree, 'formal/conformance-observations.qnt');
+  if (profileId === 'deletion' || !existsSync(source)) return descriptor;
+  const observation = scanDeclarationBodies(readFileSync(source, 'utf8')).get('Observation');
+  if (observation?.kind !== 'type' || observation.body.includes('deletions')) return descriptor;
+  const parse = descriptor.parseTrace ?? parseTrace;
+  return { ...descriptor, parseTrace(raw, path) {
+    if (!Array.isArray(raw?.states)) return parse(raw, path, descriptor);
+    const states = raw.states.map((state, index) => {
+      const o = state?.s?.o;
+      if (o === null || typeof o !== 'object' || Array.isArray(o)) return state;
+      if (Object.hasOwn(o, 'deletions')) throw new Error(`${path} step ${index}: unexpected legacy reference deletions field`);
+      return { ...state, s: { ...state.s, o: { ...o, deletions: { '#bigint': '0' } } } };
+    });
+    return parse({ ...raw, states }, path, descriptor);
+  } };
+}
+
 // A run that stops early still writes its trace: the agreeing prefix plus one
 // trailing state that carries only #meta. Only states recording a step count.
 export function recordedStates(raw) {
@@ -385,7 +409,7 @@ export function selectProfiles(prepared) {
 // These weights only place whole profiles; they never select or drop histories.
 const replaySeconds = {
   admission: 170, 'dark-layers': 400, effects: 700, independent: 280,
-  layers: 450, 'local-clock': 80, 'local-failure': 70, policy: 260,
+  layers: 450, deletion: 450, 'local-clock': 80, 'local-failure': 70, policy: 260,
   recovery: 500, 'recovery-read': 250, 'runtime-boundaries': 220, scope: 170,
   shadow: 1300, 'shadow-layers': 350, 'shadow-read-deadlines': 100, 'source-budgets': 140,
 };
@@ -444,12 +468,13 @@ export async function runDifferential(profileId, prepared, { chunk = defaultChun
   printGroup(`Reference generation (${seconds(referenceCorpus.generationMs)})`, referenceCorpus.log);
   printGroup(`Candidate generation (${seconds(candidateCorpus.generationMs)})`, candidateCorpus.log);
   const label = (histories, prefix) => histories.map(history => ({ ...history, path: `${prefix}${history.path}` }));
-  const referenceHistories = [...loadHistories(referenceCorpus.directory, descriptor), ...label(loadHistories(referenceCorpus.regressions, descriptor), 'regression:')];
+  const referenceProjection = referenceDescriptor(referenceTree, profileId, descriptor);
+  const referenceHistories = [...loadHistories(referenceCorpus.directory, referenceProjection), ...label(loadHistories(referenceCorpus.regressions, referenceProjection), 'regression:')];
   const candidateHistories = [...loadHistories(candidateCorpus.directory, descriptor), ...label(loadHistories(candidateCorpus.regressions, descriptor), 'regression:')];
   log(`Replaying ${referenceHistories.length} reference histories through the candidate and ${candidateHistories.length} candidate histories through the reference, ${chunk} per process.`);
   const started = performance.now();
   const forwardReplay = await prepareReplay(candidateTree, candidateModel, descriptor, referenceHistories, { chunk, output: resolve(outputDirectory, 'forward') });
-  const reverseReplay = await prepareReplay(referenceTree, referenceModel, descriptor, candidateHistories, { chunk, output: resolve(outputDirectory, 'reverse') });
+  const reverseReplay = await prepareReplay(referenceTree, referenceModel, referenceProjection, candidateHistories, { chunk, output: resolve(outputDirectory, 'reverse') });
   log(`${profileId}: ${forwardReplay.tasks.length} forward and ${reverseReplay.tasks.length} reverse replay batches, up to ${concurrency} concurrent processes.`);
   const progress = (direction, tasks) => {
     let completed = 0;

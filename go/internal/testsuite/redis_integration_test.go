@@ -270,6 +270,7 @@ func TestRedisIntegration(t *testing.T) {
 			t.Run("invalidation-vectors", func(t *testing.T) { testInvalidationVectors(t, environment) })
 			t.Run("mixed-typescript-go", func(t *testing.T) { testMixedLanguage(t, environment) })
 			t.Run("complete-frame-and-primary-read", func(t *testing.T) { testPrimaryRead(t, environment) })
+			t.Run("exact-delete", func(t *testing.T) { testExactDelete(t, environment) })
 		})
 	}
 }
@@ -617,5 +618,55 @@ func testPrimaryRead(t *testing.T, environment redisEnvironment) {
 	}
 	if err := adapter.Invalidate(context.Background(), watermark, 3000, 0); err != nil {
 		t.Fatal("NOSCRIPT recovery failed", err)
+	}
+}
+
+func testExactDelete(t *testing.T, environment redisEnvironment) {
+	ctx := context.Background()
+	adapter := NewRedisAdapter(environment.client)
+	for _, tracked := range []bool{false, true} {
+		identity := Identity{Namespace: "delete-integration", KeyType: "id", ID: fmt.Sprintf("%d-%t", time.Now().UnixNano(), tracked), UseCase: "Get", Tracked: tracked}
+		_, key, watermark, err := identity.Keys()
+		if err != nil {
+			t.Fatal(err)
+		}
+		commands := primaryCommands(t, environment, key)
+		defer commands.Del(ctx, key)
+		if tracked {
+			if err = commands.Set(ctx, watermark, "99", time.Minute).Err(); err != nil {
+				t.Fatal(err)
+			}
+			defer commands.Del(ctx, watermark)
+		}
+		if err = adapter.Write(ctx, key, Frame{CreatedAtMS: 100, Payload: []byte("7")}, time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		if err = adapter.Delete(ctx, key); err != nil {
+			t.Fatal(err)
+		}
+		if err = adapter.Delete(ctx, key); err != nil {
+			t.Fatal("missing delete", err)
+		}
+		got, err := adapter.Read(ctx, key, watermark)
+		if err != nil || got.Kind != "miss" || got.Reason != "value_absent" {
+			t.Fatalf("read after delete: %#v %v", got, err)
+		}
+		if tracked {
+			if got, err := commands.Get(ctx, watermark).Result(); err != nil || got != "99" {
+				t.Fatalf("watermark changed: %q %v", got, err)
+			}
+		}
+		// Another language removes the same Go frame using its bundled DEL adapter.
+		if err = adapter.Write(ctx, key, Frame{CreatedAtMS: 100, Payload: []byte("7")}, time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		result := runTypeScript(t, environment, []map[string]any{{"op": "delete", "key": key}})
+		if len(result) != 1 || result[0]["kind"] != "deleted" {
+			t.Fatalf("TypeScript delete: %#v", result)
+		}
+		got, err = adapter.Read(ctx, key, watermark)
+		if err != nil || got.Kind != "miss" {
+			t.Fatalf("mixed delete: %#v %v", got, err)
+		}
 	}
 }

@@ -21,6 +21,10 @@ export class RequestLocalCache {
     }
   }
 
+  delete(key: string): void {
+    this.values.delete(key);
+  }
+
   close(): void {
     this.closed = true;
     this.values.clear();
@@ -94,6 +98,14 @@ export function getOrCreateRequestLocalCache(context: DialCacheContext): Request
 
   holder.requestLocalCache ??= new RequestLocalCache();
   return holder.requestLocalCache;
+}
+
+/** The existing live memo, including inside disable(); never creates one. @internal */
+export function getLiveRequestLocalCache(context: DialCacheContext): RequestLocalCache | null {
+  const holder = storageFor(context).getStore()?.holder;
+  return holder !== undefined && holder !== null && !holder.closed
+    ? holder.requestLocalCache ?? null
+    : null;
 }
 
 function storageFor(context: DialCacheContext): AsyncLocalStorage<ContextStore> {

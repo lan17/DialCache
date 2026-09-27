@@ -122,6 +122,13 @@ pub struct WriteRequest {
     pub ttl_ms: u64,
 }
 
+/// Remove exactly one stored value; never its entity watermark.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeleteRequest {
+    /// The complete stored value key, including the frame suffix.
+    pub value_key: String,
+}
+
 /// One invalidation: advance the entity watermark monotonically.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidateRequest {
@@ -157,4 +164,13 @@ pub trait Remote: Send + Sync + 'static {
     /// Advance the entity watermark to at least
     /// `invalidated_at_ms + future_buffer_ms`, only ever widening its retention.
     fn invalidate(&self, request: InvalidateRequest) -> BoxFuture<'_, Result<(), BoxError>>;
+    /// Whether exact-key deletion is implemented. Existing adapters default to
+    /// unsupported, which the cache checks before changing any store.
+    fn supports_delete(&self) -> bool {
+        false
+    }
+    /// Remove one value key. Missing values succeed; watermarks are untouched.
+    fn delete(&self, _request: DeleteRequest) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async { Err("remote adapter does not support exact-key deletion".into()) })
+    }
 }

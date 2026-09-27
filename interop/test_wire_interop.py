@@ -334,7 +334,12 @@ async def invoke(
         source_calls += 1
         return native_value(source)
 
-    if op == "invalidate":
+    if op == "delete":
+        await cache.delete(key={"id": identity["id"], "args": identity["args"]},
+                           key_type=identity["keyType"], use_case=identity["useCase"],
+                           track_for_invalidation=identity["tracked"])
+        result = {"sourceCalls": source_calls}
+    elif op == "invalidate":
         await cache.invalidate_remote(identity["keyType"], identity["id"], future_buffer)
         result = {}
     else:
@@ -450,3 +455,22 @@ async def test_bidirectional_tracked_invalidation(backend, clients, identities, 
     assert_value(untouched["value"], initial)
     assert untouched["watermark"] is None
     assert untouched["frameHex"] == before[key_for(unrelated).value_key]
+
+
+@pytest.mark.parametrize("tracked", [False, True], ids=["untracked", "tracked"])
+@pytest.mark.parametrize("writer,deleter,reader", list(permutations(LANGUAGES, 3)))
+async def test_cross_language_exact_delete(backend, clients, identities, writer, deleter, reader, tracked):
+    identity = identities(tracked=tracked)
+    key = key_for(identity)
+    if tracked:
+        await backend["client"].set(key.watermark_key, str(STAMP - 1), px=60_000)
+    written = await invoke(writer, backend, clients, identity, source={"kind": "json", "value": "old"})
+    assert written["sourceCalls"] == 1 and written["frameHex"] is not None
+    deleted = await invoke(deleter, backend, clients, identity, op="delete")
+    assert deleted["sourceCalls"] == 0 and deleted["frameHex"] is None
+    assert deleted["watermark"] == (str(STAMP - 1) if tracked else None)
+    fresh = await invoke(reader, backend, clients, identity, wall=STAMP + 1,
+                         source={"kind": "json", "value": "reloaded"})
+    assert fresh["sourceCalls"] == 1
+    assert_value(fresh["value"], {"kind": "json", "value": "reloaded"})
+    assert fresh["watermark"] == deleted["watermark"]

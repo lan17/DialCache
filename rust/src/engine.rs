@@ -23,7 +23,7 @@ use crate::observe::{Event, Labels, Layer, LogEvent, Logger, Observer, OutcomeLa
 use crate::operation::{downcast_value, erase_load, ErasedOperation, Operation, RecoveryPredicate};
 use crate::policy::RuntimePolicy;
 use crate::protocol::CompressionConfig;
-use crate::remote::{InvalidateRequest, Remote};
+use crate::remote::{DeleteRequest, InvalidateRequest, Remote};
 use crate::runtime::Runtime;
 use crate::scope::{Owner, Scope};
 use crate::shadow::ShadowFlight;
@@ -671,6 +671,108 @@ impl DialCache {
                     layer: Layer::Remote,
                 },
                 error: crate::observe::ErrorKind::Invalidation,
+                in_fallback: false,
+            });
+        }
+        result
+    }
+
+    /// Remove one exact cached result from this instance's local store, the
+    /// live request memo supplied by `scope`, and the remote when configured.
+    /// Pass [`Scope::outside`] when no request is involved. Enabled state and
+    /// runtime policy are ignored. The identity must match the reader exactly,
+    /// including its arguments and tracking mode; an empty namespace inherits
+    /// this instance's. Missing entries succeed.
+    ///
+    /// Remote deletion completes first. An unsupported adapter or remote failure
+    /// leaves local and memo entries intact; local failures surface after the
+    /// remote step. Watermarks, other instances, flights and acquired snapshots
+    /// are untouched. A load already running can publish again after deletion.
+    pub async fn delete(&self, scope: &Scope, mut identity: Identity) -> Result<(), Error> {
+        let core = &self.core;
+        if identity.use_case == WATERMARK_USE_CASE {
+            return Err(ConfigError::ReservedUseCase(identity.use_case).into());
+        }
+        if identity.namespace.is_empty() {
+            identity.namespace = core.namespace.to_string();
+        }
+        let keys = identity
+            .keys()
+            .map_err(|e| Error::Config(ConfigError::invalid(e.to_string())))?;
+        if let Some(remote) = &core.remote {
+            if !remote.supports_delete() {
+                return Err(Error::RemoteDeleteUnsupported);
+            }
+        }
+        let mut labels = Labels {
+            namespace: Arc::from(identity.namespace.as_str()),
+            key_type: Arc::from(identity.key_type.as_str()),
+            use_case: Arc::from(identity.use_case.as_str()),
+            layer: if core.remote.is_some() {
+                Layer::Remote
+            } else {
+                Layer::Local
+            },
+        };
+        core.emit(Event::Deletion {
+            namespace: labels.namespace.clone(),
+            key_type: labels.key_type.clone(),
+            use_case: labels.use_case.clone(),
+            layer: labels.layer,
+        });
+        let result: Result<(), Error> = async {
+            if let Some(remote) = core.remote.clone() {
+                let request = DeleteRequest {
+                    value_key: keys.value,
+                };
+                let pending: Settled<Result<(), Error>> = start_pending(
+                    core.runtime.as_ref(),
+                    async move {
+                        remote
+                            .delete(request)
+                            .await
+                            .map_err(|e| Error::Remote(Arc::from(e)))
+                    },
+                    |message| Err(Error::Panic(message)),
+                );
+                pending.wait().await?;
+            }
+            labels.layer = Layer::Local;
+            // No await separates local and memo removal. Retire values outside
+            // both locks so their destructors may safely call back into the cache.
+            let retired = {
+                let mut state = core.state.lock();
+                let local = match state.local.as_mut() {
+                    Some(local) => catch_unwind(AssertUnwindSafe(|| local.remove(&keys.logical)))
+                        .unwrap_or_else(|payload| {
+                            Err(crate::flight::panic_message(payload).to_string().into())
+                        })
+                        .map_err(|e| Error::Local(Arc::from(e)))?,
+                    None => None,
+                };
+                let memo = if scope.cache_id == core.id {
+                    scope.owner.as_ref().and_then(|owner| {
+                        let mut owner = owner.state.lock();
+                        if owner.live {
+                            owner.memo.remove(&keys.logical)
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                };
+                (local, memo)
+            };
+            drop(retired);
+            Ok(())
+        }
+        .await;
+        if let Err(error) = &result {
+            core.log(LogEvent::DeletionFailed(error.to_string().into()));
+            core.emit(Event::Error {
+                labels,
+                error: crate::observe::ErrorKind::Deletion,
                 in_fallback: false,
             });
         }

@@ -610,6 +610,17 @@ Misses without that fence let the adapter sample its application epoch clock
 before dispatch.
 No path adds a fence-check command. See [Conditional refills](invalidation.md#conditional-refills).
 
+### Deletes
+
+Exact-key deletion sends one primary-routed `DEL valueKey`, where `valueKey` is
+the logical key plus `:dialcache-frame-v1`. It accepts only integer replies `0`
+(missing) and `1` (removed), and never reads or changes a watermark. `DEL` is
+supported on every supported server and proxy; no scan or Lua is involved.
+
+Bundled adapters add no delete retry. A command that fails after dispatch may
+already have executed; the caller decides whether to retry. See [deletion
+ordering and boundaries](invalidation.md#exact-key-deletion-versus-entity-invalidation).
+
 ### Invalidation retries and ambiguity
 
 Invalidation is the only Lua operation. Bundled adapters dispatch `EVALSHA` and
@@ -656,7 +667,7 @@ performed by an application or client.
 ### Redis compatibility and ACLs
 
 The integration suite covers Redis 6.2, Valkey 8, and Redis Cluster. The bundled
-operations require `GET`, `MGET`, and `SET`, plus `EVALSHA` and `EVAL` for
+operations require `GET`, `MGET`, `SET`, and `DEL`, plus `EVALSHA` and `EVAL` for
 invalidation. If commands called inside scripts are checked separately, allow
 `GET`, `SET`, and `PTTL` for the invalidation script.
 
@@ -667,7 +678,10 @@ DialCache does not issue `TIME`, `MULTI`, `EXEC`, `WATCH`, `UNLINK`, or
 ## Custom-client contract
 
 A semantic remote adapter must implement three operations: one decoded read,
-one complete-frame write, and explicit watermark invalidation. Tracked reads
+one complete-frame write, and explicit watermark invalidation. Exact-key
+deletion is a fourth, optional capability. Missing deletion support must produce
+an unsupported error before any store changes; never substitute entity
+invalidation or report success. Tracked reads
 must use one primary snapshot of value and watermark. Returned payload bytes
 must remain stable while the cache retains them for shadow or recovery.
 
@@ -678,7 +692,8 @@ dispatch. Invalidation retries must reuse their original logical timestamp.
 
 <LanguageContent language="typescript">
 
-Implement the three methods of `DialCacheRedisClient` and pass the object in
+Implement the three required methods of `DialCacheRedisClient` and optionally
+`delete`, then pass the object in
 `redis.client`:
 
 | Method | Return | Required semantics |
@@ -686,6 +701,7 @@ Implement the three methods of `DialCacheRedisClient` and pass the object in
 | `read(request, context?)` | `RedisReadResult` or Promise | Decode the frame; atomically apply the primary watermark for tracked reads |
 | `write(request)` | `void` or Promise | Write one complete frame with a finite TTL; honor an explicit `createdAtMs` exactly |
 | `invalidate(request)` | `void` or Promise | Advance the watermark monotonically using the client timestamp and preserve required retention |
+| `delete?(request)` | `void` or Promise | Remove exactly `RedisDeleteRequest.valueKey`; a missing value succeeds, watermarks are untouched |
 
 `read` receives `valueKey` and, only for tracked reads, `watermarkKey`.
 `RedisReadContext` supplies `timeoutMs` and an `AbortSignal` for cooperative
@@ -715,7 +731,7 @@ invalidatedAtMs]` as its arguments and returns integer `1`.
 
 Bound connection, queue, dispatch, retry, reconnect, and response lifetimes.
 DialCache bounds read waits but does not own the client's resource lifecycle or add
-write/invalidation deadlines.
+write/invalidation/deletion deadlines.
 
 </LanguageContent>
 
@@ -726,6 +742,9 @@ and optional watermark key, `Write` receives payload, TTL and timestamp, and
 `Invalidate` receives the watermark key, invalidation time and buffer. Use native
 frame/protocol helpers to preserve classified misses and observed fences. The
 [Go API reference](api.md) is generated from the actual interface.
+`Remote` stays unchanged. Implement optional `RemoteDeleter.Delete(ctx,
+valueKey)` to support deletion; otherwise `Cache.Delete` returns
+`ErrDeleteUnsupported` before changing stores.
 
 </LanguageContent>
 
@@ -735,7 +754,10 @@ Implement the asynchronous `Remote` trait and supply it to the cache builder.
 `ReadRequest`, `WriteRequest` and `InvalidateRequest` carry the semantic fields;
 `ReadResult` distinguishes frames from classified misses. Use the public protocol
 module helpers. The [Rust API reference](api.md) documents the exact trait and
-ownership types.
+ownership types. Override both `supports_delete() -> bool` and
+`delete(DeleteRequest)` to support exact deletion. Their defaults keep existing
+remotes compiling and return `Error::RemoteDeleteUnsupported` from the cache
+before any store changes.
 
 </LanguageContent>
 
@@ -745,11 +767,14 @@ Implement `dialcache.redis.RedisClient.read`, `write`, and `invalidate`; each
 method may return a value or awaitable. Use `ReadRequest`, `ReadContext`,
 `WriteRequest`, `InvalidationRequest`, `Frame` and `Miss`. The
 [Python API](api.md) documents their fields and the public protocol helpers.
+The original protocol is unchanged; `RedisDeleteClient` adds optional
+`delete(DeleteRequest)`. Core checks the method before mutation and raises
+`RemoteDeleteUnsupportedError` when absent.
 
 </LanguageContent>
 
 Bound connection, queue, dispatch, retries and settlement. The read deadline
-bounds DialCache's wait; it does not supply write or invalidation budgets.
+bounds DialCache's wait; it does not supply write, invalidation, or deletion budgets.
 
 ## Advanced wire protocol
 

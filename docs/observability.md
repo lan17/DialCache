@@ -313,6 +313,7 @@ and bytes without unit conversion:
 | `dialcache.disabled.count` | Count | `dialcache_disabled_counter` |
 | `dialcache.error.count` | Count | `dialcache_error_counter` |
 | `dialcache.invalidation.count` | Count | `dialcache_invalidation_counter` |
+| `dialcache.deletion.count` | Count | `dialcache_deletion_counter` |
 | `dialcache.coalesced.count` | Count | `dialcache_coalesced_counter` |
 | `dialcache.shadow.count` | Count | `dialcache_shadow_validation_counter` |
 | `dialcache.shadow.value_age` | Distribution or histogram | `dialcache_shadow_value_age_histogram` |
@@ -376,6 +377,7 @@ This table uses Prometheus names and types, without the optional prefix.
 | `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `policy_disabled`, `invalid_ttl`, `invalid_ramp`, `ramped_down`, `config_error`) |
 | `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors and the bounded `tracked_ttl_clamped` configuration signal |
 | `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
+| `dialcache_deletion_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Exact deletion attempts after identity/capability validation; deepest configured store is `remote`, otherwise `local` |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
 | `dialcache_shadow_value_age_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `outcome` | Age in seconds of the validated Redis value at shadow verdict time, recorded for `match` and `mismatch` |
@@ -573,6 +575,7 @@ native error type or message:
 | `serialization_dump` | Serializing a value for Redis failed |
 | `compression` | zstd compression failed while preparing a Redis write |
 | `invalidation` | Writing an invalidation watermark failed |
+| `deletion` | Exact-key removal failed; attributed to the failing store |
 | `fallback` | The source loader failed or exceeded its DialCache deadline |
 | `unknown` | Reserved for a future failure site that cannot be classified otherwise |
 
@@ -582,6 +585,13 @@ A valid explicit invalidation without a configured remote adapter is still an
 invalidation attempt: it emits the invalidation count and `error="invalidation"`
 then returns the native missing-remote error. Invalid buffer inputs fail before
 these observers run.
+
+Deletion has its own optional counter; invalidation metrics continue to mean
+watermark attempts. Identity validation and unsupported-adapter errors occur
+before the deletion counter. Remote or local mutation failures emit
+`error="deletion"` for the failing layer and a warning, then surface to the
+caller. A local-only deletion still counts, including when the entry is absent.
+No IDs, cache keys, arguments, or payloads are labels.
 
 Caller-serving remote-read timeouts use `layer="remote"` and
 `in_fallback="false"`. They are
@@ -620,6 +630,7 @@ Implement `DialCacheMetricsAdapter` and pass it through
 | `disabled(labels)` | yes | One skipped layer or no-layer invocation with a bounded `reason`. |
 | `error(labels)` | yes | One bounded failure site with `inFallback`. |
 | `invalidation(labels)` | yes | One explicit remote invalidation call. |
+| `deletion(labels)` | no | One exact deletion attempt after validation; namespace, use case, key type and deepest configured layer. |
 | `coalesced(labels)` | no | One follower that joined request-local or process-scoped work. |
 | `shadowValidation(labels)` | no | One terminal sampled-shadow outcome. This hook must be implemented for shadow jobs to execute. |
 | `observeShadowValueAge(labels, seconds)` | no | Age for shadow match/mismatch verdicts; does not gate admission. |

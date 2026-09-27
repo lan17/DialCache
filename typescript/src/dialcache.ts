@@ -10,7 +10,7 @@ import {
   type Logger,
   type StaleRecoveryPredicate,
 } from "./config.js";
-import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
+import { DialCacheContext, getLiveRequestLocalCache, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
 import { FallbackTimeoutError, UseCaseIsAlreadyRegisteredError, UseCaseNameIsReservedError } from "./errors.js";
 import { DialCacheKey, assertValidNamespace, normalizeArgs } from "./key.js";
 import {
@@ -123,11 +123,22 @@ type IsJsonObject<T extends object, Depth extends readonly unknown[]> = [keyof T
         : false;
     }[keyof T]>;
 
-interface CacheOperationOptionsBase<Value> {
+interface CacheUseCaseOptions {
   readonly keyType: string;
   readonly useCase: string;
-  readonly defaultConfig?: DialCacheKeyConfig | null;
   readonly trackForInvalidation?: boolean;
+}
+
+/**
+ * Identifies one cached result. Match the reader's key, arguments, use case
+ * and tracking mode exactly; the instance supplies the namespace.
+ */
+export interface CacheIdentityOptions extends CacheUseCaseOptions {
+  readonly key: CacheKeySpec;
+}
+
+interface CacheOperationOptionsBase<Value> extends CacheUseCaseOptions {
+  readonly defaultConfig?: DialCacheKeyConfig | null;
   /**
    * Overrides the strict deep-equality default for detached shadow validation.
    * This is stable use-case behavior, not runtime rollout configuration.
@@ -187,7 +198,7 @@ type CacheOperationOptions<Value> = CacheOperationOptionsBase<Value> & {
  */
 export type CachedOptions<Fn extends AnyFn> = CachedOptionsBase<Fn> & SerializerOption<CachedValue<Fn>>;
 
-interface GetOrLoadOptionsBase<Value> extends CacheOperationOptionsBase<Value> {
+interface GetOrLoadOptionsBase<Value> extends CacheOperationOptionsBase<Value>, CacheIdentityOptions {
   /**
    * Include every captured value that can affect the loaded result. Concurrent
    * enabled calls with the same cache key may share one in-flight loader.
@@ -585,6 +596,38 @@ export class DialCache {
         error: "invalidation",
         inFallback: false,
       });
+      throw error;
+    }
+  }
+
+  /**
+   * Remove one exact cached result from Redis when configured, this instance's
+   * local store, and the live request memo. Works outside enable() and inside
+   * disable(). Missing entries succeed. Identity must match the reader,
+   * including trackForInvalidation. Watermarks, other identities, other
+   * instances and in-flight work are unchanged; an earlier load can refill.
+   * Unsupported adapters fail before mutation. Remote errors leave local
+   * stores untouched and surface to the caller.
+   */
+  async delete(options: CacheIdentityOptions): Promise<void> {
+    this.assertUseCaseIsNotReserved(options.useCase);
+    const key = this.buildKey({ keyType: options.keyType, useCase: options.useCase,
+      trackForInvalidation: options.trackForInvalidation ?? false }, options.key, null);
+    this.redisCache?.assertDeleteSupported();
+    const layer = this.redisCache === null ? CacheLayer.LOCAL : CacheLayer.REMOTE;
+    this.metrics?.deletion?.(labelsFor(key, layer));
+    let failingLayer: MetricLayer = layer;
+    try {
+      if (this.redisCache !== null) {
+        await this.redisCache.delete(key);
+      }
+      failingLayer = CacheLayer.LOCAL;
+      this.localCache.delete(key);
+      failingLayer = REQUEST_LOCAL_CACHE_LAYER;
+      getLiveRequestLocalCache(this.context)?.delete(key.urn);
+    } catch (error) {
+      this.logger.warn("Error deleting DialCache entry", error);
+      this.recordError(key, failingLayer, "deletion");
       throw error;
     }
   }
@@ -1412,7 +1455,7 @@ export class DialCache {
   }
 
   private buildKey<Value>(
-    options: CacheOperationOptions<Value>,
+    options: CacheUseCaseOptions & { readonly serializer?: Serializer<Value> | null },
     cacheKey: CacheKeySpec,
     defaultConfig: DialCacheKeyConfig | null,
   ): DialCacheKey {
@@ -1687,6 +1730,7 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
     disabled: (labels) => callObserver(() => metrics.disabled(labels)),
     error: (labels) => callObserver(() => metrics.error(labels)),
     invalidation: (labels) => callObserver(() => metrics.invalidation(labels)),
+    deletion: (labels) => callObserver(() => metrics.deletion?.(labels)),
     coalesced: (labels) => callObserver(() => metrics.coalesced?.(labels)),
     compression: (labels) => callObserver(() => metrics.compression?.(labels)),
     ...(typeof metrics.shadowValidation === "function"

@@ -9,6 +9,7 @@ from .errors import (
     MissingRemoteError,
     RedisReadTimeoutError,
     RemoteReadTimeoutError,
+    RemoteDeleteUnsupportedError,
     UseCaseIsAlreadyRegisteredError,
     UseCaseNameIsReservedError,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "ConfigError",
     "FallbackTimeoutError",
     "RemoteReadTimeoutError",
+    "RemoteDeleteUnsupportedError",
     "RedisReadTimeoutError",
     "MissingRemoteError",
     "UseCaseIsAlreadyRegisteredError",

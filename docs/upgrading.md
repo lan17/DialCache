@@ -155,6 +155,34 @@ Invalidation is the only Lua script. It receives `[futureBufferMs,
 invalidatedAtMs]`; reuse the second argument across retries of one logical
 operation. See [Targeted invalidation](invalidation.md) for timing and retention.
 
+## Exact-key deletion support
+
+The optional delete capability preserves existing custom remote adapters for
+reads, writes, and invalidation. Upgrade an adapter before callers use exact
+deletion; unsupported is a visible failure that leaves all stores unchanged.
+Deletion uses existing value keys and frames, so it requires no wire migration.
+
+| Port | Adapter change |
+| --- | --- |
+| TypeScript | Implement optional `DialCacheRedisClient.delete(RedisDeleteRequest)`; otherwise `RemoteDeleteUnsupportedError` |
+| Go | Implement `RemoteDeleter.Delete(ctx, valueKey)` alongside unchanged `Remote`; otherwise `ErrDeleteUnsupported` |
+| Rust | Override both `Remote::supports_delete` and `Remote::delete(DeleteRequest)`; defaults report `Error::RemoteDeleteUnsupported` |
+| Python | Add `delete(DeleteRequest)` through `RedisDeleteClient`; the original `RedisClient` protocol is unchanged |
+
+Rust custom `LocalStore` implementations must add required `remove(&mut self,
+key: &str) -> Result<Option<LocalEntry>, BoxError>`. Return the displaced entry
+so the cache drops it outside its locks. A remove failure surfaces as
+`Error::Local` after any successful remote step, and the request memo remains.
+Update exhaustive matches for new `Event::Deletion`, `MetricKind::Deletion`,
+`ErrorKind::Deletion`, `LogEvent::DeletionFailed`, and the deletion error variants.
+`Event` and `MetricKind` are exhaustive public enums, so adding those variants is
+a source compatibility change for custom observers.
+
+The new optional deletion metric does not reuse the invalidation count. Update
+custom TypeScript `MetricErrorKind` mappings for `"deletion"` and native event
+handlers as appropriate. Bundled exporters add `dialcache_deletion_counter` and
+`deletion.count` with the existing namespace, use case, key type and layer labels.
+
 ## Stale retention and downgrades
 
 Stale-on-error keeps the same frame keys and layout but can retain values

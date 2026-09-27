@@ -5,6 +5,12 @@ export class DialCacheError extends Error {
   }
 }
 
+export class RemoteDeleteUnsupportedError extends DialCacheError {
+  constructor() {
+    super("DialCache remote adapter does not support exact-key deletion");
+  }
+}
+
 export class FallbackTimeoutError extends DialCacheError {
   readonly timeoutMs: number;
   readonly useCase: string;

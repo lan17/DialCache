@@ -28,6 +28,10 @@ pub enum Error {
     Config(ConfigError),
     /// Invalidation was requested without a configured remote adapter.
     MissingRemote,
+    /// The configured adapter does not implement exact-key deletion.
+    RemoteDeleteUnsupported,
+    /// An explicit maintenance mutation failed in the process-local store.
+    Local(SharedError),
     /// An explicit maintenance mutation failed at the remote adapter.
     Remote(SharedError),
 }
@@ -68,6 +72,10 @@ impl fmt::Display for Error {
             Error::MissingRemote => {
                 f.write_str("DialCache invalidation requires a configured remote adapter")
             }
+            Error::RemoteDeleteUnsupported => {
+                f.write_str("DialCache remote adapter does not support exact-key deletion")
+            }
+            Error::Local(error) => write!(f, "DialCache local maintenance failed: {error}"),
             Error::Remote(error) => write!(f, "DialCache remote maintenance failed: {error}"),
         }
     }
@@ -76,7 +84,9 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::Source(error) | Error::Remote(error) => Some(error.as_ref()),
+            Error::Source(error) | Error::Remote(error) | Error::Local(error) => {
+                Some(error.as_ref())
+            }
             Error::FallbackTimeout(timeout) => Some(timeout.as_ref()),
             Error::Config(error) => Some(error),
             _ => None,

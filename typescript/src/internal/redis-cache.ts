@@ -1,3 +1,5 @@
+import { RemoteDeleteUnsupportedError } from "../errors.js";
+
 import { performance } from "node:perf_hooks";
 
 import { CacheLayer } from "../config.js";
@@ -375,6 +377,16 @@ export class RedisCache {
       throw error;
     }
     return true;
+  }
+
+  assertDeleteSupported(): void {
+    if (typeof this.client.delete !== "function") {
+      throw new RemoteDeleteUnsupportedError();
+    }
+  }
+
+  async delete(key: DialCacheKey): Promise<void> {
+    await this.client.delete!({ valueKey: this.redisKey(key) });
   }
 
   async invalidate(keyType: string, id: string, futureBufferMs = 0, namespace = "urn"): Promise<void> {

@@ -50,6 +50,7 @@ const METRIC_ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   serialization_dump: true,
   compression: true,
   invalidation: true,
+  deletion: true,
   fallback: true,
   unknown: true,
 };
@@ -183,6 +184,7 @@ describe("Prometheus metrics adapter", () => {
     metrics.miss({ ...labels, reason: "value_absent" });
     metrics.disabled({ ...labels, reason: "context" });
     metrics.error({ ...labels, error: "cache_read", inFallback: false });
+    metrics.deletion(labels);
     metrics.invalidation({ cacheNamespace: labels.cacheNamespace, keyType: labels.keyType, layer: labels.layer });
     metrics.coalesced?.({
       cacheNamespace: labels.cacheNamespace,
@@ -253,6 +255,7 @@ describe("Prometheus metrics adapter", () => {
         ["cache_namespace", "use_case", "key_type", "layer", "operation"],
         TIMER_BUCKETS,
       ),
+      counterSchema("schema_dialcache_deletion_counter", ["cache_namespace", "use_case", "key_type", "layer"]),
       counterSchema("schema_dialcache_disabled_counter", ["cache_namespace", "use_case", "key_type", "layer", "reason"]),
       counterSchema("schema_dialcache_error_counter", [
         "cache_namespace",
@@ -975,3 +978,12 @@ async function sumMetric(
       .reduce((total, sample) => total + sample.value, 0) ?? 0
   );
 }
+
+
+it("exports exact deletion independently with bounded labels", async () => {
+  const registry = new Registry();
+  const metrics = new PrometheusDialCacheMetrics({ registry });
+  metrics.deletion({ cacheNamespace: "app", keyType: "user", useCase: "GetUser", layer: CacheLayer.LOCAL });
+  const result = await registry.getSingleMetric("dialcache_deletion_counter")!.get();
+  expect(result.values).toEqual([{ value: 1, labels: { cache_namespace: "app", key_type: "user", use_case: "GetUser", layer: "local" } }]);
+});

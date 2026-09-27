@@ -146,6 +146,10 @@ func (r *observedRemote) Write(ctx context.Context, key string, frame dialcache.
 	return err
 }
 
+func (r *observedRemote) Delete(ctx context.Context, key string) error {
+	return r.native.(dialcache.RemoteDeleter).Delete(ctx, key)
+}
+
 func (r *observedRemote) Invalidate(ctx context.Context, key string, at, buffer int64) error {
 	return r.native.Invalidate(ctx, key, at, buffer)
 }
@@ -293,6 +297,10 @@ func run() (err error) {
 		}
 		result["value"], err = describeValue(value, r.Codec)
 		if err != nil {
+			return err
+		}
+	case "delete":
+		if err = cache.Delete(ctx, identity); err != nil {
 			return err
 		}
 	case "invalidate":

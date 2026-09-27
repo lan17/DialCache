@@ -60,6 +60,7 @@ export type MetricErrorKind =
   | "serialization_dump"
   | "compression"
   | "invalidation"
+  | "deletion"
   | "fallback"
   | "unknown";
 
@@ -146,6 +147,8 @@ export interface DialCacheMetricsAdapter {
   disabled(labels: DisabledMetricLabels): void;
   error(labels: ErrorMetricLabels): void;
   invalidation(labels: InvalidationMetricLabels): void;
+  /** Exact deletion attempts, after identity and capability validation. */
+  deletion?(labels: CacheMetricLabels): void;
   // Optional so existing custom adapters keep compiling without changes.
   coalesced?(labels: CoalescedMetricLabels): void;
   // Optional so existing custom adapters keep compiling without changes.

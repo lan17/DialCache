@@ -89,6 +89,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly missCounter: Counter<MissLabels>;
   private readonly disabledCounter: Counter<DisabledLabels>;
   private readonly errorCounter: Counter<ErrorLabels>;
+  private readonly deletionCounter: Counter<CounterLabels>;
   private readonly invalidationCounter: Counter<InvalidationLabels>;
   private readonly coalescedCounter: Counter<CoalescedLabels>;
   private readonly shadowValidationCounter: Counter<OutcomeLabels>;
@@ -115,6 +116,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.missCounter = counter(registry, collectors.missCounter);
     this.requestCounter = counter(registry, collectors.requestCounter);
     this.errorCounter = counter(registry, collectors.errorCounter);
+    this.deletionCounter = counter(registry, collectors.deletionCounter);
     this.invalidationCounter = counter(registry, collectors.invalidationCounter);
     this.coalescedCounter = counter(registry, collectors.coalescedCounter);
     this.shadowValidationCounter = counter(registry, collectors.shadowValidationCounter);
@@ -150,6 +152,10 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
       error: labels.error,
       in_fallback: String(labels.inFallback),
     });
+  }
+
+  deletion(labels: CacheMetricLabels): void {
+    this.deletionCounter.inc(cacheLabels(labels));
   }
 
   invalidation(labels: InvalidationMetricLabels): void {
@@ -272,6 +278,12 @@ function collectorConfigs(prefix: string) {
       name: `${prefix}dialcache_error_counter`,
       help: "Errors during DialCache cache operations or fallback execution.",
       labelNames: ["cache_namespace", "use_case", "key_type", "layer", "error", "in_fallback"],
+    },
+    deletionCounter: {
+      type: "counter",
+      name: `${prefix}dialcache_deletion_counter`,
+      help: "DialCache exact-key deletion calls by use case and layer.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
     },
     invalidationCounter: {
       type: "counter",

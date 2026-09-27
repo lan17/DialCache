@@ -70,8 +70,8 @@ pub use redis::{
     RedisReadCancelled, INVALIDATION_SCRIPT,
 };
 pub use remote::{
-    Frame, InvalidateRequest, MissReason, ReadContext, ReadRequest, ReadResult, Remote,
-    WriteRequest,
+    DeleteRequest, Frame, InvalidateRequest, MissReason, ReadContext, ReadRequest, ReadResult,
+    Remote, WriteRequest,
 };
 pub use runtime::Runtime;
 #[cfg(feature = "tokio")]

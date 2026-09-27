@@ -189,3 +189,52 @@ func (c *Cache) Invalidate(ctx context.Context, identity Identity, futureBuffer 
 	})
 	return err
 }
+
+// Delete removes one exact result from the live request memo carried by ctx,
+// this instance's process-local store, and the configured remote. The identity
+// must match the reader, including Tracked. It works in disabled scopes and
+// does not consult policy, touch watermarks, or cancel in-flight publication.
+// A missing key succeeds. An unsupported adapter or remote failure leaves the
+// local entry and request memo untouched.
+func (c *Cache) Delete(ctx context.Context, identity Identity) error {
+	if identity.UseCase == "watermark" {
+		return ErrReservedUseCase
+	}
+	if identity.Namespace == "" {
+		identity.Namespace = c.settings.namespace
+	}
+	key, valueKey, _, err := identity.Keys()
+	if err != nil {
+		return err
+	}
+	var remote RemoteDeleter
+	layer := "local"
+	if c.settings.remote != nil {
+		var supported bool
+		remote, supported = c.settings.remote.(RemoteDeleter)
+		if !supported {
+			return ErrDeleteUnsupported
+		}
+		layer = "remote"
+	}
+	labels := map[string]any{"cacheNamespace": identity.Namespace, "keyType": identity.KeyType, "useCase": identity.UseCase, "layer": layer}
+	c.emit(Event{Kind: "deletion", Data: labels})
+	if remote != nil {
+		_, err = callSafely(func() (struct{}, error) {
+			return struct{}{}, remote.Delete(ctx, valueKey)
+		})
+		if err != nil {
+			c.settings.logger.Warn("Error deleting DialCache entry", err)
+			c.emit(Event{Kind: "error", Data: map[string]any{"cacheNamespace": identity.Namespace, "keyType": identity.KeyType, "useCase": identity.UseCase, "layer": "remote", "error": "deletion", "inFallback": false}})
+			return err
+		}
+	}
+	state, _ := ctx.Value(c).(scopeState)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.local.Remove(key)
+	if state.owner != nil && state.owner.live {
+		delete(state.owner.memo, key)
+	}
+	return nil
+}

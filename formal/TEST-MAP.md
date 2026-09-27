@@ -129,3 +129,5 @@ When behavior disagrees, review the intended contract, change Quint with an
 independent regression, replay it in both ports, and update explanatory docs and
 case mappings. A formal model is authoritative only within its declared scope;
 its notation does not remove the need to review the actual consequence.
+
+Exact deletion C61–C63 uses the `deletion` generated profile and 14 exported public regressions in every port, with receipt invariants plus consequence-based classifier negative controls in `formal-deletion-witnesses.test.ts`. Native API, keyed adapter routing, observability and real-server boundaries remain separate validation.

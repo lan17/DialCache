@@ -110,6 +110,7 @@ const ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   serialization_dump: true,
   compression: true,
   invalidation: true,
+  deletion: true,
   fallback: true,
   unknown: true,
 };
@@ -698,4 +699,13 @@ describe("Datadog metrics adapter", () => {
         }),
     ).toThrowError(RangeError);
   });
+});
+
+
+it("emits exact deletion separately with bounded tags", () => {
+  const client = new RecordingDogStatsDClient();
+  const metrics = new DatadogDialCacheMetrics({ client, observationMetricType: "distribution" });
+  metrics.deletion({ cacheNamespace: "app", keyType: "user", useCase: "GetUser", layer: CacheLayer.REMOTE });
+  expect(client.calls).toEqual([{ method: "increment", name: "dialcache.deletion.count", value: 1,
+    tags: { cache_namespace: "app", key_type: "user", use_case: "GetUser", layer: "remote" } }]);
 });

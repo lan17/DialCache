@@ -24,6 +24,7 @@ from .protocol import (
     encode_frame,
     validate_future_buffer_ms,
     validate_invalidation_reply,
+    validate_del_reply,
     validate_set_reply,
     validate_timestamp,
 )
@@ -63,12 +64,23 @@ class InvalidationRequest:
     invalidated_at_ms: int
 
 
+@dataclass(frozen=True)
+class DeleteRequest:
+    value_key: str
+
+
 class RedisClient(Protocol):
     def read(
         self, request: ReadRequest, context: ReadContext | None = None
     ) -> ReadResult | Awaitable[ReadResult]: ...
     def write(self, request: WriteRequest) -> None | Awaitable[None]: ...
     def invalidate(self, request: InvalidationRequest) -> None | Awaitable[None]: ...
+
+
+class RedisDeleteClient(RedisClient, Protocol):
+    """Optional exact-key deletion capability; RedisClient stays compatible."""
+
+    def delete(self, request: DeleteRequest) -> None | Awaitable[None]: ...
 
 
 # Same atomic transition as the TypeScript/Go/Rust adapters. Values never write
@@ -199,6 +211,10 @@ class RedisAdapter:
         frame = encode_frame(request.value, request.created_at_ms)
         result = await self._command(request.value_key, "SET", request.value_key, frame, "PX", str(ttl))
         validate_set_reply(result)
+
+    async def delete(self, request: DeleteRequest) -> None:
+        result = await self._command(request.value_key, "DEL", request.value_key)
+        validate_del_reply(result)
 
     async def invalidate(self, request: InvalidationRequest) -> None:
         buffer = validate_future_buffer_ms(request.future_buffer_ms)

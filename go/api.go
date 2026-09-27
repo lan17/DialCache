@@ -69,6 +69,12 @@ type Remote interface {
 	Invalidate(ctx context.Context, watermarkKey string, invalidatedAtMS, futureBufferMS int64) error
 }
 
+// RemoteDeleter is implemented by remotes that support exact-key deletion.
+// Remote remains unchanged so existing adapters continue to compile.
+type RemoteDeleter interface {
+	Delete(ctx context.Context, valueKey string) error
+}
+
 type Payload struct {
 	Bytes  []byte
 	Binary bool
@@ -139,6 +145,9 @@ type Logger interface {
 
 // ErrNoRemote reports maintenance that needs a remote adapter.
 var ErrNoRemote = errors.New("dialcache: a remote adapter is required")
+
+// ErrDeleteUnsupported reports a configured remote without RemoteDeleter.
+var ErrDeleteUnsupported = errors.New("dialcache: remote adapter does not support exact-key deletion")
 
 // ErrReservedUseCase reports the reserved use case "watermark".
 var ErrReservedUseCase = errors.New("dialcache: reserved use case \"watermark\"")

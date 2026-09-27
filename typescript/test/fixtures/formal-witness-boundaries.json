@@ -6,7 +6,7 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/first-stale-age-recovers-without-publication"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
       {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"4"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
       {"action":"invalidate","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"invalidations":{"#bigint":"1"},"maintenance":["ok"]}}},
@@ -32,7 +32,7 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/last-recovery-age-serves"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
       {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"3"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
       {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"2"}},"d":{"coalesced":["request_local"]}}},
@@ -59,7 +59,7 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/exact-maximum-after-decode-rejects"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
       {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
       {"action":"joinCall","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"}],"policyCalls":{"#bigint":"2"}},"d":{"coalesced":["process"]}}},
@@ -83,7 +83,7 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/failed-fresh-decode-is-not-recovery"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
       {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"6"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
       {"action":"policy","choice":{"tag":"Some","value":{"#bigint":"5000"}},"statePatch":{}},
@@ -115,7 +115,7 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/classifier-error-keeps-error-without-decode"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
       {"action":"beginCall","choice":{"tag":"Some","value":{"#bigint":"3"}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
       {"action":"rejectLoader","choice":{"tag":"Some","value":{"#bigint":"0"}},"statePatch":{"o":{"calls":[{"#bigint":"3"}],"classifications":{"#bigint":"1"}},"d":{"fallbackErrors":["remote"]}}}
@@ -128,7 +128,7 @@
       "model": "formal/dialcache-shadow-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/same-c1-bytes-confirm-mismatch"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [
       {"action":"beginCall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
       {"action":"rejectLoader","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"3"}]},"d":{"fallbackErrors":["local"]}}},
@@ -174,7 +174,7 @@
       "model": "formal/dialcache-shadow-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/different-c1-bytes-supersede"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [
       {"action":"beginCall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
       {"action":"loadFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
@@ -222,7 +222,7 @@
       "model": "formal/dialcache-shadow-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/late-shadow-dump-cannot-dispatch-write"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [
       {"action":"readFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
       {"action":"writeFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
@@ -289,7 +289,7 @@
       "model": "formal/dialcache-shadow-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/fill-write-error-preserves-caller"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [
       {"action":"advance","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
       {"action":"logPolicy","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
@@ -312,7 +312,7 @@
       "model": "formal/dialcache-shadow-conformance.qnt",
       "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/dark-read-error-still-allows-source-result"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"deletions":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [
       {"action":"readFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
       {"action":"beginCall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},

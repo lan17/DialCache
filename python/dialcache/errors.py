@@ -42,5 +42,9 @@ class UseCaseNameIsReservedError(DialCacheError):
         super().__init__(f"Use case name is reserved: {use_case}")
 
 
+class RemoteDeleteUnsupportedError(DialCacheError):
+    """The configured remote does not support exact-key deletion."""
+
+
 class MissingRemoteError(DialCacheError):
     """An explicit remote maintenance operation has no remote adapter."""

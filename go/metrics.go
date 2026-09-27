@@ -85,7 +85,7 @@ func ShadowMismatchLogDetails(key string, cached, source any) ShadowMismatchDeta
 
 var metricKinds = map[string]string{
 	"shadowAge": "shadowValueAge", "recoveryAge": "staleRecoveryValueAge",
-	"request": "request", "miss": "miss", "disabled": "disabled", "error": "error", "invalidation": "invalidation", "coalesced": "coalesced",
+	"request": "request", "miss": "miss", "disabled": "disabled", "error": "error", "invalidation": "invalidation", "deletion": "deletion", "coalesced": "coalesced",
 	"shadowValidation": "shadowValidation", "shadow": "shadowValidation", "shadowValueAge": "shadowValueAge", "observeShadowValueAge": "shadowValueAge",
 	"futureTimestampOffset": "futureTimestampOffset", "observeFutureTimestampOffset": "futureTimestampOffset", "futureOffset": "futureTimestampOffset",
 	"staleRecovery": "staleRecovery", "recovery": "staleRecovery", "staleRecoveryValueAge": "staleRecoveryValueAge", "observeStaleRecoveryValueAge": "staleRecoveryValueAge",

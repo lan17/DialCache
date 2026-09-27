@@ -31,6 +31,7 @@ interface FakeReplies {
   readonly get?: unknown;
   readonly mGet?: unknown;
   readonly set?: unknown;
+  readonly del?: unknown;
   readonly eval?: unknown;
   readonly evalSha?: unknown;
 }
@@ -41,6 +42,7 @@ function fakeClient(replies: FakeReplies = {}) {
     // Serves standalone (args, options) and cluster (firstKey, isReadonly, args, options) shapes.
     sendCommand: vi.fn(async (...callArgs: unknown[]) => {
       const args = (Array.isArray(callArgs[0]) ? callArgs[0] : callArgs[2]) as Array<unknown>;
+      if (args[0] === "DEL") return Object.hasOwn(replies, "del") ? replies.del : 1;
       if (args[0] === "SET") {
         return Object.hasOwn(replies, "set") ? replies.set : "OK";
       }
@@ -646,5 +648,24 @@ describe("node-redis adapter", () => {
       error: "invalidation",
       inFallback: false,
     });
+  });
+});
+
+
+describe("node-redis exact deletion", () => {
+  it.each([0, 1])("accepts DEL reply %s and routes one value key", async del => {
+    const client = fakeClient({ del });
+    await createNodeRedisDialCacheClient(client as never).delete!({ valueKey: "{entity}:value" });
+    expect(client.sendCommand).toHaveBeenCalledExactlyOnceWith(["DEL", "{entity}:value"], expect.anything());
+  });
+  it("routes cluster deletion to the slot primary", async () => {
+    const client = fakeCluster();
+    await createNodeRedisDialCacheClient(client as never).delete!({ valueKey: "{entity}:value" });
+    expect(client.sendCommand).toHaveBeenCalledExactlyOnceWith("{entity}:value", false, ["DEL", "{entity}:value"], expect.anything());
+  });
+  it.each([2, -1, 0.5, NaN, Infinity, "1", 1n, true, null, undefined])("rejects invalid DEL reply %s without retry", async del => {
+    const client = fakeClient({ del });
+    await expect(createNodeRedisDialCacheClient(client as never).delete!({ valueKey: "value" })).rejects.toBeInstanceOf(DialCacheRedisProtocolError);
+    expect(client.sendCommand).toHaveBeenCalledOnce();
   });
 });

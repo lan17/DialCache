@@ -151,3 +151,25 @@ async def test_tracked_invalidation():
             await client.delete(f"{prefix}#profileVersion:dialcache-frame-v1", f"{prefix}#watermark")
         finally:
             await client.aclose()
+
+
+async def test_exact_delete():
+    # region exact-delete
+    cache = DialCache()
+    source_calls = 0
+    identity = {"key": {"id": "42", "args": {"locale": "en"}},
+                "key_type": "user", "use_case": "GetUser", "track_for_invalidation": False}
+
+    async def load():
+        nonlocal source_calls
+        source_calls += 1
+        return source_calls
+
+    async with cache.enable():
+        assert await cache.get_or_load(load, **identity, default_config=Policy.enabled(60)) == 1
+        # Maintenance ignores enabled state. Match the reader's exact identity,
+        # including args and tracking mode; a local-only cache also supports it.
+        async with cache.disable():
+            await cache.delete(**identity)
+        assert await cache.get_or_load(load, **identity, default_config=Policy.enabled(60)) == 2
+    # endregion exact-delete

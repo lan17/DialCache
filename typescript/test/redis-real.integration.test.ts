@@ -262,6 +262,25 @@ return {status, kind, content, ttl_ms, now_ms() - started_at}
       client = harnesses[kind];
     });
 
+    it.each([false, true])("deletes only the exact value and preserves the watermark (tracked=%s)", async tracked => {
+      if (client === undefined || admin === undefined) throw new Error("Redis clients did not start");
+      const cache = new DialCache({ namespace: "delete-real", redis: { client: client.adapter } });
+      const options = { keyType: "item_id", useCase: "Delete", key: { id: "123", args: { variant: "a" } }, trackForInvalidation: tracked };
+      const key = new DialCacheKey({ namespace: "delete-real", keyType: options.keyType, useCase: options.useCase,
+        id: "123", args: [["variant", "a"]], trackForInvalidation: tracked });
+      const valueKey = `${key.urn}:dialcache-frame-v1`;
+      const watermarkKey = `${new DialCacheKey({ namespace: "delete-real", keyType: options.keyType,
+        useCase: options.useCase, id: "123", trackForInvalidation: true }).prefix}#watermark`;
+      await admin.set(watermarkKey, "1");
+      await client.adapter.write({ valueKey, cacheTtlMs: 60_000, value: "123" });
+      expect(await client.adapter.read({ valueKey, ...(tracked ? { watermarkKey } : {}) })).toHaveProperty("payload", "123");
+      await cache.delete(options);
+      await cache.delete(options);
+      expect(await admin.get(valueKey)).toBeNull();
+      expect(await admin.get(watermarkKey)).toBe("1");
+      expect(await client.adapter.read({ valueKey, ...(tracked ? { watermarkKey } : {}) })).toMatchObject({ kind: "miss", reason: "value_absent" });
+    });
+
     it("round-trips untracked UTF-8, binary, and inline-loader values", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");

@@ -49,6 +49,7 @@ const METRIC_SUFFIXES = {
   disabled: "disabled.count",
   error: "error.count",
   invalidation: "invalidation.count",
+  deletion: "deletion.count",
   coalesced: "coalesced.count",
   shadowValidation: "shadow.count",
   shadowValueAge: "shadow.value_age",
@@ -115,6 +116,10 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
       key_type: labels.keyType,
       layer: labels.layer,
     });
+  }
+
+  deletion(labels: CacheMetricLabels): void {
+    this.increment(this.metricNames.deletion, cacheTags(labels));
   }
 
   coalesced(labels: CoalescedMetricLabels): void {

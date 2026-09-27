@@ -36,11 +36,11 @@ export function diffPaths(expected, actual, prefix = "") {
 }
 
 const counters = new Set([
-  "o.loaders", "o.reads", "o.loads", "o.dumps", "o.writes", "o.policyCalls", "o.invalidations", "o.classifications", "o.comparisons",
+  "o.loaders", "o.reads", "o.loads", "o.dumps", "o.writes", "o.policyCalls", "o.invalidations", "o.deletions", "o.classifications", "o.comparisons",
   "d.configErrors", "d.warnings",
   // Effects and local-clock compare these same counters without an `o`
   // wrapper. Paths retain the binding's spelling in every evidence packet.
-  "loaders", "reads", "loads", "dumps", "writes", "policyCalls", "invalidations", "classifications", "comparisons",
+  "loaders", "reads", "loads", "dumps", "writes", "policyCalls", "invalidations", "deletions", "classifications", "comparisons",
   // Core's counters are also flat; an omitted earlier publication must not
   // count again merely because redisWrites is still wrong at a later call.
   "outsideLoaderCalls", "requestLoaderCalls", "localLoaderCalls", "coalescedLoaderCalls", "remoteLoaderCalls", "redisReads", "redisWrites",

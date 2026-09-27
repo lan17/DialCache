@@ -32,6 +32,12 @@ stops enabling new work and can no longer accept request-local publication.
 always return promises. Keep the source arguments and captured state immutable
 when detached shadow work can use them later.
 
+`await dialcache.delete(identity)` accepts `CacheIdentityOptions` or an existing
+`GetOrLoadOptions<T>` value. For registered readers, compute `key` with the
+reader's selector and copy its use case, key type, and tracking mode. Explicit
+maintenance runs outside enablement and failures reject. See
+[exact deletion](../invalidation.md#exact-key-deletion-versus-entity-invalidation).
+
 ## Policy and errors
 
 `DialCacheKeyConfig` supplies static defaults and sparse runtime overlays from
@@ -42,7 +48,7 @@ without canceling work or evicting data.
 
 Static option validation throws. Cache plumbing errors fail open to the source;
 source throws and rejections retain their identity. `FallbackTimeoutError`
-identifies the library's source deadline. Explicit `invalidateRemote` returns a
+identifies the library's source deadline. Explicit `invalidateRemote` or `delete` returns a
 promise whose failure must be handled by maintenance code.
 
 A deadline cannot preempt synchronous JavaScript. Bound dependency work and

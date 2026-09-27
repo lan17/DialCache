@@ -60,6 +60,7 @@ fn empty_behavior_observation(observe: bool) -> Value {
         "reads",
         "writes",
         "invalidations",
+        "deletions",
         "loads",
         "dumps",
         "policyCalls",
@@ -400,7 +401,7 @@ fn coordinator_answers_repeated_profile_requests() {
             .cloned()
             .expect("profiles object");
     }
-    assert_eq!(profiles.len(), 17, "profiles: {}", sorted_keys(&profiles));
+    assert_eq!(profiles.len(), 18, "profiles: {}", sorted_keys(&profiles));
     for name in [
         "core",
         "effects",

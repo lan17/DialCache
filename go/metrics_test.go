@@ -49,7 +49,7 @@ func TestDatadogMetricNamesUnitsAndLabels(t *testing.T) {
 	}{
 		{"request", "request.count", "increment", 1}, {"miss", "miss.count", "increment", 1}, {"disabled", "disabled.count", "increment", 1}, {"error", "error.count", "increment", 1}, {"invalidation", "invalidation.count", "increment", 1}, {"coalesced", "coalesced.count", "increment", 1},
 		{"shadowValidation", "shadow.count", "increment", 1}, {"shadowAge", "shadow.value_age", "distribution", 0.25}, {"futureOffset", "future_timestamp_offset", "distribution", 0.25}, {"staleRecovery", "stale_recovery.count", "increment", 1}, {"recoveryAge", "stale_recovery.value_age", "distribution", 0.25},
-		{"compression", "compression.count", "increment", 1}, {"get", "get.duration", "distribution", 0.25}, {"fallback", "fallback.duration", "distribution", 0.25}, {"serialization", "serialization.duration", "distribution", 0.25}, {"size", "serialization.size", "distribution", 123}, {"storedSize", "stored.size", "distribution", 123}, {"compressionRatio", "compression.ratio", "distribution", 0.25}, {"compressionDuration", "compression.duration", "distribution", 0.25},
+		{"compression", "compression.count", "increment", 1}, {"get", "get.duration", "distribution", 0.25}, {"fallback", "fallback.duration", "distribution", 0.25}, {"serialization", "serialization.duration", "distribution", 0.25}, {"size", "serialization.size", "distribution", 123}, {"storedSize", "stored.size", "distribution", 123}, {"deletion", "deletion.count", "increment", 1}, {"compressionRatio", "compression.ratio", "distribution", 0.25}, {"compressionDuration", "compression.duration", "distribution", 0.25},
 	}
 	for _, test := range cases {
 		if err := adapter.ObserveEvent(metricTestEvent(test.kind)); err != nil {
@@ -106,7 +106,7 @@ func TestPrometheusWireSchemaMatchesTypeScriptBinding(t *testing.T) {
 	}
 	text := string(source)
 	schemas := PrometheusCollectorSchemas("")
-	if len(schemas) != 19 {
+	if len(schemas) != 20 {
 		t.Fatalf("collector count: %d", len(schemas))
 	}
 	for _, schema := range schemas {
@@ -232,7 +232,7 @@ func TestPrometheusExplicitBindingsPreserveExistingObservations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := collectorDescriptions(registry); len(got) != 19 {
+	if got := collectorDescriptions(registry); len(got) != 20 {
 		t.Fatalf("binding changed registry membership: %d", len(got))
 	}
 	families, err := registry.Gather()

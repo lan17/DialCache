@@ -55,6 +55,12 @@ fn metric_test_event(kind: MetricKind) -> Event {
             key_type: Arc::from("item"),
             layer: Layer::Remote,
         },
+        MetricKind::Deletion => Event::Deletion {
+            namespace: Arc::from("logical"),
+            key_type: Arc::from("item"),
+            use_case: Arc::from("lookup"),
+            layer: Layer::Remote,
+        },
         MetricKind::Coalesced => Event::Coalesced {
             labels: outcome(),
             scope: CoalescingScope::Process,
@@ -179,7 +185,7 @@ fn datadog_metric_names_units_and_labels() {
     assert!(observer.observes_shadow_outcomes());
 
     // (kind, suffix, method, value), copied from go/metrics_test.go.
-    let cases: [(MetricKind, &str, &str, f64); 19] = [
+    let cases: [(MetricKind, &str, &str, f64); 20] = [
         (MetricKind::Request, "request.count", "increment", 1.0),
         (MetricKind::Miss, "miss.count", "increment", 1.0),
         (MetricKind::Disabled, "disabled.count", "increment", 1.0),
@@ -190,6 +196,7 @@ fn datadog_metric_names_units_and_labels() {
             "increment",
             1.0,
         ),
+        (MetricKind::Deletion, "deletion.count", "increment", 1.0),
         (MetricKind::Coalesced, "coalesced.count", "increment", 1.0),
         (
             MetricKind::ShadowValidation,
@@ -301,16 +308,25 @@ fn datadog_metric_names_units_and_labels() {
             ("cache_namespace", "logical"),
             ("use_case", "lookup"),
             ("key_type", "item"),
+            ("layer", "remote")
+        ])
+    );
+    assert_eq!(
+        recorded[6].tags,
+        tags(&[
+            ("cache_namespace", "logical"),
+            ("use_case", "lookup"),
+            ("key_type", "item"),
             ("scope", "process"),
         ]),
         "coalescing labels changed"
     );
     assert!(
-        !recorded[6].tags.iter().any(|(name, _)| name == "layer"),
+        !recorded[7].tags.iter().any(|(name, _)| name == "layer"),
         "shadow acquired layer"
     );
     assert_eq!(
-        recorded[6]
+        recorded[7]
             .tags
             .last()
             .map(|(k, v)| (k.as_str(), v.as_str())),
@@ -404,7 +420,7 @@ mod prometheus_exporter {
     const OUTCOME: &[&str] = &["cache_namespace", "use_case", "key_type", "outcome"];
 
     /// Copied from go/metrics_prometheus.go PrometheusCollectorSchemas, in order.
-    const EXPECTED: [Expected; 19] = [
+    const EXPECTED: [Expected; 20] = [
         Expected {
             kind: "disabled",
             name: "dialcache_disabled_counter",
@@ -446,6 +462,11 @@ mod prometheus_exporter {
             help: "DialCache invalidation calls by key type and layer.",
             labels: &["cache_namespace", "key_type", "layer"],
             buckets: &[],
+        },
+        Expected {
+            kind: "deletion", name: "dialcache_deletion_counter",
+            help: "DialCache exact-key deletion calls by use case and layer.",
+            labels: LAYER, buckets: &[],
         },
         Expected {
             kind: "coalesced",
@@ -556,7 +577,7 @@ mod prometheus_exporter {
     fn wire_schema_matches_the_reference_table() {
         for prefix in ["", "svc_"] {
             let actual: Vec<CollectorSchema> = schemas(prefix);
-            assert_eq!(actual.len(), 19);
+            assert_eq!(actual.len(), 20);
             for (schema, expected) in actual.iter().zip(EXPECTED.iter()) {
                 assert_eq!(schema.kind.as_str(), expected.kind);
                 assert_eq!(schema.name, format!("{prefix}{}", expected.name));
@@ -591,7 +612,7 @@ mod prometheus_exporter {
             observer.observe(&metric_test_event(kind));
         }
         let families = registry.gather();
-        assert_eq!(families.len(), 19);
+        assert_eq!(families.len(), 20);
         for expected in EXPECTED.iter() {
             let name = format!("scrape_{}", expected.name);
             let family = families
@@ -814,5 +835,42 @@ mod isolation {
             calls.load(Ordering::SeqCst) >= 2,
             "the observer received the request events"
         );
+    }
+}
+
+#[test]
+fn deletion_errors_keep_the_bounded_error_label() {
+    let event = Event::Error {
+        labels: base(),
+        error: ErrorKind::Deletion,
+        in_fallback: false,
+    };
+    let (client, events) = recording();
+    let observer = DatadogObserver::new(
+        client,
+        DatadogOptions::new(ObservationMetricType::Distribution),
+    )
+    .unwrap();
+    observer.observe(&event);
+    let emitted = events.lock();
+    assert_eq!(emitted[0].name, "dialcache.error.count");
+    assert!(emitted[0]
+        .tags
+        .contains(&("error".to_string(), "deletion".to_string())));
+    drop(emitted);
+    #[cfg(feature = "prometheus")]
+    {
+        let registry = prometheus::Registry::new();
+        let observer = dialcache::PrometheusObserver::new(&registry, "").unwrap();
+        observer.observe(&event);
+        let families = registry.gather();
+        let errors = families
+            .iter()
+            .find(|family| family.name() == "dialcache_error_counter")
+            .unwrap();
+        assert!(errors.get_metric()[0]
+            .get_label()
+            .iter()
+            .any(|label| label.name() == "error" && label.value() == "deletion"));
     }
 }

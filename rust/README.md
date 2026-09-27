@@ -7,7 +7,7 @@ The site uses one explanation per feature with selected native examples and note
 Rust implements the same portable behavior as the TypeScript library and the
 Go port: explicit request enablement, request/local/Redis layers,
 deterministic rollout, sparse runtime policy, request and process coalescing,
-tracked invalidation, source and read deadlines, stale recovery, dark and
+tracked invalidation, exact-key deletion, source and read deadlines, stale recovery, dark and
 served-hit shadow validation, compression, and failure-isolated observability.
 
 The [Quint models](https://github.com/lan17/DialCache/blob/main/formal/README.md) are the behavioral source of truth.
@@ -88,6 +88,33 @@ caching and late work cannot publish into the request memo.
 `DialCache::enable_in` and `DialCache::disable_in` derive nested scopes that
 share the outer request memo. `Scope::outside()` is the pass-through scope of
 work that runs on behalf of no request.
+
+`cache.delete(&scope, identity).await?` removes one exact result from this
+instance's process-local cache, the live request memo, and Redis when configured.
+Use `Scope::outside()` without a request. The identity must match the reader's
+namespace, key type, ID, use case, arguments and `tracked` mode exactly; an empty
+namespace inherits the instance's namespace. Missing entries succeed, including
+on local-only instances. This explicit maintenance operation also works in
+`disable_in` and consults no runtime policy.
+
+Deletion awaits Redis first, then removes local and memo entries without an
+await between them. A remote failure leaves both memory stores intact and
+surfaces as `Error::Remote`; an old custom adapter that does not override
+`Remote::supports_delete` and `Remote::delete` returns
+`Error::RemoteDeleteUnsupported` before any store changes. A custom
+`LocalStore` must implement `remove` and return the displaced entry so its
+value drops outside the cache locks; a failure surfaces as `Error::Local`
+after the remote step. The bundled Redis adapter sends one primary-routed
+`DEL`, validates the integer reply and never retries it.
+
+Deletion does not touch entity watermarks, sibling identities, other instances,
+other requests' memos, flights or acquired snapshots. A running load can
+publish again afterward. Entity-wide tracked invalidation and exact deletion
+serve different purposes; see the [invalidation guide](https://lan17.github.io/DialCache/invalidation).
+Observers receive `Event::Deletion` / `MetricKind::Deletion`, and failures use
+`ErrorKind::Deletion`; Prometheus exports `dialcache_deletion_counter` and
+Datadog exports `deletion.count` with namespace, use case, key type and layer.
+Adding these enum variants requires updating exhaustive observer matches.
 
 `use_case` registers a typed use case once per instance and returns a
 `UseCase<Args, T>` handle; `get_or_load` runs one inline `Operation<T>` without

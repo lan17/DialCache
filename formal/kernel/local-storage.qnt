@@ -33,4 +33,14 @@ module local_storage {
       ...state
     }
   }
+  // Exact deletion changes one instance's value slot and its LRU membership.
+  pure def removeLocal(state: Local[r], instance: int, key: int, keysPerInstance: int): Local[r] = {
+    val slot = instance * keysPerInstance + key
+    {
+      localValues: state.localValues.replaceAt(slot, NO_VALUE),
+      localExpires: state.localExpires.replaceAt(slot, 0),
+      lru: state.lru.replaceAt(instance, state.lru.nth(instance).select(k => k != key)),
+      ...state
+    }
+  }
 }

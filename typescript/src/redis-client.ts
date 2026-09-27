@@ -150,6 +150,9 @@ export interface RedisWriteRequest extends RedisValueRequest {
   readonly createdAtMs?: number;
 }
 
+/** One exact value key; deletion never reads or changes a watermark. */
+export interface RedisDeleteRequest extends RedisValueRequest {}
+
 export interface RedisInvalidationRequest {
   readonly watermarkKey: string;
   /** Nonnegative integer no greater than 31,536,000,000 (365 days). */
@@ -235,4 +238,6 @@ export interface DialCacheRedisClient {
    * read error surfaces without replacing prior state.
    */
   invalidate(request: RedisInvalidationRequest): Awaitable<void>;
+  /** Optional capability. Missing values succeed; failures surface without retries. */
+  delete?(request: RedisDeleteRequest): Awaitable<void>;
 }

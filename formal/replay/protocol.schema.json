@@ -55,6 +55,7 @@
                 "admission",
                 "core",
                 "dark-layers",
+                "deletion",
                 "effects",
                 "independent",
                 "layers",
@@ -774,6 +775,31 @@
             "op"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "delete"
+            },
+            "id": {
+              "type": "string"
+            },
+            "instance": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "useCase": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false,
+          "description": "Remove one exact cached result from remote first, then local and the supplied live request scope."
         }
       ]
     },
@@ -1845,10 +1871,11 @@
             "enum": [
               "ok",
               "mutation_error",
-              "missing_remote"
+              "missing_remote",
+              "unsupported"
             ]
           },
-          "description": "Outcome of each invalidateRemote command in order."
+          "description": "Outcome of each invalidate or delete command, in order."
         },
         "sourceScopes": {
           "type": "array",
@@ -1879,6 +1906,11 @@
             "type": "string"
           },
           "description": "staleRecovery outcomes in order."
+        },
+        "deletions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -1896,7 +1928,8 @@
         "sourceScopes",
         "writeTtls",
         "shadow",
-        "recovery"
+        "recovery",
+        "deletions"
       ],
       "additionalProperties": false
     },
@@ -1911,11 +1944,21 @@
         },
         "lastResult": {
           "oneOf": [
-            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
             {
               "type": "object",
-              "properties": { "absent": { "const": true } },
-              "required": ["absent"],
+              "properties": {
+                "absent": {
+                  "const": true
+                }
+              },
+              "required": [
+                "absent"
+              ],
               "additionalProperties": false
             }
           ]
@@ -2024,10 +2067,11 @@
             "enum": [
               "ok",
               "mutation_error",
-              "missing_remote"
+              "missing_remote",
+              "unsupported"
             ]
           },
-          "description": "Outcome of each invalidateRemote command in order."
+          "description": "Outcome of each invalidate or delete command, in order."
         },
         "sourceScopes": {
           "type": "array",
@@ -2066,6 +2110,11 @@
             "minimum": 0,
             "maximum": 9007199254740991
           }
+        },
+        "deletions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -2083,7 +2132,8 @@
         "sourceScopes",
         "writeTtls",
         "shadow",
-        "recovery"
+        "recovery",
+        "deletions"
       ],
       "additionalProperties": false
     },
@@ -2286,6 +2336,10 @@
             ]
           },
           "description": "Event kinds journaled into observation.events. Its presence, even empty, makes events required in every observation."
+        },
+        "remoteDeletes": {
+          "type": "boolean",
+          "description": "false exposes an adapter without exact-key delete capability. Default true."
         }
       },
       "required": [

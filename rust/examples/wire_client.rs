@@ -10,9 +10,10 @@ use std::time::{Duration, Instant};
 
 use dialcache::protocol::CompressionConfig;
 use dialcache::{
-    normalize_args, ArgValue, BoxError, DialCache, FromSync, Identity, InvalidateRequest, LogEvent,
-    Logger, Operation, Payload, Policy, ReadContext, ReadRequest, ReadResult, RedisAdapter,
-    RedisConnection, Remote, SourceBudget, SyncCodec, SystemClock, WriteRequest,
+    normalize_args, ArgValue, BoxError, DeleteRequest, DialCache, FromSync, Identity,
+    InvalidateRequest, LogEvent, Logger, Operation, Payload, Policy, ReadContext, ReadRequest,
+    ReadResult, RedisAdapter, RedisConnection, Remote, Scope, SourceBudget, SyncCodec, SystemClock,
+    WriteRequest,
 };
 use futures::future::BoxFuture;
 use parking_lot::Mutex;
@@ -44,6 +45,7 @@ enum CodecKind {
 enum Command {
     Get,
     Invalidate,
+    Delete,
 }
 
 #[derive(Debug, Deserialize)]
@@ -99,6 +101,13 @@ struct ObservedRemote<C> {
 }
 
 impl<C: RedisConnection> Remote for ObservedRemote<C> {
+    fn supports_delete(&self) -> bool {
+        true
+    }
+    fn delete(&self, request: DeleteRequest) -> BoxFuture<'_, Result<(), BoxError>> {
+        self.native.delete(request)
+    }
+
     fn read(
         &self,
         request: ReadRequest,
@@ -297,6 +306,10 @@ async fn execute<C: RedisConnection + Clone>(
     let cache = builder.build()?;
     let value = match request.op {
         Command::Get => Some(get_value(&cache, &request, key, observations.clone()).await?),
+        Command::Delete => {
+            cache.delete(&Scope::outside(), key).await?;
+            None
+        }
         Command::Invalidate => {
             cache
                 .invalidate(

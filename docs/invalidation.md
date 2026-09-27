@@ -134,6 +134,121 @@ Invalidation works outside an enabled scope. Call it **after the source mutation
 commits** and surface failures to the application's maintenance path.
 [Redis setup](redis.md) covers client connections and ownership.
 
+## Exact-key deletion versus entity invalidation
+
+Use exact deletion when one known result must be removed, including untracked
+Redis entries or local-only caching. Use entity invalidation when every tracked
+argument and use-case variant of an entity must observe a timestamp fence.
+They can be used together after the source mutation commits.
+
+| Property | Exact-key deletion | Entity invalidation |
+| --- | --- | --- |
+| Scope | One namespace, key type, ID, use case, argument set and tracking mode | All tracked use cases and arguments of one namespace, key type and ID |
+| Stores | Configured Redis value, this instance's local entry, this live request's memo | Redis entity watermark |
+| Untracked results | Supported | Unchanged |
+| Watermarks | Never read, changed or removed | Monotonically advanced |
+| Concurrent load guarantee | Removes existing entries; an earlier load may publish again | Future tracked reads enforce the cutoff, subject to clock and in-flight-work bounds |
+| Failure behavior | Unsupported adapter fails before any store changes; remote failure preserves local/memo state | Missing remote or mutation failure surfaces; existing memory entries remain |
+
+Both maintenance operations ignore enablement. Deletion works outside a request
+and inside nested disabled scopes. It never resolves runtime policy, checks TTL
+or ramps, coalesces work, or creates a request memo. A missing key succeeds;
+without a remote adapter, local and live request removal still run.
+
+The delete identity must match the reader exactly, including arguments and
+tracking mode. Tracking changes the key prefix. Deleting with the wrong mode
+can successfully remove nothing because a missing key is not an error.
+
+After identity validation, deletion verifies the configured adapter's capability
+and counts the attempt. It awaits remote deletion first, then removes the local
+entry and live request memo synchronously. Remote-first ordering prevents a
+local miss from refilling from an old remote frame between those steps. A remote
+error leaves memory entries intact; failures surface to the maintenance caller.
+A failed dispatched command may already have executed, so retry explicitly when
+appropriate. Rust custom local-store failures can surface after remote removal;
+partial removal is never success.
+
+Deletion leaves siblings, other namespaces and instances, other requests'
+memos, watermarks, flights, and shadow jobs alone. Two races remain intentional:
+
+- **Late publication:** a load admitted before deletion can finish afterward and
+  repopulate the deleted key. Deletion does not cancel it or detach its flight.
+- **Acquired snapshot:** a caller that already obtained a value, including bytes
+  waiting for decoding or stale recovery, can return that value after deletion.
+
+The following executable example warms an untracked local result, deletes it
+within a live request, and verifies that the next read loads the changed source.
+With Redis configured, the same API also removes the remote value first.
+
+<LanguageContent language="typescript">
+
+<<< @/../typescript/examples/docs.mts#exact-delete{typescript}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/typescript/examples/docs.mts)
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+<<< @/../go/docs_examples_test.go#exact-delete{go}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/go/docs_examples_test.go)
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+<<< @/../rust/tests/docs_examples.rs#exact-delete{rust}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/rust/tests/docs_examples.rs)
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+<<< @/../python/tests/test_docs_examples.py#exact-delete{python}
+
+[Complete executable example](https://github.com/lan17/DialCache/blob/main/python/tests/test_docs_examples.py)
+
+</LanguageContent>
+
+<LanguageContent language="typescript">
+
+Call `await dialcache.delete({ keyType, useCase, key, trackForInvalidation })`.
+A `GetOrLoadOptions<T>` value can be reused directly. For a registered reader,
+recompute its `cacheKey` selector for the arguments; the selector itself is not
+an identity. Unsupported adapters reject with `RemoteDeleteUnsupportedError`.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Call `cache.Delete(ctx, identity)`. An empty identity namespace inherits the
+instance's. The live outer request comes from `ctx` even inside `Disable`;
+pass a context without that request to remove only shared stores. A configured
+remote must implement the optional `RemoteDeleter` interface or the call returns
+`ErrDeleteUnsupported`.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Call `cache.delete(&scope, identity).await`; use `Scope::outside()` without a
+request. An empty identity namespace inherits the instance's. Custom remotes
+opt in with `supports_delete` and `delete`, otherwise the operation returns
+`Error::RemoteDeleteUnsupported`.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Call `await cache.delete(key=..., key_type=..., use_case=...,
+track_for_invalidation=False)`. Scope comes from the live context, including
+inside `disable()`. Custom clients can implement `RedisDeleteClient`; a missing
+`delete` method raises `RemoteDeleteUnsupportedError`.
+
+</LanguageContent>
+
 ## Choosing `futureBufferMs`
 
 The buffer covers stale work that can still become visible after invalidation.

@@ -10,6 +10,7 @@ import { independentWitnesses } from "./independent.mjs";
 import { actionLabels, flowLabels } from "./labels.mjs";
 import { layersWitnesses } from "./layers.mjs";
 import { localClockWitnesses } from "./local-clock.mjs";
+import { deletionWitnesses } from "./deletion.mjs";
 import { localFailureWitnesses } from "./local-failure.mjs";
 import { policyWitnesses } from "./policy.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
@@ -76,6 +77,7 @@ export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder
     case "shadow-layers": actionLabels(corpus, recorder); shadowLayersWitnesses(corpus, recorder); break;
     case "shadow-read-deadlines": actionLabels(corpus, recorder); shadowReadDeadlinesWitnesses(corpus, recorder); break;
     case "dark-layers": actionLabels(corpus, recorder); darkLayersWitnesses(corpus, recorder); break;
+    case "deletion": actionLabels(corpus, recorder); deletionWitnesses(corpus, recorder); break;
     case "local-failure": actionLabels(corpus, recorder); localFailureWitnesses(corpus, recorder); break;
     case "source-budgets": actionLabels(corpus, recorder); sourceBudgetsWitnesses(corpus, recorder); break;
     case "runtime-boundaries": flowLabels(corpus, false, recorder); runtimeBoundaryWitnesses(profile, corpus, recorder); break;
