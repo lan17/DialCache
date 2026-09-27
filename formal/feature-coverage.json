@@ -1005,7 +1005,13 @@
           "test": "TestRedisAdapterReadsAndBoundaries",
           "path": "go/redis_adapter_test.go",
           "scope": "Tracked native MGET validates pair length and element types; mutation validators reject non-OK and non-integer-one reply domains.",
-          "sha256": "be2b57af44084c08b8d0b017be73ab382a687da062978a8508f799a5476a38c1"
+          "sha256": "5f68cfcb6885da659618a6367375da1df4a927f784a1eab7af7b83c6377eba4c"
+        },
+        {
+          "test": "TestRedisAdapterDeleteRESPReplies",
+          "path": "go/redis_adapter_test.go",
+          "scope": "Exercises the real go-redis response decoder: DEL accepts only RESP integer 0/1 and rejects numeric status/bulk strings, big integers, doubles, booleans, nulls and out-of-range integers.",
+          "sha256": "5f68cfcb6885da659618a6367375da1df4a927f784a1eab7af7b83c6377eba4c"
         }
       ],
       "adaptation": "Redis drivers expose bulk strings and integer replies through different host representations; arbitrary truthiness is not a protocol.",
@@ -1857,7 +1863,7 @@
           "test": "TestRedisAdapterMutationDispatch",
           "path": "go/redis_adapter_test.go",
           "scope": "Native SET uses the supplied complete frame and ceil-PX TTL; invalid TTL never dispatches; EVALSHA rejection retries identical EVAL arguments and an invalid reply does not retry.",
-          "sha256": "be2b57af44084c08b8d0b017be73ab382a687da062978a8508f799a5476a38c1"
+          "sha256": "5f68cfcb6885da659618a6367375da1df4a927f784a1eab7af7b83c6377eba4c"
         }
       ],
       "adaptation": "Pure vectors prove bytes and bounds; command-boundary tests prove actual command count and arguments.",
@@ -1905,7 +1911,7 @@
           "test": "TestRedisAdapterReadsAndBoundaries",
           "path": "go/redis_adapter_test.go",
           "scope": "Tracked native MGET validates pair length and element types; mutation validators reject non-OK and non-integer-one reply domains.",
-          "sha256": "be2b57af44084c08b8d0b017be73ab382a687da062978a8508f799a5476a38c1"
+          "sha256": "5f68cfcb6885da659618a6367375da1df4a927f784a1eab7af7b83c6377eba4c"
         }
       ],
       "adaptation": "Batch atomicity naming is GLIDE-specific; the MGET command itself is atomic. This is E01 adapter/environment evidence, not a proof from core replay.",
@@ -1953,7 +1959,7 @@
           "test": "TestRedisAdapterMutationDispatch",
           "path": "go/redis_adapter_test.go",
           "scope": "Native SET uses the supplied complete frame and ceil-PX TTL; invalid TTL never dispatches; EVALSHA rejection retries identical EVAL arguments and an invalid reply does not retry.",
-          "sha256": "be2b57af44084c08b8d0b017be73ab382a687da062978a8508f799a5476a38c1"
+          "sha256": "5f68cfcb6885da659618a6367375da1df4a927f784a1eab7af7b83c6377eba4c"
         },
         {
           "path": "go/feature_boundary_test.go",

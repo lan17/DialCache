@@ -132,7 +132,9 @@ func ValidateRedisSetReply(reply any) error {
 
 // Delete removes exactly one value key. It never reads or changes a watermark.
 func (adapter *RedisAdapter) Delete(ctx context.Context, valueKey string) error {
-	reply, err := adapter.client.Del(ctx, valueKey).Result()
+	// The typed DEL helper coerces numeric strings into integers; validate the
+	// original reply type just as we do for SET.
+	reply, err := adapter.client.Do(ctx, "DEL", valueKey).Result()
 	if err != nil {
 		return err
 	}
