@@ -375,7 +375,7 @@
         {
           "path": "rust/src/engine.rs",
           "before": "owner.memo.remove(&keys.logical)",
-          "after": "{ owner.memo.clear(); None }"
+          "after": "{ owner.memo.clear(); None::<crate::local::StoredValue> }"
         }
       ],
       "requiredDetections": [

@@ -939,31 +939,6 @@
             "readFailure"
           ],
           "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "op": {
-              "const": "delete"
-            },
-            "id": {
-              "type": "string"
-            },
-            "instance": {
-              "type": "string"
-            },
-            "key": {
-              "type": "string"
-            },
-            "useCase": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "op"
-          ],
-          "additionalProperties": false,
-          "description": "Remove one exact cached result from remote first, then local and the supplied live request scope."
         }
       ]
     },

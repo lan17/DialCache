@@ -11,17 +11,19 @@ module dialcache_deletion_conformance {
   import flights as Flights from "./kernel/flights"
   import clock as Clock from "./kernel/clock"
   import policy_gate as Gate from "./kernel/policy-gate"
-  // Composition boundary: request -> process flight -> local -> remote -> source.
-  // Two entities x two operations; two instances; three persistent request scopes.
-  // Fresh entries throughout this profile; policy/storage profiles cover expiry.
-  // State: o is the replay projection. Memo/flight ownership, LRU membership,
-  // remote frames and watermarks are predictions tested through public calls.
-  // Every rule is a kernel transition (formal/kernel); this module owns only the
-  // bounded state, the input choices and the environment steps.
-  // Environment: explicit request closure, source settlement, remote seeding,
-  // invalidation, and 1 ms clock steps. All serving TTLs are 60 seconds.
-  // Bounds: four identities (two entities x two operations), two instances,
-  // three persistent contexts, two fresh-context choices, twenty callers.
+  // C61-C63: exact maintenance over request, local and remote storage. Two
+  // entities x two operations, two instances, three persistent request roots,
+  // fresh contexts, a disabled child and an outside context distinguish owners.
+  // The four abstract identities stand for reader key bytes; native key/wire
+  // tests distinguish argument, namespace and tracking-mode encodings.
+  // All TTLs are 60 seconds; 1 ms ticks keep entries fresh at these bounds.
+  // Receipts snapshot each store, watermark and flight registry before delete;
+  // only public inputs and observations enter implementation replay.
+  // The environment controls source settlement, seeding, invalidation, scope
+  // closure, policy, mutation failure and optional held snapshot decoding.
+  // No delete cancels admitted work or promises a publication barrier.
+  // Every cache transition belongs to the kernel; this module supplies bounded
+  // state, external choices, independent properties and twenty caller slots.
 
   // -- Fixture, context and identity encodings (policy codes and sentinels are
   // the library's: layer_policy and encodings) --------------------------------

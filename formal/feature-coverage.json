@@ -985,19 +985,19 @@
           "test": "rejects malformed native read reply shapes",
           "path": "typescript/test/node-redis.test.ts",
           "scope": "Asserts that the TypeScript binding rejects malformed native read reply shapes.",
-          "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f"
+          "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff"
         },
         {
           "test": "rejects every out-of-domain reply returned by a node-redis client",
           "path": "typescript/test/node-redis.test.ts",
           "scope": "Asserts that the TypeScript binding rejects every out-of-domain reply returned by a node-redis client.",
-          "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f"
+          "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff"
         },
         {
           "test": "rejects malformed native read and mutation script replies",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding rejects malformed native read and mutation script replies.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         }
       ],
       "go": [
@@ -1005,7 +1005,7 @@
           "test": "TestRedisAdapterReadsAndBoundaries",
           "path": "go/redis_adapter_test.go",
           "scope": "Tracked native MGET validates pair length and element types; mutation validators reject non-OK and non-integer-one reply domains.",
-          "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
+          "sha256": "be2b57af44084c08b8d0b017be73ab382a687da062978a8508f799a5476a38c1"
         }
       ],
       "adaptation": "Redis drivers expose bulk strings and integer replies through different host representations; arbitrary truthiness is not a protocol.",
@@ -1047,7 +1047,7 @@
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
           "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "388cb138ba51552b850b411d9e6fef005e6c741757e1edd7c60f925a15249bee"
         }
       ],
       "adaptation": "Observability must remain diagnostic even when both the primary operation and logger fail.",
@@ -1352,13 +1352,13 @@
           "test": "preserves the public collector schema",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding preserves the public collector schema.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "27c797ef9dec7c8578dbffc01d0829fe92c17b1125dc344603badb491e8ba55b"
         },
         {
           "test": "exports every bounded error category without rewriting labels",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding exports every bounded error category without rewriting labels.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "27c797ef9dec7c8578dbffc01d0829fe92c17b1125dc344603badb491e8ba55b"
         }
       ],
       "go": [
@@ -1366,7 +1366,7 @@
           "test": "TestPrometheusWireSchemaMatchesTypeScriptBinding",
           "path": "go/metrics_test.go",
           "scope": "All nineteen Go collector names, help text, label order, kinds and bucket boundaries are checked against the TS binding schema.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "388cb138ba51552b850b411d9e6fef005e6c741757e1edd7c60f925a15249bee"
         }
       ],
       "adaptation": "Exporter schema changes break dashboards even when portable event semantics still pass; current Go schema check derives its expectation from TS source, not Quint.",
@@ -1386,19 +1386,19 @@
           "test": "keeps default DialCache construction detached from Prometheus",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding keeps default DialCache construction detached from Prometheus.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "27c797ef9dec7c8578dbffc01d0829fe92c17b1125dc344603badb491e8ba55b"
         },
         {
           "test": "registers collectors only in the caller-owned registry",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding registers collectors only in the caller-owned registry.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "27c797ef9dec7c8578dbffc01d0829fe92c17b1125dc344603badb491e8ba55b"
         },
         {
           "test": "reuses existing collectors when multiple adapters share a registry",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding reuses existing collectors when multiple adapters share a registry.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "27c797ef9dec7c8578dbffc01d0829fe92c17b1125dc344603badb491e8ba55b"
         }
       ],
       "go": [
@@ -1406,7 +1406,7 @@
           "test": "TestPrometheusReuseAndConflictIsolation",
           "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "388cb138ba51552b850b411d9e6fef005e6c741757e1edd7c60f925a15249bee"
         }
       ],
       "adaptation": "Registry ownership and collector reuse avoid global pollution and duplicate collectors in multi-instance deployments.",
@@ -1426,19 +1426,19 @@
           "test": "rejects a pre-registered legacy miss collector before registering anything",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding rejects a pre-registered legacy miss collector before registering anything.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "27c797ef9dec7c8578dbffc01d0829fe92c17b1125dc344603badb491e8ba55b"
         },
         {
           "test": "rejects exemplar-enabled collectors before registering anything",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding rejects exemplar-enabled collectors before registering anything.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "27c797ef9dec7c8578dbffc01d0829fe92c17b1125dc344603badb491e8ba55b"
         },
         {
           "test": "reuses a pre-registered current-schema miss collector",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding reuses a pre-registered current-schema miss collector.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "27c797ef9dec7c8578dbffc01d0829fe92c17b1125dc344603badb491e8ba55b"
         }
       ],
       "go": [
@@ -1446,19 +1446,19 @@
           "test": "TestPrometheusReuseAndConflictIsolation",
           "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "388cb138ba51552b850b411d9e6fef005e6c741757e1edd7c60f925a15249bee"
         },
         {
           "test": "TestPrometheusExplicitBindingsPreserveExistingObservations",
           "path": "go/metrics_test.go",
           "scope": "Explicit compatible externally created collectors preserve pre-existing counter and histogram observations when bound by an adapter.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "388cb138ba51552b850b411d9e6fef005e6c741757e1edd7c60f925a15249bee"
         },
         {
           "test": "TestPrometheusBindingsRejectIncompatibleOrUnregisteredCollectors",
           "path": "go/metrics_test.go",
           "scope": "Explicit collector bindings reject malformed schema, conflicting registry state or unregistered collector identities.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "388cb138ba51552b850b411d9e6fef005e6c741757e1edd7c60f925a15249bee"
         }
       ],
       "adaptation": "Go requires explicit collector bindings/schema because client_golang cannot expose empty histogram bucket schema; no destructive compatibility probing is permitted.",
@@ -1480,19 +1480,19 @@
           "test": "maps every DialCache metric to the default metric namespace with exact names, values, and tags",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding maps every DialCache metric to the default metric namespace with exact names, values, and tags.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "bc867e9e5ed19e2a52963dfb3bca38212ef78ec3de8a5136fc36605ca78de185"
         },
         {
           "test": "emits hot-shots histogram datagrams when explicitly selected",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding emits hot-shots histogram datagrams when explicitly selected.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "bc867e9e5ed19e2a52963dfb3bca38212ef78ec3de8a5136fc36605ca78de185"
         },
         {
           "test": "requires an explicit observation metric type",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding requires an explicit observation metric type.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "bc867e9e5ed19e2a52963dfb3bca38212ef78ec3de8a5136fc36605ca78de185"
         }
       ],
       "go": [
@@ -1500,7 +1500,7 @@
           "test": "TestDatadogMetricNamesUnitsAndLabels",
           "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "388cb138ba51552b850b411d9e6fef005e6c741757e1edd7c60f925a15249bee"
         }
       ],
       "adaptation": "Different observation modes have different backend semantics and require a namespace migration; current schema source remains native integration code.",
@@ -1521,19 +1521,19 @@
           "test": "never emits cache ids, arguments, Redis keys, or raw errors as Datadog tags",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding never emits cache ids, arguments, Redis keys, or raw errors as Datadog tags.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "bc867e9e5ed19e2a52963dfb3bca38212ef78ec3de8a5136fc36605ca78de185"
         },
         {
           "test": "enforces Datadog's 200-character final metric-name limit",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding enforces Datadog's 200-character final metric-name limit.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "bc867e9e5ed19e2a52963dfb3bca38212ef78ec3de8a5136fc36605ca78de185"
         },
         {
           "test": "validates every required DogStatsD method before emitting metrics",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding validates every required DogStatsD method before emitting metrics.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "bc867e9e5ed19e2a52963dfb3bca38212ef78ec3de8a5136fc36605ca78de185"
         }
       ],
       "go": [
@@ -1541,7 +1541,7 @@
           "test": "TestDatadogMetricNamesUnitsAndLabels",
           "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "388cb138ba51552b850b411d9e6fef005e6c741757e1edd7c60f925a15249bee"
         }
       ],
       "adaptation": "Typed Go methods replace TS duck-typed method validation, but namespace and cardinality constraints remain observable integration contracts.",
@@ -1581,7 +1581,7 @@
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
           "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "388cb138ba51552b850b411d9e6fef005e6c741757e1edd7c60f925a15249bee"
         }
       ],
       "adaptation": "C60 covers whether a warning happens; bounded formatting and native JSON failures are separate observability behavior.",
@@ -1837,19 +1837,19 @@
           "test": "writes complete frames with one native SET",
           "path": "typescript/test/node-redis.test.ts",
           "scope": "Asserts that the TypeScript binding writes complete frames with one native SET.",
-          "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f"
+          "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff"
         },
         {
           "test": "honors a supplied write timestamp without sampling the client clock",
           "path": "typescript/test/node-redis.test.ts",
           "scope": "Asserts that the TypeScript binding honors a supplied write timestamp without sampling the client clock.",
-          "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f"
+          "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff"
         },
         {
           "test": "writes string and binary values as complete frames with one SET each",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding writes string and binary values as complete frames with one SET each.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         }
       ],
       "go": [
@@ -1857,7 +1857,7 @@
           "test": "TestRedisAdapterMutationDispatch",
           "path": "go/redis_adapter_test.go",
           "scope": "Native SET uses the supplied complete frame and ceil-PX TTL; invalid TTL never dispatches; EVALSHA rejection retries identical EVAL arguments and an invalid reply does not retry.",
-          "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
+          "sha256": "be2b57af44084c08b8d0b017be73ab382a687da062978a8508f799a5476a38c1"
         }
       ],
       "adaptation": "Pure vectors prove bytes and bounds; command-boundary tests prove actual command count and arguments.",
@@ -1879,19 +1879,19 @@
           "test": "forces tracked Cluster MGET reads to the primary",
           "path": "typescript/test/node-redis.test.ts",
           "scope": "Asserts that the TypeScript binding forces tracked Cluster MGET reads to the primary.",
-          "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f"
+          "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff"
         },
         {
           "test": "uses GET and a non-atomic primary MGET batch that preserves caller WATCH state",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding uses GET and a non-atomic primary MGET batch that preserves caller WATCH state.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         },
         {
           "test": "routes tracked cluster MGET directly to the slot primary",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding routes tracked cluster MGET directly to the slot primary.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         }
       ],
       "go": [
@@ -1899,13 +1899,13 @@
           "test": "TestRedisIntegration",
           "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "f1919eacccda5cc36ac2d91c5d9afa415e230e68cfb35307ce640324631f6874"
+          "sha256": "dd591c6d04be362dd5a5392c140c11c52ecd6c02c07ad73a193c5d41bbc6db65"
         },
         {
           "test": "TestRedisAdapterReadsAndBoundaries",
           "path": "go/redis_adapter_test.go",
           "scope": "Tracked native MGET validates pair length and element types; mutation validators reject non-OK and non-integer-one reply domains.",
-          "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
+          "sha256": "be2b57af44084c08b8d0b017be73ab382a687da062978a8508f799a5476a38c1"
         }
       ],
       "adaptation": "Batch atomicity naming is GLIDE-specific; the MGET command itself is atomic. This is E01 adapter/environment evidence, not a proof from core replay.",
@@ -1927,25 +1927,25 @@
           "test": "retries a rejected EVALSHA once with EVAL by source",
           "path": "typescript/test/node-redis.test.ts",
           "scope": "Asserts that the TypeScript binding retries a rejected EVALSHA once with EVAL by source.",
-          "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f"
+          "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff"
         },
         {
           "test": "does not retry an invalidation reply-domain violation",
           "path": "typescript/test/node-redis.test.ts",
           "scope": "Asserts that the TypeScript binding does not retry an invalidation reply-domain violation.",
-          "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f"
+          "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff"
         },
         {
           "test": "surfaces the invalidation retry rejection unmodified",
           "path": "typescript/test/node-redis.test.ts",
           "scope": "Asserts that the TypeScript binding surfaces the invalidation retry rejection unmodified.",
-          "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f"
+          "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff"
         },
         {
           "test": "chains the original rejection when the invalidation retry also fails",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding chains the original rejection when the invalidation retry also fails.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         }
       ],
       "go": [
@@ -1953,7 +1953,7 @@
           "test": "TestRedisAdapterMutationDispatch",
           "path": "go/redis_adapter_test.go",
           "scope": "Native SET uses the supplied complete frame and ceil-PX TTL; invalid TTL never dispatches; EVALSHA rejection retries identical EVAL arguments and an invalid reply does not retry.",
-          "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
+          "sha256": "be2b57af44084c08b8d0b017be73ab382a687da062978a8508f799a5476a38c1"
         },
         {
           "path": "go/feature_boundary_test.go",
@@ -1980,13 +1980,13 @@
           "test": "passes the cooperative read signal through node-redis command options",
           "path": "typescript/test/node-redis.test.ts",
           "scope": "Asserts that the TypeScript binding passes the cooperative read signal through node-redis command options.",
-          "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f"
+          "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff"
         },
         {
           "test": "preserves GLIDE invocation options when given a core read context",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding preserves GLIDE invocation options when given a core read context.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         }
       ],
       "go": [
@@ -2020,25 +2020,25 @@
           "test": "uses one wire format across node-redis and Valkey GLIDE",
           "path": "typescript/test/redis-real.integration.test.ts",
           "scope": "Asserts that the TypeScript binding uses one wire format across node-redis and Valkey GLIDE.",
-          "sha256": "37e311c65c2329cef4942b7e485d5e652cdaf5738a19dc4b7c3a269a917c480c"
+          "sha256": "f8e337c3c7e8ab5db381d9dea6fd3f5f9834ca60577606cd7fb625d68c6a8d11"
         },
         {
           "test": "round-trips compressed payloads through tracked writes and invalidation",
           "path": "typescript/test/redis-real.integration.test.ts",
           "scope": "Asserts that the TypeScript binding round-trips compressed payloads through tracked writes and invalidation.",
-          "sha256": "37e311c65c2329cef4942b7e485d5e652cdaf5738a19dc4b7c3a269a917c480c"
+          "sha256": "f8e337c3c7e8ab5db381d9dea6fd3f5f9834ca60577606cd7fb625d68c6a8d11"
         },
         {
           "test": "routes cache operations across slots and reloads invalidation scripts per node",
           "path": "typescript/test/redis-cluster.integration.test.ts",
           "scope": "Asserts that the TypeScript binding routes cache operations across slots and reloads invalidation scripts per node.",
-          "sha256": "7c6f642d578cab1b1237743a305bc8d9c315267e94057c61fd67ed2ba4f8bc66"
+          "sha256": "e6b0793106144e230c45bf6887442605eb0ba95d10bfdf6ed42cda55ee67ebca"
         },
         {
           "test": "keeps tracked keys colocated and rejects mismatched hash tags",
           "path": "typescript/test/redis-cluster.integration.test.ts",
           "scope": "Asserts that the TypeScript binding keeps tracked keys colocated and rejects mismatched hash tags.",
-          "sha256": "7c6f642d578cab1b1237743a305bc8d9c315267e94057c61fd67ed2ba4f8bc66"
+          "sha256": "e6b0793106144e230c45bf6887442605eb0ba95d10bfdf6ed42cda55ee67ebca"
         }
       ],
       "go": [
@@ -2046,7 +2046,7 @@
           "test": "TestRedisIntegration",
           "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "f1919eacccda5cc36ac2d91c5d9afa415e230e68cfb35307ce640324631f6874"
+          "sha256": "dd591c6d04be362dd5a5392c140c11c52ecd6c02c07ad73a193c5d41bbc6db65"
         }
       ],
       "adaptation": "Real-server dispatch, Lua semantics, topology and mixed-language data are outside an in-memory conformance driver.",
@@ -2122,25 +2122,25 @@
           "test": "rejects forwarding wrappers instead of silently treating them as standalone",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding rejects forwarding wrappers instead of silently treating them as standalone.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         },
         {
           "test": "rejects a direct client from a different GLIDE module instance",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding rejects a direct client from a different GLIDE module instance.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         },
         {
           "test": "rejects an ambiguous client identity",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding rejects an ambiguous client identity.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         },
         {
           "test": "requires GLIDE 2.x Batch support",
           "path": "typescript/test/valkey-glide.test.ts",
           "scope": "Asserts that the TypeScript binding requires GLIDE 2.x Batch support.",
-          "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db"
+          "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7"
         }
       ],
       "go": [],
