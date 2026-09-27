@@ -952,24 +952,19 @@ class DialCache:
     ) -> None:
         """Remove one exact result from this request, instance, and remote.
 
+        ``key`` is a scalar ID or a mapping containing ``id`` and optional
+        ``args``. Prebuilt ``Key`` objects are not accepted by this operation.
         The identity must match the reader, including tracking mode. Maintenance
         works in disabled scopes without consulting policy. Existing flights and
         acquired values remain valid and may publish after deletion.
         """
         if use_case == "watermark":
             raise UseCaseNameIsReservedError(use_case)
-        if isinstance(key, Key):
-            identity = key
-            if identity.namespace != self.namespace:
-                raise ValueError("Key namespace differs from cache namespace")
-            if identity.use_case == "watermark":
-                raise UseCaseNameIsReservedError(identity.use_case)
-        else:
-            spec = key if isinstance(key, Mapping) else {"id": key}
-            identity = Key(
-                self.namespace, key_type, spec["id"], use_case,
-                normalize_args(spec.get("args", {})), track_for_invalidation,
-            )
+        spec = key if isinstance(key, Mapping) else {"id": key}
+        identity = Key(
+            self.namespace, key_type, spec["id"], use_case,
+            normalize_args(spec.get("args", {})), track_for_invalidation,
+        )
         remote_delete = getattr(self.redis, "delete", None) if self.redis is not None else None
         if self.redis is not None and not callable(remote_delete):
             raise RemoteDeleteUnsupportedError("Redis adapter does not support exact-key deletion")

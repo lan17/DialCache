@@ -55,8 +55,8 @@ export class LocalCache {
     });
   }
 
-  delete(key: string): void {
-    this.cache?.delete(key);
+  delete(key: DialCacheKey): void {
+    this.cache?.delete(key.urn);
   }
 
   put<T>(key: DialCacheKey, value: T, config: { readonly ttlSec: number }): void {

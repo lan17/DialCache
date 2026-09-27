@@ -21,7 +21,7 @@ DialCache organizes caching into use cases, with runtime control and
 observability for each one. Its TypeScript, Go, Rust and Python implementations share
 behavioral contracts and documentation.
 
-- **Off by default:** automatic reads cache only inside `enable()`; explicit maintenance (`invalidateRemote`, `delete`) acts regardless of scope.
+- **Off by default:** readers cache only inside `enable()`. Maintenance calls (`invalidateRemote`, `delete`) always act.
 - **Multi-layer:** request-local → process-local → Redis.
 - **Runtime policies per use case:** layers, TTLs, and rollout ramps.
 - **Targeted invalidation:** fence an entity's tracked Redis results, or delete one exact result from this request, this instance and Redis.

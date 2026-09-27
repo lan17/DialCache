@@ -622,7 +622,7 @@ export class DialCache {
         await this.redisCache.delete(key);
       }
       failingLayer = CacheLayer.LOCAL;
-      this.localCache.delete(key.urn);
+      this.localCache.delete(key);
       failingLayer = REQUEST_LOCAL_CACHE_LAYER;
       getLiveRequestLocalCache(this.context)?.delete(key.urn);
     } catch (error) {

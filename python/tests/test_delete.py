@@ -127,6 +127,31 @@ def test_validation_and_capability_precede_metrics_and_mutation(executor, remote
     assert events == []
 
 
+@pytest.mark.parametrize("overrides", [
+    {},
+    {"key_type": "other"},
+    {"use_case": "Other"},
+    {"track_for_invalidation": False},
+], ids=["matching", "key-type", "use-case", "tracking"])
+def test_delete_rejects_prebuilt_key_before_any_effects(executor, overrides):
+    calls, events = [], []
+    remote = SimpleNamespace(delete=lambda request: calls.append(request.value_key))
+    cache = DialCache(redis=remote, metrics=events.append, clock=executor.clock)
+    key = Key("urn", "id", "42", "Get", tracked=True)
+    options = dict(key_type="id", use_case="Get", track_for_invalidation=True)
+    options.update(overrides)
+    cache._local.put(key.logical, 1, 60)
+    with cache.enable():
+        memo = cache._context.request_cache()
+        memo.set(key.logical, 1)
+        with pytest.raises(TypeError, match="Cache key scalar"):
+            executor.finish(cache.delete(key=key, **options))
+        assert cache._local.get(key.logical) == 1
+        assert memo.read(key.logical) == (True, 1)
+    assert calls == []
+    assert events == []
+
+
 @pytest.mark.parametrize("capacity", [0, 2])
 def test_local_only_outside_scope_and_memo_not_created(executor, capacity):
     events = []

@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "e708123c9abdc859eeb947549d5032c040ca31cffdf6496480ec9ed2fcc0bc7b",
     "executionSha256": "8104c2a484854f589e9ea8082c8ea2c403a42949b432122df1f738499fcb5507",
-    "sourceAuditSha256": "4ca9fbf49290d5fae17f8d6549a11d6574e9db71352d797e040add23d8939209",
+    "sourceAuditSha256": "f51c30a9250623cb7e05a13e3c005a99ccbab56eccfbdeb06bb5c181446af00a",
     "featureCoverageSha256": "d76a011543f676bf5c2c34b4ee21a70b51a80e3830b0275581852d48f5d3f363",
     "coverageWitnessesSha256": "ffea1970977f29fc8396a255934737bba8387619f67ceaa86f0fb5557f41b579",
     "profilesSha256": "0b3571910b903ff47d01f307bf9f4610ef4e36aee4906c9a33b88c95b27df6c0"
@@ -3467,7 +3467,7 @@
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "60ff2584a7620e94ce832bc6af60453a64aa252ed35a0de28b3fdffd63dae6bc",
+      "sha256": "221cd3bf238c06f1136ed448eb2c8cceba3c1485424d2116d3a167db7c0e7f68",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -3805,7 +3805,7 @@
     },
     {
       "path": "typescript/src/internal/local-cache.ts",
-      "sha256": "5ab3929fd50bfb605f076a501bbd990ea86d370e898e2f386353e58077d5dff2",
+      "sha256": "172d8cc46bb632342bc75433654ca0a7259ff59b81f88507464bbe7483b3a344",
       "candidateGoFiles": [
         "go/internal/localcache/cache.go",
         "go/cache.go",

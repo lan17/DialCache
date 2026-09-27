@@ -46,6 +46,8 @@ the public API.
 `await cache.delete(key=..., key_type=..., use_case=...,
 track_for_invalidation=False)` removes one exact result. It uses the existing
 live context even inside `disable()` and is independent of runtime policy.
+For deletion, `key` must be a scalar ID or `{"id": ..., "args": {...}}`; a
+prebuilt `Key` raises `TypeError` before any cache state changes.
 Custom clients may implement `RedisDeleteClient`; missing support raises
 `RemoteDeleteUnsupportedError`. See [exact deletion](../invalidation.md#exact-key-deletion-versus-entity-invalidation).
 

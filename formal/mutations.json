@@ -2083,7 +2083,7 @@
         "edits": [
           {
             "path": "typescript/src/dialcache.ts",
-            "before": "      this.localCache.delete(key.urn);",
+            "before": "      this.localCache.delete(key);",
             "after": "      // Fault injection: leave the local entry intact."
           }
         ],
@@ -2153,7 +2153,7 @@
           {
             "path": "typescript/src/dialcache.ts",
             "before": "      this.logger.warn(\"Error deleting DialCache entry\", error);",
-            "after": "      this.localCache.delete(key.urn);\n      this.logger.warn(\"Error deleting DialCache entry\", error);"
+            "after": "      this.localCache.delete(key);\n      this.logger.warn(\"Error deleting DialCache entry\", error);"
           }
         ],
         "requiredDetections": [
@@ -2184,7 +2184,7 @@
         "edits": [
           {
             "path": "typescript/src/internal/local-cache.ts",
-            "before": "this.cache?.delete(key);",
+            "before": "this.cache?.delete(key.urn);",
             "after": "void key; this.cache?.clear();"
           },
           {
@@ -2226,8 +2226,8 @@
         "edits": [
           {
             "path": "typescript/src/dialcache.ts",
-            "before": "      this.localCache.delete(key.urn);",
-            "after": "      this.processFlights.delete(key.urn);\n      this.localCache.delete(key.urn);"
+            "before": "      this.localCache.delete(key);",
+            "after": "      this.processFlights.delete(key.urn);\n      this.localCache.delete(key);"
           }
         ],
         "requiredDetections": [

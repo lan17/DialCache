@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "e2d55f5fdbf6bb1f4ed01d840694c40999573571349ba4f4f34eac7bf61287ef",
+      "sha256": "2992b9441de01a1885201d9c7a040f52f265aebe7f59a9e2c25acc856cf49166",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01","C61","C62","C63"]},
         {"line":49,"title":"Install TypeScript","contracts":["B01"]},
@@ -180,16 +180,16 @@
     },
     {
       "path": "docs/languages/python.md",
-      "sha256": "047f56add5d2d44a93f88c1f60e81872d19419cff4a750422b07fe78232de3d2",
+      "sha256": "9fc740e6cebb7e6100ca9757f93de8485a608450a453f3f95b45919bf6f7d672",
       "entries": [
         {"line":1,"title":"Python integration","contracts":["B01"]},
         {"line":10,"title":"Installation and runtime","contracts":["B01","B02"]},
         {"line":29,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
-        {"line":52,"title":"Identity and policy","contracts":["W01","W02","C16","C18","C20","B01"]},
-        {"line":103,"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
-        {"line":121,"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
-        {"line":140,"title":"Sharing Redis with other languages","contracts":["W01","W02","E04","B03","B01"]},
-        {"line":150,"title":"Validation","contracts":["B01"]}
+        {"line":54,"title":"Identity and policy","contracts":["W01","W02","C16","C18","C20","B01"]},
+        {"line":105,"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
+        {"line":123,"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
+        {"line":142,"title":"Sharing Redis with other languages","contracts":["W01","W02","E04","B03","B01"]},
+        {"line":152,"title":"Validation","contracts":["B01"]}
       ]
     },
     {
