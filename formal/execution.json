@@ -926,7 +926,8 @@
           "layers",
           "independent",
           "recovery-read",
-          "dark-layers"
+          "dark-layers",
+          "deletion"
         ],
         "exclusions": {
           "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
@@ -940,8 +941,7 @@
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
-          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -1022,11 +1022,10 @@
           "local-clock",
           "source-budgets",
           "dark-layers",
-          "shadow-read-deadlines"
+          "shadow-read-deadlines",
+          "deletion"
         ],
-        "exclusions": {
-          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
-        },
+        "exclusions": {},
         "scope": "Two outside callers start distinct sources. The connection monitor captures each caller from the external admission count and rejects an owners-table rewrite at the second source. This checks model bookkeeping only: native callers await their own source promise or goroutine result, with no owners table to mutate."
       }
     },
@@ -1242,7 +1241,8 @@
           "source-budgets",
           "admission",
           "effects",
-          "dark-layers"
+          "dark-layers",
+          "deletion"
         ],
         "exclusions": {
           "independent": "Coalescing is off in every reply: every flight has one owner, so completing the first owner completes them all.",
@@ -1251,8 +1251,7 @@
           "shadow": "Coalescing is off and one caller runs at a time: every flight has one owner.",
           "local-failure": "Composes serving.complete through local_faults.settle, but admits one source at a time (no call begins while a source is pending), so every flight has one owner and the mutant's minimum-owner fold finishes the same call.",
           "local-clock": "Composes serving.complete through serving.callLocal, whose inline source settles in the step that starts it, so no flight ever gains a second owner and the mutant's minimum-owner fold finishes the same call.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
-          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       },
       "nativeMutants": {
@@ -1340,11 +1339,10 @@
           "local-clock",
           "source-budgets",
           "dark-layers",
-          "shadow-read-deadlines"
+          "shadow-read-deadlines",
+          "deletion"
         ],
-        "exclusions": {
-          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
-        },
+        "exclusions": {},
         "scope": "Two independent held reads start distinct loaders. The unchanged connection property rejects the second loader having no caller in the mutated ownership registry. Both ports return each independent source into its own caller without such a registry; this reproducer checks the model monitor, not a native wrong-key fault."
       }
     },
@@ -1373,7 +1371,8 @@
           "layers",
           "independent",
           "recovery-read",
-          "dark-layers"
+          "dark-layers",
+          "deletion"
         ],
         "exclusions": {
           "effects": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
@@ -1387,8 +1386,7 @@
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
-          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
         }
       }
     },
@@ -1823,7 +1821,8 @@
           "layers",
           "independent",
           "dark-layers",
-          "recovery-read"
+          "recovery-read",
+          "deletion"
         ],
         "exclusions": {
           "effects": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
@@ -1837,8 +1836,7 @@
           "shadow-layers": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
           "local-clock": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
           "source-budgets": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
-          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes tracked read acceptance at watermark equality in this bounded read-deadline profile; the imported rule alone does not establish detection.",
-          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes tracked read acceptance at watermark equality in this bounded read-deadline profile; the imported rule alone does not establish detection."
         },
         "scope": "A deterministic protocol transform exports language-neutral vector inputs rather than an asynchronous driver history. Exact generated rows have their own native input/output recording and clean baseline in both ports. The named run executes requestFor(546), the exact generated tracked frame row: createdAtMs and watermark are both one. Its miss classification must precede serving the frame.",
         "model": "formal/dialcache-frame-vectors.qnt"
@@ -3100,15 +3098,15 @@
           "runtime-boundaries",
           "local-clock",
           "source-budgets",
-          "dark-layers"
+          "dark-layers",
+          "deletion"
         ],
         "exclusions": {
           "scope": "Only request flights are registered; processFlights stays empty, so removing process-flight cleanup changes no state.",
           "shadow": "This single-execution projection cannot admit a second source after its one source/job lifetime; its scheduled properties do not observe the settled process registry.",
           "independent": "Every caller has coalesce false and registers no process flight, so processFlights remains empty.",
           "shadow-layers": "Coalescing is disabled for its independent-source fixture, so no process flight is registered.",
-          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior.",
-          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
+          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior."
         }
       }
     },

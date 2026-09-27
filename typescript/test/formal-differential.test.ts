@@ -21,6 +21,8 @@ const differential = await import(new URL("../../formal/differential.mjs", impor
   recordedStates(raw: { states: unknown[] }): { states: unknown[] };
   runDiagnostic(log: string, run: string): string | null;
   replayedHistory(raw: { states: unknown[] }, reference: History, descriptor: unknown): History;
+  loadHistories(directory: string, descriptor: unknown): History[];
+  referenceDescriptor(tree: string, profileId: string, descriptor: unknown): unknown;
   closureDigests(path: string, options?: { cwd?: string }): Record<string, string>;
   differentialPlan(reference: Manifests, candidate: Manifests, profileId: string): Plan;
   readManifests(directory: string): Manifests;
@@ -78,6 +80,52 @@ describe("corpus differential comparison", () => {
     const verdict = differential.compareHistory(reference, sideChannel);
     expect(verdict).toMatchObject({ agree: false, step: 1, fields: ["io.0.budget"] });
     expect(verdict.reason).toContain("io.0.budget 10 (reference 5)");
+  });
+
+  it("projects the absent deletion counter only for historic non-deletion reference sources", () => {
+    const tree = mkdtempSync(join(tmpdir(), "differential-legacy-observation-"));
+    try {
+      mkdirSync(join(tree, "formal"));
+      const source = readFileSync(join(root, "formal/conformance-observations.qnt"), "utf8");
+      writeFileSync(join(tree, "formal/conformance-observations.qnt"), source.replace("    deletions: int,\n", "").replace("    deletions: 0,\n", ""));
+      const descriptor = differential.replayDescriptors.layers;
+      const projection = differential.referenceDescriptor(tree, "layers", descriptor);
+      expect(projection).not.toBe(descriptor);
+      expect(differential.referenceDescriptor(root, "layers", descriptor)).toBe(descriptor);
+      expect(differential.referenceDescriptor(tree, "deletion", descriptor)).toBe(descriptor);
+      const current = JSON.parse(readFileSync(join(root, "formal/layers-smoke.itf.json"), "utf8")) as {
+        states: Array<{ s: { o: Record<string, unknown> } }>;
+      };
+      const reference = structuredClone(current);
+      for (const state of reference.states) delete state.s.o.deletions;
+      expect(() => parseTrace(reference, "candidate", descriptor)).toThrow(/unexpected observation fields/);
+      const referenceDirectory = join(tree, "traces");
+      mkdirSync(referenceDirectory);
+      writeFileSync(join(referenceDirectory, "old.itf.json"), JSON.stringify(reference));
+      const [historic] = differential.loadHistories(referenceDirectory, projection);
+      const candidate = parseTrace(current, "candidate", descriptor);
+      expect(differential.compareHistory(historic!, candidate)).toEqual({ agree: true });
+      // Both loading the old corpus and replaying through the old model use
+      // the same boundary; no fields in the input trace are changed in place.
+      expect(differential.compareHistory(candidate, differential.replayedHistory(reference, candidate, projection))).toEqual({ agree: true });
+      expect(reference.states.every(state => !Object.hasOwn(state.s.o, "deletions"))).toBe(true);
+      // A real new deletion is still a disagreement in either direction.
+      current.states[1]!.s.o.deletions = { "#bigint": "1" };
+      const changed = parseTrace(current, "candidate", descriptor);
+      expect(differential.compareHistory(historic!, changed)).toMatchObject({ agree: false, step: 1, fields: ["expected.deletions"] });
+      expect(differential.compareHistory(changed, differential.replayedHistory(reference, changed, projection)))
+        .toMatchObject({ agree: false, step: 1, fields: ["expected.deletions"] });
+      // Neither unexpected reference counters nor any other malformed fields
+      // are hidden by the historical zero baseline.
+      reference.states[1]!.s.o.deletions = { "#bigint": "1" };
+      expect(() => differential.replayedHistory(reference, candidate, projection)).toThrow(/unexpected legacy reference deletions field/);
+      delete reference.states[1]!.s.o.deletions;
+      reference.states[1]!.s.o.unexpected = { "#bigint": "0" };
+      expect(() => differential.replayedHistory(reference, candidate, projection)).toThrow(/unexpected observation fields/);
+      delete reference.states[1]!.s.o.unexpected;
+      delete reference.states[1]!.s.o.reads;
+      expect(() => differential.replayedHistory(reference, candidate, projection)).toThrow(/unexpected observation fields/);
+    } finally { rmSync(tree, { recursive: true, force: true }); }
   });
 
   it("reports a replaced input and names the input the replay refused", () => {
