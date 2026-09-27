@@ -23,6 +23,7 @@ func NewRedisAdapter(client redis.UniversalClient) *RedisAdapter {
 }
 
 var _ Remote = (*RedisAdapter)(nil)
+var _ RemoteDeleter = (*RedisAdapter)(nil)
 
 type RedisPayloadError struct{ Message string }
 
@@ -128,6 +129,23 @@ func ValidateRedisSetReply(reply any) error {
 	}
 	return nil
 }
+
+// Delete removes exactly one value key. It never reads or changes a watermark.
+func (adapter *RedisAdapter) Delete(ctx context.Context, valueKey string) error {
+	reply, err := adapter.client.Del(ctx, valueKey).Result()
+	if err != nil {
+		return err
+	}
+	return ValidateRedisDelReply(reply)
+}
+
+func ValidateRedisDelReply(reply any) error {
+	if integer, ok := reply.(int64); !ok || (integer != 0 && integer != 1) {
+		return &RedisProtocolError{"invalid Redis DEL reply; expected integer 0 or 1"}
+	}
+	return nil
+}
+
 func ValidateRedisInvalidationReply(reply any) error {
 	if integer, ok := reply.(int64); !ok || integer != 1 {
 		return &RedisProtocolError{"invalid Redis invalidation reply; expected integer 1"}

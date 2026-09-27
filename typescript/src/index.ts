@@ -33,12 +33,14 @@ export type {
 export {
   DialCacheError,
   FallbackTimeoutError,
+  RemoteDeleteUnsupportedError,
   RedisReadTimeoutError,
   UseCaseIsAlreadyRegisteredError,
   UseCaseNameIsReservedError,
 } from "./errors.js";
 export { DialCache } from "./dialcache.js";
 export type {
+  CacheIdentityOptions,
   CacheKeySpec,
   CachedFn,
   CachedOptions,
@@ -61,6 +63,7 @@ export type {
   DecodedRedisFrame,
   DialCacheRedisClient,
   RedisCachePayload,
+  RedisDeleteRequest,
   RedisInvalidationRequest,
   RedisReadContext,
   RedisReadMiss,

@@ -1,5 +1,6 @@
 import type {
   DialCacheRedisClient,
+  RedisDeleteRequest,
   RedisInvalidationRequest,
   RedisReadResult,
   RedisReadRequest,
@@ -60,6 +61,11 @@ export class FakeRedis implements DialCacheRedisClient {
       value: frame,
       expiresAtMs: storedAtMs + validatedTtlMs,
     });
+  }
+
+  async delete({ valueKey }: RedisDeleteRequest): Promise<void> {
+    this.throwIfWriteFails();
+    this.values.delete(valueKey);
   }
 
   async invalidate({ watermarkKey, futureBufferMs }: RedisInvalidationRequest): Promise<void> {

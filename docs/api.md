@@ -268,6 +268,38 @@ Redis configuration and mutation failures reject; the method works outside an
 enabled scope. Choose the buffer from the
 [clock and in-flight-work contract](invalidation.md#choosing-futurebufferms).
 
+## `delete`
+
+`delete(options: CacheIdentityOptions): Promise<void>` removes one exact cached
+result from Redis when configured, this instance's process-local LRU, and the
+live outer request memo. It works outside `enable()` and inside nested
+`disable()`, with no policy-provider lookup, TTL/ramp checks, or coalescing.
+A missing entry succeeds, including on instances without Redis.
+
+`CacheIdentityOptions` contains `keyType`, `useCase`, `key`, and optional
+`trackForInvalidation` (default `false`). The instance supplies the namespace.
+Every identity dimension must match the reader exactly, including arguments and
+tracking mode. Using the wrong tracking mode targets a different key and can
+therefore succeed without removing the intended entry. No value type,
+serializer, or configuration is needed.
+
+An existing `GetOrLoadOptions<T>` value is structurally compatible with
+`CacheIdentityOptions`: pass it directly. A registered reader's `CachedOptions`
+is not an identity because it contains a `cacheKey` selector; invoke that
+selector with the reader's arguments and supply the resulting `key` instead.
+The shared `CacheUseCaseOptions` base names the use case and tracking mode.
+
+Validation and adapter-capability checks happen before mutation or the deletion
+metric. Redis deletion completes first; a remote failure leaves both memory
+stores intact. Then local and live memo removal run synchronously. A configured
+adapter without optional `delete` rejects with `RemoteDeleteUnsupportedError`;
+other mutation failures also reject and never report partial removal as success.
+
+Deletion changes no watermarks, sibling identities, other instances or requests,
+flights, acquired snapshots, or shadow jobs. A previously admitted load can
+publish after deletion. See [exact-key deletion versus entity invalidation](invalidation.md#exact-key-deletion-versus-entity-invalidation)
+for examples and concurrency boundaries.
+
 ## `getCoalescingState`
 
 `getCoalescingState(): CoalescingState` returns a point-in-time process-flight
@@ -282,7 +314,8 @@ process.oldestLeaderAgeMs;   // Monotonic age, or null when idle.
 
 The nested shape is `ProcessCoalescingState`. Request-local flights are excluded.
 There is no method to clear a cache, cancel in-flight loads, cap coalesced
-flights, or shut an instance down.
+flights, or shut an instance down. [`delete`](#delete) removes one exact result,
+not an entire cache.
 See [Coalescing state](coalescing.md#inspecting-process-scoped-flights).
 
 ## Keys and serializers
@@ -350,9 +383,10 @@ braces; it does not encode the value. Neither helper adds arguments or a use cas
 
 | Root export | When it matters |
 | --- | --- |
-| `DialCacheError` | Base class of the four core errors below |
+| `DialCacheError` | Base class of the core errors below |
 | `UseCaseIsAlreadyRegisteredError` | Duplicate `cached()` registration on an instance |
-| `UseCaseNameIsReservedError` | Either operation API uses `"watermark"` |
+| `UseCaseNameIsReservedError` | A reader or exact deletion uses `"watermark"` |
+| `RemoteDeleteUnsupportedError` | Exact deletion has a configured Redis adapter without the optional `delete` capability |
 | `FallbackTimeoutError` | Enabled source deadline; exposes `useCase` and `timeoutMs` |
 | `RedisReadTimeoutError` | Remote wait deadline; exposes `useCase` and `timeoutMs`; serving reads log/count it before fallback, while shadow reads report a job outcome |
 | `DialCacheRedisPayloadError` | Invalid raw Redis reply shape |
@@ -368,11 +402,18 @@ Source errors retain their original rejection value if recovery does not serve.
 
 `RedisConfig`, `CompressionConfig`, `DialCacheRedisClient`, `RedisReadRequest`,
 `RedisReadContext`, `RedisReadResult`, `RedisReadMiss`, `DecodedRedisFrame`,
-`RedisWriteRequest`, `RedisInvalidationRequest`, and `RedisCachePayload` are root
+`RedisWriteRequest`, `RedisInvalidationRequest`, `RedisDeleteRequest`, and `RedisCachePayload` are root
 types. Use `isRedisReadMiss` to discriminate reads. The complete semantic and
 binary contracts are in [Redis and Valkey](redis.md#custom-client-contract).
 
+`DialCacheRedisClient.delete?(request: RedisDeleteRequest)` is optional and
+returns `void` or a promise. Its request contains the exact `valueKey`; remove
+that key only, never an entity watermark. Existing adapters retain read/write
+compatibility and report unsupported if deletion is requested.
+
 `DialCacheMetricsAdapter` and its label/outcome types are root exports.
+The optional `deletion(labels)` hook counts attempts after validation, with
+namespace, use case, key type and deepest configured layer (`remote` or `local`).
 [Observability](observability.md#custom-adapters) lists required and optional
 hooks, bounded labels, and the effects of omitting optional hooks.
 

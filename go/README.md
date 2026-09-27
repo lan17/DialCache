@@ -86,6 +86,26 @@ UTF-16 name ordering, numeric formatting, omission of `Absent`, escaping, and
 tracked Redis hash tags. Use the same namespace, key dimensions, codecs and
 policy in both languages when sharing entries.
 
+## Exact-key deletion
+
+`cache.Delete(ctx, identity)` removes one exact result from the live request
+memo carried by `ctx`, this instance's local store, and its configured remote.
+An empty `Identity.Namespace` inherits the instance namespace. Match the
+reader's full identity, including `Args` and `Tracked`; the wrong tracking
+mode identifies a different key and missing keys succeed.
+
+Maintenance ignores enabled state and policy, including inside `Disable`.
+The remote runs first: failure leaves local and memo entries untouched. Custom
+remotes opt in through `RemoteDeleter`; the existing `Remote` interface is
+unchanged. A configured adapter without it returns `ErrDeleteUnsupported`
+before changing any store. Local-only instances also support deletion.
+
+The bundled `RedisAdapter.Delete` uses one keyed `DEL`, accepting only integer
+0 or 1. Deletion never changes watermarks or cancels in-flight work: an admitted
+load can publish afterward and a caller can return an acquired snapshot. Other
+identities, instances and requests remain untouched. See the shared
+[invalidation guide](../docs/invalidation.md).
+
 ## Configuration and effects
 
 `Policy` uses `time.Duration`. Cache TTLs and recovery ages are whole seconds;

@@ -49,6 +49,12 @@ dropping the guard closes it. `enable` offers a callback form. `enable_in` and
 `disable_in` derive nested scopes; `Scope::outside()` runs without caching.
 Retained scope clones no longer enable caching after the outer scope closes.
 
+`cache.delete(&scope, identity).await` removes one exact result. Pass
+`Scope::outside()` without a request; an empty identity namespace inherits the
+cache's. Custom remotes override `supports_delete` and `delete`, or the call
+returns `Error::RemoteDeleteUnsupported` before mutation. Local-store removal
+failures surface as `Error::Local`. See [exact deletion](../invalidation.md#exact-key-deletion-versus-entity-invalidation).
+
 ## Policy and errors
 
 Static `Policy` builders use whole seconds for TTL/recovery ages and milliseconds
@@ -64,7 +70,7 @@ registration return native errors before work begins.
 Source errors appear as `Error::Source(Arc<dyn Error>)`; coalesced callers share
 that error instance. A source deadline produces `Error::FallbackTimeout` and
 does not cancel raw source work. Dropping a caller's returned future also does
-not cancel the execution or other followers. Explicit `invalidate` errors are
+not cancel the execution or other followers. Explicit `invalidate` and `delete` errors are
 returned to the maintenance caller. Cache plumbing fails open.
 
 ## Identity and values

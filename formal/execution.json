@@ -610,6 +610,29 @@
         "traces": 128,
         "outputDirectory": ".formal-traces/features/shadow-read-deadlines"
       }
+    },
+    {
+      "path": "formal/dialcache-deletion-conformance.qnt",
+      "profile": "deletion",
+      "invariants": [
+        "okDeleteLeavesKeyAbsentEverywhere",
+        "deleteLeavesWatermarks",
+        "deleteTouchesOnlyItsKey",
+        "failedDeleteChangesNothing",
+        "deleteIgnoresEnablement",
+        "deleteLeavesFlights",
+        "absentDeleteReportsOk",
+        "atomicPathSeedsDecodableFrames"
+      ],
+      "differential": {
+        "maxBytesPerStateRatio": 1.45
+      },
+      "generate": {
+        "maxSamples": 512,
+        "maxSteps": 40,
+        "traces": 128,
+        "outputDirectory": ".formal-traces/features/deletion"
+      }
     }
   ],
   "symbolic": {
@@ -659,7 +682,8 @@
           "local-failure": "Composes the remote freshness judgment (ageBeforeCeiling), but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets a ceiling (re-measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated (re-measured 2026-09-20 over the composed text).",
           "runtime-boundaries": "No scheduled history reaches an exact age boundary: every regression passes under the mutant.",
-          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior."
+          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -702,7 +726,8 @@
           "shadow-layers": "Frames are stamped with the wall clock at write release (remote_writes.dispatch) or seeded at a non-negative age; the skew is 0 and never shifts, so no history observes a future stamp.",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated.",
           "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated.",
-          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior."
+          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -740,7 +765,8 @@
           "local-failure": "Composes the remote freshness judgment (ageBeforeCeiling), but its wall clock never moves and every frame is stamped at the current instant, so a frame's age is always 0 and never meets a ceiling (re-measured 2026-09-20 over the composed text: every scheduled invariant and regression passes under the mutant).",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated (re-measured 2026-09-20 over the composed text).",
           "runtime-boundaries": "No scheduled history reaches an exact age boundary: every regression passes under the mutant.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -780,7 +806,8 @@
           "runtime-boundaries": "Composes local storage, but no input advances the clock, so no entry reaches its expiry.",
           "dark-layers": "The named dark-job histories and invariants do not distinguish inclusive local expiry. The sampled local-expiry witness drives native replay, but this profile supplies no model-side assertion for that exact local boundary.",
           "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
-          "local-clock": "The fractional profile supplies its lookup through local_grid using raw insertion ticks and localEntryLiveOnGrid; it does not execute the mutated local_storage.localValue lookup. All named histories and scheduled invariants pass under this fault. Its own precise-grid and hit-renewal faults remain separately checked."
+          "local-clock": "The fractional profile supplies its lookup through local_grid using raw insertion ticks and localEntryLiveOnGrid; it does not execute the mutated local_storage.localValue lookup. All named histories and scheduled invariants pass under this fault. Its own precise-grid and hit-renewal faults remain separately checked.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -827,7 +854,8 @@
           "shadow-layers": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
           "source-budgets": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
           "dark-layers": "This profile never calls localEntryLiveOnGrid. Its local expiry, if present, is already expressed in whole milliseconds; raw insertion/observation projection belongs to local-clock.",
-          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes fractional local insertion and lookup expiry in this bounded read-deadline profile; the imported rule alone does not establish detection."
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes fractional local insertion and lookup expiry in this bounded read-deadline profile; the imported rule alone does not establish detection.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -868,7 +896,8 @@
           "layers": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
           "local-failure": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
           "runtime-boundaries": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
-          "local-clock": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry."
+          "local-clock": "This profile has no source/read/shadow deadline. It imports the common rules through storage, but its scheduled histories and independent properties do not distinguish equality in deadlinePendingAt for physical retention or marker expiry.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         },
         "model": "formal/dialcache-effects-conformance.qnt"
       }
@@ -911,7 +940,8 @@
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -994,7 +1024,9 @@
           "dark-layers",
           "shadow-read-deadlines"
         ],
-        "exclusions": {},
+        "exclusions": {
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
+        },
         "scope": "Two outside callers start distinct sources. The connection monitor captures each caller from the external admission count and rejects an owners-table rewrite at the second source. This checks model bookkeeping only: native callers await their own source promise or goroutine result, with no owners table to mutate."
       }
     },
@@ -1026,7 +1058,8 @@
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -1063,7 +1096,8 @@
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -1100,7 +1134,8 @@
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "Caller remote reads never start because remote serving is off; the mutated caller read-admission policy is not used by the separate held dark C0 read.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -1149,7 +1184,8 @@
           "shadow-layers": "Uses the atomic caller traversal and RemoteWrites settlement, never RemoteIO::settleLoad; its guard also excludes ordinary stale caller recovery.",
           "source-budgets": "Uses the budgeted local projection, with no remote layer or held caller decode; it never executes RemoteIO::settleLoad.",
           "dark-layers": "Every reply disables caller remote serving; held C0 decodes belong to shadow jobs, and no caller retains a recovery candidate.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -1215,7 +1251,8 @@
           "shadow": "Coalescing is off and one caller runs at a time: every flight has one owner.",
           "local-failure": "Composes serving.complete through local_faults.settle, but admits one source at a time (no call begins while a source is pending), so every flight has one owner and the mutant's minimum-owner fold finishes the same call.",
           "local-clock": "Composes serving.complete through serving.callLocal, whose inline source settles in the step that starts it, so no flight ever gains a second owner and the mutant's minimum-owner fold finishes the same call.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -1305,7 +1342,9 @@
           "dark-layers",
           "shadow-read-deadlines"
         ],
-        "exclusions": {},
+        "exclusions": {
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
+        },
         "scope": "Two independent held reads start distinct loaders. The unchanged connection property rejects the second loader having no caller in the mutated ownership registry. Both ports return each independent source into its own caller without such a registry; this reproducer checks the model monitor, not a native wrong-key fault."
       }
     },
@@ -1348,7 +1387,8 @@
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after changing the shared strict read/write fence to an inclusive comparison. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -1383,7 +1423,8 @@
           "source-budgets": "Composes the local projection, which never reads a remote frame.",
           "layers": "Composes remote frames, but its 60 s freshness is never reached within the bound of 1 ms ticks.",
           "runtime-boundaries": "Composes remote frames, but no input advances the clock, so no frame ages to its freshness boundary.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -1490,7 +1531,8 @@
           "source-budgets": "The local projection has no remote read, so no tracked remote miss can withhold local publication.",
           "dark-layers": "Foreground remote serving is always off, so source local publication is permitted by both judgments.",
           "shadow-layers": "Dark sources may publish locally because remote serving is off. Its scheduled histories and properties do not detect the changed foreground tracked publication authority; layers and recovery-read supply that boundary.",
-          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes direct local publication after a tracked source refill in this bounded read-deadline profile; the imported rule alone does not establish detection."
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes direct local publication after a tracked source refill in this bounded read-deadline profile; the imported rule alone does not establish detection.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -1539,7 +1581,8 @@
           "local-clock": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
           "source-budgets": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
           "dark-layers": "The profile supplies an explicit sharing policy and never resolves an omitted coalesce leaf through libraryCoalescingDefault. The omitted-default connection belongs to runtime-boundaries.",
-          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes the inherited library coalescing default in this bounded read-deadline profile; the imported rule alone does not establish detection."
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes the inherited library coalescing default in this bounded read-deadline profile; the imported rule alone does not establish detection.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -1588,7 +1631,8 @@
           "local-clock": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
           "source-budgets": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
           "dark-layers": "The profile supplies retention directly and does not derive it through policy-overlay resolved retention. The captured maximum-of-freshness-and-recovery judgment is exercised by policy.",
-          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes physical retention beyond the fresh lifetime for recovery in this bounded read-deadline profile; the imported rule alone does not establish detection."
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes physical retention beyond the fresh lifetime for recovery in this bounded read-deadline profile; the imported rule alone does not establish detection.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -1630,7 +1674,8 @@
           "local-clock": "Composes the local projection without the recovery module, so the mutated retained-candidate judgment is never executed.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot.",
-          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes serving a retained recovery candidate at maximum-age equality in this bounded read-deadline profile; the imported rule alone does not establish detection."
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes serving a retained recovery candidate at maximum-age equality in this bounded read-deadline profile; the imported rule alone does not establish detection.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -1674,7 +1719,8 @@
           "shadow-layers": "Composes recovery on the atomic path, but its guard excludes every stale candidate, so no snapshot holds a candidate and neither its stamp nor its maximum is ever consulted.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "Remote serving is always off and no caller retains a recovery candidate; dark C0 bytes belong to the shadow job, not a recovery snapshot.",
-          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes preserving the original frame timestamp in a retained recovery candidate in this bounded read-deadline profile; the imported rule alone does not establish detection."
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes preserving the original frame timestamp in a retained recovery candidate in this bounded read-deadline profile; the imported rule alone does not establish detection.",
+          "deletion": "The deletion profile has no stale recovery or shadow scenario; imported helpers compose the held snapshot path with recovery disabled. Its runs and independent deletion receipts are measured under this shared fault."
         }
       }
     },
@@ -1791,7 +1837,8 @@
           "shadow-layers": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
           "local-clock": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
           "source-budgets": "This profile does not execute the shared tracked-read fence at timestamp equality with an observable value; scheduled histories and independent properties are measured under the fault.",
-          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes tracked read acceptance at watermark equality in this bounded read-deadline profile; the imported rule alone does not establish detection."
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes tracked read acceptance at watermark equality in this bounded read-deadline profile; the imported rule alone does not establish detection.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         },
         "scope": "A deterministic protocol transform exports language-neutral vector inputs rather than an asynchronous driver history. Exact generated rows have their own native input/output recording and clean baseline in both ports. The named run executes requestFor(546), the exact generated tracked frame row: createdAtMs and watermark are both one. Its miss classification must precede serving the frame.",
         "model": "formal/dialcache-frame-vectors.qnt"
@@ -1842,7 +1889,8 @@
           "local-clock": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
           "source-budgets": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
           "dark-layers": "This profile does not execute the affected shared judgment with a distinguishing input; its scheduled histories and independent properties are measured under the same mutation.",
-          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes ignoring a grouped watermark on an untracked read in this bounded read-deadline profile; the imported rule alone does not establish detection."
+          "shadow-read-deadlines": "All six scheduled histories and six invariants pass under this shared fault at 2000 samples by 40 steps. No scheduled assertion distinguishes ignoring a grouped watermark on an untracked read in this bounded read-deadline profile; the imported rule alone does not establish detection.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -2209,7 +2257,8 @@
           "local-clock": "The local projection has no remote layer, so refills is never judged.",
           "source-budgets": "The local projection never refills the remote layer, so refills is never judged.",
           "dark-layers": "Caller remote serving is off, so callers capture no remote-refill authority. Dark fills apply the shadow job fence independently of this caller-publication guard.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -2287,7 +2336,8 @@
           "local-clock": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
           "source-budgets": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
           "dark-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
-          "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection."
+          "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -2328,7 +2378,8 @@
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after memoizing a rejected source result. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -2363,7 +2414,8 @@
           "source-budgets": "Composes the local projection with no request scope: no input opens or closes a scope and every reply disables the request layer, so request_memo.closeScope is never executed.",
           "dark-layers": "The fault can clear peer request memos, but named histories never probe a previously populated peer memo after closing another scope. memoHoldsAcceptedValues permits empty rows; named runs and bounded invariant checks pass.",
           "layers": "Closing a scope can clear another open scope under this fault, but no scheduled layers regression closes a scope or probes another memo afterward. Scheduled invariants constrain closed rows and accepted ownership, not preservation of open memo rows; named runs and the bounded invariant check pass.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -2467,7 +2519,8 @@
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -2508,7 +2561,8 @@
           "local-clock": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
           "source-budgets": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
           "dark-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
-          "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection."
+          "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. This profile does not observe a memo populated after its request scope closes; the shared module being imported alone does not establish detection.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -2542,7 +2596,8 @@
           "shadow-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
           "source-budgets": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
           "dark-layers": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
-          "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it."
+          "shadow-read-deadlines": "All scheduled named histories and invariants pass under this fault at 2000 samples by 40 steps. The profile does not independently reject retaining an initially out-of-window candidate; subsequent maximum-age checks still prevent serving it.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -2609,7 +2664,8 @@
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "No caller recovery candidate is retained while remote serving is off; the recovery maximum is never judged.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -2646,7 +2702,8 @@
           "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
           "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read.",
           "dark-layers": "No caller enters recovery or releases a recovery decode; dark jobs decode their own C0 and never use the challenged recovery publication arm.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -2686,7 +2743,8 @@
           "scope": "Composes the request-only projection, which never reaches serving.authority.",
           "source-budgets": "Composes the local projection, which never reaches serving.authority.",
           "dark-layers": "Caller remote serving is off, so callers capture no refill retention. Held dark fills cap their own captured retention through remote_frames.physicalRetention.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -2754,7 +2812,8 @@
           "shadow-layers": "Composes the layered shape and reaches the mutated warm when a source is rejected while local storage participates, but none of its scheduled invariants or exported regressions reads the local slot between that rejection and the next publication (measured under the mutant at 2000 x 40 and over its exported regressions).",
           "local-clock": "Its inline sources only return accepted values, so the acceptance judgment in publishLocal never rejects one.",
           "dark-layers": "The held source lifecycle rejects errors before the accepted-only serving publication call. Native M37 also edits a serving/recovery failure-publication site outside finishRampedDownRemote; both ports replay this dark corpus unchanged under the absent-value mutation.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -2912,7 +2971,8 @@
           "shadow-layers": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
           "source-budgets": "Advances its clock in whole milliseconds through clock.advance and never composes the fractional clock, so the mutated projection is never executed.",
           "dark-layers": "The environment advances in whole milliseconds and never calls clock.advanceTicks; wall rollback changes no monotonic insertion grid.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -2958,7 +3018,8 @@
           "runtime-boundaries": "Composes local storage, but no input advances the clock, so a renewed insertion is invisible.",
           "shadow-layers": "Composes local storage; its one expiry regression reads the entry again only after the advances that expire it, with no hit in between, so a renewed insertion is invisible (measured under the mutant at 2000 x 40 and over its exported regressions).",
           "dark-layers": "The named dark-job histories and invariants do not constrain renewing local insertion expiry on a hit. Local-clock supplies the detecting model boundary; this profile does not claim that property.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -3046,7 +3107,8 @@
           "shadow": "This single-execution projection cannot admit a second source after its one source/job lifetime; its scheduled properties do not observe the settled process registry.",
           "independent": "Every caller has coalesce false and registers no process flight, so processFlights remains empty.",
           "shadow-layers": "Coalescing is disabled for its independent-source fixture, so no process flight is registered.",
-          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior."
+          "shadow-read-deadlines": "All six exported read-deadline histories and all six scheduled invariants at 2000 x 40 pass under this fault; this profile does not exercise the affected recovery or settled-flight reuse behavior.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       }
     },
@@ -3084,7 +3146,8 @@
           "shadow-layers": "Frames are stamped with the wall clock at write release (remote_writes.dispatch) or seeded at a non-negative age; the skew is 0 and never shifts, so no history observes a future stamp.",
           "local-clock": "Composes the local projection with no remote layer; its closure reaches cache-rules through wholeMs and localEntryLiveAt only, so ageBeforeCeiling is never evaluated.",
           "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -3198,7 +3261,8 @@
           "local-clock": "Composes serving.decide over the local projection, but an inline source settles in the step that starts it, so no flight is pending at any admission and the join arms are never taken.",
           "scope": "Composes the request-only projection, which passes no layer values to the decision, so no layer hit can precede a join.",
           "source-budgets": "Its replies always coalesce and its bypass sources warm nothing, so a live entry and a pending registered flight never coexist.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -3238,7 +3302,8 @@
           "layers": "Its replies always coalesce, so the conjunct the fault removes is always true and no history observes it.",
           "scope": "Composes the request-only projection, whose process join requires a shared layer this shape never has.",
           "source-budgets": "Its replies always coalesce, so the conjunct the fault removes is always true and no history observes it.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -3278,7 +3343,8 @@
           "local-failure": "Only one source can be pending, time never expires a local entry, and a failed local read withdraws local publication authority. The profile never requires replacing an occupied slot.",
           "shadow-layers": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; the partition checker remeasures that exclusion.",
           "dark-layers": "Local publication is reachable, but no scheduled regression or sampled invariant at the check bounds distinguishes skipping an occupied slot; the partition checker remeasures that exclusion.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         },
         "model": "formal/dialcache-policy-conformance.qnt"
       },
@@ -3319,7 +3385,8 @@
           "shadow-layers": "Rejected sources go through remote_writes.failed, which completes or recovers them without calling publishLocal with the rejected value.",
           "local-clock": "Its inline sources only return accepted values, so the failure-preserves-local branch is never taken.",
           "dark-layers": "Rejected held sources complete without calling publishLocal with the rejected value, so they cannot take the mutated failure branch.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         },
         "model": "formal/dialcache-policy-conformance.qnt"
       },
@@ -3365,7 +3432,8 @@
           "shadow-layers": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "local-clock": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
           "source-budgets": "Every named run and the scheduled invariant check at 2000 samples by 40 steps passes after removing the instance from pending process-flight identity. This bounded profile supplies no detecting assertion for that shared fault; the listed profiles carry its model evidence.",
-          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed."
+          "shadow-read-deadlines": "All six exported read-deadline regressions and the scheduled 2000 x 40 invariant check pass under this mutation. This profile claims separate dark read deadlines and raw ownership, not this property; detecting profiles are listed.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "measures": "Repeats the layers identity fault against the held dark path: every caller must own a source for its own key and instance."
@@ -3545,7 +3613,8 @@
           "shadow-layers": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "local-clock": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "source-budgets": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
-          "shadow-read-deadlines": "Measured with all six exported read-deadline histories and all six scheduled invariants at 2000 x 40: all pass. The profile imports flights but never calls recordInspectionAdmission or inspectProcess, so this inspection-only fault has no executed path."
+          "shadow-read-deadlines": "Measured with all six exported read-deadline histories and all six scheduled invariants at 2000 x 40: all pass. The profile imports flights but never calls recordInspectionAdmission or inspectProcess, so this inspection-only fault has no executed path.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -3592,7 +3661,8 @@
           "shadow-layers": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "local-clock": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
           "source-budgets": "This profile does not call inspectProcess or compare public coalescing snapshots; the modified inspection helper has no effect on its histories.",
-          "shadow-read-deadlines": "Measured with all six exported read-deadline histories and all six scheduled invariants at 2000 x 40: all pass. The profile imports flights but never calls recordInspectionAdmission or inspectProcess, so this inspection-only fault has no executed path."
+          "shadow-read-deadlines": "Measured with all six exported read-deadline histories and all six scheduled invariants at 2000 x 40: all pass. The profile imports flights but never calls recordInspectionAdmission or inspectProcess, so this inspection-only fault has no executed path.",
+          "deletion": "Exact deletion uses fresh 60-second entries and 1 ms ticks, with no recovery, shadow, timeout, fractional-clock or config-error scenarios. Its independent receipts constrain deletion effects; the named public runs cover deletion consequences. This reaching profile is measured under the fault by the partition checker."
         }
       },
       "nativeMutants": {
@@ -3654,6 +3724,400 @@
         "kind": "mapped",
         "mutant": "M62",
         "text": "M62 is the native twin of this model fault. Both ports complete the bounded read error but release its shadow registration before the raw adapter operation settles. The kernel removes the same job while retaining the raw read, and the generated competing-key admission checkpoint detects the premature capacity release."
+      }
+    },
+    {
+      "id": "deletion-skip-local",
+      "contract": "C61",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "invariant": "okDeleteLeavesKeyAbsentEverywhere",
+      "before": "val local = Local::removeLocal(remote, instance, key, layout.keysPerInstance)",
+      "after": "val local = remote",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M65",
+        "text": "M65 injects the same wrong exact-deletion boundary guarded by okDeleteLeavesKeyAbsentEverywhere.",
+        "evidence": {
+          "history": "deletion/deleteRemovesRequestLocalAndRemoteTest",
+          "step": 4,
+          "fields": [
+            "o.calls",
+            "o.loaders",
+            "o.reads"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "deleteRemovesRequestLocalAndRemoteTest",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2\n      and s.o.deletions == 1 and s.o.maintenance == List(\"ok\")",
+        "family": "deletion-skip-local",
+        "profiles": [
+          "deletion"
+        ],
+        "exclusions": {
+          "effects": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "policy": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "scope": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "admission": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "independent": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery-read": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-failure": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "runtime-boundaries": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-clock": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "source-budgets": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "dark-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-read-deadlines": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition."
+        }
+      }
+    },
+    {
+      "id": "deletion-disabled-skip-local",
+      "contract": "C61",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "invariant": "deleteIgnoresEnablement",
+      "before": "val local = Local::removeLocal(remote, instance, key, layout.keysPerInstance)",
+      "after": "val local = remote",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M65",
+        "text": "M65 injects the same wrong exact-deletion boundary guarded by deleteIgnoresEnablement.",
+        "evidence": {
+          "history": "deletion/deleteFromDisabledContextRemovesTest",
+          "step": 4,
+          "fields": [
+            "o.calls",
+            "o.loaders",
+            "o.reads"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "deleteFromDisabledContextRemovesTest",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2",
+        "family": "deletion-disabled-skip-local",
+        "profiles": [
+          "deletion"
+        ],
+        "exclusions": {
+          "effects": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "policy": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "scope": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "admission": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "independent": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery-read": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-failure": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "runtime-boundaries": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-clock": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "source-budgets": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "dark-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-read-deadlines": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition."
+        }
+      },
+      "measures": "The same omitted local removal independently challenges deletion from a disabled child context."
+    },
+    {
+      "id": "deletion-clears-watermark",
+      "contract": "C63",
+      "source": "formal/kernel/remote-frames.qnt",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "invariant": "deleteLeavesWatermarks",
+      "before": "expires: state.expires.replaceAt(key, 0),",
+      "after": "expires: state.expires.replaceAt(key, 0),\n    watermark: state.watermark.replaceAt(key / 2, 0),",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M66",
+        "text": "M66 injects the same wrong exact-deletion boundary guarded by deleteLeavesWatermarks.",
+        "evidence": {
+          "history": "deletion/deletePreservesWatermarkAndSiblingVariantsTest",
+          "step": 9,
+          "fields": [
+            "o.calls",
+            "o.loaders"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "deletePreservesWatermarkAndSiblingVariantsTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_TWO, CALL_PENDING)\n      and s.o.loaders == 1 and s.o.invalidations == 1 and s.o.deletions == 1",
+        "family": "deletion-clears-watermark",
+        "profiles": [
+          "deletion"
+        ],
+        "exclusions": {
+          "effects": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "policy": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "scope": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "admission": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "independent": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery-read": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-failure": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "runtime-boundaries": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-clock": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "source-budgets": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "dark-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-read-deadlines": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition."
+        }
+      }
+    },
+    {
+      "id": "deletion-failure-removes-local",
+      "contract": "C62",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "invariant": "failedDeleteChangesNothing",
+      "before": "if (not(supported) or failed) counted else {",
+      "after": "if (not(supported)) counted else if (failed) Local::removeLocal(counted, instance, key, layout.keysPerInstance) else {",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M67",
+        "text": "M67 injects the same wrong exact-deletion boundary guarded by failedDeleteChangesNothing.",
+        "evidence": {
+          "history": "deletion/remoteDeleteFailureKeepsLocalTest",
+          "step": 7,
+          "fields": [
+            "o.calls",
+            "o.loaders"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "remoteDeleteFailureKeepsLocalTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.loaders == 1",
+        "family": "deletion-failure-removes-local",
+        "profiles": [
+          "deletion"
+        ],
+        "exclusions": {
+          "effects": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "policy": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "scope": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "admission": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "independent": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery-read": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-failure": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "runtime-boundaries": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-clock": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "source-budgets": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "dark-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-read-deadlines": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition."
+        }
+      }
+    },
+    {
+      "id": "deletion-clears-siblings",
+      "contract": "C63",
+      "source": "formal/kernel/local-storage.qnt",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "invariant": "deleteTouchesOnlyItsKey",
+      "before": "localValues: state.localValues.replaceAt(slot, NO_VALUE),",
+      "after": "localValues: state.localValues.indices().fold(state.localValues, (out, i) => if (i / keysPerInstance == instance) out.replaceAt(i, NO_VALUE) else out),",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M68",
+        "text": "M68 injects the same wrong exact-deletion boundary guarded by deleteTouchesOnlyItsKey.",
+        "evidence": {
+          "history": "deletion/deletePreservesSiblingAndOtherRequestTest",
+          "step": 9,
+          "fields": [
+            "o.calls",
+            "o.loaders"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "deletePreservesSiblingAndOtherRequestTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 0",
+        "family": "deletion-clears-siblings",
+        "profiles": [
+          "deletion"
+        ],
+        "exclusions": {
+          "effects": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "policy": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "scope": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "admission": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "independent": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery-read": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-failure": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "runtime-boundaries": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-clock": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "source-budgets": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "dark-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-read-deadlines": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition."
+        }
+      }
+    },
+    {
+      "id": "deletion-clears-flight",
+      "contract": "C63",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "invariant": "deleteLeavesFlights",
+      "before": "Memo::forget(local, Memo::memoSlot(context, key, layout.keysPerScope, memoizes))",
+      "after": "Memo::forget({ processFlights: local.processFlights.replaceAt(instance * layout.keysPerInstance + key, NO_OWNER), ...local }, Memo::memoSlot(context, key, layout.keysPerScope, memoizes))",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M69",
+        "text": "M69 injects the same wrong exact-deletion boundary guarded by deleteLeavesFlights.",
+        "evidence": {
+          "history": "deletion/lateFillAfterDeleteRepopulatesTest",
+          "step": 3,
+          "fields": [
+            "o.calls",
+            "o.loaders"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "lateFillAfterDeleteRepopulatesTest",
+        "failure": "s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 1",
+        "family": "deletion-clears-flight",
+        "profiles": [
+          "deletion"
+        ],
+        "exclusions": {
+          "effects": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "policy": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "scope": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "admission": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "independent": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery-read": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-failure": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "runtime-boundaries": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-clock": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "source-budgets": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "dark-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-read-deadlines": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition."
+        }
+      }
+    },
+    {
+      "id": "deletion-local-only-unsupported",
+      "contract": "C62",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "invariant": "absentDeleteReportsOk",
+      "before": "val supported = not(state.remoteAvailable) or state.remoteDeletes",
+      "after": "val supported = state.remoteAvailable and state.remoteDeletes",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M70",
+        "text": "M70 injects the same wrong exact-deletion boundary guarded by absentDeleteReportsOk.",
+        "evidence": {
+          "history": "deletion/deleteAbsentLocalOnlyReportsOkTest",
+          "step": 1,
+          "fields": [
+            "o.maintenance"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "deleteAbsentLocalOnlyReportsOkTest",
+        "failure": "s.o.maintenance == List(\"ok\") and s.o.deletions == 0 and s.o.policyCalls == 0",
+        "family": "deletion-local-only-unsupported",
+        "profiles": [
+          "deletion"
+        ],
+        "exclusions": {
+          "effects": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "policy": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "scope": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "admission": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "independent": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery-read": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-failure": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "runtime-boundaries": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-clock": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "source-budgets": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "dark-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-read-deadlines": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition."
+        }
+      }
+    },
+    {
+      "id": "deletion-unsupported-succeeds",
+      "contract": "C62",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "invariant": "failedDeleteChangesNothing",
+      "before": "val supported = not(state.remoteAvailable) or state.remoteDeletes",
+      "after": "val supported = true",
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M71",
+        "text": "M71 injects the same wrong exact-deletion boundary guarded by failedDeleteChangesNothing.",
+        "evidence": {
+          "history": "deletion/deleteUnsupportedRemoteChangesNothingTest",
+          "step": 3,
+          "fields": [
+            "o.maintenance",
+            "o.deletions"
+          ]
+        }
+      },
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "deleteUnsupportedRemoteChangesNothingTest",
+        "failure": "s.o.deletions == 0 and s.o.maintenance == List(\"unsupported\")",
+        "family": "deletion-unsupported-succeeds",
+        "profiles": [
+          "deletion"
+        ],
+        "exclusions": {
+          "effects": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "policy": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "scope": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "admission": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "independent": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "recovery-read": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-failure": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "runtime-boundaries": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "local-clock": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "source-budgets": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "dark-layers": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition.",
+          "shadow-read-deadlines": "This profile imports the module for existing serving/storage transitions but never executes the new exact-deletion transition."
+        }
       }
     }
   ],

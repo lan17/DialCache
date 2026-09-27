@@ -36,6 +36,9 @@ pub trait LocalStore: Send + 'static {
     /// Returns the displaced entry (the replaced value or the evicted tail),
     /// which the cache drops outside its lock.
     fn put(&mut self, key: String, entry: LocalEntry) -> Result<Option<LocalEntry>, BoxError>;
+    /// Remove one key, returning its displaced entry to drop outside the cache
+    /// lock. A missing key succeeds with `None`.
+    fn remove(&mut self, key: &str) -> Result<Option<LocalEntry>, BoxError>;
 }
 
 /// The outcome of one [`LocalStore::get`].
@@ -79,6 +82,10 @@ impl LruLocalStore {
 }
 
 impl LocalStore for LruLocalStore {
+    fn remove(&mut self, key: &str) -> Result<Option<LocalEntry>, BoxError> {
+        Ok(self.entries.pop(key))
+    }
+
     fn get(&mut self, key: &str, now_ms: i64) -> Result<LocalRead, BoxError> {
         // Peek, check freshness, then promote: an expired entry leaves the LRU
         // order untouched apart from its own removal.

@@ -23,6 +23,8 @@ pub enum MetricKind {
     Error,
     /// Counter of explicit invalidation attempts ([`Event::Invalidation`]).
     Invalidation,
+    /// Counter of exact-key deletion attempts ([`Event::Deletion`]).
+    Deletion,
     /// Counter of callers that joined an in-flight execution ([`Event::Coalesced`]).
     Coalesced,
     /// Counter of terminal shadow job outcomes ([`Event::ShadowValidation`]).
@@ -62,12 +64,13 @@ const LABEL_KEY_TYPE: &str = "key_type";
 
 impl MetricKind {
     /// Every kind, in declaration order.
-    pub const ALL: [MetricKind; 19] = [
+    pub const ALL: [MetricKind; 20] = [
         MetricKind::Request,
         MetricKind::Miss,
         MetricKind::Disabled,
         MetricKind::Error,
         MetricKind::Invalidation,
+        MetricKind::Deletion,
         MetricKind::Coalesced,
         MetricKind::ShadowValidation,
         MetricKind::ShadowValueAge,
@@ -92,6 +95,7 @@ impl MetricKind {
             Event::Disabled { .. } => MetricKind::Disabled,
             Event::Error { .. } => MetricKind::Error,
             Event::Invalidation { .. } => MetricKind::Invalidation,
+            Event::Deletion { .. } => MetricKind::Deletion,
             Event::Coalesced { .. } => MetricKind::Coalesced,
             Event::ShadowValidation { .. } => MetricKind::ShadowValidation,
             Event::ShadowValueAge { .. } => MetricKind::ShadowValueAge,
@@ -117,6 +121,7 @@ impl MetricKind {
             MetricKind::Disabled => "disabled",
             MetricKind::Error => "error",
             MetricKind::Invalidation => "invalidation",
+            MetricKind::Deletion => "deletion",
             MetricKind::Coalesced => "coalesced",
             MetricKind::ShadowValidation => "shadowValidation",
             MetricKind::ShadowValueAge => "shadowValueAge",
@@ -144,6 +149,7 @@ impl MetricKind {
                 | MetricKind::Disabled
                 | MetricKind::Error
                 | MetricKind::Invalidation
+                | MetricKind::Deletion
                 | MetricKind::Coalesced
                 | MetricKind::ShadowValidation
                 | MetricKind::StaleRecovery
@@ -173,6 +179,7 @@ impl MetricKind {
         ];
         match self {
             MetricKind::Request
+            | MetricKind::Deletion
             | MetricKind::FutureTimestampOffset
             | MetricKind::Get
             | MetricKind::Fallback
@@ -234,6 +241,17 @@ impl MetricKind {
                 layer,
             } => {
                 labels.push((LABEL_CACHE_NAMESPACE, namespace.to_string()));
+                labels.push((LABEL_KEY_TYPE, key_type.to_string()));
+                labels.push(("layer", layer.as_str().to_string()));
+            }
+            Event::Deletion {
+                namespace,
+                key_type,
+                use_case,
+                layer,
+            } => {
+                labels.push((LABEL_CACHE_NAMESPACE, namespace.to_string()));
+                labels.push((LABEL_USE_CASE, use_case.to_string()));
                 labels.push((LABEL_KEY_TYPE, key_type.to_string()));
                 labels.push(("layer", layer.as_str().to_string()));
             }
@@ -345,6 +363,7 @@ impl MetricKind {
             | Event::Disabled { .. }
             | Event::Error { .. }
             | Event::Invalidation { .. }
+            | Event::Deletion { .. }
             | Event::Coalesced { .. }
             | Event::ShadowValidation { .. }
             | Event::StaleRecovery { .. }
@@ -418,6 +437,12 @@ mod tests {
                 key_type: Arc::from("item"),
                 layer: Layer::Remote,
             },
+            MetricKind::Deletion => Event::Deletion {
+                namespace: Arc::from("logical"),
+                key_type: Arc::from("item"),
+                use_case: Arc::from("lookup"),
+                layer: Layer::Remote,
+            },
             MetricKind::Coalesced => Event::Coalesced {
                 labels: outcome(),
                 scope: CoalescingScope::Process,
@@ -489,7 +514,7 @@ mod tests {
         }
         let names: std::collections::HashSet<&str> =
             MetricKind::ALL.iter().map(|k| k.as_str()).collect();
-        assert_eq!(names.len(), 19);
+        assert_eq!(names.len(), 20);
     }
 
     #[test]
@@ -613,6 +638,7 @@ mod tests {
                 "disabled",
                 "error",
                 "invalidation",
+                "deletion",
                 "coalesced",
                 "shadowValidation",
                 "staleRecovery",

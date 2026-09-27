@@ -55,6 +55,10 @@ export class LocalCache {
     });
   }
 
+  delete(key: string): void {
+    this.cache?.delete(key);
+  }
+
   put<T>(key: DialCacheKey, value: T, config: { readonly ttlSec: number }): void {
     // lru-cache expires when age > ttl, while DialCache historically expired
     // when its integer-millisecond clock reached the configured boundary.

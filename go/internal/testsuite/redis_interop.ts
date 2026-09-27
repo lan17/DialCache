@@ -58,6 +58,9 @@ async function main() {
         const value = action.binary ? undefined : await codec.load(payload);
         results.push({ kind: "hit", stamp: result.createdAtMs, ...(keys ? { keys } : {}),
           ...(action.binary ? { binaryHex: Buffer.from(payload).toString("hex") } : { value: value === undefined ? { absent: true } : value }) });
+      } else if (action.op === "delete") {
+        await adapter.delete!({ valueKey: key });
+        results.push({ kind: "deleted" });
       } else if (action.op === "invalidate") {
         const realNow = Date.now;
         Date.now = () => action.stamp;

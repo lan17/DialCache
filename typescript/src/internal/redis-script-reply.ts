@@ -1,5 +1,12 @@
 import { DialCacheRedisProtocolError } from "../redis-client.js";
 
+/** Validate the count from DEL of exactly one value key. */
+export function validateRedisDelReply(reply: unknown): void {
+  if (reply !== 0 && reply !== 1) {
+    throw new DialCacheRedisProtocolError("Invalid DialCache Redis DEL reply; expected integer 0 or 1");
+  }
+}
+
 export function validateRedisSetReply(reply: unknown): void {
   const text = typeof reply === "string"
     ? reply

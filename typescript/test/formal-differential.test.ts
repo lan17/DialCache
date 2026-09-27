@@ -222,7 +222,7 @@ describe("corpus differential comparison", () => {
   }, 30_000);
 
   it("selects the composed profiles by their kernel imports in either revision, following helper libraries, and lists every Quint source", () => {
-    expect(differential.composedProfiles(readExecution())).toEqual(["effects", "recovery", "policy", "shadow", "scope", "admission", "layers", "independent", "recovery-read", "local-failure", "runtime-boundaries", "shadow-layers", "local-clock", "source-budgets", "dark-layers", "shadow-read-deadlines"]);
+    expect(differential.composedProfiles(readExecution())).toEqual(["effects", "recovery", "policy", "shadow", "scope", "admission", "layers", "independent", "recovery-read", "local-failure", "runtime-boundaries", "shadow-layers", "local-clock", "source-budgets", "dark-layers", "shadow-read-deadlines", "deletion"]);
     // A profile composed only at the reference (a rewrite off the library) is still selected.
     const referenceTree = mkdtempSync(join(tmpdir(), "differential-reference-"));
     const candidateTree = mkdtempSync(join(tmpdir(), "differential-candidate-"));
@@ -292,7 +292,7 @@ describe("corpus differential comparison", () => {
     expect(shadow).not.toEqual(expect.arrayContaining(["layers"]));
     expect(shadow).not.toEqual(expect.arrayContaining(["recovery"]));
     expect(shadow).not.toEqual(expect.arrayContaining(["effects"]));
-    expect(shards.flat()).toEqual(expect.arrayContaining(["effects", "dark-layers", "shadow-read-deadlines"]));
+    expect(shards.flat()).toEqual(expect.arrayContaining(["effects", "dark-layers", "shadow-read-deadlines", "deletion"]));
     // Names without timing history still distribute evenly and deterministically.
     expect([1, 2, 3].map(index => differential.shardProfiles(["z", "a", "b", "c"], index, 3)))
       .toEqual([["a", "z"], ["b"], ["c"]]);

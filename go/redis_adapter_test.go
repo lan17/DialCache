@@ -140,3 +140,26 @@ func TestNormalizeReadResultBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestRedisAdapterDeleteSingleKeyAndReplyValidation(t *testing.T) {
+	for _, reply := range []int64{0, 1, 2, -1} {
+		calls := 0
+		adapter := hookedRedis(t, func(cmd redis.Cmder) error {
+			calls++
+			if !reflect.DeepEqual(cmd.Args(), []any{"del", "{entity}#value:dialcache-frame-v1"}) {
+				t.Fatal(cmd.Args())
+			}
+			cmd.(*redis.IntCmd).SetVal(reply)
+			return nil
+		})
+		err := adapter.Delete(context.Background(), "{entity}#value:dialcache-frame-v1")
+		if (err != nil) != (reply < 0 || reply > 1) || calls != 1 {
+			t.Fatalf("reply %d: %v calls=%d", reply, err, calls)
+		}
+	}
+	for _, reply := range []any{nil, "0", false, float64(1), []byte("1"), int(1)} {
+		if ValidateRedisDelReply(reply) == nil {
+			t.Fatalf("invalid DEL reply %T accepted", reply)
+		}
+	}
+}

@@ -106,6 +106,8 @@ str_enum! {
         /// An explicit invalidation failed, including one made without a
         /// remote adapter.
         Invalidation => "invalidation",
+        /// An explicit exact-key deletion failed at the remote or local store.
+        Deletion => "deletion",
         /// The source failed, panicked or exceeded its deadline; reported
         /// with `in_fallback` set.
         Fallback => "fallback",
@@ -278,6 +280,17 @@ pub enum Event {
         /// The entity type being invalidated.
         key_type: Arc<str>,
         /// Always [`Layer::Remote`]: watermarks live only in the remote layer.
+        layer: Layer,
+    },
+    /// One exact-key deletion attempt after identity and capability validation.
+    Deletion {
+        /// The identity namespace.
+        namespace: Arc<str>,
+        /// The entity type.
+        key_type: Arc<str>,
+        /// The operation name.
+        use_case: Arc<str>,
+        /// Deepest configured store: remote when configured, otherwise local.
         layer: Layer,
     },
     /// A caller joined an execution already in flight for the same logical
@@ -487,6 +500,8 @@ pub enum LogEvent {
     ShadowMismatch(ShadowMismatchDetails),
     /// An explicit invalidation failed; the same error is returned to the caller.
     InvalidationFailed(BoxError),
+    /// An exact-key deletion failed; the same error is returned to the caller.
+    DeletionFailed(BoxError),
 }
 
 impl LogEvent {
@@ -550,6 +565,7 @@ impl fmt::Display for LogEvent {
                 }
                 Ok(())
             }
+            LogEvent::DeletionFailed(e) => write!(f, "Error deleting DialCache entry: {e}"),
             LogEvent::InvalidationFailed(e) => {
                 write!(f, "Error writing DialCache invalidation watermark: {e}")
             }

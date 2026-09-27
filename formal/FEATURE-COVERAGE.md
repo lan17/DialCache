@@ -186,3 +186,5 @@ Atomic primary reads, stable retained bytes, suitable clocks, executor progress
 and watermark durability remain environmental assumptions. Race detection covers
 exercised schedules; sampled model checks do not prove fairness or universal
 refinement. The inventory keeps known cases and remaining domains reviewable.
+
+Exact cached-result deletion is tracked by C61.exact-deletion, C62.deletion-failure and C63.deletion-boundaries. Public generated probes independently exercise successful removal, unsupported/failing remote preservation and boundaries for sibling identities, owners, watermarks, held snapshots and flights.

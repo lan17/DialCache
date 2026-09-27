@@ -4,6 +4,7 @@ import { assertObservation } from "./divergence.mjs";
 import { emptyObservation } from "./observation.mjs";
 import { assertInputMetadata, itfInteger, itfSignedInteger, record } from "./itf.mjs";
 import { recoveryReadProfile } from "./profiles/recovery-read.mjs";
+import { deletionProfile } from "./profiles/deletion.mjs";
 import { localFailureProfile } from "./profiles/local-failure.mjs";
 import { runtimeBoundariesProfile } from "./profiles/runtime-boundaries.mjs";
 import { shadowLayersProfile } from "./profiles/shadow-layers.mjs";
@@ -48,6 +49,7 @@ const shadowSeed = { choices: [1, 2, 3, 4, 5, 6, 7, 8], input: (choice) => choic
     : choice === 8 ? { op: "seed", payloadHex: "22636166c3a922" } : choice === 6 ? { op: "seed", payloadText: " 1" }
       : { op: "seed", payloadHex: choice === 3 ? "31" : choice === 4 ? "32" : "2031" } };
 export const profiles = {
+  deletion: deletionProfile,
   "dark-layers": darkLayersProfile,
   "shadow-read-deadlines": shadowReadDeadlinesProfile,
   "source-budgets": sourceBudgetsProfile,

@@ -636,3 +636,10 @@ no remaining job timer. M61 and M62 distinguish losing bounded completion from
 releasing raw ownership early, in the model and both native implementations.
 Existing profiles retain their simpler projection when their bounds cannot
 reach a separate shadow read deadline; factoring `retireJob` preserves it.
+
+Exact deletion is composed by `serving.deleteEntry`: `remote_frames.removeFrame`
+removes one frame without its watermark, `local_storage.removeLocal` removes
+one instance's value and LRU membership, and `request_memo.forget` removes the
+existing live holder's memo slot. The deletion profile records independent
+before-state receipts; its witness classifier reads only public inputs and
+observations through `public-prefix.mjs`.

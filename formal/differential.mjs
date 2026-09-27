@@ -385,7 +385,7 @@ export function selectProfiles(prepared) {
 // These weights only place whole profiles; they never select or drop histories.
 const replaySeconds = {
   admission: 170, 'dark-layers': 400, effects: 700, independent: 280,
-  layers: 450, 'local-clock': 80, 'local-failure': 70, policy: 260,
+  layers: 450, deletion: 450, 'local-clock': 80, 'local-failure': 70, policy: 260,
   recovery: 500, 'recovery-read': 250, 'runtime-boundaries': 220, scope: 170,
   shadow: 1300, 'shadow-layers': 350, 'shadow-read-deadlines': 100, 'source-budgets': 140,
 };

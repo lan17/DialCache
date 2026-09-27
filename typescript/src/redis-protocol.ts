@@ -28,6 +28,7 @@ export type {
   RedisReadResult,
 } from "./redis-client.js";
 export {
+  validateRedisDelReply,
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
 } from "./internal/redis-script-reply.js";

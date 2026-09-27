@@ -43,6 +43,12 @@ exercise both forms of identity, ordinary and canceled concurrent callers,
 deadline boundaries, sparse runtime policies, and argument adaptation through
 the public API.
 
+`await cache.delete(key=..., key_type=..., use_case=...,
+track_for_invalidation=False)` removes one exact result. It uses the existing
+live context even inside `disable()` and is independent of runtime policy.
+Custom clients may implement `RedisDeleteClient`; missing support raises
+`RemoteDeleteUnsupportedError`. See [exact deletion](../invalidation.md#exact-key-deletion-versus-entity-invalidation).
+
 ## Identity and policy
 
 Prefer `cache_key=` to select identity explicitly, as shown in the shared

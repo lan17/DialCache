@@ -8,32 +8,32 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "f3989f3032706ec6880ea29805dd1634964d868a2c3d99188adc6eaa1aac68ca",
-    "executionSha256": "bdb8428c4fc4b34d7eed84d60f53fce53331bc3d3f16433c720e34331a9ea64f",
-    "sourceAuditSha256": "b3c2a358529c0d72e40103fc919dc9b07121802ad715106312d7df691d56ad85",
-    "featureCoverageSha256": "e177762da07f2b796a8bd9bc9ba69f6261b82cd9cee98391e97c2bfc3253d964",
-    "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
-    "profilesSha256": "15fbdb476b5ee9f39ea017ef5668d9c26cb7d53ebc96a6b7c4f531cccfa8d897"
+    "semanticCasesSha256": "87aa8e430631dedd8c85400d436cb94719c72af0e2c027b8eca4333762ccd847",
+    "executionSha256": "a21a8d186e07e9ecf1ee6bec6c4d8b7d9eeeca6893691fbc75fbb822af9a420d",
+    "sourceAuditSha256": "4ca9fbf49290d5fae17f8d6549a11d6574e9db71352d797e040add23d8939209",
+    "featureCoverageSha256": "b7f700e9af7911942f6f8275dc25142b33b626a6f0831e121ee99477a85c3385",
+    "coverageWitnessesSha256": "ffea1970977f29fc8396a255934737bba8387619f67ceaa86f0fb5557f41b579",
+    "profilesSha256": "54f16d32fa35eb58eccf677d8f3510d70d8d7d9742544913def7912b120a5f2a"
   },
   "inventory": {
-    "behavioralCases": 244,
-    "withRequiredGeneratedWitnesses": 244,
+    "behavioralCases": 247,
+    "withRequiredGeneratedWitnesses": 247,
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
-    "sourceDeclarations": 772,
-    "casesWithScheduledChecks": 266,
-    "requiredWitnesses": 497,
-    "casesWithQuintRegressionReplay": 192,
+    "sourceDeclarations": 793,
+    "casesWithScheduledChecks": 269,
+    "requiredWitnesses": 511,
+    "casesWithQuintRegressionReplay": 195,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
-    "quintModels": 32,
-    "scheduledInvariants": 253,
-    "scheduledRegressions": 468,
+    "quintModels": 33,
+    "scheduledInvariants": 260,
+    "scheduledRegressions": 482,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 343,
-    "exportedRegressionHistories": 358
+    "caseReferencedWitnesses": 357,
+    "exportedRegressionHistories": 372
   },
   "cases": [
     {
@@ -3247,6 +3247,48 @@
         "nativeGo": [],
         "scope": "A later served-hit shadow job rejects within its own ten-millisecond budget and reports source_error, preserving the acquired caller value; both native ports replay the exact generated schedule."
       }
+    },
+    {
+      "id": "C61.exact-deletion",
+      "kind": "portable-behavior",
+      "group": "exact-deletion",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [
+          "go/delete_test.go"
+        ],
+        "scope": "Exact deletion obligations bind the generated deletion histories to each public native API. Native tests supplement capability, validation, metrics, and remote dispatch boundaries; this inventory is not completed execution evidence."
+      }
+    },
+    {
+      "id": "C62.deletion-failure",
+      "kind": "portable-behavior",
+      "group": "exact-deletion",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [
+          "go/delete_test.go"
+        ],
+        "scope": "Exact deletion obligations bind the generated deletion histories to each public native API. Native tests supplement capability, validation, metrics, and remote dispatch boundaries; this inventory is not completed execution evidence."
+      }
+    },
+    {
+      "id": "C63.deletion-boundaries",
+      "kind": "portable-behavior",
+      "group": "exact-deletion",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [
+          "go/delete_test.go"
+        ],
+        "scope": "Exact deletion obligations bind the generated deletion histories to each public native API. Native tests supplement capability, validation, metrics, and remote dispatch boundaries; this inventory is not completed execution evidence."
+      }
     }
   ],
   "sourceDeclarationScope": {
@@ -3350,20 +3392,20 @@
               "Logger",
               "RecoveryPredicate"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "2690bc46da14c9dc541cd0f7484dd29d1832c0825c2c4e7d1b0d2aaaa621615c"
           }
         ]
       }
     },
     {
       "path": "typescript/src/context.ts",
-      "sha256": "11ba0a9181aa8bdd171d668a3d2909843c5e44c775425141741413dfb80c9631",
+      "sha256": "12c38bf165f608a7f46ad64f5c205adf08aa13df9672587b49bd34e9f4ac50d4",
       "candidateGoFiles": [
         "go/cache.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "An explicit Go context carries a per-cache live request holder. Enable closes the holder when its callback returns; Disable preserves the outer holder while bypassing caching. Goroutines must propagate the supplied context. This replaces AsyncLocalStorage and promise lifetime mechanics.",
+        "rationale": "An explicit Go context carries a per-cache live request holder. Enable closes the holder when its callback returns; Disable preserves the outer holder while bypassing caching. Goroutines must propagate the supplied context. This replaces AsyncLocalStorage and promise lifetime mechanics. Delete inspects the existing live scope owner regardless of enabled state, removes only its memo value, and leaves flights intact.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -3378,16 +3420,17 @@
               "Disable",
               "IsEnabled",
               "WithEnabled",
-              "WithDisabled"
+              "WithDisabled",
+              "Delete"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "58963717859b52d48c19fa56d57acf9425816aa4dd4297756ded17c37778cc5b"
           }
         ]
       }
     },
     {
       "path": "typescript/src/datadog.ts",
-      "sha256": "078ee508e948dcf997b556e6ab34d6c5e779c057dd588f2b7b16dee40fcf2c41",
+      "sha256": "ae2cc8a574d04a9591c5b3ae4e96c7b7384175eea6fd5a54f98c74b2ace5b341",
       "candidateGoFiles": [
         "go/metrics_datadog.go",
         "go/metrics.go"
@@ -3408,7 +3451,7 @@
               "NewDatadogMetrics",
               "ObserveEvent"
             ],
-            "sha256": "84f56821e1234a7ae77569c1429d2385a13bedb1ce7d1a5186a1d808ebe6809b"
+            "sha256": "bb82d0a1e211ba18ed63f9905a066507a97ea7bb50158a20d1210d4114b4ffd5"
           },
           {
             "path": "go/metrics.go",
@@ -3417,14 +3460,14 @@
               "metricLabels",
               "metricValue"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "d4207016f4030152c2c7d9aa946b4b544e588877e1d25daa0be9c99be2c6be07"
           }
         ]
       }
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "90e83928537806591b4de1553c81dc542bb59615150b90d5897d929532e15702",
+      "sha256": "60ff2584a7620e94ce832bc6af60453a64aa252ed35a0de28b3fdffd63dae6bc",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -3436,7 +3479,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings.",
+        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. Cache.Delete validates the concrete Identity and optional RemoteDeleter before metrics, calls the remote first, then removes this instance and live request entries together without policy lookup.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -3452,9 +3495,10 @@
               "Enable",
               "Disable",
               "IsEnabled",
-              "Invalidate"
+              "Invalidate",
+              "Delete"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "58963717859b52d48c19fa56d57acf9425816aa4dd4297756ded17c37778cc5b"
           },
           {
             "path": "go/bindings.go",
@@ -3500,9 +3544,11 @@
             "symbols": [
               "Option",
               "Operation",
-              "Event"
+              "Event",
+              "RemoteDeleter",
+              "ErrDeleteUnsupported"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "2690bc46da14c9dc541cd0f7484dd29d1832c0825c2c4e7d1b0d2aaaa621615c"
           },
           {
             "path": "go/internal/logging/logging.go",
@@ -3516,14 +3562,14 @@
     },
     {
       "path": "typescript/src/errors.ts",
-      "sha256": "a3ebca8ae9ed370d6601132fa69878696685ce12f5bb021e49df3ca746f369d3",
+      "sha256": "8d73009fe84c909f835a2e1510dca9bed753580239f37099440cc9436e3329f4",
       "candidateGoFiles": [
         "go/api.go",
         "go/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Public failure categories use concrete Go errors plus errors.Is/errors.As instead of an inheritance hierarchy. Deadline errors retain timeout values; adapter protocol/payload errors remain distinct, source errors keep identity, and callback panics become CallbackPanicError.",
+        "rationale": "Public failure categories use concrete Go errors plus errors.Is/errors.As instead of an inheritance hierarchy. Deadline errors retain timeout values; adapter protocol/payload errors remain distinct, source errors keep identity, and callback panics become CallbackPanicError. ErrDeleteUnsupported is the distinct pre-mutation error for a configured adapter that lacks the optional exact-key capability.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -3535,9 +3581,10 @@
               "FallbackTimeoutError",
               "RemoteReadTimeoutError",
               "CallbackPanicError",
-              "ErrNoRemote"
+              "ErrNoRemote",
+              "ErrDeleteUnsupported"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "2690bc46da14c9dc541cd0f7484dd29d1832c0825c2c4e7d1b0d2aaaa621615c"
           },
           {
             "path": "go/redis_adapter.go",
@@ -3545,14 +3592,14 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "3e6074c7a254eab8c2956acf0ae8238e0db79c90743ee05e8b82b977e91e829c"
           }
         ]
       }
     },
     {
       "path": "typescript/src/index.ts",
-      "sha256": "bbf222cec750670240b0475f1e4ab8a071d86fee2a10c3e1d30b8d314d38be5d",
+      "sha256": "dcc3e4cf74ba001f1a237fb1c8e340b449f216610513883998188b7b73a62636",
       "candidateGoFiles": [
         "go/api.go",
         "go/bindings.go",
@@ -3576,7 +3623,7 @@
               "Codec",
               "Remote"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "2690bc46da14c9dc541cd0f7484dd29d1832c0825c2c4e7d1b0d2aaaa621615c"
           },
           {
             "path": "go/bindings.go",
@@ -3590,7 +3637,7 @@
             "symbols": [
               "New"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "58963717859b52d48c19fa56d57acf9425816aa4dd4297756ded17c37778cc5b"
           },
           {
             "path": "go/policy.go",
@@ -3714,7 +3761,7 @@
               "TimerClock",
               "DeferredExecutor"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "2690bc46da14c9dc541cd0f7484dd29d1832c0825c2c4e7d1b0d2aaaa621615c"
           }
         ]
       }
@@ -3758,7 +3805,7 @@
     },
     {
       "path": "typescript/src/internal/local-cache.ts",
-      "sha256": "506914e17cfdddacbf2c84e01c6893fe0dc87d509e7688cfc1718d0584470527",
+      "sha256": "5ab3929fd50bfb605f076a501bbd990ea86d370e898e2f386353e58077d5dff2",
       "candidateGoFiles": [
         "go/internal/localcache/cache.go",
         "go/cache.go",
@@ -3767,7 +3814,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The internal localcache.Store wraps HashiCorp simplelru with its own mutex and captures insertion time and TTL as whole monotonic milliseconds, matching TypeScript clock quantization. Root New supplies the configured clock callback and disables storage at zero capacity while still permitting coalescing. Expiration compares integer differences without converting a large clock origin to time.Duration. Reads promote recency without renewing TTL, and process-local values are outside synchronous remote invalidation. Default system clocks use a common process-relative millisecond grid while keeping a nearby nonnegative elapsed origin; custom clocks retain their supplied origin.",
+        "rationale": "The internal localcache.Store wraps HashiCorp simplelru with its own mutex and captures insertion time and TTL as whole monotonic milliseconds, matching TypeScript clock quantization. Root New supplies the configured clock callback and disables storage at zero capacity while still permitting coalescing. Expiration compares integer differences without converting a large clock origin to time.Duration. Reads promote recency without renewing TTL, and process-local values are outside synchronous remote invalidation. Default system clocks use a common process-relative millisecond grid while keeping a nearby nonnegative elapsed origin; custom clocks retain their supplied origin. Store.Remove removes only the named LRU entry without clock access; a nil receiver preserves zero-capacity deletion as a no-op.",
         "nativeAdaptations": [
           "B02",
           "B03",
@@ -3781,16 +3828,17 @@
               "Store",
               "New",
               "Get",
-              "Put"
+              "Put",
+              "Remove"
             ],
-            "sha256": "543cb54ab08dbfb297d16a5eb8202e96cce76755eb602ca2b26e06af882e9b02"
+            "sha256": "9a50a59d250de871e646b33a76bf68aec7e6f88972c544a4ac1f04fed110bcb6"
           },
           {
             "path": "go/cache.go",
             "symbols": [
               "New"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "58963717859b52d48c19fa56d57acf9425816aa4dd4297756ded17c37778cc5b"
           },
           {
             "path": "go/engine.go",
@@ -3802,7 +3850,7 @@
           },
           {
             "path": "go/api.go",
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f",
+            "sha256": "2690bc46da14c9dc541cd0f7484dd29d1832c0825c2c4e7d1b0d2aaaa621615c",
             "symbols": [
               "systemClock",
               "newSystemClock"
@@ -3842,16 +3890,17 @@
     },
     {
       "path": "typescript/src/internal/redis-cache.ts",
-      "sha256": "6fd0f9d16289efd66d60cfdf538d44fb520301a45634f72c5aaaaf4f79deae79",
+      "sha256": "fab6617b45926ed138c1328973baf06f5099618d6852f07c57b5bc05854bfb42",
       "candidateGoFiles": [
         "go/engine.go",
         "go/shadow.go",
         "go/codec.go",
-        "go/redis_adapter.go"
+        "go/redis_adapter.go",
+        "go/cache.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Serving, retained stale recovery, compression, timestamp validation and local publication are in execution methods; detached shadow validation is separate. A raw semantic read is normalized before serving, elapsed deadlines retain acquired snapshots, and both tracked refill timestamp checks precede a complete frame write.",
+        "rationale": "Serving, retained stale recovery, compression, timestamp validation and local publication are in execution methods; detached shadow validation is separate. A raw semantic read is normalized before serving, elapsed deadlines retain acquired snapshots, and both tracked refill timestamp checks precede a complete frame write. Exact deletion is orchestrated by Cache.Delete rather than the read/write execution layer; it forwards only the complete value key through RemoteDeleter.",
         "nativeAdaptations": [
           "B02",
           "B03"
@@ -3891,7 +3940,14 @@
               "Read",
               "Write"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "3e6074c7a254eab8c2956acf0ae8238e0db79c90743ee05e8b82b977e91e829c"
+          },
+          {
+            "path": "go/cache.go",
+            "symbols": [
+              "Delete"
+            ],
+            "sha256": "58963717859b52d48c19fa56d57acf9425816aa4dd4297756ded17c37778cc5b"
           }
         ]
       }
@@ -3916,7 +3972,7 @@
             "symbols": [
               "Invalidate"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "58963717859b52d48c19fa56d57acf9425816aa4dd4297756ded17c37778cc5b"
           },
           {
             "path": "go/redis_adapter.go",
@@ -3925,7 +3981,7 @@
               "InvalidateDecimal",
               "InvalidationScript"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "3e6074c7a254eab8c2956acf0ae8238e0db79c90743ee05e8b82b977e91e829c"
           }
         ]
       }
@@ -3959,13 +4015,13 @@
     },
     {
       "path": "typescript/src/internal/redis-script-reply.ts",
-      "sha256": "ed209f330943aa158a3ae31ba59b7a2acd8f0d7d082f8cdef77bbb9338ed7dbb",
+      "sha256": "61ba118fb694ef4f148e635a25743f1c0f24dc10b9c15050c08d8ef6bf6c6fca",
       "candidateGoFiles": [
         "go/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The native go-redis adapter validates exact semantic reply classes: SET must return the string OK and successful invalidation the integer one. Unexpected accepted replies surface protocol errors and do not trigger a duplicate mutation.",
+        "rationale": "The native go-redis adapter validates exact semantic reply classes: SET must return the string OK and successful invalidation the integer one. Unexpected accepted replies surface protocol errors and do not trigger a duplicate mutation. DEL accepts only integer zero or one, with malformed accepted replies surfacing RedisProtocolError and no adapter retry.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -3976,9 +4032,10 @@
             "symbols": [
               "ValidateRedisSetReply",
               "ValidateRedisInvalidationReply",
-              "RedisProtocolError"
+              "RedisProtocolError",
+              "ValidateRedisDelReply"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "3e6074c7a254eab8c2956acf0ae8238e0db79c90743ee05e8b82b977e91e829c"
           }
         ]
       }
@@ -4003,7 +4060,7 @@
               "InvalidationScript",
               "InvalidateDecimal"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "3e6074c7a254eab8c2956acf0ae8238e0db79c90743ee05e8b82b977e91e829c"
           }
         ]
       }
@@ -4058,7 +4115,7 @@
               "PreviewShadowLogJSON",
               "ShadowMismatchLogDetails"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "d4207016f4030152c2c7d9aa946b4b544e588877e1d25daa0be9c99be2c6be07"
           },
           {
             "path": "go/codec.go",
@@ -4100,16 +4157,17 @@
     },
     {
       "path": "typescript/src/metrics.ts",
-      "sha256": "6c2607ec512c10362f1906ff082799d8b770f34cb3d61d5523dba908349d90d8",
+      "sha256": "72340186538ba069b2ccaa79bf5d07d0e626234fde35802b542e11d6079568c4",
       "candidateGoFiles": [
         "go/api.go",
         "go/metrics.go",
         "go/engine.go",
-        "go/shadow.go"
+        "go/shadow.go",
+        "go/cache.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The backend-neutral Event stream expresses portable diagnostic outcomes, attribution and durations. Optional shadow/recovery hooks preserve admission semantics; FailureIsolatedObserver and FailureIsolatedLogger contain native exporter/logging failures. Exporter schemas are separately reviewed bindings.",
+        "rationale": "The backend-neutral Event stream expresses portable diagnostic outcomes, attribution and durations. Optional shadow/recovery hooks preserve admission semantics; FailureIsolatedObserver and FailureIsolatedLogger contain native exporter/logging failures. Exporter schemas are separately reviewed bindings. The optional deletion metric becomes a bounded deletion Event distinct from invalidation; errors use deletion and preserve the failing remote/local layer.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -4123,7 +4181,7 @@
               "Option",
               "Logger"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "2690bc46da14c9dc541cd0f7484dd29d1832c0825c2c4e7d1b0d2aaaa621615c"
           },
           {
             "path": "go/metrics.go",
@@ -4132,7 +4190,7 @@
               "FailureIsolatedObserver",
               "FailureIsolatedLogger"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "d4207016f4030152c2c7d9aa946b4b544e588877e1d25daa0be9c99be2c6be07"
           },
           {
             "path": "go/engine.go",
@@ -4149,19 +4207,26 @@
               "shadowEvent"
             ],
             "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
+          },
+          {
+            "path": "go/cache.go",
+            "symbols": [
+              "Delete"
+            ],
+            "sha256": "58963717859b52d48c19fa56d57acf9425816aa4dd4297756ded17c37778cc5b"
           }
         ]
       }
     },
     {
       "path": "typescript/src/node-redis.ts",
-      "sha256": "b57b4db9b75d12e3da7c4b388cb736927c4301753c082cd4e160d913b041b991",
+      "sha256": "3c88cd4b806627ea86feebfa741d3c3d628de79e7e4ccce908b37e4f140278cf",
       "candidateGoFiles": [
         "go/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "RedisAdapter uses go-redis UniversalClient rather than node-redis types. It borrows the client, issues primary atomic MGET for tracked values, one SET of the complete frame, and EVALSHA with one EVAL retry on command error. Context cancellation and client queue/retry/resource policy remain native binding obligations.",
+        "rationale": "RedisAdapter uses go-redis UniversalClient rather than node-redis types. It borrows the client, issues primary atomic MGET for tracked values, one SET of the complete frame, and EVALSHA with one EVAL retry on command error. Context cancellation and client queue/retry/resource policy remain native binding obligations. RedisAdapter.Delete calls one keyed go-redis DEL and validates its integer reply without retry or watermark access.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -4175,16 +4240,18 @@
               "NewRedisAdapter",
               "Read",
               "Write",
-              "InvalidateDecimal"
+              "InvalidateDecimal",
+              "Delete",
+              "ValidateRedisDelReply"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "3e6074c7a254eab8c2956acf0ae8238e0db79c90743ee05e8b82b977e91e829c"
           }
         ]
       }
     },
     {
       "path": "typescript/src/prometheus.ts",
-      "sha256": "56c11cd6fba362c4b0ab16b222cd5785a37bdc81fdde67ae920557ba05ed5ec7",
+      "sha256": "6a1dcbb101cd73ee9100555ec24a8e4d6e33cda692da5a9fc25fdf510ce82bac",
       "candidateGoFiles": [
         "go/metrics_prometheus.go"
       ],
@@ -4206,14 +4273,14 @@
               "NewPrometheusMetricsWithBindings",
               "ObserveEvent"
             ],
-            "sha256": "c29b357dff3917acb3dbfe3912a74f6c3b7a6312b9d110577bd30e960bc5d87e"
+            "sha256": "871098a64a033fa041f4155d0074f655e279a9f12e151066d1b405f362623908"
           }
         ]
       }
     },
     {
       "path": "typescript/src/redis-client.ts",
-      "sha256": "2b07115b1f35f82b857ed9ee4dd27656eb636e7426c60cbfb31b39903b084b30",
+      "sha256": "ff309815336271a3785252298968ece4e06b1da8ea4a93bac31cfd16c2dba0c8",
       "candidateGoFiles": [
         "go/api.go",
         "go/protocol.go",
@@ -4221,7 +4288,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The client-independent contract becomes Remote plus Frame and ReadResult; context carries the acquired read budget and cancellation request. Typed adapter errors and NormalizeReadResult preserve malformed-reply failure boundaries independently of the concrete Redis library.",
+        "rationale": "The client-independent contract becomes Remote plus Frame and ReadResult; context carries the acquired read budget and cancellation request. Typed adapter errors and NormalizeReadResult preserve malformed-reply failure boundaries independently of the concrete Redis library. Remote remains source-compatible; RemoteDeleter adds the optional exact value-key deletion capability and is checked before any store changes.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -4231,9 +4298,11 @@
             "path": "go/api.go",
             "symbols": [
               "Remote",
-              "ReadBudget"
+              "ReadBudget",
+              "RemoteDeleter",
+              "ErrDeleteUnsupported"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "2690bc46da14c9dc541cd0f7484dd29d1832c0825c2c4e7d1b0d2aaaa621615c"
           },
           {
             "path": "go/protocol.go",
@@ -4250,21 +4319,21 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "3e6074c7a254eab8c2956acf0ae8238e0db79c90743ee05e8b82b977e91e829c"
           }
         ]
       }
     },
     {
       "path": "typescript/src/redis-protocol.ts",
-      "sha256": "d68a674346fd61f4b14f3a5315baf3e171835b964a895192a6cc3590e58fdba1",
+      "sha256": "25c933a24094a40bd0305c45cffaf3aacde8768e2d14c3bd717e997316bea954",
       "candidateGoFiles": [
         "go/protocol.go",
         "go/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Public wire helpers are direct Go package exports rather than a JavaScript package subpath. EncodeFrame, DecodeFrame and InvalidationScript expose the production implementation used by the shared protocol and invalidation vectors.",
+        "rationale": "Public wire helpers are direct Go package exports rather than a JavaScript package subpath. EncodeFrame, DecodeFrame and InvalidationScript expose the production implementation used by the shared protocol and invalidation vectors. ValidateRedisDelReply is a direct Go export for the single-key DEL reply boundary.",
         "nativeAdaptations": [
           "B01"
         ],
@@ -4280,9 +4349,10 @@
           {
             "path": "go/redis_adapter.go",
             "symbols": [
-              "InvalidationScript"
+              "InvalidationScript",
+              "ValidateRedisDelReply"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "3e6074c7a254eab8c2956acf0ae8238e0db79c90743ee05e8b82b977e91e829c"
           }
         ]
       }
@@ -4309,7 +4379,7 @@
               "Codec",
               "ContextCodec"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "2690bc46da14c9dc541cd0f7484dd29d1832c0825c2c4e7d1b0d2aaaa621615c"
           },
           {
             "path": "go/codec.go",
@@ -4328,13 +4398,13 @@
     },
     {
       "path": "typescript/src/valkey-glide.ts",
-      "sha256": "0cb2e03925f55e53057fa666ac41060abf5445fdfcda1ae25792bd75986d30c8",
+      "sha256": "3c3fa009aef9b5366020c04bccd17ace8fbe0e926ba63039f6464ddab0f85361",
       "candidateGoFiles": [
         "go/redis_adapter.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Go supplies one go-redis adapter for both Redis and Valkey rather than reproducing GLIDE classes/options. Real Redis, Valkey and six-node Cluster tests exercise the same production adapter; explicit Cluster primary selection preserves tracked read guarantees even with replica-routing client options.",
+        "rationale": "Go supplies one go-redis adapter for both Redis and Valkey rather than reproducing GLIDE classes/options. Real Redis, Valkey and six-node Cluster tests exercise the same production adapter; explicit Cluster primary selection preserves tracked read guarantees even with replica-routing client options. The same RedisAdapter.Delete provides one keyed DEL and validates integer zero or one on both Redis and Valkey, including cluster slots.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -4348,9 +4418,11 @@
               "NewRedisAdapter",
               "Read",
               "Write",
-              "InvalidateDecimal"
+              "InvalidateDecimal",
+              "Delete",
+              "ValidateRedisDelReply"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "3e6074c7a254eab8c2956acf0ae8238e0db79c90743ee05e8b82b977e91e829c"
           }
         ]
       }
@@ -4369,7 +4441,9 @@
           "go/internal/testsuite/bindings_test.go",
           "go/api_boundary_test.go",
           "go/policy.go",
-          "go/protocol.go"
+          "go/protocol.go",
+          "go/cache.go",
+          "go/delete_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4386,7 +4460,9 @@
           "go/internal/testsuite/bindings_test.go",
           "go/api_boundary_test.go",
           "go/policy.go",
-          "go/protocol.go"
+          "go/protocol.go",
+          "go/cache.go",
+          "go/delete_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4433,7 +4509,8 @@
           "go/cache_test.go",
           "go/internal/testsuite/bindings_test.go",
           "go/core_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/feature_replay_test.go",
+          "go/delete_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4497,7 +4574,8 @@
           "go/engine.go",
           "go/redis_adapter.go",
           "go/internal/testsuite/redis_integration_test.go",
-          "go/api_boundary_test.go"
+          "go/api_boundary_test.go",
+          "go/delete_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4611,7 +4689,9 @@
           "go/metrics.go",
           "go/metrics_test.go",
           "go/effects_replay_test.go",
-          "go/feature_replay_test.go"
+          "go/feature_replay_test.go",
+          "go/cache.go",
+          "go/delete_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -4626,7 +4706,9 @@
           "go/redis_adapter_test.go",
           "go/internal/testsuite/redis_integration_test.go",
           "go/protocol_test.go",
-          "go/codec.go"
+          "go/codec.go",
+          "go/cache.go",
+          "go/delete_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4675,7 +4757,9 @@
           "go/internal/testsuite/bindings_test.go",
           "go/api_boundary_test.go",
           "go/policy.go",
-          "go/protocol.go"
+          "go/protocol.go",
+          "go/cache.go",
+          "go/delete_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4692,7 +4776,9 @@
           "go/internal/testsuite/bindings_test.go",
           "go/api_boundary_test.go",
           "go/policy.go",
-          "go/protocol.go"
+          "go/protocol.go",
+          "go/cache.go",
+          "go/delete_test.go"
         ],
         "nativeAdaptations": [
           "B01",
@@ -4802,6 +4888,21 @@
           "B02"
         ],
         "rationale": "Sparse overlays, omission/null distinctions, validation and captured policy apply to Go ResolvePolicy and invocation execution. Shared histories carry portable expectations; typed configuration, panic/error timing and pointer mutation boundaries additionally have native tests."
+      },
+      {
+        "path": "typescript/test/dialcache-delete.test.ts",
+        "goFiles": [
+          "go/cache.go",
+          "go/delete_test.go",
+          "go/redis_adapter_test.go",
+          "go/metrics_test.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "X01"
+        ],
+        "rationale": "Go exact deletion uses Identity and an explicit context instead of TypeScript structural option typing and async-local state. Native tests exercise validation, optional capability, remote-first failure, live disabled memo removal, exact tracked bytes, untouched sibling/flight state and allowed late publication; portable histories remain separate conformance evidence."
       },
       {
         "path": "typescript/test/dialcache-get-or-load.test.ts",
@@ -5207,14 +5308,14 @@
     {
       "id": "B03",
       "boundary": "Native value conventions",
-      "existingTreatment": "Shared object references, constructors/prototypes, JavaScript JSON coercion/lossiness, and default Node deep equality are not universal port requirements. Each binding documents its supported value domain and codec; W01\u2013W09 apply wherever it shares Redis.",
+      "existingTreatment": "Shared object references, constructors/prototypes, JavaScript JSON coercion/lossiness, and default Node deep equality are not universal port requirements. Each binding documents its supported value domain and codec; W01–W09 apply wherever it shares Redis.",
       "goStatus": "reviewed-native-binding",
       "goTreatment": "JSONCodec[any] supports the explicit portable JSON scalar-string domain plus Absent. JSONObject preserves insertion order when encoding; Go maps have no insertion order. Typed destinations impose Go field and numeric rules. Lone UTF-16 surrogate JSON escapes are rejected rather than silently replaced."
     },
     {
       "id": "X01",
       "boundary": "Optional observability integration",
-      "existingTreatment": "Backend metric names, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing precision are covered by implementation/integration tests. Current portable claims include C57\u2013C60 diagnostic semantics and failure isolation plus C11 process-coalescing snapshot semantics; exact exporter schemas, buckets, registry compatibility, timing precision, and logging resource limits remain separate.",
+      "existingTreatment": "Backend metric names, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing precision are covered by implementation/integration tests. Current portable claims include C57–C60 diagnostic semantics and failure isolation plus C11 process-coalescing snapshot semantics; exact exporter schemas, buckets, registry compatibility, timing precision, and logging resource limits remain separate.",
       "goStatus": "explicit-native-binding-adaptation",
       "goTreatment": "Portable diagnostics require shared generated histories. Native metric names, labels, buckets, units, counts and bounded logging have focused Go tests. NewPrometheusMetricsWithBindings reuses caller-owned individually registered CounterVec/HistogramVec objects after checking declared construction schema, public descriptors and registry identity; new collectors register atomically. Because client_golang exposes no bucket configuration for an empty histogram, accurate caller-supplied schema is an explicit binding precondition; construction must not race with collector registration/reconfiguration. No private-field inspection or temporary series is used.",
       "nativeTests": [
@@ -5229,7 +5330,7 @@
     {
       "id": "X02",
       "boundary": "Resource/algorithm implementation",
-      "existingTreatment": "Compression level tuning, native zstd availability/decoder quirks, huge payloads/512 MiB guard, decompression bombs, local allocation strategy, CPU/memory/throughput, connection lifecycle, retry APIs, and command queue limits remain implementation/integration tests. Envelope interoperability remains W06\u2013W08.",
+      "existingTreatment": "Compression level tuning, native zstd availability/decoder quirks, huge payloads/512 MiB guard, decompression bombs, local allocation strategy, CPU/memory/throughput, connection lifecycle, retry APIs, and command queue limits remain implementation/integration tests. Envelope interoperability remains W06–W08.",
       "goStatus": "reviewed-native-binding",
       "goTreatment": "Go uses native sparse maps and go-redis/zstd libraries with explicit decoder resource limits and caller-owned clients. Wire representation and round trips are shared-vector/integration checked; exact compressed bytes, allocation strategy, throughput and operating-system exhaustion are native boundaries. Quint computes envelope and size-selection behavior using native codec lengths that both test bindings independently verify. Different native lengths may cause compressed/not_smaller diagnostic differences at size boundaries; logical payload identity and wrapper rules remain shared."
     }

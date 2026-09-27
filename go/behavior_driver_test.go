@@ -350,7 +350,7 @@ type behaviorDriver struct {
 
 func emptyBehaviorObservation(fixture obj) obj {
 	o := obj{}
-	for _, key := range []string{"loaders", "reads", "writes", "invalidations", "loads", "dumps", "policyCalls", "classifications", "comparisons"} {
+	for _, key := range []string{"loaders", "reads", "writes", "invalidations", "deletions", "loads", "dumps", "policyCalls", "classifications", "comparisons"} {
 		o[key] = int64(0)
 	}
 	for _, key := range []string{"calls", "maintenance", "sourceScopes", "writeTtls", "shadow", "recovery"} {
@@ -481,7 +481,11 @@ func (d *behaviorDriver) instance(id string) *Cache {
 		return RawPolicy(bclone(d.runtimePolicy)), nil
 	})}
 	if d.fixture["remote"] != false {
-		opts = append(opts, WithRemote(behaviorRemote{d: d}))
+		var remote Remote = behaviorRemote{d: d}
+		if d.fixture["remoteDeletes"] == false {
+			remote = behaviorRemoteWithoutDelete{Remote: remote}
+		}
+		opts = append(opts, WithRemote(remote))
 	}
 	if bb(d.fixture["localFaultInjection"]) {
 		opts = append(opts, WithClock(behaviorLocalFaultClock{behaviorClock: d.clock, driver: d}))
@@ -829,6 +833,34 @@ func (d *behaviorDriver) apply(input obj) error {
 		d.mu.Lock()
 		d.values[key] = behaviorStored{raw: raw, expires: d.clock.ElapsedMS() + bn(bdefault(input, "ttlMs", 60000))}
 		d.mu.Unlock()
+	case "delete":
+		ctx := context.Background()
+		instance := bs(input["instance"])
+		if id, ok := input["id"]; ok {
+			s := d.scopes[bs(id)]
+			if s == nil {
+				return fmt.Errorf("unknown scope %s", id)
+			}
+			ctx = s.ctx
+			if instance == "" {
+				instance = s.instance
+			}
+		}
+		if instance == "" {
+			instance = "default"
+		}
+		err := d.instance(instance).Delete(ctx, d.identity(bs(input["key"]), bs(input["useCase"])))
+		status := "ok"
+		if err != nil {
+			if err == d.maintenanceError {
+				status = "mutation_error"
+			} else if errors.Is(err, ErrDeleteUnsupported) {
+				status = "unsupported"
+			} else {
+				return err
+			}
+		}
+		d.append("maintenance", status)
 	case "invalidate":
 		err := d.instance("default").Invalidate(context.Background(), d.identity(bs(input["key"]), ""), time.Duration(bn(input["futureBufferMs"]))*time.Millisecond)
 		status := "ok"
@@ -1035,6 +1067,9 @@ func (c behaviorCodec) Decode(payload Payload) (any, error) {
 
 type behaviorRemote struct{ d *behaviorDriver }
 
+// Embedding only Remote deliberately hides the optional delete capability.
+type behaviorRemoteWithoutDelete struct{ Remote }
+
 type behaviorLogger struct{ d *behaviorDriver }
 
 func (l behaviorLogger) fail() {
@@ -1115,6 +1150,17 @@ func (r behaviorRemote) Write(ctx context.Context, key string, frame Frame, ttl 
 		d.values[key] = behaviorStored{raw: raw, expires: d.clock.ElapsedMS() + ms(ttl)}
 	}
 	d.mu.Unlock()
+	return nil
+}
+func (r behaviorRemote) Delete(ctx context.Context, key string) error {
+	d := r.d
+	d.increment("deletions")
+	if d.fault("write") {
+		return d.maintenanceError
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.values, key)
 	return nil
 }
 func (r behaviorRemote) Invalidate(ctx context.Context, key string, now, buffer int64) error {

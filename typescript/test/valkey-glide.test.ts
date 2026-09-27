@@ -685,3 +685,24 @@ describe("Valkey GLIDE adapter", () => {
     expect(invalidateOptions?.decoder).not.toBe(otherGlide.Decoder.Bytes);
   });
 });
+
+
+describe("GLIDE exact deletion", () => {
+  it.each([0, 1])("accepts standalone DEL reply %s", async reply => {
+    const client = fakeClient(reply);
+    await createValkeyGlideDialCacheClient(client, mockGlide).delete!({ valueKey: "value" });
+    expect(client.customCommand).toHaveBeenCalledExactlyOnceWith(["DEL", "value"], { decoder: decoderBytes });
+  });
+  it("routes cluster deletion to the slot primary", async () => {
+    const client = fakeClusterClient(1);
+    await createValkeyGlideDialCacheClient(client, mockGlide).delete!({ valueKey: "{entity}:value" });
+    expect(client.customCommand).toHaveBeenCalledExactlyOnceWith(["DEL", "{entity}:value"], {
+      decoder: decoderBytes, route: { type: "primarySlotKey", key: "{entity}:value" },
+    });
+  });
+  it.each([2, -1, 0.5, NaN, Infinity, "1", 1n, true, null, undefined])("rejects invalid DEL reply %s without retry", async reply => {
+    const client = fakeClient(reply);
+    await expect(createValkeyGlideDialCacheClient(client, mockGlide).delete!({ valueKey: "value" })).rejects.toBeInstanceOf(DialCacheRedisProtocolError);
+    expect(client.customCommand).toHaveBeenCalledOnce();
+  });
+});

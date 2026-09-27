@@ -134,9 +134,12 @@ const rootConsumer = `import {
   DialCacheKeyConfig,
   DialCacheRedisProtocolError,
   FallbackTimeoutError,
+  RemoteDeleteUnsupportedError,
   JsonSerializer,
   RedisReadTimeoutError,
   isRedisReadMiss,
+  type CacheIdentityOptions,
+  type RedisDeleteRequest,
   type CacheMissReason,
   type CacheMetricLabels,
   type CacheConfigProvider,
@@ -192,6 +195,7 @@ import {
   encodeRedisFrame,
   isRedisReadMiss as isRedisProtocolReadMiss,
   validateRedisScriptInvalidationReply,
+  validateRedisDelReply,
   validateRedisSetReply,
   type CacheMissReason as ProtocolCacheMissReason,
   type DecodedRedisFrame,
@@ -410,6 +414,12 @@ void protocolGuardMatchesRoot;
 void rootGuardMatchesProtocol;
 void protocolReadResult;
 const zeroTimestampRedisFrame: Buffer = encodeRedisFrame("pending", 0);
+const deleteReplyValidation: void = validateRedisDelReply(0);
+const deleteIdentity: CacheIdentityOptions = { keyType: "id", useCase: "Delete", key: "1" };
+const deleteRequest: RedisDeleteRequest = { valueKey: "value" };
+const deleteResult: Promise<void> = cache.delete(deleteIdentity);
+const unsupportedDeleteError = new RemoteDeleteUnsupportedError();
+void deleteReplyValidation; void deleteRequest; void deleteResult; void unsupportedDeleteError;
 const setReplyValidation: void = validateRedisSetReply("OK");
 const invalidationReplyValidation: 1 = validateRedisScriptInvalidationReply(1);
 const ceiledCacheTtlMs: number = ceilSupportedCacheTtlMs(1_000.5);
@@ -615,6 +625,7 @@ const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
   serialization_dump: true,
   compression: true,
   invalidation: true,
+  deletion: true,
   fallback: true,
   unknown: true,
 };
@@ -668,6 +679,7 @@ const redisClientMethods: Readonly<Record<keyof DialCacheRedisClient, true>> = {
   read: true,
   write: true,
   invalidate: true,
+  delete: true,
 };
 void redisClientMethods;
 const redisConfigAcceptsCompressionOptOut: RedisConfig = {

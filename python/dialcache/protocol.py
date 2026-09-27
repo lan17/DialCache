@@ -165,6 +165,11 @@ def validate_set_reply(reply: object) -> None:
         raise RedisProtocolError("Invalid Redis SET reply; expected OK")
 
 
+def validate_del_reply(reply: object) -> None:
+    if type(reply) is not int or reply not in (0, 1):
+        raise RedisProtocolError("Invalid Redis DEL reply; expected integer 0 or 1")
+
+
 def validate_invalidation_reply(reply: object) -> None:
     if type(reply) is not int or reply != 1:
         raise RedisProtocolError("Invalid Redis invalidate reply; expected integer 1")

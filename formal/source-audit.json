@@ -3,9 +3,9 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "54f1bc0f51873584135c99d057e46d8dbf8f628e80af8b826fbee45dedd49182",
+      "sha256": "e2d55f5fdbf6bb1f4ed01d840694c40999573571349ba4f4f34eac7bf61287ef",
       "entries": [
-        {"line":1,"title":"DialCache","contracts":["B01"]},
+        {"line":1,"title":"DialCache","contracts":["B01","C61","C62","C63"]},
         {"line":49,"title":"Install TypeScript","contracts":["B01"]},
         {"line":62,"title":"Usage","contracts":["C01","C05","W01"]},
         {"line":106,"title":"How reads work","contracts":["C05","C31"]},
@@ -15,7 +15,7 @@
     },
     {
       "path": "docs/api.md",
-      "sha256": "04683617993432aea655d42d7fac51c2e9b3553d4f8c5535f1cc1a5e5e0ce56e",
+      "sha256": "6edcac313ef4e214c6b85cd2490ce452a4ef5269a668cdba7f41efdc5926eb6e",
       "entries": [
         {"line":5,"title":"API reference","contracts":["B01"]},
         {"line":56,"title":"Imports","contracts":["B01"]},
@@ -28,11 +28,12 @@
         {"line":191,"title":"`DialCacheKeyConfig`","contracts":["C16","B01"]},
         {"line":220,"title":"Validation and snapshots","contracts":["C18","C20","B01"]},
         {"line":255,"title":"`invalidateRemote`","contracts":["C29","C32","C39","B01"]},
-        {"line":271,"title":"`getCoalescingState`","contracts":["X01","B01"]},
-        {"line":288,"title":"Keys and serializers","contracts":["W01","W02","B03"]},
-        {"line":305,"title":"Constructing keys directly","contracts":["W01","B01"]},
-        {"line":349,"title":"Errors","contracts":["C27","B01"]},
-        {"line":367,"title":"Custom integrations","contracts":["E01","B01","X01"]}
+        {"line":271,"title":"`delete`","contracts":["C61","C62","C63","B01"]},
+        {"line":303,"title":"`getCoalescingState`","contracts":["X01","B01"]},
+        {"line":321,"title":"Keys and serializers","contracts":["W01","W02","B03"]},
+        {"line":338,"title":"Constructing keys directly","contracts":["W01","B01"]},
+        {"line":382,"title":"Errors","contracts":["C27","B01","C61","C62","C63"]},
+        {"line":401,"title":"Custom integrations","contracts":["E01","B01","X01","C61","C62","C63"]}
       ]
     },
     {
@@ -72,20 +73,20 @@
     },
     {
       "path": "docs/concepts.md",
-      "sha256": "f8c042f4a7f446a3305563730062fd048d70c5424a38a3c71bc5cfa2627b5271",
+      "sha256": "e4bf38ffe18d2935fabe71410ce6556e42a953f8e8411edfd3bb5165732893fe",
       "entries": [
         {"line":1,"title":"How DialCache works","contracts":["C01"]},
         {"line":9,"title":"Identity governs reuse","contracts":["W01","E04"]},
         {"line":22,"title":"The read path","contracts":["C05","C11"]},
-        {"line":50,"title":"Enable and disable scopes","contracts":["C01","C02","C03"]},
-        {"line":101,"title":"Three lifetimes","contracts":["C07","C08"]},
-        {"line":113,"title":"Request-local cache","contracts":["C06","C07"]},
-        {"line":120,"title":"Process-local cache","contracts":["C08","C09"]},
-        {"line":131,"title":"What gets stored after a miss?","contracts":["C05","C31"]},
-        {"line":154,"title":"Freshness boundaries","contracts":["C09","C22","C36"]},
-        {"line":177,"title":"Fail-open and liveness","contracts":["C23","C25","C27","C28"]},
-        {"line":194,"title":"Value ownership","contracts":["E04","B03"]},
-        {"line":234,"title":"Where to go next","contracts":["B01"]}
+        {"line":50,"title":"Enable and disable scopes","contracts":["C01","C02","C03","C61","C62","C63"]},
+        {"line":104,"title":"Three lifetimes","contracts":["C07","C08"]},
+        {"line":116,"title":"Request-local cache","contracts":["C06","C07"]},
+        {"line":123,"title":"Process-local cache","contracts":["C08","C09"]},
+        {"line":134,"title":"What gets stored after a miss?","contracts":["C05","C31"]},
+        {"line":157,"title":"Freshness boundaries","contracts":["C09","C22","C36","C61","C62","C63"]},
+        {"line":188,"title":"Fail-open and liveness","contracts":["C23","C25","C27","C28"]},
+        {"line":205,"title":"Value ownership","contracts":["E04","B03"]},
+        {"line":245,"title":"Where to go next","contracts":["B01"]}
       ]
     },
     {
@@ -130,24 +131,25 @@
     },
     {
       "path": "docs/invalidation.md",
-      "sha256": "9eb7ac9c831c4616632825d6aa8676555efdd42986134c91206d58248e8d2ad9",
+      "sha256": "ccbdd666f52fc161a97fc1cf4ad057866bb76c6560fc81f6a8a2d4e83cb59123",
       "entries": [
         {"line":1,"title":"Targeted invalidation","contracts":["C32"]},
         {"line":10,"title":"Watermarks: an entity-wide cutoff","contracts":["C32","C33"]},
         {"line":53,"title":"Configure a tracked use case","contracts":["C31","B01"]},
-        {"line":137,"title":"Choosing `futureBufferMs`","contracts":["E02","E03"]},
-        {"line":165,"title":"Reuse boundaries","contracts":["C36"]},
-        {"line":177,"title":"Independent fence checks","contracts":["C34","C35"]},
-        {"line":193,"title":"Application clock contract","contracts":["E03"]},
-        {"line":208,"title":"Watermark durability","contracts":["E02"]},
-        {"line":219,"title":"Protocol reference","contracts":["W09"]},
-        {"line":221,"title":"Read and write behavior","contracts":["C33","C35"]},
-        {"line":231,"title":"Conditional refills","contracts":["C34"]},
-        {"line":260,"title":"In-memory publication","contracts":["C31","C36"]},
-        {"line":271,"title":"Shadow reads and fills","contracts":["C53"]},
-        {"line":282,"title":"Identity and Redis Cluster placement","contracts":["W01"]},
-        {"line":307,"title":"Watermark lifetime","contracts":["C37","C38","C39"]},
-        {"line":335,"title":"Failure behavior and telemetry","contracts":["C29","C58"]}
+        {"line":137,"title":"Exact-key deletion versus entity invalidation","contracts":["C61","C62","C63"]},
+        {"line":252,"title":"Choosing `futureBufferMs`","contracts":["E02","E03"]},
+        {"line":280,"title":"Reuse boundaries","contracts":["C36"]},
+        {"line":292,"title":"Independent fence checks","contracts":["C34","C35"]},
+        {"line":308,"title":"Application clock contract","contracts":["E03"]},
+        {"line":323,"title":"Watermark durability","contracts":["E02"]},
+        {"line":334,"title":"Protocol reference","contracts":["W09"]},
+        {"line":336,"title":"Read and write behavior","contracts":["C33","C35"]},
+        {"line":346,"title":"Conditional refills","contracts":["C34"]},
+        {"line":375,"title":"In-memory publication","contracts":["C31","C36"]},
+        {"line":386,"title":"Shadow reads and fills","contracts":["C53"]},
+        {"line":397,"title":"Identity and Redis Cluster placement","contracts":["W01"]},
+        {"line":422,"title":"Watermark lifetime","contracts":["C37","C38","C39"]},
+        {"line":450,"title":"Failure behavior and telemetry","contracts":["C29","C58"]}
       ]
     },
     {
@@ -165,54 +167,54 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "d011de5bf43a253a0d3d2cd5d2cfdaa43926322ea65eba1781c5e8809a3c10c6",
+      "sha256": "5f9ad01e1372f9dd3260efff9da6e8f6158a30ad9aad40059b6cf17097aaa929",
       "entries": [
         {"line":1,"title":"Go integration","contracts":["B01"]},
         {"line":8,"title":"Installation and runtime","contracts":["B01","B02"]},
         {"line":23,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
         {"line":37,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
-        {"line":55,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
-        {"line":72,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
-        {"line":90,"title":"Conformance","contracts":["B01"]}
+        {"line":60,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
+        {"line":77,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
+        {"line":95,"title":"Conformance","contracts":["B01"]}
       ]
     },
     {
       "path": "docs/languages/python.md",
-      "sha256": "6b0625588d4028207e8069241a64a2d73e825d07f56e2d23111ee24fd4b5ad90",
+      "sha256": "047f56add5d2d44a93f88c1f60e81872d19419cff4a750422b07fe78232de3d2",
       "entries": [
         {"line":1,"title":"Python integration","contracts":["B01"]},
         {"line":10,"title":"Installation and runtime","contracts":["B01","B02"]},
         {"line":29,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
-        {"line":46,"title":"Identity and policy","contracts":["W01","W02","C16","C18","C20","B01"]},
-        {"line":97,"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
-        {"line":115,"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
-        {"line":134,"title":"Sharing Redis with other languages","contracts":["W01","W02","E04","B03","B01"]},
-        {"line":144,"title":"Validation","contracts":["B01"]}
+        {"line":52,"title":"Identity and policy","contracts":["W01","W02","C16","C18","C20","B01"]},
+        {"line":103,"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
+        {"line":121,"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
+        {"line":140,"title":"Sharing Redis with other languages","contracts":["W01","W02","E04","B03","B01"]},
+        {"line":150,"title":"Validation","contracts":["B01"]}
       ]
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "bd24a8859958f816750c1c4ce70e05f4f366f56d50ea8b491586e9c6441f4215",
+      "sha256": "29501db8782277b28391fe7dcdf243bf51168774dce0ccc1947c54ba2fc1c3b1",
       "entries": [
         {"line":1,"title":"Rust integration","contracts":["B01"]},
         {"line":8,"title":"Installation and runtime","contracts":["B01","B02"]},
         {"line":40,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
-        {"line":52,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
-        {"line":70,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
-        {"line":88,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
-        {"line":111,"title":"Conformance","contracts":["B01"]}
+        {"line":58,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
+        {"line":76,"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
+        {"line":94,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
+        {"line":117,"title":"Conformance","contracts":["B01"]}
       ]
     },
     {
       "path": "docs/languages/typescript.md",
-      "sha256": "8f6706c33d8e712a9ef70acec8d212a4db20cd206c1b2d04a0c7b2f18f0f1bb7",
+      "sha256": "3d5595529aeaa3ebcfcf05c793f92ddf73808338a0be4c24c45a267cdf19ae8f",
       "entries": [
         {"line":1,"title":"TypeScript integration","contracts":["B01"]},
         {"line":9,"title":"Installation and runtime","contracts":["B01","B02"]},
         {"line":23,"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
-        {"line":35,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
-        {"line":51,"title":"Values and codecs","contracts":["W02","E04","B03"]},
-        {"line":64,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]}
+        {"line":41,"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
+        {"line":57,"title":"Values and codecs","contracts":["W02","E04","B03"]},
+        {"line":70,"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]}
       ]
     },
     {
@@ -236,7 +238,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "bdafd62305526062fe913fada398d9356c4d081b6c2f1c2744b1cc7454bbe97c",
+      "sha256": "e22200f97aa91b4d67de41f6630e4491dc2e35912d645dbf545584b4736b56ab",
       "entries": [
         {"line":1,"title":"Observability","contracts":["C30","X01"]},
         {"line":16,"title":"Reading the signals","contracts":["C58"]},
@@ -244,23 +246,23 @@
         {"line":53,"title":"Prometheus","contracts":["X01"]},
         {"line":135,"title":"Histogram buckets","contracts":["X01"]},
         {"line":147,"title":"Prometheus metrics","contracts":["X01"]},
-        {"line":151,"title":"Datadog","contracts":["X01"]},
+        {"line":151,"title":"Datadog","contracts":["X01","C61","C62","C63"]},
         {"line":239,"title":"Distribution or histogram","contracts":["X01"]},
         {"line":259,"title":"Datadog namespaces","contracts":["X01"]},
         {"line":304,"title":"Datadog metrics","contracts":["X01"]},
-        {"line":367,"title":"Metric catalog","contracts":["C58","C59"]},
-        {"line":420,"title":"Shadow outcomes","contracts":["C50","C51","C52","C53","C54"]},
-        {"line":448,"title":"Stale recovery outcomes","contracts":["C41","C45"]},
-        {"line":464,"title":"Value ages and clock offsets","contracts":["C57"]},
-        {"line":486,"title":"Compression metrics","contracts":["W06","W07","C58","C59","X02"]},
-        {"line":542,"title":"Confirmed mismatch warnings","contracts":["C60","X01"]},
-        {"line":559,"title":"Error categories","contracts":["C58"]},
-        {"line":609,"title":"Custom adapters","contracts":["C30","X01"]}
+        {"line":368,"title":"Metric catalog","contracts":["C58","C59","C61","C62","C63"]},
+        {"line":422,"title":"Shadow outcomes","contracts":["C50","C51","C52","C53","C54"]},
+        {"line":450,"title":"Stale recovery outcomes","contracts":["C41","C45"]},
+        {"line":466,"title":"Value ages and clock offsets","contracts":["C57"]},
+        {"line":488,"title":"Compression metrics","contracts":["W06","W07","C58","C59","X02"]},
+        {"line":544,"title":"Confirmed mismatch warnings","contracts":["C60","X01"]},
+        {"line":561,"title":"Error categories","contracts":["C58","C61","C62","C63"]},
+        {"line":619,"title":"Custom adapters","contracts":["C30","X01","C61","C62","C63"]}
       ]
     },
     {
       "path": "docs/redis.md",
-      "sha256": "754d156cff4d53d65ea33aef458839a8459aacfeac0d59303a292113d667545d",
+      "sha256": "9668dbb8a9752021e884330a48a819b6974588ad12954dc6e9778f471ed83be7",
       "entries": [
         {"line":1,"title":"Redis and Valkey","contracts":["E01"]},
         {"line":14,"title":"Install a client","contracts":["B01","E01"]},
@@ -273,12 +275,13 @@
         {"line":563,"title":"Bundled Redis operations","contracts":["E01"]},
         {"line":565,"title":"Reads","contracts":["E01","W04"]},
         {"line":589,"title":"Writes","contracts":["E01","W04","W05"]},
-        {"line":613,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
-        {"line":656,"title":"Redis compatibility and ACLs","contracts":["E01"]},
-        {"line":667,"title":"Custom-client contract","contracts":["C55","C56","E01","E04"]},
-        {"line":754,"title":"Advanced wire protocol","contracts":["W04"]},
-        {"line":809,"title":"Read decoding and validation order","contracts":["W04"]},
-        {"line":898,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
+        {"line":613,"title":"Deletes","contracts":["C61","C62","E01","C63"]},
+        {"line":624,"title":"Invalidation retries and ambiguity","contracts":["E01","E03"]},
+        {"line":667,"title":"Redis compatibility and ACLs","contracts":["E01","C61","C62","C63"]},
+        {"line":678,"title":"Custom-client contract","contracts":["C55","C56","E01","E04","C61","C62","C63"]},
+        {"line":779,"title":"Advanced wire protocol","contracts":["W04"]},
+        {"line":834,"title":"Read decoding and validation order","contracts":["W04"]},
+        {"line":923,"title":"Invalidation script and payload envelope","contracts":["W09","W06"]}
       ]
     },
     {
@@ -319,22 +322,23 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "a02cb92599073440b0bc6f693b064236759dced02d578591934830fc4c9ff425",
+      "sha256": "12321873de4ef36d470363d33e5ef38bddaee1d9e841ad91672851180b52f202",
       "entries": [
         {"line":1,"title":"Upgrading","contracts":["E05"]},
         {"line":13,"title":"Tracked protocol cutover","contracts":["E05","W09"]},
         {"line":47,"title":"Removed configuration fields","contracts":["B01"]},
         {"line":93,"title":"Custom Redis adapters","contracts":["E01","C55"]},
-        {"line":158,"title":"Stale retention and downgrades","contracts":["E05","C37"]},
-        {"line":177,"title":"Compression and value schemas","contracts":["E05","W06","W08"]},
-        {"line":207,"title":"Metric migrations","contracts":["X01"]}
+        {"line":158,"title":"Exact-key deletion support","contracts":["C61","C62","C63","B01","X01"]},
+        {"line":186,"title":"Stale retention and downgrades","contracts":["E05","C37"]},
+        {"line":205,"title":"Compression and value schemas","contracts":["E05","W06","W08"]},
+        {"line":235,"title":"Metric migrations","contracts":["X01"]}
       ]
     },
     {
       "path": "typescript/README.md",
-      "sha256": "c57210b637682308d7d5d16a01cdaa768ecf4a1949793d6cff3aa20e0836c978",
+      "sha256": "f481f870838197f75a60a891fcf6f87c35bc620293c2fa8d2d36d8224fda338e",
       "entries": [
-        {"line":1,"title":"DialCache","contracts":["B01"]},
+        {"line":1,"title":"DialCache","contracts":["B01","C61","C62","C63"]},
         {"line":30,"title":"Install","contracts":["B01"]},
         {"line":43,"title":"Usage","contracts":["C01","C05","W01"]},
         {"line":87,"title":"How reads work","contracts":["C05","C31"]},
@@ -390,21 +394,22 @@
     },
     {
       "path": "typescript/test/datadog.test.ts",
-      "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65",
+      "sha256": "bc867e9e5ed19e2a52963dfb3bca38212ef78ec3de8a5136fc36605ca78de185",
       "entries": [
-        {"line":158,"title":"maps every DialCache metric to the default metric namespace with exact names, values, and tags","contracts":["X01"]},
-        {"line":305,"title":"`uses ${observationMetricType} for every observation, so switching modes requires a new namespace`","contracts":["X01"]},
-        {"line":355,"title":"forwards every bounded label value without rewriting it","contracts":["X01"]},
-        {"line":460,"title":"accepts hot-shots directly and emits DogStatsD distribution datagrams","contracts":["X01"]},
-        {"line":477,"title":"emits hot-shots histogram datagrams when explicitly selected","contracts":["X01"]},
-        {"line":488,"title":"creates the public class through the factory","contracts":["B01"]},
-        {"line":496,"title":"fails open when the DogStatsD client throws synchronously","contracts":["C30"]},
-        {"line":523,"title":"propagates a shadow metric thenable at runtime for DialCache to consume","contracts":["C30","B02"]},
-        {"line":544,"title":"never emits cache ids, arguments, Redis keys, or raw errors as Datadog tags","contracts":["X01"]},
-        {"line":600,"title":"requires an explicit observation metric type","contracts":["X01"]},
-        {"line":614,"title":"validates every required DogStatsD method before emitting metrics","contracts":["X01"]},
-        {"line":639,"title":"rejects invalid options and namespaces instead of rewriting them","contracts":["X01"]},
-        {"line":671,"title":"enforces Datadog's 200-character final metric-name limit","contracts":["X01"]}
+        {"line":159,"title":"maps every DialCache metric to the default metric namespace with exact names, values, and tags","contracts":["X01"]},
+        {"line":306,"title":"`uses ${observationMetricType} for every observation, so switching modes requires a new namespace`","contracts":["X01"]},
+        {"line":356,"title":"forwards every bounded label value without rewriting it","contracts":["X01"]},
+        {"line":461,"title":"accepts hot-shots directly and emits DogStatsD distribution datagrams","contracts":["X01"]},
+        {"line":478,"title":"emits hot-shots histogram datagrams when explicitly selected","contracts":["X01"]},
+        {"line":489,"title":"creates the public class through the factory","contracts":["B01"]},
+        {"line":497,"title":"fails open when the DogStatsD client throws synchronously","contracts":["C30"]},
+        {"line":524,"title":"propagates a shadow metric thenable at runtime for DialCache to consume","contracts":["C30","B02"]},
+        {"line":545,"title":"never emits cache ids, arguments, Redis keys, or raw errors as Datadog tags","contracts":["X01"]},
+        {"line":601,"title":"requires an explicit observation metric type","contracts":["X01"]},
+        {"line":615,"title":"validates every required DogStatsD method before emitting metrics","contracts":["X01"]},
+        {"line":640,"title":"rejects invalid options and namespaces instead of rewriting them","contracts":["X01"]},
+        {"line":672,"title":"enforces Datadog's 200-character final metric-name limit","contracts":["X01"]},
+        {"line":705,"title":"emits exact deletion separately with bounded tags","contracts":["C61","C62","X01"]}
       ]
     },
     {
@@ -491,6 +496,24 @@
         {"line":1048,"title":"disables missing local config while allowing the remote layer to work","contracts":["C05","C21"]},
         {"line":1074,"title":"disables missing remote config while allowing the local layer to work","contracts":["C05","C21"]},
         {"line":1100,"title":"fails open when the runtime config provider throws","contracts":["C20"]}
+      ]
+    },
+    {
+      "path": "typescript/test/dialcache-delete.test.ts",
+      "sha256": "e50e494591a370c74da73994d4dda1ff3098486c5e94ddc9cbed3cde9766499c",
+      "entries": [
+        {"line":32,"title":"removes all reachable stores, including a disabled live memo (disabled=%s)","contracts":["C61"]},
+        {"line":50,"title":"works without a remote, outside a scope, and on absent entries (capacity=%s)","contracts":["C61"]},
+        {"line":59,"title":"keeps the live memo and local entry until the remote step succeeds","contracts":["C62"]},
+        {"line":79,"title":"%s leaves local and memo intact","contracts":["C62"]},
+        {"line":103,"title":"validates reserved use cases and key construction before capability, metrics or mutation","contracts":["C61","C62","B01"]},
+        {"line":118,"title":"deletes exact key bytes and preserves watermarks and siblings (tracked=%s)","contracts":["C61","C63","W01"]},
+        {"line":137,"title":"outside deletion leaves another request's acquired memo and another instance's local entry","contracts":["C63"]},
+        {"line":160,"title":"does not detach active flights or suppress their later publication","contracts":["C63"]},
+        {"line":176,"title":"ignores reader configuration and serializer fields","contracts":["C61","B01"]},
+        {"line":184,"title":"an ambiguous remote error surfaces even if the remote value was already removed","contracts":["C62","E01"]},
+        {"line":202,"title":"an acquired remote snapshot can finish decoding after deletion","contracts":["C63"]},
+        {"line":219,"title":"counts local-only deletion separately from invalidation and isolates observer failures","contracts":["C61","X01"]}
       ]
     },
     {
@@ -909,71 +932,76 @@
     },
     {
       "path": "typescript/test/node-redis.test.ts",
-      "sha256": "c9d458295cae96574f285c4472d75c1d0f0de9c3a1245262614a9277966e378f",
+      "sha256": "9b35cd41f168d8d8ccd68b69ae444e161a031d70ac9c34632768e2f281edccff",
       "entries": [
-        {"line":92,"title":"keeps invalidation independent of the Redis server clock","contracts":["E01","C39"]},
-        {"line":96,"title":"accepts an ordinary node-redis client without custom script registrations","contracts":["B01"]},
-        {"line":100,"title":"accepts the exact write and invalidation reply domains","contracts":["E01"]},
-        {"line":134,"title":"classifies an absent tracked value while preserving its observed watermark","contracts":["C55"]},
-        {"line":150,"title":"writes complete frames with one native SET","contracts":["W04"]},
-        {"line":172,"title":"honors a supplied write timestamp without sampling the client clock","contracts":["E01"]},
-        {"line":191,"title":"writes binary values as complete frames with one client-clock sample","contracts":["W04"]},
-        {"line":217,"title":"routes cluster write SETs by the value key","contracts":["E01"]},
-        {"line":234,"title":"accepts SET replies returned as Buffers and rejects everything else","contracts":["E01"]},
-        {"line":250,"title":"rejects out-of-range cacheTtlMs before issuing commands and ceils fractional TTLs","contracts":["W05","C39"]},
-        {"line":270,"title":"rejects invalid application timestamps before dispatching mutations","contracts":["W04","C39"]},
-        {"line":294,"title":"surfaces a SET failure as the write error","contracts":["E01"]},
-        {"line":307,"title":"passes the cooperative read signal through node-redis command options","contracts":["C56","B02"]},
-        {"line":329,"title":"forces tracked Cluster MGET reads to the primary","contracts":["E01"]},
-        {"line":349,"title":"does not mistake unrelated standalone metadata for the Cluster topology marker","contracts":["B01"]},
-        {"line":369,"title":"rejects malformed native read reply shapes","contracts":["E01"]},
-        {"line":404,"title":"rejects every out-of-domain reply returned by a node-redis client","contracts":["E01"]},
-        {"line":419,"title":"dispatches invalidation once with EVALSHA by the source digest","contracts":["E01"]},
-        {"line":443,"title":"retries a rejected EVALSHA once with EVAL by source","contracts":["E01"]},
-        {"line":472,"title":"routes the invalidation EVAL retry through the cluster keyed overload","contracts":["E01"]},
-        {"line":502,"title":"surfaces the invalidation retry rejection unmodified","contracts":["E01"]},
-        {"line":518,"title":"never writes to the rejection even when one instance rejects both dispatches","contracts":["E01","B02"]},
-        {"line":536,"title":"passes a non-Error invalidation retry rejection through as-is","contracts":["E01","B02"]},
-        {"line":547,"title":"validates the invalidation retry reply through the shared validator","contracts":["E01"]},
-        {"line":562,"title":"does not retry an invalidation reply-domain violation","contracts":["E01"]},
-        {"line":576,"title":"keeps protocol error instanceof checks specific to the base class and subclasses","contracts":["B01"]},
-        {"line":594,"title":"surfaces protocol failures through the normal DialCache observability path","contracts":["C58","E01"]}
+        {"line":94,"title":"keeps invalidation independent of the Redis server clock","contracts":["E01","C39"]},
+        {"line":98,"title":"accepts an ordinary node-redis client without custom script registrations","contracts":["B01"]},
+        {"line":102,"title":"accepts the exact write and invalidation reply domains","contracts":["E01"]},
+        {"line":136,"title":"classifies an absent tracked value while preserving its observed watermark","contracts":["C55"]},
+        {"line":152,"title":"writes complete frames with one native SET","contracts":["W04"]},
+        {"line":174,"title":"honors a supplied write timestamp without sampling the client clock","contracts":["E01"]},
+        {"line":193,"title":"writes binary values as complete frames with one client-clock sample","contracts":["W04"]},
+        {"line":219,"title":"routes cluster write SETs by the value key","contracts":["E01"]},
+        {"line":236,"title":"accepts SET replies returned as Buffers and rejects everything else","contracts":["E01"]},
+        {"line":252,"title":"rejects out-of-range cacheTtlMs before issuing commands and ceils fractional TTLs","contracts":["W05","C39"]},
+        {"line":272,"title":"rejects invalid application timestamps before dispatching mutations","contracts":["W04","C39"]},
+        {"line":296,"title":"surfaces a SET failure as the write error","contracts":["E01"]},
+        {"line":309,"title":"passes the cooperative read signal through node-redis command options","contracts":["C56","B02"]},
+        {"line":331,"title":"forces tracked Cluster MGET reads to the primary","contracts":["E01"]},
+        {"line":351,"title":"does not mistake unrelated standalone metadata for the Cluster topology marker","contracts":["B01"]},
+        {"line":371,"title":"rejects malformed native read reply shapes","contracts":["E01"]},
+        {"line":406,"title":"rejects every out-of-domain reply returned by a node-redis client","contracts":["E01"]},
+        {"line":421,"title":"dispatches invalidation once with EVALSHA by the source digest","contracts":["E01"]},
+        {"line":445,"title":"retries a rejected EVALSHA once with EVAL by source","contracts":["E01"]},
+        {"line":474,"title":"routes the invalidation EVAL retry through the cluster keyed overload","contracts":["E01"]},
+        {"line":504,"title":"surfaces the invalidation retry rejection unmodified","contracts":["E01"]},
+        {"line":520,"title":"never writes to the rejection even when one instance rejects both dispatches","contracts":["E01","B02"]},
+        {"line":538,"title":"passes a non-Error invalidation retry rejection through as-is","contracts":["E01","B02"]},
+        {"line":549,"title":"validates the invalidation retry reply through the shared validator","contracts":["E01"]},
+        {"line":564,"title":"does not retry an invalidation reply-domain violation","contracts":["E01"]},
+        {"line":578,"title":"keeps protocol error instanceof checks specific to the base class and subclasses","contracts":["B01"]},
+        {"line":596,"title":"surfaces protocol failures through the normal DialCache observability path","contracts":["C58","E01"]},
+        {"line":656,"title":"accepts DEL reply %s and routes one value key","contracts":["C61","C62","E01"]},
+        {"line":661,"title":"routes cluster deletion to the slot primary","contracts":["C61","E01"]},
+        {"line":666,"title":"rejects invalid DEL reply %s without retry","contracts":["C62","E01"]}
       ]
     },
     {
       "path": "typescript/test/prometheus.test.ts",
-      "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602",
+      "sha256": "27c797ef9dec7c8578dbffc01d0829fe92c17b1125dc344603badb491e8ba55b",
       "entries": [
-        {"line":151,"title":"keeps default DialCache construction detached from Prometheus","contracts":["X01"]},
-        {"line":161,"title":"registers collectors only in the caller-owned registry","contracts":["X01"]},
-        {"line":172,"title":"preserves the public collector schema","contracts":["X01"]},
-        {"line":368,"title":"ignores non-finite and non-positive future timestamp offsets","contracts":["X01"]},
-        {"line":393,"title":"exports every bounded error category without rewriting labels","contracts":["X01"]},
-        {"line":422,"title":"exports every bounded disabled reason without rewriting labels","contracts":["X01"]},
-        {"line":450,"title":"exports every bounded miss reason without rewriting labels","contracts":["X01"]},
-        {"line":478,"title":"exports every bounded shadow-validation outcome without adding cache identity or layer labels","contracts":["X01"]},
-        {"line":511,"title":"exports every bounded stale-recovery outcome without adding cache identity or layer labels","contracts":["X01"]},
-        {"line":544,"title":"exports every bounded compression outcome without rewriting labels","contracts":["X01"]},
-        {"line":572,"title":"uses the existing layer label for detached Redis telemetry","contracts":["X01"]},
-        {"line":605,"title":"reuses existing collectors when multiple adapters share a registry","contracts":["X01"]},
-        {"line":631,"title":"rejects a pre-registered legacy miss collector before registering anything","contracts":["X01"]},
-        {"line":649,"title":"reuses a pre-registered current-schema miss collector","contracts":["X01"]},
-        {"line":681,"title":"`rejects an existing collector with incompatible ${schemaPart} before registering anything`","contracts":["X01"]},
-        {"line":695,"title":"rejects exemplar-enabled collectors before registering anything","contracts":["X01"]},
-        {"line":716,"title":"treats an explicitly undefined exemplar mode as disabled","contracts":["B01"]},
-        {"line":742,"title":"exports counters and histograms for requests, misses, fallbacks, gets, serialization, and size","contracts":["X01"]},
-        {"line":771,"title":"exports disabled, error, invalidation, and scoped coalescing counters","contracts":["X01"]}
+        {"line":152,"title":"keeps default DialCache construction detached from Prometheus","contracts":["X01"]},
+        {"line":162,"title":"registers collectors only in the caller-owned registry","contracts":["X01"]},
+        {"line":173,"title":"preserves the public collector schema","contracts":["X01"]},
+        {"line":371,"title":"ignores non-finite and non-positive future timestamp offsets","contracts":["X01"]},
+        {"line":396,"title":"exports every bounded error category without rewriting labels","contracts":["X01"]},
+        {"line":425,"title":"exports every bounded disabled reason without rewriting labels","contracts":["X01"]},
+        {"line":453,"title":"exports every bounded miss reason without rewriting labels","contracts":["X01"]},
+        {"line":481,"title":"exports every bounded shadow-validation outcome without adding cache identity or layer labels","contracts":["X01"]},
+        {"line":514,"title":"exports every bounded stale-recovery outcome without adding cache identity or layer labels","contracts":["X01"]},
+        {"line":547,"title":"exports every bounded compression outcome without rewriting labels","contracts":["X01"]},
+        {"line":575,"title":"uses the existing layer label for detached Redis telemetry","contracts":["X01"]},
+        {"line":608,"title":"reuses existing collectors when multiple adapters share a registry","contracts":["X01"]},
+        {"line":634,"title":"rejects a pre-registered legacy miss collector before registering anything","contracts":["X01"]},
+        {"line":652,"title":"reuses a pre-registered current-schema miss collector","contracts":["X01"]},
+        {"line":684,"title":"`rejects an existing collector with incompatible ${schemaPart} before registering anything`","contracts":["X01"]},
+        {"line":698,"title":"rejects exemplar-enabled collectors before registering anything","contracts":["X01"]},
+        {"line":719,"title":"treats an explicitly undefined exemplar mode as disabled","contracts":["B01"]},
+        {"line":745,"title":"exports counters and histograms for requests, misses, fallbacks, gets, serialization, and size","contracts":["X01"]},
+        {"line":774,"title":"exports disabled, error, invalidation, and scoped coalescing counters","contracts":["X01"]},
+        {"line":983,"title":"exports exact deletion independently with bounded labels","contracts":["C61","C62","X01"]}
       ]
     },
     {
       "path": "typescript/test/redis-cluster.integration.test.ts",
-      "sha256": "7c6f642d578cab1b1237743a305bc8d9c315267e94057c61fd67ed2ba4f8bc66",
+      "sha256": "e6b0793106144e230c45bf6887442605eb0ba95d10bfdf6ed42cda55ee67ebca",
       "entries": [
-        {"line":152,"title":"routes cache operations across slots and reloads invalidation scripts per node","contracts":["E01","W09"]},
-        {"line":207,"title":"keeps tracked keys colocated and rejects mismatched hash tags","contracts":["E01","W01"]},
-        {"line":243,"title":"round-trips binary payloads through cluster routing","contracts":["E01","W04"]},
-        {"line":282,"title":"runs GLIDE tracked mutations against the real cluster","contracts":["E01","W09"]},
-        {"line":331,"title":"recovers GLIDE cluster mutations after SCRIPT FLUSH on every master","contracts":["E01","W09"]}
+        {"line":153,"title":"routes exact deletion and preserves its watermark with %s","contracts":["C61","C63","E01"]},
+        {"line":176,"title":"routes cache operations across slots and reloads invalidation scripts per node","contracts":["E01","W09"]},
+        {"line":231,"title":"keeps tracked keys colocated and rejects mismatched hash tags","contracts":["E01","W01"]},
+        {"line":267,"title":"round-trips binary payloads through cluster routing","contracts":["E01","W04"]},
+        {"line":306,"title":"runs GLIDE tracked mutations against the real cluster","contracts":["E01","W09"]},
+        {"line":355,"title":"recovers GLIDE cluster mutations after SCRIPT FLUSH on every master","contracts":["E01","W09"]}
       ]
     },
     {
@@ -1003,42 +1031,43 @@
     },
     {
       "path": "typescript/test/redis-real.integration.test.ts",
-      "sha256": "37e311c65c2329cef4942b7e485d5e652cdaf5738a19dc4b7c3a269a917c480c",
+      "sha256": "f8e337c3c7e8ab5db381d9dea6fd3f5f9834ca60577606cd7fb625d68c6a8d11",
       "entries": [
         {"line":204,"title":"`portable invalidation: ${vector.name}`","contracts":["W09"]},
-        {"line":265,"title":"round-trips untracked UTF-8, binary, and inline-loader values","contracts":["W04","B01"]},
-        {"line":320,"title":"stores the exact application timestamp in tracked frame v1","contracts":["W04"]},
-        {"line":347,"title":"retains a logically stale value through its maximum age and recovers it after source rejection (tracked=%s)","contracts":["C40","C43"]},
-        {"line":412,"title":"does not recover a tracked stale value fenced by invalidation","contracts":["C40"]},
-        {"line":468,"title":"serves the retained tracked snapshot when invalidation arrives during the source attempt","contracts":["C44"]},
-        {"line":530,"title":"conditionally skips and then admits a tracked refill from the observed watermark","contracts":["C34"]},
-        {"line":583,"title":"compresses values above the threshold and stores small values byte-identical","contracts":["W07"]},
-        {"line":629,"title":"round-trips compressed payloads through tracked writes and invalidation","contracts":["W07","C33"]},
-        {"line":680,"title":"escapes envelope-colliding binary serializer output on the wire and round-trips it","contracts":["W06"]},
-        {"line":714,"title":"stores arbitrary binary payloads without base64 expansion","contracts":["W04"]},
-        {"line":759,"title":"shadow-validates the deserialized tracked value without repairing a mismatch","contracts":["C50","C51"]},
-        {"line":937,"title":"shadow-reads $name Redis without serving or repairing a warm hit when the remote ramp is zero","contracts":["C49","C52"]},
-        {"line":1070,"title":"fills a clean $name shadow miss asynchronously and serves it after Redis ramps up","contracts":["C49","C52"]},
-        {"line":1201,"title":"skips a shadow fill behind a future watermark","contracts":["C53"]},
-        {"line":1284,"title":"keeps native writes working and reloads invalidation after SCRIPT FLUSH","contracts":["E01"]},
-        {"line":1324,"title":"classifies native absent, malformed, and watermark-fenced read states","contracts":["E01","W04"]},
-        {"line":1372,"title":"records a stale tracked frame as a remote miss without a read error","contracts":["C33","C58"]},
-        {"line":1431,"title":"uses native wrong-type read semantics and repairs wrong-type keys","contracts":["E01","W09"]},
-        {"line":1503,"title":"treats a wrong-type tracked watermark as absent without coupling writes","contracts":["E01","W09"]},
-        {"line":1568,"title":"rejects invalid raw script arguments before mutating Redis","contracts":["C39"]},
-        {"line":1630,"title":"accepts maximum raw protocol durations and keeps derived TTLs in range","contracts":["C39","W05"]},
-        {"line":1671,"title":"rounds fractional native write TTLs upward","contracts":["W05"]},
-        {"line":1683,"title":"keeps native reads working after SCRIPT FLUSH","contracts":["E01"]},
-        {"line":1716,"title":"fails open without caching malformed watermark state","contracts":["C33"]},
-        {"line":1740,"title":"writes complete frames without inspecting malformed watermarks","contracts":["W04"]},
-        {"line":1763,"title":"labels malformed payload encoding through the production adapter","contracts":["W04","C58"]},
-        {"line":1817,"title":"creates missing and repairs malformed invalidation watermarks","contracts":["C38"]},
-        {"line":1851,"title":"keeps persistent invalidation watermarks persistent","contracts":["C38"]},
-        {"line":1865,"title":"does not create or rewrite watermarks on writes","contracts":["C38"]},
-        {"line":1894,"title":"fences complete writes during the buffer without extending the watermark","contracts":["C35"]},
-        {"line":1944,"title":"documents that losing a watermark removes its read-time invalidation fence","contracts":["E02"]},
-        {"line":1969,"title":"preserves a watermark when GET fails for a reason other than WRONGTYPE","contracts":["C38"]},
-        {"line":2006,"title":"uses one wire format across node-redis and Valkey GLIDE","contracts":["W04","E01"]}
+        {"line":265,"title":"deletes only the exact value and preserves the watermark (tracked=%s)","contracts":["C61","C63","E01"]},
+        {"line":284,"title":"round-trips untracked UTF-8, binary, and inline-loader values","contracts":["W04","B01"]},
+        {"line":339,"title":"stores the exact application timestamp in tracked frame v1","contracts":["W04"]},
+        {"line":366,"title":"retains a logically stale value through its maximum age and recovers it after source rejection (tracked=%s)","contracts":["C40","C43"]},
+        {"line":431,"title":"does not recover a tracked stale value fenced by invalidation","contracts":["C40"]},
+        {"line":487,"title":"serves the retained tracked snapshot when invalidation arrives during the source attempt","contracts":["C44"]},
+        {"line":549,"title":"conditionally skips and then admits a tracked refill from the observed watermark","contracts":["C34"]},
+        {"line":602,"title":"compresses values above the threshold and stores small values byte-identical","contracts":["W07"]},
+        {"line":648,"title":"round-trips compressed payloads through tracked writes and invalidation","contracts":["W07","C33"]},
+        {"line":699,"title":"escapes envelope-colliding binary serializer output on the wire and round-trips it","contracts":["W06"]},
+        {"line":733,"title":"stores arbitrary binary payloads without base64 expansion","contracts":["W04"]},
+        {"line":778,"title":"shadow-validates the deserialized tracked value without repairing a mismatch","contracts":["C50","C51"]},
+        {"line":956,"title":"shadow-reads $name Redis without serving or repairing a warm hit when the remote ramp is zero","contracts":["C49","C52"]},
+        {"line":1089,"title":"fills a clean $name shadow miss asynchronously and serves it after Redis ramps up","contracts":["C49","C52"]},
+        {"line":1220,"title":"skips a shadow fill behind a future watermark","contracts":["C53"]},
+        {"line":1303,"title":"keeps native writes working and reloads invalidation after SCRIPT FLUSH","contracts":["E01"]},
+        {"line":1343,"title":"classifies native absent, malformed, and watermark-fenced read states","contracts":["E01","W04"]},
+        {"line":1391,"title":"records a stale tracked frame as a remote miss without a read error","contracts":["C33","C58"]},
+        {"line":1450,"title":"uses native wrong-type read semantics and repairs wrong-type keys","contracts":["E01","W09"]},
+        {"line":1522,"title":"treats a wrong-type tracked watermark as absent without coupling writes","contracts":["E01","W09"]},
+        {"line":1587,"title":"rejects invalid raw script arguments before mutating Redis","contracts":["C39"]},
+        {"line":1649,"title":"accepts maximum raw protocol durations and keeps derived TTLs in range","contracts":["C39","W05"]},
+        {"line":1690,"title":"rounds fractional native write TTLs upward","contracts":["W05"]},
+        {"line":1702,"title":"keeps native reads working after SCRIPT FLUSH","contracts":["E01"]},
+        {"line":1735,"title":"fails open without caching malformed watermark state","contracts":["C33"]},
+        {"line":1759,"title":"writes complete frames without inspecting malformed watermarks","contracts":["W04"]},
+        {"line":1782,"title":"labels malformed payload encoding through the production adapter","contracts":["W04","C58"]},
+        {"line":1836,"title":"creates missing and repairs malformed invalidation watermarks","contracts":["C38"]},
+        {"line":1870,"title":"keeps persistent invalidation watermarks persistent","contracts":["C38"]},
+        {"line":1884,"title":"does not create or rewrite watermarks on writes","contracts":["C38"]},
+        {"line":1913,"title":"fences complete writes during the buffer without extending the watermark","contracts":["C35"]},
+        {"line":1963,"title":"documents that losing a watermark removes its read-time invalidation fence","contracts":["E02"]},
+        {"line":1988,"title":"preserves a watermark when GET fails for a reason other than WRONGTYPE","contracts":["C38"]},
+        {"line":2025,"title":"uses one wire format across node-redis and Valkey GLIDE","contracts":["W04","E01"]}
       ]
     },
     {
@@ -1053,7 +1082,7 @@
     },
     {
       "path": "typescript/test/valkey-glide.test.ts",
-      "sha256": "1144ccd7deabea1ed6657b87da7e9718d63bbedded8a2c5a65014098d8a543db",
+      "sha256": "dd0a3ce9c897132c06cfd0b79654defbf1efe4fada20e82c5705eef40a1a1bc7",
       "entries": [
         {"line":137,"title":"uses GET and a non-atomic primary MGET batch that preserves caller WATCH state","contracts":["E01"]},
         {"line":184,"title":"classifies an absent tracked value while preserving its observed watermark","contracts":["E01"]},
@@ -1077,7 +1106,10 @@
         {"line":603,"title":"preserves a pre-existing cause on the invalidation retry rejection","contracts":["B02"]},
         {"line":617,"title":"passes a non-Error invalidation retry rejection through without decoration","contracts":["E01","B02"]},
         {"line":631,"title":"validates the invalidation retry reply through the shared validator","contracts":["E01"]},
-        {"line":647,"title":"uses Batch and Decoder from the supplied GLIDE module instance","contracts":["B01"]}
+        {"line":647,"title":"uses Batch and Decoder from the supplied GLIDE module instance","contracts":["B01"]},
+        {"line":691,"title":"accepts standalone DEL reply %s","contracts":["C61","C62","E01"]},
+        {"line":696,"title":"routes cluster deletion to the slot primary","contracts":["C61","E01"]},
+        {"line":703,"title":"rejects invalid DEL reply %s without retry","contracts":["C62","E01"]}
       ]
     }
   ],
@@ -1106,7 +1138,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "ee7e2809fe5a06a3252ffcd6089cf2e9b4f78548008b56853e5641889121896b",
+      "sha256": "89588d5de56e7c4ca3d6718ff0d250d65065765a9a41ac61d19082cb876f3d05",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1122,7 +1154,8 @@
         {"line":336,"title":"Generated layer-composition profile"},
         {"line":370,"title":"Generated request-scope profile"},
         {"line":393,"title":"Generated served-hit shadow admission profile"},
-        {"line":417,"title":"Port workflow and limits"}
+        {"line":417,"title":"Port workflow and limits"},
+        {"line":427,"title":"Exact deletion profile"}
       ],
       "review": {
         "kind": "contract-guide",
@@ -1233,7 +1266,7 @@
     },
     {
       "path": "formal/CONTRACTS.md",
-      "sha256": "6c760c76f666b32cdacab7e65822529de0d24b241c0b463327ea8eaff61b8b8f",
+      "sha256": "5c836619e7b038a75b7fd5285f42237cdf2b0c6876c40f36520bced518561ea7",
       "entries": [
         {"line":1,"title":"Portable contract inventory"},
         {"line":11,"title":"Where the boundary lies"},
@@ -1243,10 +1276,10 @@
         {"line":58,"title":"Policy, liveness, and failure handling"},
         {"line":78,"title":"Invalidation, recovery, and shadow validation"},
         {"line":107,"title":"Adapter boundary and diagnostic behavior"},
-        {"line":118,"title":"Deterministic protocol obligations"},
-        {"line":132,"title":"Assumptions and deliberate exclusions"},
-        {"line":147,"title":"Source index"},
-        {"line":187,"title":"Maintenance and claim limits"}
+        {"line":121,"title":"Deterministic protocol obligations"},
+        {"line":135,"title":"Assumptions and deliberate exclusions"},
+        {"line":150,"title":"Source index"},
+        {"line":190,"title":"Maintenance and claim limits"}
       ],
       "review": {
         "kind": "contract-guide",
@@ -1330,13 +1363,16 @@
           "B02",
           "B03",
           "X01",
-          "X02"
+          "X02",
+          "C61",
+          "C62",
+          "C63"
         ]
       }
     },
     {
       "path": "formal/FEATURE-COVERAGE.md",
-      "sha256": "ef55f7f4ac68fe36051eb92f210c3bc9979e20819714f842e5b52338cd15b63c",
+      "sha256": "f31d922103578494cf21dc1da69defa0233fe0ac4e24a626fda2321ad58a5fbf",
       "entries": [
         {"line":1,"title":"DialCache features and known behavioral corners"},
         {"line":16,"title":"What is accounted for"},
@@ -1426,15 +1462,15 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "4b9114d19cf627e6d1c3b8bf6d82f193633ae6cec8986a4147f46bedacb161af",
+      "sha256": "320214be4408811736767da7c58e97462c711122309bf3f81563582d4b51238f",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":10,"title":"Start with your task"},
         {"line":26,"title":"How the specification connects to code"},
         {"line":46,"title":"Models and composition profiles"},
-        {"line":99,"title":"Generating and replaying behavior"},
-        {"line":201,"title":"Shared verification and replay rules"},
-        {"line":217,"title":"Evidence and scope"}
+        {"line":100,"title":"Generating and replaying behavior"},
+        {"line":202,"title":"Shared verification and replay rules"},
+        {"line":218,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1552,7 +1588,7 @@
     },
     {
       "path": "formal/TEST-AUDIT.md",
-      "sha256": "fda74847092b768ceb216d34f43465f5323b2bea3ddf9f97871d9fba17fca714",
+      "sha256": "ec74ec12a33f8d3565dcd8b470ee2a53759edb3e6d55f344606b6b8159747eea",
       "entries": [
         {"line":1,"title":"Docs and test behavior audit"},
         {"line":13,"title":"Keeping the audit current"},
@@ -1566,7 +1602,7 @@
     },
     {
       "path": "formal/TEST-MAP.md",
-      "sha256": "1882a0a430c22b5d1a50741a3121cc77b7810cb2f9b0cb65500489d479bbd883",
+      "sha256": "27b3ad259ffae8bf126c14b7ad9410f3e7b0d0bd2764ce3bec79d5755399b2d7",
       "entries": [
         {"line":1,"title":"Formal contract and implementation evidence map"},
         {"line":18,"title":"Behavioral map"},
@@ -1614,17 +1650,18 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "dcef48b1acaea88d04dd2ea49ed09f7ce7ea17a019f41b9df257a31b6560bebf",
+      "sha256": "ce87b05155c2e938c425808454e339e7dd8929791a6b42ec3d6875db9d4cf602",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
         {"line":23,"title":"Use"},
-        {"line":89,"title":"Configuration and effects"},
-        {"line":147,"title":"Values, codecs and observability"},
-        {"line":193,"title":"Validation and reproducing a trace"}
+        {"line":89,"title":"Exact-key deletion"},
+        {"line":109,"title":"Configuration and effects"},
+        {"line":167,"title":"Values, codecs and observability"},
+        {"line":213,"title":"Validation and reproducing a trace"}
       ],
       "review": {
         "kind": "contract-guide",
-        "scope": "Go API/context/policy/error bindings and native codec domains. Updated test prerequisites and shared coordinator ownership: command mapping/assertions use Node while the cache implementation and environment remain native Go; full evidence differs from smoke. Redis routing review distinguishes the concrete ClusterClient primary override from the application requirement that standalone/Sentinel handles target the primary with ReplicaOnly disabled.",
+        "scope": "Go API/context/policy/error bindings and native codec domains. Updated test prerequisites and shared coordinator ownership: command mapping/assertions use Node while the cache implementation and environment remain native Go; full evidence differs from smoke. Redis routing review distinguishes the concrete ClusterClient primary override from the application requirement that standalone/Sentinel handles target the primary with ReplicaOnly disabled. Exact deletion uses the existing Identity and optional RemoteDeleter, performs remote-first maintenance through disabled live scopes, and preserves watermarks, flights and acquired snapshots.",
         "contracts": [
           "B01",
           "B02",
@@ -1659,7 +1696,10 @@
           "W07",
           "W08",
           "X01",
-          "X02"
+          "X02",
+          "C61",
+          "C62",
+          "C63"
         ]
       }
     }

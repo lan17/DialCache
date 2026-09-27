@@ -304,6 +304,29 @@
         "shadow_reads::releaseRead"
       ],
       "compositionViolations": 0
+    },
+    {
+      "id": "deletion",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "module": "dialcache_deletion_conformance",
+      "libraryTransitions": [
+        "clock::advance",
+        "flights::recordIdentity",
+        "layer_policy::resolution",
+        "remote_frames::seedFrame",
+        "remote_io::begin",
+        "remote_io::latestRead",
+        "remote_io::settleLoad",
+        "remote_io::settleLoader",
+        "remote_io::settleRead",
+        "serving::begin",
+        "serving::closeScope",
+        "serving::deleteEntry",
+        "serving::invalidate",
+        "serving::maintenanceOutcome",
+        "serving::settle"
+      ],
+      "compositionViolations": 0
     }
   ]
 }

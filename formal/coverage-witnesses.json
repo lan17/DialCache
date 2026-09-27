@@ -527,5 +527,21 @@
     "confirmation-keeps-captured-read-budget",
     "confirmation-read-budget-starts-at-dispatch",
     "timely-shadow-read-cancels-deadline-and-fills"
+  ],
+  "deletion": [
+    "delete-removes-every-reachable-store",
+    "disabled-delete-removes-outer-memo",
+    "outside-delete-preserves-existing-request-memo",
+    "local-only-delete-removes-local",
+    "unsupported-delete-preserves-every-store",
+    "failed-delete-preserves-every-store",
+    "delete-preserves-watermark-and-sibling-local-value",
+    "delete-preserves-other-instance-local-value",
+    "late-fill-remains-shared-and-repopulates",
+    "acquired-snapshot-completes-after-delete",
+    "absent-delete-succeeds-without-policy",
+    "deleted-key-reloads-and-memoizes-new-value",
+    "delete-preserves-sibling-and-other-request",
+    "absent-local-only-delete-succeeds"
   ]
 }

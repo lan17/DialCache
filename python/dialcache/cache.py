@@ -26,6 +26,7 @@ from .errors import (
     FallbackTimeoutError,
     MissingRemoteError,
     RemoteReadTimeoutError,
+    RemoteDeleteUnsupportedError,
     UseCaseIsAlreadyRegisteredError,
     UseCaseNameIsReservedError,
 )
@@ -33,7 +34,7 @@ from .key import Key, KeyScalar, invalidation_prefix, normalize_args, ramp_sampl
 from .local import LocalCache
 from .metrics import Metrics, emit_metric
 from .protocol import Frame, Miss, compress_payload, decompress_payload, escape_raw_payload, utf8_bytes
-from .redis import InvalidationRequest, ReadContext, ReadRequest, WriteRequest
+from .redis import DeleteRequest, InvalidationRequest, ReadContext, ReadRequest, WriteRequest
 from .serializer import JsonSerializer
 
 T = TypeVar("T")
@@ -945,6 +946,54 @@ class DialCache:
             self._error(key, layer, "cache_write")
             raise
         return True
+
+    async def delete(
+        self, *, key: Any, key_type: str, use_case: str, track_for_invalidation: bool = False
+    ) -> None:
+        """Remove one exact result from this request, instance, and remote.
+
+        The identity must match the reader, including tracking mode. Maintenance
+        works in disabled scopes without consulting policy. Existing flights and
+        acquired values remain valid and may publish after deletion.
+        """
+        if use_case == "watermark":
+            raise UseCaseNameIsReservedError(use_case)
+        if isinstance(key, Key):
+            identity = key
+            if identity.namespace != self.namespace:
+                raise ValueError("Key namespace differs from cache namespace")
+            if identity.use_case == "watermark":
+                raise UseCaseNameIsReservedError(identity.use_case)
+        else:
+            spec = key if isinstance(key, Mapping) else {"id": key}
+            identity = Key(
+                self.namespace, key_type, spec["id"], use_case,
+                normalize_args(spec.get("args", {})), track_for_invalidation,
+            )
+        remote_delete = getattr(self.redis, "delete", None) if self.redis is not None else None
+        if self.redis is not None and not callable(remote_delete):
+            raise RemoteDeleteUnsupportedError("Redis adapter does not support exact-key deletion")
+        layer = "remote" if self.redis is not None else "local"
+        labels = self._labels(identity, layer)
+        self._emit("deletion", labels)
+        if remote_delete is not None:
+            try:
+                await _call_dependency(remote_delete, DeleteRequest(identity.value_key))
+            except (Exception, asyncio.CancelledError) as error:
+                self._emit("error", labels, error="deletion", inFallback=False)
+                self._log("Could not delete DialCache entry: %s", error)
+                raise
+        # There is no await between the two local removals. A disabled inner
+        # scope still carries the live outer holder, and deletion creates none.
+        try:
+            self._local.delete(identity.logical)
+            holder = self._context._live_holder()
+            if holder is not None and holder.memo is not None:
+                holder.memo.delete(identity.logical)
+        except (Exception, asyncio.CancelledError) as error:
+            self._emit("error", {**labels, "layer": "local"}, error="deletion", inFallback=False)
+            self._log("Could not delete local DialCache entry: %s", error)
+            raise
 
     async def invalidate_remote(self, key_type: str, id: Any, future_buffer_ms: int = 0) -> None:
         """Write an entity fence after its source mutation commits; failures raise."""

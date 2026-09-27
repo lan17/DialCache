@@ -70,6 +70,9 @@ class LocalCache:
         while len(self._entries) > self.max_size:
             self._entries.popitem(last=False)
 
+    def delete(self, key: str) -> None:
+        self._entries.pop(key, None)
+
     def clear(self) -> None:
         self._entries.clear()
 

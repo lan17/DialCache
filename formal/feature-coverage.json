@@ -92,7 +92,8 @@
         "C22.freshness-boundary",
         "C22.physical-vs-logical",
         "C06.absent-distinct-from-text",
-        "C22.adapter-frame-expiry", "C22.freshness-after-read",
+        "C22.adapter-frame-expiry",
+        "C22.freshness-after-read",
         "C05.request-hit-stops-traversal",
         "C05.local-hit-stops-traversal",
         "C09.fractional-clock-grid"
@@ -559,6 +560,26 @@
       ],
       "assumptions": [
         "E03"
+      ]
+    },
+    {
+      "id": "deletion",
+      "title": "Exact cached-result deletion",
+      "scope": "Explicit maintenance across request, process-local and configured remote storage, including capability and failure ordering; no entity scan or publication barrier.",
+      "contracts": [
+        "C61",
+        "C62",
+        "C63"
+      ],
+      "cases": [
+        "C61.exact-deletion",
+        "C62.deletion-failure",
+        "C63.deletion-boundaries"
+      ],
+      "nativeCases": [],
+      "assumptions": [
+        "E01",
+        "E02"
       ]
     }
   ],

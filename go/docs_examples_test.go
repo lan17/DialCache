@@ -186,3 +186,28 @@ func TestDocsTrackedInvalidation(t *testing.T) {
 	}
 	// #endregion tracked-invalidation
 }
+
+func TestDocsExactDelete(t *testing.T) {
+	// #region exact-delete
+	cache := dialcache.MustNew()
+	identity := dialcache.Identity{KeyType: "user", ID: "42", UseCase: "GetUser"}
+	operation := dialcache.Operation[int]{Identity: identity, Policy: dialcache.Policy{
+		RequestLocal: true, LocalTTL: time.Minute,
+	}}
+	sourceCalls := 0
+	load := func(context.Context) (int, error) { sourceCalls++; return sourceCalls, nil }
+	ctx, done := cache.Enable(context.Background())
+	defer done()
+	if value, err := dialcache.GetOrLoad(ctx, cache, operation, load); err != nil || value != 1 {
+		t.Fatalf("initial value: %d %v", value, err)
+	}
+	// Exact deletion also works inside Disable and without a remote adapter.
+	// Supply the same identity, including Args and Tracked, as the reader.
+	if err := cache.Delete(cache.Disable(ctx), identity); err != nil {
+		t.Fatal(err)
+	}
+	if value, err := dialcache.GetOrLoad(ctx, cache, operation, load); err != nil || value != 2 {
+		t.Fatalf("deleted value should reload: %d %v", value, err)
+	}
+	// #endregion exact-delete
+}

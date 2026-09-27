@@ -138,11 +138,11 @@ Calls may remain pending at a scenario's end. Drivers release fixture-owned work
 ## Observations
 
 - `calls`: every caller, in start order, is `{"status":"pending"}`, `{"status":"value","value":1}`, or `{"status":"error","error":"source:0"}` / `"timeout:0"`. Source IDs identify the original loader error; timeout IDs identify distinct timeout outcomes in observation order. Coalesced followers must receive the same error identity. Ports can compare a shared logical error token without adopting JavaScript object identity.
-- `loaders`, `reads`, `writes`, `invalidations`, `loads`, `dumps`, `policyCalls`: cumulative actual loader, adapter, serializer, and provider invocations. Failed and still-pending attempts count. Value writes and invalidations are separate.
+- `loaders`, `reads`, `writes`, `invalidations`, `deletions`, `loads`, `dumps`, `policyCalls`: cumulative actual loader, adapter, serializer, and provider invocations. Failed and still-pending attempts count. Value writes, watermark invalidations and exact value deletions are separate. Deletions count adapter dispatches, including failures; local-only and unsupported operations dispatch none.
 - `classifications`, `comparisons`: actual invocations of the fixture-owned classifier/comparator. Built-in defaults are not instrumented.
 - `sourceScopes`: actual source-entry enablement observations when the explicit scope probe is enabled; otherwise empty.
 - `writeTtls`: actual requested physical write TTLs in milliseconds, in dispatch order.
-- `maintenance`: public invalidation outcomes, `ok`, `mutation_error`, or `missing_remote`. The last category records the actual public error; a port need not reproduce its native class or text.
+- `maintenance`: public outcomes of each `invalidate` or `delete` in order: `ok`, `mutation_error`, `missing_remote`, or `unsupported`. The last category records the actual public error; a port need not reproduce its native class or text.
 - `shadow`, `recovery`: terminal outcomes from the public diagnostic hooks, in observed order. Exact telemetry timing and ordinary metrics are not asserted.
 
 A returned cache value, loader invocation, or acknowledged write does not prove publication. Subsequent calls test cache retention and invalidation. Negative harness tests deliberately remove recovery, local storage, and acknowledged invalidation and require a later observable divergence.
@@ -423,3 +423,28 @@ The committed `admission-smoke.itf.json` retains actions, choices, and observati
 5. Report passing behavior families, specification revision, seed, bounds, and tool versions.
 
 Passing covers the supplied observations and scenarios. It does not establish every feature interaction, fairness/liveness, arbitrary resource limits, or all external failures. The Go driver executes this same feature interface and generated corpus. Its native concurrency gates and source-ownership monitor use actual callbacks and contexts, while expected model state remains assertion-only. See [`TEST-MAP.md`](./TEST-MAP.md) for the remaining boundaries.
+
+## Exact deletion profile
+
+`deletion` composes the same four identities and two instances as `layers`.
+Fixture choices 0..5 match `layers`; choice 6 configures a remote without the
+optional delete capability. Three root scopes are opened, plus disabled child
+scope `5` sharing root `0`. Contexts 3/4 are fresh enabled calls on instances
+0/1; context 6 is outside enablement. Choices are `context * 4 + identity`.
+The identity encodes entity `floor(identity / 2)` and operation `Layers0/1`.
+
+| Quint action | Driver input |
+| --- | --- |
+| `deleteEntry` | `delete` with scope `id` when present, instance, key and useCase; fixture supplies tracking mode |
+| `remoteFault` | Toggle the shared remote mutation failure switch |
+| `holdDecoding` | Hold subsequent serializer loads; permitted only before any caller starts |
+| `releaseLoad` | Release the selected acquired snapshot's decoding |
+| Other actions | The `layers` begin, resolve, reject, seed, invalidate, closeScope, policy and 1 ms tick inputs |
+
+`delete` is explicit maintenance: its adapter effect runs before synchronous
+local and request-memo removal. Unsupported capability fails before mutation;
+a remote failure leaves both local stores untouched. No policy is resolved.
+The receipt records stores and ownership before each operation, while public
+post-delete calls prove the distinguishing consequences. Acquired snapshots
+are held before decoding and released after deletion; their result and late
+publication remain allowed, as does a pending source's later fill.

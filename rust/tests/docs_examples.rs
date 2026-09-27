@@ -156,3 +156,41 @@ async fn tracked_invalidation() -> Result<(), BoxError> {
         .await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn exact_delete() -> Result<(), BoxError> {
+    use dialcache::{Identity, Operation};
+    // #region exact-delete
+    let cache = DialCache::builder().namespace("my-app").build()?;
+    // Match every reader dimension, including arguments and tracking mode.
+    let identity =
+        Identity::new("user", 42, "displayName").args(vec![("locale".into(), "en".into())]);
+    let operation = Operation::<String>::new(identity.clone())
+        .policy(Policy::default().request_local(true).local_ttl_sec(60));
+    let request = cache.enable_guard();
+    let before = cache
+        .get_or_load(request.scope(), operation.clone(), |_| async {
+            Ok("Ada".to_string())
+        })
+        .await?;
+    assert_eq!(*before, "Ada");
+
+    // After the source mutation commits, remove this exact cached result.
+    let cache_ref = &cache;
+    cache
+        .disable_in(request.scope(), |disabled| async move {
+            cache_ref.delete(&disabled, identity).await
+        })
+        .await?;
+    let after = cache
+        .get_or_load(request.scope(), operation, |_| async {
+            Ok("Grace".to_string())
+        })
+        .await?;
+    assert_eq!(*after, "Grace");
+    assert_eq!(*before, "Ada"); // A previously acquired snapshot stays usable.
+                                // With Redis configured, deletion removes its value first, then local and
+                                // request entries. Use Scope::outside() when no request is involved.
+                                // #endregion exact-delete
+    Ok(())
+}

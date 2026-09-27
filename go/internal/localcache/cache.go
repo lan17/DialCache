@@ -61,3 +61,14 @@ func (s *Store) Put(key string, value any, ttlMS int64) {
 	// capacity, regardless of that entry's remaining TTL.
 	s.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})
 }
+
+// Remove deletes one exact entry without consulting the clock or changing
+// the relative recency of the entries that remain. A nil Store is a no-op.
+func (s *Store) Remove(key string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.entries.Remove(key)
+}

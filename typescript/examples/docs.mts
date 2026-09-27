@@ -121,6 +121,29 @@ async function trackedInvalidation(url: string): Promise<void> {
   }
 }
 
+async function exactDelete(): Promise<void> {
+  // #region exact-delete
+  const cache = new DialCache();
+  let sourceCalls = 0;
+  const options = {
+    keyType: "user", useCase: "profile", key: { id: "42", args: { locale: "en" } },
+    defaultConfig: new DialCacheKeyConfig({ requestLocal: true, ttlSec: { local: 60 } }),
+  };
+  const load = () => ++sourceCalls;
+  await cache.enable(async () => {
+    assert.equal(await cache.getOrLoad(load, options), 1);
+    assert.equal(await cache.getOrLoad(load, options), 1);
+    // Maintenance acts even while automatic caching is disabled.
+    await cache.disable(() => cache.delete(options));
+    assert.equal(await cache.getOrLoad(load, options), 2);
+  });
+  // Use the same identity, including arguments and tracking mode, as the reader.
+  await cache.delete(options);
+  assert.equal(await cache.enable(() => cache.getOrLoad(load, options)), 3);
+  // #endregion exact-delete
+}
+
+await exactDelete();
 await requestScope();
 await runtimePolicy();
 if (process.env.DOCS_REDIS_URL) {
