@@ -741,7 +741,7 @@
       "id": "M24",
       "case": "C13.local-last-writer",
       "description": "Clear the key's local entry when a source settlement fails",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain deletes the key's local entry before rethrowing a rejected source, and Go go/engine.go shared removes the local entry on its no-Redis-client, non-ramped remote-disabled and remote-read error paths. A mutation-only Store.Remove method in go/internal/localcache/cache.go preserves removal of the complete entry under the store mutex. A failed active source can therefore discard another source's accepted local publication. The model removes the value, expiry and LRU membership together. Native scope differs: Go also clears after a remote-read failure, before a recovery attempt, and without a Redis client; TypeScript clears only after finishRedisChain cannot recover. Ramped-down dark-source paths and outside bypass calls do not execute these edits.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain deletes the key's local entry before rethrowing a rejected source, and Go go/engine.go shared removes the local entry on its no-Redis-client, non-ramped remote-disabled and remote-read error paths. The existing Store.Remove method removes the complete entry under the store mutex. A failed active source can therefore discard another source's accepted local publication. The model removes the value, expiry and LRU membership together. Native scope differs: Go also clears after a remote-read failure, before a recovery attempt, and without a Redis client; TypeScript clears only after finishRedisChain cannot recover. Ramped-down dark-source paths and outside bypass calls do not execute these edits.",
       "typescript": {
         "edits": [
           {
@@ -771,11 +771,6 @@
             "path": "go/engine.go",
             "before": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n",
             "after": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n\t\t\tc.local.Remove(x.key)\n"
-          },
-          {
-            "path": "go/internal/localcache/cache.go",
-            "before": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n}",
-            "after": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n}\n\n// Fault injection: remove the complete entry after an active source failure.\nfunc (s *Store) Remove(key string) {\n\tif s == nil {\n\t\treturn\n\t}\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\ts.entries.Remove(key)\n}"
           }
         ],
         "requiredDetections": [
