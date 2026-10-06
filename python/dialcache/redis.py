@@ -22,9 +22,9 @@ from .protocol import (
     decode_read,
     decode_tracked_read,
     encode_frame,
+    validate_del_reply,
     validate_future_buffer_ms,
     validate_invalidation_reply,
-    validate_del_reply,
     validate_set_reply,
     validate_timestamp,
 )

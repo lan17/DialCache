@@ -42,6 +42,7 @@ export { DialCache } from "./dialcache.js";
 export type {
   CacheIdentityOptions,
   CacheKeySpec,
+  CacheUseCaseOptions,
   CachedFn,
   CachedOptions,
   CachedValue,

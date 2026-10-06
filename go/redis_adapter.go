@@ -141,6 +141,8 @@ func (adapter *RedisAdapter) Delete(ctx context.Context, valueKey string) error 
 	return ValidateRedisDelReply(reply)
 }
 
+// ValidateRedisDelReply accepts only the integer replies 0 and 1 that DEL of
+// one key can return.
 func ValidateRedisDelReply(reply any) error {
 	if integer, ok := reply.(int64); !ok || (integer != 0 && integer != 1) {
 		return &RedisProtocolError{"invalid Redis DEL reply; expected integer 0 or 1"}

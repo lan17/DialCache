@@ -1,9 +1,7 @@
-import { RemoteDeleteUnsupportedError } from "../errors.js";
-
 import { performance } from "node:perf_hooks";
 
 import { CacheLayer } from "../config.js";
-import { RedisReadTimeoutError } from "../errors.js";
+import { RedisReadTimeoutError, RemoteDeleteUnsupportedError } from "../errors.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
 import {
   isCacheMissReason,

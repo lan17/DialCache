@@ -139,6 +139,7 @@ const rootConsumer = `import {
   RedisReadTimeoutError,
   isRedisReadMiss,
   type CacheIdentityOptions,
+  type CacheUseCaseOptions,
   type RedisDeleteRequest,
   type CacheMissReason,
   type CacheMetricLabels,
@@ -418,6 +419,8 @@ const deleteReplyValidation: void = validateRedisDelReply(0);
 const deleteIdentity: CacheIdentityOptions = { keyType: "id", useCase: "Delete", key: "1" };
 const deleteRequest: RedisDeleteRequest = { valueKey: "value" };
 const deleteResult: Promise<void> = cache.delete(deleteIdentity);
+const deleteUseCase: CacheUseCaseOptions = deleteIdentity;
+void deleteUseCase;
 const unsupportedDeleteError = new RemoteDeleteUnsupportedError();
 void deleteReplyValidation; void deleteRequest; void deleteResult; void unsupportedDeleteError;
 const setReplyValidation: void = validateRedisSetReply("OK");

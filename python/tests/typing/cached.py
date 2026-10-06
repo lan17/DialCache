@@ -5,6 +5,16 @@ from collections.abc import Awaitable, Coroutine, Mapping
 from typing import Any, assert_type
 
 from dialcache import UNDEFINED, CacheKeySpec, DialCache, Key, KeyScalar
+from dialcache.protocol import Miss, ReadResult
+from dialcache.redis import (
+    DeleteRequest,
+    InvalidationRequest,
+    ReadContext,
+    ReadRequest,
+    RedisClient,
+    RedisDeleteClient,
+    WriteRequest,
+)
 
 cache = DialCache()
 
@@ -116,16 +126,6 @@ invalid_id: CacheKeySpec = {"id": object()}  # type: ignore[typeddict-item]
 
 # Existing typed adapters retain the original three-method protocol; exact
 # deletion is an optional, separately declared capability.
-from dialcache.protocol import Miss, ReadResult
-from dialcache.redis import (
-    DeleteRequest,
-    InvalidationRequest,
-    ReadContext,
-    ReadRequest,
-    RedisClient,
-    RedisDeleteClient,
-    WriteRequest,
-)
 
 
 class LegacyRemote:

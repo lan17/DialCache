@@ -131,25 +131,25 @@
     },
     {
       "path": "docs/invalidation.md",
-      "sha256": "ccbdd666f52fc161a97fc1cf4ad057866bb76c6560fc81f6a8a2d4e83cb59123",
+      "sha256": "9c305eeb192dffd2ee889d55478c04970ba194315d62b4553b6cf1cb2846e58d",
       "entries": [
         {"line":1,"title":"Targeted invalidation","contracts":["C32"]},
         {"line":10,"title":"Watermarks: an entity-wide cutoff","contracts":["C32","C33"]},
         {"line":53,"title":"Configure a tracked use case","contracts":["C31","B01"]},
         {"line":137,"title":"Exact-key deletion versus entity invalidation","contracts":["C61","C62","C63"]},
-        {"line":252,"title":"Choosing `futureBufferMs`","contracts":["E02","E03"]},
-        {"line":280,"title":"Reuse boundaries","contracts":["C36"]},
-        {"line":292,"title":"Independent fence checks","contracts":["C34","C35"]},
-        {"line":308,"title":"Application clock contract","contracts":["E03"]},
-        {"line":323,"title":"Watermark durability","contracts":["E02"]},
-        {"line":334,"title":"Protocol reference","contracts":["W09"]},
-        {"line":336,"title":"Read and write behavior","contracts":["C33","C35"]},
-        {"line":346,"title":"Conditional refills","contracts":["C34"]},
-        {"line":375,"title":"In-memory publication","contracts":["C31","C36"]},
-        {"line":386,"title":"Shadow reads and fills","contracts":["C53"]},
-        {"line":397,"title":"Identity and Redis Cluster placement","contracts":["W01"]},
-        {"line":422,"title":"Watermark lifetime","contracts":["C37","C38","C39"]},
-        {"line":450,"title":"Failure behavior and telemetry","contracts":["C29","C58"]}
+        {"line":254,"title":"Choosing `futureBufferMs`","contracts":["E02","E03"]},
+        {"line":282,"title":"Reuse boundaries","contracts":["C36"]},
+        {"line":294,"title":"Independent fence checks","contracts":["C34","C35"]},
+        {"line":310,"title":"Application clock contract","contracts":["E03"]},
+        {"line":325,"title":"Watermark durability","contracts":["E02"]},
+        {"line":336,"title":"Protocol reference","contracts":["W09"]},
+        {"line":338,"title":"Read and write behavior","contracts":["C33","C35"]},
+        {"line":348,"title":"Conditional refills","contracts":["C34"]},
+        {"line":377,"title":"In-memory publication","contracts":["C31","C36"]},
+        {"line":388,"title":"Shadow reads and fills","contracts":["C53"]},
+        {"line":399,"title":"Identity and Redis Cluster placement","contracts":["W01"]},
+        {"line":424,"title":"Watermark lifetime","contracts":["C37","C38","C39"]},
+        {"line":452,"title":"Failure behavior and telemetry","contracts":["C29","C58"]}
       ]
     },
     {
@@ -336,7 +336,7 @@
     },
     {
       "path": "typescript/README.md",
-      "sha256": "f481f870838197f75a60a891fcf6f87c35bc620293c2fa8d2d36d8224fda338e",
+      "sha256": "ec7c8a46a10e93ddf72b12adc57bd5f8d94ef247381d4535c3e5644d82f7a601",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01","C61","C62","C63"]},
         {"line":30,"title":"Install","contracts":["B01"]},

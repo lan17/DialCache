@@ -17,8 +17,8 @@ from dialcache.key import Key
 from dialcache.protocol import Frame, Miss, RedisProtocolError, encode_frame
 from dialcache.redis import (
     INVALIDATE_CACHE_SCRIPT,
-    InvalidationRequest,
     DeleteRequest,
+    InvalidationRequest,
     ReadRequest,
     RedisAdapter,
     WriteRequest,

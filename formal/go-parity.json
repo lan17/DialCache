@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "e708123c9abdc859eeb947549d5032c040ca31cffdf6496480ec9ed2fcc0bc7b",
     "executionSha256": "8104c2a484854f589e9ea8082c8ea2c403a42949b432122df1f738499fcb5507",
-    "sourceAuditSha256": "f51c30a9250623cb7e05a13e3c005a99ccbab56eccfbdeb06bb5c181446af00a",
+    "sourceAuditSha256": "e88d507a914275560ee7e1bcbc33ea265ac15f20dc2a970d67c502d343198015",
     "featureCoverageSha256": "d76a011543f676bf5c2c34b4ee21a70b51a80e3830b0275581852d48f5d3f363",
     "coverageWitnessesSha256": "ffea1970977f29fc8396a255934737bba8387619f67ceaa86f0fb5557f41b579",
     "profilesSha256": "0b3571910b903ff47d01f307bf9f4610ef4e36aee4906c9a33b88c95b27df6c0"
@@ -3467,7 +3467,7 @@
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "221cd3bf238c06f1136ed448eb2c8cceba3c1485424d2116d3a167db7c0e7f68",
+      "sha256": "914e3d62a3047442e74910352d5e5ab42c20d34cf53cc3d9a3729095abe43541",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -3592,14 +3592,14 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "a9dac7c9fbf714b4be25a3b17dd73426f736151a0c69b1425366335008666705"
+            "sha256": "3b05d833afd394eecf139612679c09b1cd0014edbf5c90a7bdb5c9c7cb5bd0f2"
           }
         ]
       }
     },
     {
       "path": "typescript/src/index.ts",
-      "sha256": "dcc3e4cf74ba001f1a237fb1c8e340b449f216610513883998188b7b73a62636",
+      "sha256": "dc857cf67883c7df287520ec0f3c9688ab0346a1d1ee766a04a17afe6025b0ef",
       "candidateGoFiles": [
         "go/api.go",
         "go/bindings.go",
@@ -3890,7 +3890,7 @@
     },
     {
       "path": "typescript/src/internal/redis-cache.ts",
-      "sha256": "fab6617b45926ed138c1328973baf06f5099618d6852f07c57b5bc05854bfb42",
+      "sha256": "68de03b30309fca1544d858883d3062a70042835944009e61c86a5e6a1cc9dc5",
       "candidateGoFiles": [
         "go/engine.go",
         "go/shadow.go",
@@ -3940,7 +3940,7 @@
               "Read",
               "Write"
             ],
-            "sha256": "a9dac7c9fbf714b4be25a3b17dd73426f736151a0c69b1425366335008666705"
+            "sha256": "3b05d833afd394eecf139612679c09b1cd0014edbf5c90a7bdb5c9c7cb5bd0f2"
           },
           {
             "path": "go/cache.go",
@@ -3981,7 +3981,7 @@
               "InvalidateDecimal",
               "InvalidationScript"
             ],
-            "sha256": "a9dac7c9fbf714b4be25a3b17dd73426f736151a0c69b1425366335008666705"
+            "sha256": "3b05d833afd394eecf139612679c09b1cd0014edbf5c90a7bdb5c9c7cb5bd0f2"
           }
         ]
       }
@@ -4035,7 +4035,7 @@
               "RedisProtocolError",
               "ValidateRedisDelReply"
             ],
-            "sha256": "a9dac7c9fbf714b4be25a3b17dd73426f736151a0c69b1425366335008666705"
+            "sha256": "3b05d833afd394eecf139612679c09b1cd0014edbf5c90a7bdb5c9c7cb5bd0f2"
           }
         ]
       }
@@ -4060,7 +4060,7 @@
               "InvalidationScript",
               "InvalidateDecimal"
             ],
-            "sha256": "a9dac7c9fbf714b4be25a3b17dd73426f736151a0c69b1425366335008666705"
+            "sha256": "3b05d833afd394eecf139612679c09b1cd0014edbf5c90a7bdb5c9c7cb5bd0f2"
           }
         ]
       }
@@ -4244,7 +4244,7 @@
               "Delete",
               "ValidateRedisDelReply"
             ],
-            "sha256": "a9dac7c9fbf714b4be25a3b17dd73426f736151a0c69b1425366335008666705"
+            "sha256": "3b05d833afd394eecf139612679c09b1cd0014edbf5c90a7bdb5c9c7cb5bd0f2"
           }
         ]
       }
@@ -4319,7 +4319,7 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "a9dac7c9fbf714b4be25a3b17dd73426f736151a0c69b1425366335008666705"
+            "sha256": "3b05d833afd394eecf139612679c09b1cd0014edbf5c90a7bdb5c9c7cb5bd0f2"
           }
         ]
       }
@@ -4352,7 +4352,7 @@
               "InvalidationScript",
               "ValidateRedisDelReply"
             ],
-            "sha256": "a9dac7c9fbf714b4be25a3b17dd73426f736151a0c69b1425366335008666705"
+            "sha256": "3b05d833afd394eecf139612679c09b1cd0014edbf5c90a7bdb5c9c7cb5bd0f2"
           }
         ]
       }
@@ -4422,7 +4422,7 @@
               "Delete",
               "ValidateRedisDelReply"
             ],
-            "sha256": "a9dac7c9fbf714b4be25a3b17dd73426f736151a0c69b1425366335008666705"
+            "sha256": "3b05d833afd394eecf139612679c09b1cd0014edbf5c90a7bdb5c9c7cb5bd0f2"
           }
         ]
       }

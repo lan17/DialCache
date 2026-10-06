@@ -123,7 +123,8 @@ type IsJsonObject<T extends object, Depth extends readonly unknown[]> = [keyof T
         : false;
     }[keyof T]>;
 
-interface CacheUseCaseOptions {
+/** Names the use case of a cached result: its key type, operation name and tracking mode. */
+export interface CacheUseCaseOptions {
   readonly keyType: string;
   readonly useCase: string;
   readonly trackForInvalidation?: boolean;

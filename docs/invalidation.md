@@ -175,6 +175,8 @@ memos, watermarks, flights, and shadow jobs alone. Two races remain intentional:
   repopulate the deleted key. Deletion does not cancel it or detach its flight.
 - **Acquired snapshot:** a caller that already obtained a value, including bytes
   waiting for decoding or stale recovery, can return that value after deletion.
+  It also publishes that value into the request memo and local store, where it
+  then lives for a full local TTL.
 
 The following executable example warms an untracked local result, deletes it
 within a live request, and verifies that the next read loads the changed source.

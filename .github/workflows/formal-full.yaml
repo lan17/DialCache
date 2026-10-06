@@ -55,10 +55,12 @@ jobs:
     runs-on: ubuntu-latest
     # Shared-library challenges now execute the importing profiles' partitions,
     # including clean baselines and mutant checks cached by exact source closure.
-    # The expanded partition campaign was still running after an hour in
-    # run 35568655690. Leave room for the full campaign on slower runners
-    # without reducing models, histories or partitions.
-    timeout-minutes: 150
+    # Runs 36416779057 and 37307897418 on main needed 2 h 28 min, and run
+    # 36347923680 was cancelled at exactly 150 minutes with the same models that
+    # had passed in 2 h 08 min one commit earlier. Leave real headroom for the
+    # full campaign on slower runners without reducing models, histories or
+    # partitions.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation

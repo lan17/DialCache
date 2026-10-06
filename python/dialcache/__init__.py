@@ -8,8 +8,8 @@ from .errors import (
     FallbackTimeoutError,
     MissingRemoteError,
     RedisReadTimeoutError,
-    RemoteReadTimeoutError,
     RemoteDeleteUnsupportedError,
+    RemoteReadTimeoutError,
     UseCaseIsAlreadyRegisteredError,
     UseCaseNameIsReservedError,
 )

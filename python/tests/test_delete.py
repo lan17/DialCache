@@ -118,6 +118,7 @@ def test_validation_and_capability_precede_metrics_and_mutation(executor, remote
         for options, error in [
             (dict(key="42", key_type="id", use_case="watermark"), UseCaseNameIsReservedError),
             (dict(key="{", key_type="id", use_case="Get", track_for_invalidation=True), ValueError),
+            (dict(key={"args": {"locale": "en"}}, key_type="id", use_case="Get"), TypeError),
             (dict(key="42", key_type="id", use_case="Get"), RemoteDeleteUnsupportedError),
         ]:
             with pytest.raises(error):

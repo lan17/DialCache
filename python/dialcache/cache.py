@@ -25,8 +25,8 @@ from .errors import (
     ConfigError,
     FallbackTimeoutError,
     MissingRemoteError,
-    RemoteReadTimeoutError,
     RemoteDeleteUnsupportedError,
+    RemoteReadTimeoutError,
     UseCaseIsAlreadyRegisteredError,
     UseCaseNameIsReservedError,
 )
@@ -547,6 +547,13 @@ class DialCache:
                 self._track_delivery(group, pending)
             op.deliveries = group
 
+    def _identity(self, key: Any, key_type: str, use_case: str, tracked: bool) -> Key:
+        """Build one exact identity from a scalar ID or an ``{id, args}`` mapping."""
+        spec = key if isinstance(key, Mapping) else {"id": key}
+        if "id" not in spec:
+            raise TypeError("Cache key mapping requires an 'id'")
+        return Key(self.namespace, key_type, spec["id"], use_case, normalize_args(spec.get("args", {})), tracked)
+
     async def _execute_enabled(self, op: _Operation) -> Any:
         try:
             selected = op.select_key()
@@ -555,15 +562,7 @@ class DialCache:
                 if key.namespace != self.namespace:
                     raise ValueError("Key namespace differs from cache namespace")
             else:
-                spec = selected if isinstance(selected, Mapping) else {"id": selected}
-                key = Key(
-                    self.namespace,
-                    op.key_type,
-                    spec["id"],
-                    op.use_case,
-                    normalize_args(spec.get("args", {})),
-                    op.tracked,
-                )
+                key = self._identity(selected, op.key_type, op.use_case, op.tracked)
         except (Exception, asyncio.CancelledError) as error:
             self._error(op, "noop", "key_construction")
             self._log("Could not construct DialCache key: %s", error)
@@ -960,11 +959,7 @@ class DialCache:
         """
         if use_case == "watermark":
             raise UseCaseNameIsReservedError(use_case)
-        spec = key if isinstance(key, Mapping) else {"id": key}
-        identity = Key(
-            self.namespace, key_type, spec["id"], use_case,
-            normalize_args(spec.get("args", {})), track_for_invalidation,
-        )
+        identity = self._identity(key, key_type, use_case, track_for_invalidation)
         remote_delete = getattr(self.redis, "delete", None) if self.redis is not None else None
         if self.redis is not None and not callable(remote_delete):
             raise RemoteDeleteUnsupportedError("Redis adapter does not support exact-key deletion")

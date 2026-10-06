@@ -235,7 +235,7 @@ export function loadHistories(directory, descriptor) {
 // reference projection has a zero baseline. Apply this bridge only when the
 // pinned reference source declares the older record; candidate traces and
 // reference sources that already declare the counter keep the strict parser.
-// Remove it once supported reference revisions all declare `deletions`.
+// Remove it once supported reference revisions all declare `deletions` (#222).
 export function referenceDescriptor(tree, profileId, descriptor) {
   const source = resolve(tree, 'formal/conformance-observations.qnt');
   if (profileId === 'deletion' || !existsSync(source)) return descriptor;
