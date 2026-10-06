@@ -13,6 +13,7 @@ import {
 } from "./internal/redis-payload.js";
 import { ceilSupportedCacheTtlMs } from "./internal/duration.js";
 import {
+  validateRedisDelReply,
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
 } from "./internal/redis-script-reply.js";
@@ -147,6 +148,9 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
       validateRedisSetReply(
         await sendFrameSet(client, valueKey, encodeRedisFrame(value, createdAtMs), cacheTtlMs),
       );
+    },
+    async delete({ valueKey }) {
+      validateRedisDelReply(await sendKeyedCommand(client, valueKey, ["DEL", valueKey], bufferReplyOptions));
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
       const invalidatedAtMs = Date.now();

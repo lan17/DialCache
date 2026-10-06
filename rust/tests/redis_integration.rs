@@ -48,8 +48,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use dialcache::protocol::encode_frame;
 use dialcache::redis::{RedisAdapter, RedisConnection};
 use dialcache::{
-    CancelToken, Frame, InvalidateRequest, MissReason, Payload, ReadContext, ReadRequest,
-    ReadResult, Remote, WriteRequest,
+    CancelToken, DeleteRequest, Frame, InvalidateRequest, MissReason, Payload, ReadContext,
+    ReadRequest, ReadResult, Remote, WriteRequest,
 };
 use formal::witness::sha256_hex;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig, MultiplexedConnection};
@@ -458,9 +458,97 @@ async fn round_trip<C: RedisConnection>(adapter: &RedisAdapter<C>, connection: &
     );
 }
 
+async fn exact_delete<C: RedisConnection>(adapter: &RedisAdapter<C>, label: &str) {
+    let entity = format!("{{rust-delete-{label}}}");
+    let watermark = format!("{entity}#watermark");
+    adapter
+        .invalidate(InvalidateRequest {
+            watermark_key: watermark.clone(),
+            invalidated_at_ms: 1,
+            future_buffer_ms: 0,
+        })
+        .await
+        .unwrap();
+    for tracked in [false, true] {
+        let key = format!("{entity}:{tracked}:dialcache-frame-v1");
+        let sibling = format!("{entity}:sibling-{tracked}:dialcache-frame-v1");
+        for value_key in [&key, &sibling] {
+            adapter
+                .write(WriteRequest {
+                    value_key: value_key.clone(),
+                    frame: Frame {
+                        created_at_ms: 2,
+                        payload: Payload::text("1"),
+                    },
+                    ttl_ms: 10_000,
+                })
+                .await
+                .unwrap();
+        }
+        adapter
+            .delete(DeleteRequest {
+                value_key: key.clone(),
+            })
+            .await
+            .unwrap();
+        adapter
+            .delete(DeleteRequest {
+                value_key: key.clone(),
+            })
+            .await
+            .unwrap();
+        let result = adapter
+            .read(
+                ReadRequest {
+                    value_key: key,
+                    watermark_key: tracked.then(|| watermark.clone()),
+                },
+                context(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            matches!(
+                result,
+                ReadResult::Miss {
+                    reason: MissReason::ValueAbsent,
+                    ..
+                }
+            ),
+            "{label}: {result:?}"
+        );
+        let sibling = adapter
+            .read(
+                ReadRequest {
+                    value_key: sibling,
+                    watermark_key: tracked.then(|| watermark.clone()),
+                },
+                context(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            matches!(sibling, ReadResult::Hit(_)),
+            "{label}: sibling removed"
+        );
+        let mut get = redis::cmd("GET");
+        get.arg(&watermark);
+        assert_eq!(
+            adapter
+                .connection()
+                .run_on_primary(&watermark, get)
+                .await
+                .unwrap(),
+            Value::BulkString(b"1".to_vec()),
+            "{label}: watermark changed"
+        );
+    }
+}
+
 async fn exercise<C: RedisConnection>(connection: C, label: &str, endpoint: &str, cluster: bool) {
     let adapter = RedisAdapter::new(connection);
     round_trip(&adapter, adapter.connection(), label).await;
+    exact_delete(&adapter, label).await;
     redis_interop::exercise(&adapter, endpoint, cluster, label).await;
     let vectors = invalidation_vectors::load_corpus(&repo_root(), sha256_hex);
     let prefix = format!("{{rust-invalidation-{label}}}:");

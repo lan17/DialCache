@@ -98,6 +98,7 @@ pub fn metric_suffix(kind: MetricKind) -> &'static str {
         MetricKind::Disabled => "disabled.count",
         MetricKind::Error => "error.count",
         MetricKind::Invalidation => "invalidation.count",
+        MetricKind::Deletion => "deletion.count",
         MetricKind::Coalesced => "coalesced.count",
         MetricKind::ShadowValidation => "shadow.count",
         MetricKind::ShadowValueAge => "shadow.value_age",

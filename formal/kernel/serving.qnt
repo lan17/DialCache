@@ -633,4 +633,29 @@ module serving {
       },
       ...Remote::raiseWatermark(state, entity, bufferMs)
     }
+  // A receipt reads the emitted public result, without recomputing the rule.
+  pure def maintenanceOutcome(state: Served[r]): str = state.o.maintenance.nth(state.o.maintenance.length() - 1)
+
+  // Exact maintenance does not resolve policy, inspect enablement or touch
+  // flights. Capability is checked before effects; a remote failure preserves
+  // both local stores. The counter records adapter dispatches, like invalidation.
+  pure def deleteEntry(state: Served[{ remoteDeletes: bool | r }], layout: Layout,
+    instance: int, context: int, key: int, memoizes: bool): Served[{ remoteDeletes: bool | r }] = {
+    val supported = not(state.remoteAvailable) or state.remoteDeletes
+    val failed = state.remoteAvailable and state.writeFailed
+    val outcome = if (not(supported)) "unsupported" else if (failed) "mutation_error" else "ok"
+    val counted = {
+      o: {
+        deletions: state.o.deletions + (if (supported and state.remoteAvailable) 1 else 0),
+        maintenance: state.o.maintenance.append(outcome),
+        ...state.o
+      },
+      ...state
+    }
+    if (not(supported) or failed) counted else {
+      val remote = if (state.remoteAvailable) Remote::removeFrame(counted, key) else counted
+      val local = Local::removeLocal(remote, instance, key, layout.keysPerInstance)
+      Memo::forget(local, Memo::memoSlot(context, key, layout.keysPerScope, memoizes))
+    }
+  }
 }

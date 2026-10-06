@@ -52,6 +52,11 @@ and `errors.As` for native error handling. `FallbackTimeoutError` reports a
 source deadline; callback panics become `CallbackPanicError`. `Invalidate`
 returns maintenance errors, including `ErrNoRemote` without an adapter.
 
+`cache.Delete(ctx, identity)` removes one exact result; an empty identity
+namespace inherits the cache's. The live request memo follows `ctx`, including
+inside `Disable`. Custom remotes opt in through `RemoteDeleter`; otherwise the
+call returns `ErrDeleteUnsupported`. See [exact deletion](../invalidation.md#exact-key-deletion-versus-entity-invalidation).
+
 ## Identity and values
 
 `Identity` holds normalized strings and ordered argument pairs. Use

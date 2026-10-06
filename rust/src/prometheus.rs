@@ -117,6 +117,12 @@ pub fn schemas(prefix: &str) -> Vec<CollectorSchema> {
             &[],
         ),
         schema(
+            MetricKind::Deletion,
+            "deletion_counter",
+            "DialCache exact-key deletion calls by use case and layer.",
+            &[],
+        ),
+        schema(
             MetricKind::Coalesced,
             "coalesced_counter",
             "DialCache requests coalesced onto in-flight work by sharing scope.",

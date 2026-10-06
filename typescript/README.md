@@ -13,10 +13,10 @@ are imported from source files that CI executes.
 DialCache is a TypeScript library that organizes caching into use cases, with
 runtime control and observability for each one.
 
-- **Off by default:** caching runs only inside an `enable()` scope.
+- **Off by default:** readers cache only inside `enable()`. Maintenance calls (`invalidateRemote`, `delete`) always act.
 - **Multi-layer:** request-local → process-local → Redis.
 - **Runtime policies per use case:** layers, TTLs, and rollout ramps.
-- **Targeted invalidation:** one call per entity for its tracked Redis results.
+- **Targeted invalidation:** fence an entity's tracked Redis results, or delete one exact result from this request, this instance and Redis.
 - **Coalescing:** same-key reads share work when a cache layer is active.
 - **Fail-open:** cache failures fall back to the loader.
 - **Stale-on-error (opt-in):** retained Redis values for selected source errors.

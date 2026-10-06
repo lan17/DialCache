@@ -10,7 +10,7 @@ import math
 from dataclasses import dataclass
 
 from dialcache import DialCache
-from dialcache.errors import FallbackTimeoutError, MissingRemoteError
+from dialcache.errors import FallbackTimeoutError, MissingRemoteError, RemoteDeleteUnsupportedError
 from dialcache.key import Key
 from dialcache.local import LocalCache
 from dialcache.protocol import Frame, Miss, decode_read, decode_tracked_read, encode_frame
@@ -27,6 +27,7 @@ def empty_observation(fixture=None):
         "reads": 0,
         "writes": 0,
         "invalidations": 0,
+        "deletions": 0,
         "maintenance": [],
         "loads": 0,
         "dumps": 0,
@@ -134,6 +135,13 @@ class FakeRedis:
                 raise owner.maintenance_error
         self.seed(request.value_key, stamped, math.ceil(request.cache_ttl_ms))
 
+    async def delete(self, request):
+        if self.owner:
+            self.owner.count("deletions")
+            if self.owner.faults.get("write"):
+                raise self.owner.maintenance_error
+        self.values.pop(request.value_key, None)
+
     async def invalidate(self, request):
         self.writes += 1
         if self.owner:
@@ -156,6 +164,15 @@ class FakeRedis:
     def ttl(self, key):
         entry = self.values.get(key)
         return -2 if entry is None else max(0, entry[1] - self.clock.monotonic_ms())
+
+
+class RedisWithoutDelete:
+    """An old adapter retains only the three required semantic operations."""
+
+    def __init__(self, adapter):
+        self.read = adapter.read
+        self.write = adapter.write
+        self.invalidate = adapter.invalidate
 
 
 class Metrics:
@@ -261,6 +278,7 @@ class BehaviorDriver:
         self.adapter_reply = ABSENT
         self.maintenance_error = RuntimeError("Controlled mutation failure")
         self.redis = FakeRedis(self.clock, self)
+        self.adapter = self.redis if fixture.get("remoteDeletes", True) else RedisWithoutDelete(self.redis)
         self.cache = self.instance("default")
         self.serializer = Serializer(self)
         self.settlement = self._receipt(0)
@@ -288,7 +306,7 @@ class BehaviorDriver:
             return self.instances[name]
         fixture = self.fixture
         options = {
-            "redis": None if fixture.get("remote") is False else self.redis,
+            "redis": None if fixture.get("remote") is False else self.adapter,
             "policy_provider": self.policy_provider,
             "clock": self.clock,
             "metrics": Metrics(self),
@@ -442,6 +460,27 @@ class BehaviorDriver:
                 )
                 frame = encode_frame(payload, self.clock.wall_ms() - command.get("ageMs", 0))
             self.redis.seed(self.value_key(command).value_key, frame, command.get("ttlMs", 60_000))
+        elif op == "delete":
+            scope = self.scopes.get(command.get("id"))
+            cache = self.instance(command.get("instance", scope.instance if scope else "default"))
+
+            async def delete():
+                try:
+                    await cache.delete(
+                        key=command.get("key", "1"), key_type="id",
+                        use_case=command.get("useCase", "Behavior"),
+                        track_for_invalidation=self.fixture.get("tracked", False),
+                    )
+                    self.observed["maintenance"].append("ok")
+                except Exception as error:
+                    if error is self.maintenance_error:
+                        self.observed["maintenance"].append("mutation_error")
+                    elif isinstance(error, RemoteDeleteUnsupportedError):
+                        self.observed["maintenance"].append("unsupported")
+                    else:
+                        raise
+
+            self.executor.finish(delete(), scope.context if scope else None)
         elif op == "invalidate":
 
             async def invalidate():

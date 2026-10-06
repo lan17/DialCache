@@ -17,6 +17,7 @@ from dialcache.key import Key
 from dialcache.protocol import Frame, Miss, RedisProtocolError, encode_frame
 from dialcache.redis import (
     INVALIDATE_CACHE_SCRIPT,
+    DeleteRequest,
     InvalidationRequest,
     ReadRequest,
     RedisAdapter,
@@ -133,7 +134,9 @@ async def test_adapter_real_frames_fencing_and_retention(server):
         await adapter.write(WriteRequest(key.value_key, 60000, b"fresh", 1201))
         assert await adapter.read(ReadRequest(key.value_key, key.watermark_key)) == Frame(1201, b"fresh")
         assert await server.get(key.watermark_key) == b"1200"
-        await server.delete(key.value_key)
+        await adapter.delete(DeleteRequest(key.value_key))
+        await adapter.delete(DeleteRequest(key.value_key))
+        assert await server.get(key.watermark_key) == b"1200"
         assert await adapter.read(ReadRequest(key.value_key, key.watermark_key)) == Miss("value_absent", 1200)
     finally:
         await server.delete(key.value_key, key.watermark_key)
@@ -185,6 +188,9 @@ async def test_cluster_atomic_primary_snapshot_and_native_writes():
         assert await client.execute_command("GET", key.value_key, target_nodes=primary) == encode_frame(
             "after", 1001
         )
+        assert await client.execute_command("GET", key.watermark_key, target_nodes=primary) == b"1000"
+        await adapter.delete(DeleteRequest(key.value_key))
+        assert await adapter.read(ReadRequest(key.value_key, key.watermark_key)) == Miss("value_absent", 1000)
         assert await client.execute_command("GET", key.watermark_key, target_nodes=primary) == b"1000"
         replica_client = redis.RedisCluster.from_url(
             url, read_from_replicas=True, decode_responses=False, socket_timeout=5, socket_connect_timeout=5

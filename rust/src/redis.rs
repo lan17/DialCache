@@ -42,7 +42,7 @@ use crate::error::BoxError;
 use crate::limits::{MAX_SAFE_INTEGER, MAX_SUPPORTED_DURATION_MS};
 use crate::protocol::{decode_frame, encode_frame, ProtocolError};
 use crate::remote::{
-    InvalidateRequest, ReadContext, ReadRequest, ReadResult, Remote, WriteRequest,
+    DeleteRequest, InvalidateRequest, ReadContext, ReadRequest, ReadResult, Remote, WriteRequest,
 };
 
 /// The version-1 wire invalidation transition, byte-identical to the Go
@@ -307,6 +307,16 @@ pub fn validate_set_reply(reply: &Value) -> Result<(), RedisProtocolError> {
     }
 }
 
+/// `DEL` of one key must answer the integer `0` or `1`.
+pub fn validate_del_reply(reply: &Value) -> Result<(), RedisProtocolError> {
+    match reply {
+        Value::Int(0 | 1) => Ok(()),
+        _ => Err(RedisProtocolError::new(
+            "invalid Redis DEL reply; expected integer 0 or 1",
+        )),
+    }
+}
+
 /// The invalidation script must answer the integer `1`.
 pub fn validate_invalidation_reply(reply: &Value) -> Result<(), RedisProtocolError> {
     if matches!(reply, Value::Int(1)) {
@@ -340,6 +350,24 @@ fn value_kind(value: &Value) -> &'static str {
 }
 
 impl<C: RedisConnection> Remote for RedisAdapter<C> {
+    fn supports_delete(&self) -> bool {
+        true
+    }
+
+    fn delete(&self, request: DeleteRequest) -> BoxFuture<'_, Result<(), BoxError>> {
+        async move {
+            let mut cmd = redis::cmd("DEL");
+            cmd.arg(&request.value_key);
+            let reply = self
+                .connection
+                .run_on_primary(&request.value_key, cmd)
+                .await?;
+            validate_del_reply(&reply)?;
+            Ok(())
+        }
+        .boxed()
+    }
+
     fn read(
         &self,
         request: ReadRequest,
@@ -564,6 +592,51 @@ mod tests {
         // hashes the same Lua with different formatting.
         assert_eq!(sha, "a6c1c661884bd7f535a13c79135a40b1edd2e216");
         assert_eq!(sha, redis::Script::new(INVALIDATION_SCRIPT).get_hash());
+    }
+
+    #[test]
+    fn delete_is_one_primary_del_and_validates_replies_without_retry() {
+        for reply in [Value::Int(0), Value::Int(1)] {
+            let connection = Scripted::with(vec![Ok(reply)]);
+            let adapter = RedisAdapter::new(connection.clone());
+            assert!(adapter.supports_delete());
+            block_on(adapter.delete(DeleteRequest {
+                value_key: "{entity}:value".into(),
+            }))
+            .unwrap();
+            assert_eq!(
+                connection.calls(),
+                vec![Call {
+                    primary: true,
+                    args: vec![b"DEL".to_vec(), b"{entity}:value".to_vec()]
+                }]
+            );
+        }
+        for reply in [
+            Value::Nil,
+            Value::Int(-1),
+            Value::Int(2),
+            Value::Double(1.0),
+            Value::Boolean(true),
+            Value::BulkString(b"1".to_vec()),
+            Value::Okay,
+        ] {
+            let connection = Scripted::with(vec![Ok(reply)]);
+            let adapter = RedisAdapter::new(connection.clone());
+            let error = block_on(adapter.delete(DeleteRequest {
+                value_key: "value".into(),
+            }))
+            .unwrap_err();
+            assert!(error.is::<RedisProtocolError>(), "{error}");
+            assert_eq!(connection.calls().len(), 1);
+        }
+        let connection = Scripted::with(vec![failure()]);
+        let adapter = RedisAdapter::new(connection.clone());
+        assert!(block_on(adapter.delete(DeleteRequest {
+            value_key: "value".into()
+        }))
+        .is_err());
+        assert_eq!(connection.calls().len(), 1);
     }
 
     #[test]

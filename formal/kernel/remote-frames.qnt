@@ -121,4 +121,10 @@ module remote_frames {
   // fenced one is written only while its fence still allows it: the frame it
   // would stamp now must clear the watermark the miss observed.
   pure def writeAllowed(state: Frames[r], fence: int): bool = fence == NO_FENCE or fenceAllows(Clock::wallOf(state), fence)
+  // DEL removes the exact value and retention, never an entity watermark.
+  pure def removeFrame(state: Frames[r], key: int): Frames[r] = {
+    remoteValues: state.remoteValues.replaceAt(key, NO_VALUE),
+    expires: state.expires.replaceAt(key, 0),
+    ...state
+  }
 }

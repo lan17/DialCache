@@ -118,7 +118,7 @@ already admitted invocation.
 
 `Policy.disabled()` explicitly disables inherited request memoization, local
 and remote serving, recovery, and shadow work. It does not cancel work that
-was already admitted or disable explicit invalidation. `Policy.enabled(ttl)`
+was already admitted or disable explicit maintenance. `Policy.enabled(ttl)`
 enables local and remote TTLs; it does not opt into request memoization.
 
 Invalid static defaults raise `ConfigError` at registration. At runtime,
@@ -126,6 +126,25 @@ invalid TTLs or ramps disable their own layer; malformed boolean switches,
 read deadlines, containers, or provider failures bypass caching for that
 enabled invocation. Optional recovery and shadow failures leave ordinary
 serving available.
+
+## Exact-key deletion
+
+Use `await cache.delete(key=..., key_type=..., use_case=..., track_for_invalidation=...)`
+to remove one result from the live request memo, this instance's local store,
+and Redis when configured. Match the reader's entire identity, including args
+and tracking mode. It works outside `enable()` and inside `disable()`, without
+policy lookup, and a missing entry succeeds.
+
+The remote is deleted first. Adapter failure leaves local and memo entries
+untouched and raises; an older custom adapter without `delete` raises
+`RemoteDeleteUnsupportedError` before any changes. Custom adapters can implement
+`RedisDeleteClient` and its `delete(DeleteRequest)` method; `RedisClient` remains
+unchanged. The bundled adapter issues a single keyed `DEL` and validates its reply.
+
+Deletion preserves watermarks, other identities, other instances and other
+requests. In-flight work may republish afterward, and callers retain already
+acquired values. See the shared [invalidation guide](../docs/invalidation.md)
+for the comparison with entity invalidation.
 
 ## Redis and tracked invalidation
 

@@ -8,9 +8,9 @@ import { performance } from "node:perf_hooks";
 import { vi } from "vitest";
 
 import {
-  DialCache, DialCacheKey, DialCacheKeyConfig, FallbackTimeoutError,
+  DialCache, DialCacheKey, DialCacheKeyConfig, FallbackTimeoutError, RemoteDeleteUnsupportedError,
   type DialCacheConfig, type RedisReadRequest, type RedisReadResult, type RedisReadContext,
-  type RedisWriteRequest, type RedisInvalidationRequest, type Serializer,
+  type RedisDeleteRequest, type RedisWriteRequest, type RedisInvalidationRequest, type Serializer,
 } from "../../src/index.js";
 import { encodeFrame, FakeRedis } from "../fake-redis.js";
 import type { EffectsContractEvent } from "./effects-contract.js";
@@ -43,6 +43,7 @@ export interface Fixture {
   shadowHook?: boolean;
   observerFailure?: boolean;
   remote?: boolean;
+  remoteDeletes?: boolean;
   probeSourceScope?: boolean;
   observe?: EventName[];
 }
@@ -58,6 +59,7 @@ export type Input =
   | { op: "advance"; ms: number; deliverTimers?: boolean }
   | { op: "shiftWall"; ms: number }
   | { op: "seed"; useCase?: string; key?: string; value?: Value; ageMs?: number; frameHex?: string; payloadText?: string; payloadHex?: string; ttlMs?: number }
+  | { op: "delete"; id?: string; instance?: string; key?: string; useCase?: string }
   | { op: "invalidate"; key?: string; futureBufferMs?: number }
   | { op: "observeMarker"; key?: string }
   | { op: "inspectCoalescing"; instance?: string }
@@ -77,6 +79,7 @@ export interface Observation {
   reads: number;
   writes: number;
   invalidations: number;
+  deletions: number;
   maintenance: string[];
   loads: number;
   dumps: number;
@@ -207,6 +210,11 @@ export class BehaviorDriver {
         if (owner.faults.write) throw owner.maintenanceError;
         await super.write(stamped);
       }
+      override async delete(request: RedisDeleteRequest): Promise<void> {
+        owner.observed.deletions++;
+        if (owner.faults.write) throw owner.maintenanceError;
+        await super.delete(request);
+      }
       override async invalidate(request: RedisInvalidationRequest): Promise<void> {
         owner.observed.invalidations++;
         if (owner.faults.write) throw owner.maintenanceError;
@@ -222,7 +230,7 @@ export class BehaviorDriver {
     const fixture = this.fixture;
     const noop = () => { if (fixture.observerFailure || this.faults.observer) throw new Error("Controlled observer failure"); };
     const cache = new DialCache({
-      ...(fixture.remote === false ? {} : { redis: { client: this.redis, ...(fixture.readTimeoutMs === "default" ? {} : { readTimeoutMs: fixture.readTimeoutMs ?? 50 }), compression: false as const } }),
+      ...(fixture.remote === false ? {} : { redis: { client: fixture.remoteDeletes === false ? { read: this.redis.read.bind(this.redis), write: this.redis.write.bind(this.redis), invalidate: this.redis.invalidate.bind(this.redis) } : this.redis, ...(fixture.readTimeoutMs === "default" ? {} : { readTimeoutMs: fixture.readTimeoutMs ?? 50 }), compression: false as const } }),
       ...(fixture.localMaxSize === undefined ? {} : { localMaxSize: fixture.localMaxSize }),
       ...(fixture.shadowMaxInFlight === undefined ? {} : { shadowMaxInFlight: fixture.shadowMaxInFlight }),
       ...(fixture.recovery === undefined || fixture.recovery === "default" ? {}
@@ -371,6 +379,21 @@ export class BehaviorDriver {
             : Buffer.from(input.payloadHex, "hex"), Date.now() - (input.ageMs ?? 0), input.payloadHex === undefined ? 0 : 1)
           : Buffer.from(input.frameHex, "hex"), input.ttlMs ?? 60_000);
         break;
+      case "delete": {
+        const scope = input.id === undefined ? undefined : this.scope(input.id);
+        const cache = this.instance(input.instance ?? scope?.instance ?? "default");
+        const remove = () => cache.delete({ keyType: "id", key: input.key ?? "1",
+          useCase: input.useCase ?? "Behavior", trackForInvalidation: this.fixture.tracked ?? false });
+        try {
+          await (scope === undefined ? remove() : scope.run(remove));
+          this.observed.maintenance.push("ok");
+        } catch (error) {
+          if (error instanceof RemoteDeleteUnsupportedError) this.observed.maintenance.push("unsupported");
+          else if (error === this.maintenanceError) this.observed.maintenance.push("mutation_error");
+          else throw error;
+        }
+        break;
+      }
       case "invalidate":
         try {
           await this.cache.invalidateRemote("id", input.key ?? "1", input.futureBufferMs ?? 0);

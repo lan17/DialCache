@@ -11,6 +11,7 @@ import {
   encodeRedisFrame,
 } from "./internal/redis-payload.js";
 import {
+  validateRedisDelReply,
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
 } from "./internal/redis-script-reply.js";
@@ -174,6 +175,9 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
       validateRedisSetReply(
         await client.customCommand(["SET", valueKey, frame, "PX", String(cacheTtlMs)], execOptions),
       );
+    },
+    async delete({ valueKey }) {
+      validateRedisDelReply(await client.customCommand(["DEL", valueKey], keyedOptions(valueKey)));
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
       const invalidatedAtMs = Date.now();

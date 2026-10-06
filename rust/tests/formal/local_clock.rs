@@ -101,6 +101,7 @@ impl LocalClockDriver {
             "reads",
             "writes",
             "invalidations",
+            "deletions",
             "loads",
             "dumps",
             "policyCalls",

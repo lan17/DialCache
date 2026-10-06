@@ -33,4 +33,8 @@ module request_memo {
       if (slot / keysPerScope == context) out.replaceAt(slot, NO_VALUE) else out),
     ...state
   }
+  // A maintenance operation sees the live holder even through disable().
+  // Closed scopes already contain no values; absent holders use NO_OWNER.
+  pure def forget(state: Scoped[r], slot: int): Scoped[r] =
+    if (slot < 0) state else { memo: state.memo.replaceAt(slot, NO_VALUE), ...state }
 }

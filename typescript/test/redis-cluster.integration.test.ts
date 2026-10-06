@@ -13,6 +13,7 @@ import {
   CacheLayer,
   type DecodedRedisFrame,
   DialCache,
+  DialCacheKey,
   DialCacheKeyConfig,
   type DialCacheRedisClient,
   isRedisReadMiss,
@@ -147,6 +148,29 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     await cluster?.quit();
     await Promise.all(containers.map(async (container) => await container.stop()));
     await network?.stop();
+  });
+
+  it.for(["node-redis", "glide"])("routes exact deletion and preserves its watermark with %s", async (kind, ctx) => {
+    if (cluster === undefined) throw new Error("Redis Cluster did not start");
+    if (kind === "glide" && glideCluster === undefined) return ctx.skip();
+    const adapter = kind === "node-redis" ? createNodeRedisDialCacheClient(cluster)
+      : createValkeyGlideDialCacheClient(glideCluster!, valkeyGlide);
+    for (const tracked of [false, true]) {
+      const cache = new DialCache({ namespace: "delete-cluster", redis: { client: adapter } });
+      const identity = { keyType: "item", useCase: "Delete", key: `${kind}-${tracked}`, trackForInvalidation: tracked };
+      const key = new DialCacheKey({ namespace: "delete-cluster", keyType: identity.keyType, useCase: identity.useCase,
+        id: identity.key, trackForInvalidation: tracked });
+      const valueKey = `${key.urn}:dialcache-frame-v1`;
+      const watermarkKey = `${new DialCacheKey({ namespace: "delete-cluster", keyType: identity.keyType,
+        useCase: identity.useCase, id: identity.key, trackForInvalidation: true }).prefix}#watermark`;
+      await cluster.set(watermarkKey, "1");
+      await adapter.write({ valueKey, cacheTtlMs: 60_000, value: "123" });
+      await cache.delete(identity);
+      await cache.delete(identity);
+      expect(await cluster.get(valueKey)).toBeNull();
+      expect(await cluster.get(watermarkKey)).toBe("1");
+      expect(await adapter.read({ valueKey })).toMatchObject({ kind: "miss", reason: "value_absent" });
+    }
   });
 
   it("routes cache operations across slots and reloads invalidation scripts per node", async () => {

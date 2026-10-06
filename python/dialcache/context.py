@@ -25,6 +25,9 @@ class RequestLocalCache:
         if not self.closed:
             self._values[key] = value
 
+    def delete(self, key: str) -> None:
+        self._values.pop(key, None)
+
     def close(self) -> None:
         self.closed = True
         self._values.clear()

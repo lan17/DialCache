@@ -297,6 +297,158 @@
         "generated",
         "portable"
       ]
+    },
+    {
+      "id": "M14",
+      "case": "C61.exact-deletion",
+      "description": "Leave the process-local entry behind after exact deletion",
+      "typescriptMutation": "M65",
+      "edits": [
+        {
+          "path": "rust/src/engine.rs",
+          "before": "Some(local) => catch_unwind(AssertUnwindSafe(|| local.remove(&keys.logical)))",
+          "after": "Some(_local) => catch_unwind(AssertUnwindSafe(|| Ok::<Option<crate::local::LocalEntry>, crate::error::BoxError>(None)))"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M15",
+      "case": "C63.deletion-boundaries",
+      "description": "Delete the tracked watermark alongside the exact value",
+      "typescriptMutation": "M66",
+      "edits": [
+        {
+          "path": "rust/src/engine.rs",
+          "before": "                        remote\n                            .delete(request)\n                            .await\n                            .map_err(|e| Error::Remote(Arc::from(e)))",
+          "after": "                        remote.delete(request).await.map_err(|e| Error::Remote(Arc::from(e)))?;\n                        if let Some(value_key) = keys.watermark {\n                            remote.delete(DeleteRequest { value_key }).await.map_err(|e| Error::Remote(Arc::from(e)))?;\n                        }\n                        Ok(())"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M16",
+      "case": "C62.deletion-failure",
+      "description": "Remove local data when the remote deletion fails",
+      "typescriptMutation": "M67",
+      "edits": [
+        {
+          "path": "rust/src/engine.rs",
+          "before": "                pending.wait().await?;\n            }\n            labels.layer = Layer::Local;",
+          "after": "                if let Err(error) = pending.wait().await {\n                    if let Some(local) = core.state.lock().local.as_mut() { let _ = local.remove(&keys.logical); }\n                    return Err(error);\n                }\n            }\n            labels.layer = Layer::Local;"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M17",
+      "case": "C63.deletion-boundaries",
+      "description": "Clear sibling entries as well as the exact local and memo entry",
+      "typescriptMutation": "M68",
+      "edits": [
+        {
+          "path": "rust/src/engine.rs",
+          "before": "                let mut state = core.state.lock();\n                let local = match state.local.as_mut() {",
+          "after": "                let mut state = core.state.lock();\n                state.local = None;\n                let local = match state.local.as_mut() {"
+        },
+        {
+          "path": "rust/src/engine.rs",
+          "before": "owner.memo.remove(&keys.logical)",
+          "after": "{ owner.memo.clear(); None::<crate::local::StoredValue> }"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M18",
+      "case": "C63.deletion-boundaries",
+      "description": "Detach the active process flight during deletion",
+      "typescriptMutation": "M69",
+      "edits": [
+        {
+          "path": "rust/src/engine.rs",
+          "before": "                let mut state = core.state.lock();\n                let local = match state.local.as_mut() {",
+          "after": "                let mut state = core.state.lock();\n                state.flights.remove(&keys.logical);\n                let local = match state.local.as_mut() {"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M19",
+      "case": "C62.deletion-failure",
+      "description": "Reject local-only deletion when no remote is configured",
+      "typescriptMutation": "M70",
+      "edits": [
+        {
+          "path": "rust/src/engine.rs",
+          "before": "        if let Some(remote) = &core.remote {\n            if !remote.supports_delete() {",
+          "after": "        if core.remote.is_none() { return Err(Error::RemoteDeleteUnsupported); }\n        if let Some(remote) = &core.remote {\n            if !remote.supports_delete() {"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M20",
+      "case": "C62.deletion-failure",
+      "description": "Report successful deletion for an unsupported configured adapter",
+      "typescriptMutation": "M71",
+      "edits": [
+        {
+          "path": "rust/src/engine.rs",
+          "before": "return Err(Error::RemoteDeleteUnsupported);",
+          "after": "return Ok(());"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "generated",
+        "portable"
+      ]
     }
   ]
 }

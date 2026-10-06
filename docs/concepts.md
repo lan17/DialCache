@@ -96,7 +96,10 @@ its loader with its enabled fallback deadline.
 
 Keep mutation work outside the enabled boundary or inside a disabled region.
 Disabling does not invalidate anything; mutable data still needs appropriate TTLs
-or [targeted invalidation](invalidation.md).
+or [targeted invalidation](invalidation.md). Explicit maintenance operations
+ignore enabled state: entity invalidation always attempts its remote mutation,
+and exact deletion removes the targeted local/memo entries and configured remote
+value, even inside a disabled region. Deletion never creates a request memo.
 
 ## Three lifetimes
 
@@ -157,6 +160,14 @@ A local hit does not consult Redis. Remote invalidation therefore does not
 evict values already in request-local or process-local memory. A Redis hit can
 also warm the local layer with a full local TTL; the remote TTL is not an
 end-to-end maximum age across the chain.
+
+| Maintenance | Memory stores | Redis | Concurrent work |
+| --- | --- | --- | --- |
+| Entity invalidation | Existing entries retain their lifetimes | Advances one entity's tracked watermark | Existing flights and acquired snapshots remain usable |
+| Exact-key deletion | Removes one key in this instance and live request | Removes one value key; preserves watermarks | Existing flights and snapshots remain; a late load can repopulate |
+
+See [exact-key deletion](invalidation.md#exact-key-deletion-versus-entity-invalidation)
+for identity matching and failure ordering.
 
 Changing policy does not evict old entries. In particular, a shorter local TTL
 applies to new writes; existing local values retain their insertion TTL. Redis

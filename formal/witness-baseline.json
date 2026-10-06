@@ -84,6 +84,26 @@
         "timed-out-dark-write-retains-capacity-until-raw-release": 0
       }
     },
+    "deletion": {
+      "sampledHistories": 128,
+      "corpusSha256": "c38f803a95562df5cdf143d3d446776555eb1e0254cba713e6fe321c546e502e",
+      "labels": {
+        "delete-removes-every-reachable-store": 0,
+        "disabled-delete-removes-outer-memo": 0,
+        "outside-delete-preserves-existing-request-memo": 0,
+        "local-only-delete-removes-local": 0,
+        "unsupported-delete-preserves-every-store": 0,
+        "failed-delete-preserves-every-store": 0,
+        "delete-preserves-watermark-and-sibling-local-value": 0,
+        "delete-preserves-other-instance-local-value": 0,
+        "late-fill-remains-shared-and-repopulates": 0,
+        "acquired-snapshot-completes-after-delete": 0,
+        "absent-delete-succeeds-without-policy": 0,
+        "deleted-key-reloads-and-memoizes-new-value": 0,
+        "delete-preserves-sibling-and-other-request": 0,
+        "absent-local-only-delete-succeeds": 0
+      }
+    },
     "effects": {
       "sampledHistories": 512,
       "corpusSha256": "e0456e899a35bad39f306e4c12f1f45b9bb97f59736c11d417130599e228795d",

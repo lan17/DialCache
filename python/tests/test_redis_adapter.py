@@ -121,3 +121,32 @@ async def test_invalid_atomic_snapshot_shape(reply):
 
 def test_lua_source_is_identical_to_current_typescript():
     assert INVALIDATE_CACHE_SCRIPT == node_bridge({"op": "script"})
+
+
+@pytest.mark.parametrize("reply", [0, 1, -1, 2, None, "1", True, 1.0])
+async def test_delete_single_key_reply_and_no_retry(reply):
+    from dialcache.redis import DeleteRequest
+
+    client = Client([reply])
+    if type(reply) is int and reply in (0, 1):
+        await RedisAdapter(client).delete(DeleteRequest("{entity}#value:dialcache-frame-v1"))
+    else:
+        with pytest.raises(RedisProtocolError):
+            await RedisAdapter(client).delete(DeleteRequest("{entity}#value:dialcache-frame-v1"))
+    assert client.calls == [(("DEL", "{entity}#value:dialcache-frame-v1"), {})]
+
+
+async def test_delete_cluster_routes_single_key_to_primary():
+    from dialcache.redis import DeleteRequest
+
+    class Cluster(Client):
+        async def initialize(self):
+            self.initialized = True
+
+        def get_node_from_key(self, key, replica=False):
+            assert self.initialized and replica is False
+            return ("primary", key)
+
+    client = Cluster([1])
+    await RedisAdapter(client).delete(DeleteRequest("{entity}#value"))
+    assert client.calls == [(("DEL", "{entity}#value"), {"target_nodes": ("primary", "{entity}#value")})]

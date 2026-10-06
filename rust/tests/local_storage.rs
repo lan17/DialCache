@@ -71,3 +71,16 @@ fn sparse_storage_preserves_capacity_and_lru_eviction() {
     assert_eq!(evicted.value.downcast_ref::<u64>(), Some(&3));
     assert_eq!(store.len(), 2);
 }
+
+#[test]
+fn remove_returns_displaced_entry_and_releases_capacity_without_promoting_siblings() {
+    let mut store = LruLocalStore::new(NonZeroUsize::new(2).unwrap());
+    store.put("a".into(), entry(1)).unwrap();
+    store.put("b".into(), entry(2)).unwrap();
+    let removed = store.remove("a").unwrap().unwrap();
+    assert_eq!(removed.value.downcast_ref::<u64>(), Some(&1));
+    assert!(store.remove("a").unwrap().is_none());
+    assert!(store.put("c".into(), entry(3)).unwrap().is_none());
+    let evicted = store.put("d".into(), entry(4)).unwrap().unwrap();
+    assert_eq!(evicted.value.downcast_ref::<u64>(), Some(&2));
+}

@@ -76,6 +76,7 @@ Conformance profiles expose external commands that every language driver replays
 | [layers](./dialcache-layers-conformance.qnt) | Request/local/remote composition, instance and key isolation, publication and invalidation |
 | [independent](./dialcache-independent-conformance.qnt) | Uncoalesced callers, independent budgets, acquired snapshots and per-call refill authority |
 | [recovery-read](./dialcache-recovery-read-conformance.qnt) | Held reads/decode, compressed recovery, logical versus physical age, marker lifetime and publication |
+| [deletion](./dialcache-deletion-conformance.qnt) | Exact deletion, scope-independent maintenance, failure ordering and publication boundaries |
 | [local-failure](./dialcache-local-failure-conformance.qnt) | Local storage faults, preserved source outcomes and request publication |
 | [runtime-boundaries](./dialcache-runtime-boundaries-conformance.qnt) | Omitted/invalid policy leaves, defaults, exact rollout cohorts and policy capture |
 | [shadow-layers](./dialcache-shadow-layers-conformance.qnt) | Dark fills and local/request reuse; independent sources and mixed served/dark capacity |

@@ -26,6 +26,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -51,6 +52,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -84,6 +86,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -114,6 +117,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -141,6 +145,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -169,6 +174,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -189,6 +195,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -208,6 +215,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -242,6 +250,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -275,6 +284,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -303,6 +313,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -329,6 +340,7 @@
         "comparisons": true,
         "dumps": true,
         "invalidations": true,
+        "deletions": true,
         "loaders": true,
         "loads": true,
         "maintenance": true,
@@ -3039,6 +3051,95 @@
           "id": "readBeforeDeadlineCanFillAndCancelsItsTimerTest",
           "regression": "readBeforeDeadlineCanFillAndCancelsItsTimerTest",
           "projection": "shadow-read-deadlines"
+        }
+      ]
+    },
+    {
+      "path": "formal/deletion-smoke.itf.json",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "format": "smoke",
+      "recipes": [
+        {
+          "id": "smoke",
+          "regression": "deleteThenReadMissesAndReloadsTest",
+          "projection": "observations"
+        }
+      ]
+    },
+    {
+      "path": "typescript/test/fixtures/deletion-witnesses.json",
+      "model": "formal/dialcache-deletion-conformance.qnt",
+      "format": "named-list",
+      "recipes": [
+        {
+          "id": "deleteRemovesRequestLocalAndRemoteTest",
+          "regression": "deleteRemovesRequestLocalAndRemoteTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deleteFromDisabledContextRemovesTest",
+          "regression": "deleteFromDisabledContextRemovesTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deleteOutsideAnyScopeRemovesSharedLayersTest",
+          "regression": "deleteOutsideAnyScopeRemovesSharedLayersTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deleteWithoutRemoteRemovesLocalTest",
+          "regression": "deleteWithoutRemoteRemovesLocalTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deleteUnsupportedRemoteChangesNothingTest",
+          "regression": "deleteUnsupportedRemoteChangesNothingTest",
+          "projection": "observations"
+        },
+        {
+          "id": "remoteDeleteFailureKeepsLocalTest",
+          "regression": "remoteDeleteFailureKeepsLocalTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deletePreservesWatermarkAndSiblingVariantsTest",
+          "regression": "deletePreservesWatermarkAndSiblingVariantsTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deleteOneInstanceLeavesOtherInstanceTest",
+          "regression": "deleteOneInstanceLeavesOtherInstanceTest",
+          "projection": "observations"
+        },
+        {
+          "id": "lateFillAfterDeleteRepopulatesTest",
+          "regression": "lateFillAfterDeleteRepopulatesTest",
+          "projection": "observations"
+        },
+        {
+          "id": "acquiredReadAfterDeleteStillReturnsTest",
+          "regression": "acquiredReadAfterDeleteStillReturnsTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deleteAbsentKeyReportsOkTest",
+          "regression": "deleteAbsentKeyReportsOkTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deleteThenReadMissesAndReloadsTest",
+          "regression": "deleteThenReadMissesAndReloadsTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deletePreservesSiblingAndOtherRequestTest",
+          "regression": "deletePreservesSiblingAndOtherRequestTest",
+          "projection": "observations"
+        },
+        {
+          "id": "deleteAbsentLocalOnlyReportsOkTest",
+          "regression": "deleteAbsentLocalOnlyReportsOkTest",
+          "projection": "observations"
         }
       ]
     }

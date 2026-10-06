@@ -741,7 +741,7 @@
       "id": "M24",
       "case": "C13.local-last-writer",
       "description": "Clear the key's local entry when a source settlement fails",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain deletes the key's local entry before rethrowing a rejected source, and Go go/engine.go shared removes the local entry on its no-Redis-client, non-ramped remote-disabled and remote-read error paths. A mutation-only Store.Remove method in go/internal/localcache/cache.go preserves removal of the complete entry under the store mutex. A failed active source can therefore discard another source's accepted local publication. The model removes the value, expiry and LRU membership together. Native scope differs: Go also clears after a remote-read failure, before a recovery attempt, and without a Redis client; TypeScript clears only after finishRedisChain cannot recover. Ramped-down dark-source paths and outside bypass calls do not execute these edits.",
+      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.finishRedisChain deletes the key's local entry before rethrowing a rejected source, and Go go/engine.go shared removes the local entry on its no-Redis-client, non-ramped remote-disabled and remote-read error paths. The existing Store.Remove method removes the complete entry under the store mutex. A failed active source can therefore discard another source's accepted local publication. The model removes the value, expiry and LRU membership together. Native scope differs: Go also clears after a remote-read failure, before a recovery attempt, and without a Redis client; TypeScript clears only after finishRedisChain cannot recover. Ramped-down dark-source paths and outside bypass calls do not execute these edits.",
       "typescript": {
         "edits": [
           {
@@ -771,11 +771,6 @@
             "path": "go/engine.go",
             "before": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n",
             "after": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n\t\t\tc.local.Remove(x.key)\n"
-          },
-          {
-            "path": "go/internal/localcache/cache.go",
-            "before": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n}",
-            "after": "\ts.entries.Add(key, entry{value: value, insertedMS: s.elapsedMS(), ttlMS: ttlMS})\n}\n\n// Fault injection: remove the complete entry after an active source failure.\nfunc (s *Store) Remove(key string) {\n\tif s == nil {\n\t\treturn\n\t}\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\ts.entries.Remove(key)\n}"
           }
         ],
         "requiredDetections": [
@@ -2071,6 +2066,250 @@
             "path": "go/redis_adapter.go",
             "before": "future_buffer_ms > 31536000000",
             "after": "future_buffer_ms >= 31536000000"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M65",
+      "case": "C61.exact-deletion",
+      "description": "Leave the process-local entry behind after exact deletion",
+      "rationale": "TypeScript DialCache.delete and Go Cache.Delete skip their process-local removal after successful remote deletion. The live memo still clears, so a subsequent read exposes the surviving local value instead of reloading.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/dialcache.ts",
+            "before": "      this.localCache.delete(key);",
+            "after": "      // Fault injection: leave the local entry intact."
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/cache.go",
+            "before": "\tc.local.Remove(key)",
+            "after": "\t// Fault injection: leave the local entry intact."
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M66",
+      "case": "C63.deletion-boundaries",
+      "description": "Delete the tracked watermark alongside the exact value",
+      "rationale": "TypeScript RedisCache.delete and Go Cache.Delete incorrectly dispatch deletion of the identity watermark as well as the value. A sibling frame fenced before deletion becomes readable, distinguishing loss of the invalidation fence.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/redis-cache.ts",
+            "before": "    await this.client.delete!({ valueKey: this.redisKey(key) });",
+            "after": "    await this.client.delete!({ valueKey: this.redisKey(key) });\n    if (key.trackForInvalidation) await this.client.delete!({ valueKey: this.redisWatermarkKeyFromKey(key) });"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/cache.go",
+            "before": "key, valueKey, _, err := identity.Keys()",
+            "after": "key, valueKey, watermarkKey, err := identity.Keys()"
+          },
+          {
+            "path": "go/cache.go",
+            "before": "return struct{}{}, remote.Delete(ctx, valueKey)",
+            "after": "if err := remote.Delete(ctx, valueKey); err != nil { return struct{}{}, err }; if identity.Tracked { return struct{}{}, remote.Delete(ctx, watermarkKey) }; return struct{}{}, nil"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M67",
+      "case": "C62.deletion-failure",
+      "description": "Remove local data when the remote deletion fails",
+      "rationale": "TypeScript DialCache.delete and Go Cache.Delete evict the process-local entry in the remote-error branch. A local-only probe after the surfaced failure must still hit the original entry, so partial removal is observed.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/dialcache.ts",
+            "before": "      this.logger.warn(\"Error deleting DialCache entry\", error);",
+            "after": "      this.localCache.delete(key);\n      this.logger.warn(\"Error deleting DialCache entry\", error);"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/cache.go",
+            "before": "\t\t\tc.settings.logger.Warn(\"Error deleting DialCache entry\", err)",
+            "after": "\t\t\tc.mu.Lock(); c.local.Remove(key); c.mu.Unlock()\n\t\t\tc.settings.logger.Warn(\"Error deleting DialCache entry\", err)"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M68",
+      "case": "C63.deletion-boundaries",
+      "description": "Clear sibling entries as well as the exact local and memo entry",
+      "rationale": "TypeScript local and request stores clear all entries instead of one; Go localcache.Store.Remove purges its LRU and Cache.Delete clears the current memo. A surviving sibling is probed with shared remote serving disabled, exposing the overbroad mutation.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/local-cache.ts",
+            "before": "this.cache?.delete(key.urn);",
+            "after": "void key; this.cache?.clear();"
+          },
+          {
+            "path": "typescript/src/context.ts",
+            "before": "this.values.delete(key);",
+            "after": "void key; this.values.clear();"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/internal/localcache/cache.go",
+            "before": "\ts.entries.Remove(key)\n}",
+            "after": "\ts.entries.Purge()\n}"
+          },
+          {
+            "path": "go/cache.go",
+            "before": "delete(state.owner.memo, key)",
+            "after": "clear(state.owner.memo)"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M69",
+      "case": "C63.deletion-boundaries",
+      "description": "Detach the active process flight during deletion",
+      "rationale": "TypeScript DialCache.delete and Go Cache.Delete remove their process flight entry for the key. A new same-key call starts a second source instead of joining the admitted source; deletion must leave existing flights unchanged.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/dialcache.ts",
+            "before": "      this.localCache.delete(key);",
+            "after": "      this.processFlights.delete(key.urn);\n      this.localCache.delete(key);"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/cache.go",
+            "before": "\tc.local.Remove(key)",
+            "after": "\tdelete(c.flights, key)\n\tc.local.Remove(key)"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M70",
+      "case": "C62.deletion-failure",
+      "description": "Reject local-only deletion when no remote is configured",
+      "rationale": "TypeScript DialCache.delete and Go Cache.Delete incorrectly require a remote. The absent local-only regression expects successful maintenance without a remote dispatch, distinguishing this from unsupported configured adapters.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/dialcache.ts",
+            "before": "import { FallbackTimeoutError,",
+            "after": "import { RemoteDeleteUnsupportedError, FallbackTimeoutError,"
+          },
+          {
+            "path": "typescript/src/dialcache.ts",
+            "before": "    this.redisCache?.assertDeleteSupported();",
+            "after": "    if (this.redisCache === null) throw new RemoteDeleteUnsupportedError();\n    this.redisCache?.assertDeleteSupported();"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/cache.go",
+            "before": "\tvar remote RemoteDeleter",
+            "after": "\tif c.settings.remote == nil { return ErrDeleteUnsupported }\n\tvar remote RemoteDeleter"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M71",
+      "case": "C62.deletion-failure",
+      "description": "Report successful deletion for an unsupported configured adapter",
+      "rationale": "TypeScript DialCache.delete swallows the capability error and Go Cache.Delete returns nil when RemoteDeleter is absent. Both report false success without deleting the cached value, violating the pre-mutation capability contract.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/dialcache.ts",
+            "before": "    this.redisCache?.assertDeleteSupported();",
+            "after": "    try { this.redisCache?.assertDeleteSupported(); } catch { return; }"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/cache.go",
+            "before": "\t\tif !supported {\n\t\t\treturn ErrDeleteUnsupported\n\t\t}",
+            "after": "\t\tif !supported {\n\t\t\treturn nil\n\t\t}"
           }
         ],
         "requiredDetections": [

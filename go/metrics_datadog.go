@@ -26,13 +26,13 @@ type DatadogMetrics struct {
 }
 
 var datadogSuffixes = map[string]string{
-	"request": "request.count", "miss": "miss.count", "disabled": "disabled.count", "error": "error.count", "invalidation": "invalidation.count", "coalesced": "coalesced.count",
+	"request": "request.count", "miss": "miss.count", "disabled": "disabled.count", "error": "error.count", "invalidation": "invalidation.count", "deletion": "deletion.count", "coalesced": "coalesced.count",
 	"shadowValidation": "shadow.count", "shadowValueAge": "shadow.value_age", "futureTimestampOffset": "future_timestamp_offset",
 	"staleRecovery": "stale_recovery.count", "staleRecoveryValueAge": "stale_recovery.value_age", "compression": "compression.count",
 	"get": "get.duration", "fallback": "fallback.duration", "serialization": "serialization.duration", "size": "serialization.size", "storedSize": "stored.size",
 	"compressionRatio": "compression.ratio", "compressionDuration": "compression.duration",
 }
-var counterKinds = map[string]bool{"request": true, "miss": true, "disabled": true, "error": true, "invalidation": true, "coalesced": true, "shadowValidation": true, "staleRecovery": true, "compression": true}
+var counterKinds = map[string]bool{"request": true, "miss": true, "disabled": true, "error": true, "invalidation": true, "deletion": true, "coalesced": true, "shadowValidation": true, "staleRecovery": true, "compression": true}
 var datadogNamespace = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$`)
 
 func NewDatadogMetrics(options DatadogMetricsOptions) (*DatadogMetrics, error) {

@@ -3,9 +3,13 @@ package dialcache
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -138,5 +142,92 @@ func TestNormalizeReadResultBoundary(t *testing.T) {
 		if (got.Kind == "hit") != test.hit || got.Reason != test.reason || !reflect.DeepEqual(got.ObservedWatermarkMS, test.fence) {
 			t.Fatalf("%#v: %#v", test.raw, got)
 		}
+	}
+}
+
+func TestRedisAdapterDeleteSingleKeyAndReplyValidation(t *testing.T) {
+	for _, reply := range []any{int64(0), int64(1), int64(2), int64(-1), nil, "0", "1", false, float64(1), []byte("1"), int(1)} {
+		calls := 0
+		adapter := hookedRedis(t, func(cmd redis.Cmder) error {
+			calls++
+			if !reflect.DeepEqual(cmd.Args(), []any{"DEL", "{entity}#value:dialcache-frame-v1"}) {
+				t.Fatal(cmd.Args())
+			}
+			cmd.(*redis.Cmd).SetVal(reply)
+			return nil
+		})
+		err := adapter.Delete(context.Background(), "{entity}#value:dialcache-frame-v1")
+		integer, isInteger := reply.(int64)
+		valid := isInteger && (integer == 0 || integer == 1)
+		if (err == nil) != valid || calls != 1 {
+			t.Fatalf("reply %T(%v): %v calls=%d", reply, reply, err, calls)
+		}
+	}
+}
+
+func TestRedisAdapterDeleteRESPReplies(t *testing.T) {
+	for _, test := range []struct {
+		name, reply string
+		valid       bool
+	}{
+		{"integer-zero", ":0\r\n", true},
+		{"integer-one", ":1\r\n", true},
+		{"integer-two", ":2\r\n", false},
+		{"integer-negative", ":-1\r\n", false},
+		{"status-zero", "+0\r\n", false},
+		{"status-one", "+1\r\n", false},
+		{"bulk-zero", "$1\r\n0\r\n", false},
+		{"bulk-one", "$1\r\n1\r\n", false},
+		{"big-integer-zero", "(0\r\n", false},
+		{"big-integer-one", "(1\r\n", false},
+		{"double-one", ",1\r\n", false},
+		{"boolean", "#t\r\n", false},
+		{"null", "$-1\r\n", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			clientConn, serverConn := net.Pipe()
+			t.Cleanup(func() { _ = clientConn.Close(); _ = serverConn.Close() })
+			const key = "{entity}#value:dialcache-frame-v1"
+			serverErr := make(chan error, 1)
+			go func() {
+				serverErr <- func() error {
+					defer serverConn.Close()
+					if err := serverConn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+						return err
+					}
+					// Exercise go-redis's real response decoder. Only its HELLO 2
+					// negotiation and one exact DEL are expected on this connection.
+					for _, exchange := range []struct{ request, reply string }{
+						{"*2\r\n$5\r\nhello\r\n$1\r\n2\r\n", "-ERR unknown command 'hello'\r\n"},
+						{fmt.Sprintf("*2\r\n$3\r\nDEL\r\n$%d\r\n%s\r\n", len(key), key), test.reply},
+					} {
+						request := make([]byte, len(exchange.request))
+						if _, err := io.ReadFull(serverConn, request); err != nil {
+							return err
+						}
+						if string(request) != exchange.request && string(request) != strings.Replace(exchange.request, "DEL", "del", 1) {
+							return fmt.Errorf("unexpected command %q", request)
+						}
+						if _, err := io.WriteString(serverConn, exchange.reply); err != nil {
+							return err
+						}
+					}
+					return nil
+				}()
+			}()
+			client := redis.NewClient(&redis.Options{
+				Addr: "scripted", Protocol: 2, DisableIdentity: true, MaxRetries: -1, PoolSize: 1,
+				ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second,
+				Dialer: func(context.Context, string, string) (net.Conn, error) { return clientConn, nil },
+			})
+			t.Cleanup(func() { _ = client.Close() })
+			err := NewRedisAdapter(client).Delete(context.Background(), key)
+			if serverFailure := <-serverErr; serverFailure != nil {
+				t.Fatal(serverFailure)
+			}
+			if (err == nil) != test.valid {
+				t.Fatalf("DEL reply %q: valid=%t, error=%v", test.reply, test.valid, err)
+			}
+		})
 	}
 }

@@ -27,7 +27,7 @@ changing that behavior could change existing keys or break existing callbacks.
 | Synchronous wrapper and background event-loop pool | The binding is asyncio based. Every cached wrapper is awaitable; synchronous loaders execute on the caller's event loop. One cache belongs to one event loop. No implicit threads or client factories are created. |
 | Singleton, global namespace, global metrics | Instances own their namespace, request scopes, local capacity, flights and observer. The application owns its Redis client. |
 | Pickle / JSON / protobuf envelope choice | DialCache always uses the portable version-1 frame and compression wrapper. A custom serializer can produce text or binary payloads, including protobuf. There is no pickle fallback or gcache envelope compatibility. |
-| `aput`, `adelete`, `aflushall` and their synchronous counterparts | These are not part of the existing DialCache public contract and are not added by this port. Tracked invalidation is the explicit maintenance API. |
+| `delete`, `aput`, `adelete`, `aflushall` | Exact-key async `delete` is available with explicit identity kwargs and removes the live request memo, this instance's local entry, and the configured remote value. It works in disabled scopes. `put`, `aput`, `adelete`, and flush APIs are not provided. |
 | Random sampling and per-use-case local TTL cache | Replaced by DialCache's deterministic key cohorts and a bounded per-instance LRU, with expiry captured at each insertion. |
 
 Disabled calls bypass key selection, argument adaptation, policy resolution, deadlines and coalescing. Redis reads acquire the value and watermark atomically from a primary; writes use one native `SET` of a complete frame. None of these rules are inherited from gcache's implementation.

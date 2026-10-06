@@ -11,9 +11,9 @@ use dialcache::observe::{Event, LogEvent, Logger, Observer};
 use dialcache::protocol::{decode_frame, encode_frame, read_result_from_untrusted_json};
 use dialcache::testing::{TestExecutor, VirtualClock};
 use dialcache::{
-    BoxError, Codec, DialCache, Error, FallbackTimeout, Identity, InvalidateRequest, LocalEntry,
-    LocalRead, LocalStore, LruLocalStore, Operation, Payload, Policy, ReadContext, ReadRequest,
-    ReadResult, Remote, RuntimePolicy, Scope, SourceBudget, WriteRequest,
+    BoxError, Codec, DeleteRequest, DialCache, Error, FallbackTimeout, Identity, InvalidateRequest,
+    LocalEntry, LocalRead, LocalStore, LruLocalStore, Operation, Payload, Policy, ReadContext,
+    ReadRequest, ReadResult, Remote, RuntimePolicy, Scope, SourceBudget, WriteRequest,
 };
 use futures::future::BoxFuture;
 use parking_lot::Mutex;
@@ -241,6 +241,7 @@ pub fn empty_observation(fixture: &Value) -> Map<String, Value> {
         "reads",
         "writes",
         "invalidations",
+        "deletions",
         "loads",
         "dumps",
         "policyCalls",
@@ -441,10 +442,17 @@ impl Driver {
                 }
             });
         if fixture.get("remote") != Some(&Value::Bool(false)) {
-            builder = builder.remote_arc(Arc::new(DriverRemote {
+            let remote = DriverRemote {
                 shared: shared.clone(),
                 clock: clock.clone(),
-            }));
+            };
+            builder = builder.remote_arc(
+                if fixture.get("remoteDeletes") == Some(&Value::Bool(false)) {
+                    Arc::new(WithoutDelete(remote))
+                } else {
+                    Arc::new(remote)
+                },
+            );
         }
         if fixture.get("localFaultInjection") == Some(&Value::Bool(true)) {
             let inner = std::num::NonZeroUsize::new(capacity).map(LruLocalStore::new);
@@ -584,6 +592,32 @@ impl Driver {
                     .lock()
                     .values
                     .insert(keys.value, Stored { raw, expires });
+            }
+            "delete" => {
+                let (scope, scope_instance) = match input.get("id").and_then(Value::as_str) {
+                    Some(id) => self.scope_of(id)?,
+                    None => (Scope::outside(), "default".to_string()),
+                };
+                let instance = input
+                    .get("instance")
+                    .and_then(Value::as_str)
+                    .unwrap_or(&scope_instance);
+                let cache = self.instance(instance);
+                let identity = self.identity(&text(input.get("key")), &text(input.get("useCase")));
+                let result = self
+                    .exec
+                    .block_on(async move { cache.delete(&scope, identity).await });
+                let status = match result {
+                    Ok(()) => "ok",
+                    Err(Error::RemoteDeleteUnsupported) => "unsupported",
+                    Err(Error::Remote(error))
+                        if error.downcast_ref::<MaintenanceFailure>().is_some() =>
+                    {
+                        "mutation_error"
+                    }
+                    Err(other) => return Err(format!("unexpected deletion error: {other}")),
+                };
+                self.shared.lock().push("maintenance", Value::from(status));
             }
             "invalidate" => {
                 let cache = self.instance("default");
@@ -1239,7 +1273,40 @@ struct DriverRemote {
     clock: Arc<VirtualClock>,
 }
 
+// Deliberately implements only the pre-delete adapter interface.
+struct WithoutDelete(DriverRemote);
+impl Remote for WithoutDelete {
+    fn read(
+        &self,
+        request: ReadRequest,
+        context: ReadContext,
+    ) -> BoxFuture<'_, Result<ReadResult, BoxError>> {
+        self.0.read(request, context)
+    }
+    fn write(&self, request: WriteRequest) -> BoxFuture<'_, Result<(), BoxError>> {
+        self.0.write(request)
+    }
+    fn invalidate(&self, request: InvalidateRequest) -> BoxFuture<'_, Result<(), BoxError>> {
+        self.0.invalidate(request)
+    }
+}
+
 impl Remote for DriverRemote {
+    fn supports_delete(&self) -> bool {
+        true
+    }
+    fn delete(&self, request: DeleteRequest) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async move {
+            let mut shared = self.shared.lock();
+            shared.increment("deletions");
+            if shared.fault("write") {
+                return Err(Box::new(MaintenanceFailure) as BoxError);
+            }
+            shared.values.remove(&request.value_key);
+            Ok(())
+        })
+    }
+
     fn read(
         &self,
         request: ReadRequest,
@@ -1457,6 +1524,22 @@ impl Observer for DriverObserver {
                 m.insert("layer".to_string(), Value::from(layer.as_str()));
                 ("invalidation", m)
             }
+            Event::Deletion {
+                namespace,
+                key_type,
+                use_case,
+                layer,
+            } => {
+                let mut m = Map::new();
+                m.insert(
+                    "cacheNamespace".to_string(),
+                    Value::from(namespace.as_ref()),
+                );
+                m.insert("keyType".to_string(), Value::from(key_type.as_ref()));
+                m.insert("useCase".to_string(), Value::from(use_case.as_ref()));
+                m.insert("layer".to_string(), Value::from(layer.as_str()));
+                ("deletion", m)
+            }
             Event::Coalesced { labels, scope } => {
                 let mut m = outcome_map(labels);
                 m.insert("scope".to_string(), Value::from(scope.as_str()));
@@ -1634,6 +1717,16 @@ struct FaultStore {
 }
 
 impl LocalStore for FaultStore {
+    fn remove(&mut self, key: &str) -> Result<Option<LocalEntry>, BoxError> {
+        if self.shared.lock().fault("localStorage") {
+            return Err("controlled local storage failure".into());
+        }
+        match self.inner.as_mut() {
+            Some(inner) => inner.remove(key),
+            None => Ok(None),
+        }
+    }
+
     fn get(&mut self, key: &str, now_ms: i64) -> Result<LocalRead, BoxError> {
         if self.shared.lock().fault("localStorage") {
             return Err("controlled local storage failure".into());

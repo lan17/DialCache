@@ -34,7 +34,7 @@ interface Request {
   compression: boolean;
   codec: "json" | "binary";
   wallMs: number;
-  op: "get" | "invalidate";
+  op: "get" | "invalidate" | "delete";
   source?: TaggedValue;
   futureBufferMs?: number;
 }
@@ -132,6 +132,7 @@ async function main(): Promise<void> {
         return pending;
       },
       invalidate: invalidation => native.invalidate(invalidation),
+      delete: request => native.delete!(request),
     };
     const warnings: string[] = [];
     const cache = new DialCache({
@@ -172,6 +173,9 @@ async function main(): Promise<void> {
         throw new Error(`Expected ${expectedWrites} completed Redis writes; observed ${writes.length}`);
       }
       await bounded(Promise.all(writes), "Redis publication");
+    } else if (request.op === "delete") {
+      await bounded(cache.delete({ key: { id: request.id, args: request.args },
+        keyType: request.keyType, useCase: request.useCase, trackForInvalidation: request.tracked }), "DialCache deletion");
     } else if (request.op === "invalidate") {
       await bounded(cache.invalidateRemote(request.keyType, request.id, request.futureBufferMs ?? 0), "DialCache invalidation");
     } else {

@@ -5,6 +5,16 @@ from collections.abc import Awaitable, Coroutine, Mapping
 from typing import Any, assert_type
 
 from dialcache import UNDEFINED, CacheKeySpec, DialCache, Key, KeyScalar
+from dialcache.protocol import Miss, ReadResult
+from dialcache.redis import (
+    DeleteRequest,
+    InvalidationRequest,
+    ReadContext,
+    ReadRequest,
+    RedisClient,
+    RedisDeleteClient,
+    WriteRequest,
+)
 
 cache = DialCache()
 
@@ -113,3 +123,26 @@ cache.cached(key_type="user", cache_key=lambda user_id: object())  # type: ignor
 missing_id: CacheKeySpec = {"args": {"locale": "en"}}  # type: ignore[typeddict-item]
 nested_args: CacheKeySpec = {"id": "42", "args": {"nested": []}}  # type: ignore[dict-item]
 invalid_id: CacheKeySpec = {"id": object()}  # type: ignore[typeddict-item]
+
+# Existing typed adapters retain the original three-method protocol; exact
+# deletion is an optional, separately declared capability.
+
+
+class LegacyRemote:
+    def read(self, request: ReadRequest, context: ReadContext | None = None) -> ReadResult:
+        return Miss("value_absent")
+
+    def write(self, request: WriteRequest) -> None:
+        pass
+
+    def invalidate(self, request: InvalidationRequest) -> None:
+        pass
+
+
+class DeletingRemote(LegacyRemote):
+    async def delete(self, request: DeleteRequest) -> None:
+        pass
+
+
+legacy_remote: RedisClient = LegacyRemote()
+deleting_remote: RedisDeleteClient = DeletingRemote()
