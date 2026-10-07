@@ -45,7 +45,7 @@ const completed = (): Event[] => {
   return [...events, event("pass")];
 };
 const check = (events: unknown[]): Result => checkGoReplay(encode(events), inventory);
-const readFixture = (path: string): unknown => JSON.parse(readFileSync(new URL(`../../formal/${path}`, import.meta.url), "utf8"));
+const readFixture = (path: string): unknown => JSON.parse(readFileSync(new URL(`../../formal/catalogs/${path}`, import.meta.url), "utf8"));
 const inventoryInputs = (): InventoryInputs => ({
   packageName: inventory.packageName,
   execution: scheduleExecution(),

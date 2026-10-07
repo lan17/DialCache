@@ -29,7 +29,7 @@ describe("reviewed documentation freshness", () => {
 
   beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), "dialcache-source-audit-"));
-    for (const path of ["docs", "typescript/test", "formal", "go"]) mkdirSync(join(directory, path), { recursive: true });
+    for (const path of ["docs", "typescript/test", "formal/guides", "formal/catalogs", "go"]) mkdirSync(join(directory, path), { recursive: true });
     put("README.md", "# Example library\n");
     put("typescript/README.md", "# TypeScript package\n");
     put("docs/usage.md", "# Public usage\n\nReviewed behavior.\n");
@@ -37,6 +37,7 @@ describe("reviewed documentation freshness", () => {
     put("formal/guides/CONTRACTS.md", "# Contracts\n\n| C01 | Admission |\n| B01 | Native API |\n");
     put("formal/guides/PORTING.md", "# Porting\n\n## Native driver\n\nReview the real observations.\n");
     put("formal/guides/VALIDATION.md", "# Validation snapshots\n\n## Prior run\n\nAn earlier revision passed two tests.\n");
+    put("formal/README.md", "# Formal model\n\nStart here.\n");
     put("go/README.md", "# Go port\n\nThe native API uses explicit contexts.\n");
     audit = {
       schemaVersion: 1,
@@ -55,10 +56,10 @@ describe("reviewed documentation freshness", () => {
   afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
   it("checks guides separately from public behavior mappings and preserves historical results", () => {
-    expect(check()).toEqual({ sources: 4, tests: 1, sections: 3, reviewedGuides: 4, guideSections: 6 });
+    expect(check()).toEqual({ sources: 4, tests: 1, sections: 3, reviewedGuides: 5, guideSections: 7 });
     guide().review = { kind: "coverage-guide", scope: "Describes finite evidence accounting without claiming all histories pass.", contracts: [] };
     put("formal/catalogs/source-audit.json", JSON.stringify(audit));
-    expect(checkSourceAudit(undefined, { directory })).toMatchObject({ reviewedGuides: 4 });
+    expect(checkSourceAudit(undefined, { directory })).toMatchObject({ reviewedGuides: 5 });
   });
 
   it("rejects a body-only edit even when the section inventory stays unchanged", () => {
@@ -66,9 +67,9 @@ describe("reviewed documentation freshness", () => {
     const before = readFileSync(join(directory, path), "utf8");
     put(path, before.replace("real observations", "expected model values"));
     expect(guideSnapshot(directory).find(entry => entry.path === path)!.entries).toEqual(guide(path).entries);
-    expect(() => check()).toThrow(/formal\/PORTING.md: contents changed/);
+    expect(() => check()).toThrow(/formal\/guides\/PORTING.md: contents changed/);
     put(path, before);
-    expect(check()).toMatchObject({ reviewedGuides: 4 });
+    expect(check()).toMatchObject({ reviewedGuides: 5 });
   });
 
   it("rejects a newly added or removed guide", () => {
@@ -142,7 +143,7 @@ describe("reviewed documentation freshness", () => {
     guide().review = { kind: "tooling-guide", scope: "Explains report preparation without claiming behavioral coverage.", contracts: ["C99"] };
     expect(() => check()).toThrow(/guide contract IDs/);
     delete guide().review!.contracts;
-    expect(check()).toMatchObject({ reviewedGuides: 4 });
+    expect(check()).toMatchObject({ reviewedGuides: 5 });
   });
 
   it("requires full unique revision identities for historical evidence", () => {

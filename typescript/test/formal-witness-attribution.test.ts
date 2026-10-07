@@ -46,7 +46,7 @@ const integer = (value: number): RecordValue => ({ "#bigint": String(value) });
 const explicitInput = (name: string, choice?: Choice) => ({ name, choice: choice === undefined || choice.tag === "None" ? integer(-1) : choice.value });
 // A history starts at its init, whose fixture choice is the recipe's first external action.
 function initialInput(fixture: Fixture): { name: string; choice: unknown } {
-  const reference = fixture.provenance.recipe.replace(/^formal\/fixture-recipes\.json#/, "");
+  const reference = fixture.provenance.recipe.replace(/^formal\/catalogs\/fixture-recipes\.json#/, "");
   const separator = reference.lastIndexOf("/");
   const recipe = recipes.artifacts.find(artifact => artifact.path === reference.slice(0, separator))?.recipes.find(item => item.id === reference.slice(separator + 1));
   if (recipe === undefined) throw new Error(`Missing recipe for ${fixture.witness}`);

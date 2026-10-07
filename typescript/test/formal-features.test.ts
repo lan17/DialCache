@@ -67,7 +67,7 @@ const execution = scheduleExecution();
 for (const [name, profile] of Object.entries(profiles)) {
   if (selectedProfile !== undefined && selectedProfile !== name) continue;
   const paths = single !== undefined ? (single.includes(`/${name}/`) || single.endsWith(`${name}-smoke.itf.json`) ? [resolve(single)] : [])
-    : directory === undefined ? [fileURLToPath(new URL(`../../formal/${name}-smoke.itf.json`, import.meta.url))]
+    : directory === undefined ? [fileURLToPath(new URL(`../../formal/generated/${name}-smoke.itf.json`, import.meta.url))]
     : readdirSync(resolve(directory, name)).filter((file) => file.endsWith(".itf.json")).sort().map((file) => resolve(directory, name, file));
   if (directory !== undefined && single === undefined) {
     const regressions = execution.models.find(model => model.profile === name)?.replayRegressions ?? [];
@@ -127,7 +127,7 @@ for (const [name, profile] of Object.entries(profiles)) {
         await expect(replay(profile, trace)).rejects.toThrow(/step 1 action.*\nexpected:.*\nactual:/s);
       });
       it("fails a driver that skips settlement by settlement violation, never by mismatch", async () => {
-        const path = fileURLToPath(new URL(`../../formal/${name}-smoke.itf.json`, import.meta.url));
+        const path = fileURLToPath(new URL(`../../formal/generated/${name}-smoke.itf.json`, import.meta.url));
         const trace = parseTrace(JSON.parse(readFileSync(path, "utf8")), path, profile);
         const error = await replay(profile, trace, { settle: false }).then(() => "passed", (cause: unknown) => String(cause));
         expect(error).toMatch(/Settlement violation: \d+ runnable task\(s\) at observation/);

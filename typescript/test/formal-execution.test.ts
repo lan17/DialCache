@@ -150,7 +150,7 @@ describe("formal execution schedule", () => {
     expect(validate(manifest()).libraries).toBe(libraries.length);
     const kernelSource = readFileSync(new URL("../../formal/models/kernel/clock.qnt", import.meta.url), "utf8");
     expect(() => validate(manifest(), { readSource: (path: string) => path === "formal/models/kernel/clock.qnt" ? kernelSource.replace("type Timed[r]", "var leaked: int\n  type Timed[r]") : readFileSync(new URL(`../../${path}`, import.meta.url), "utf8") }))
-      .toThrow(/formal\/kernel\/clock\.qnt: a stateful Quint source must be a scheduled model/);
+      .toThrow(/formal\/models\/kernel\/clock\.qnt: a stateful Quint source must be a scheduled model/);
   });
 
   it("validates a composed profile's declared behavior version and bytes-per-state bound", () => {
@@ -187,12 +187,12 @@ describe("formal execution schedule", () => {
     const stateless = "module orphan { pure def unused(n: int): int = n }";
     const sources = (path: string) => ["formal/models/kernel/orphan.qnt", "formal/models/stray.qnt"].includes(path) ? stateless : readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
     // Present in the tree, a library by construction, yet reached by no model: the orphan rule.
-    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/models/kernel/orphan.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/kernel\/orphan\.qnt/);
+    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/models/kernel/orphan.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/models\/kernel\/orphan\.qnt/);
     // The same rule is the inventory tripwire at formal/: a stateless source the listing would otherwise admit as
     // a library, and that no lane would typecheck, is refused by name rather than hashed into the evidence inputs.
-    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/models/stray.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/stray\.qnt;/);
+    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/models/stray.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/models\/stray\.qnt;/);
     expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/models/kernel/orphan.qnt", "formal/models/stray.qnt"].sort() }))
-      .toThrow(/formal\/kernel\/orphan\.qnt, formal\/stray\.qnt/);
+      .toThrow(/formal\/models\/kernel\/orphan\.qnt, formal\/models\/stray\.qnt/);
     // Every library in the tree is reached, so the rule admits the current inventory.
     expect(() => validate(manifest())).not.toThrow();
   });
@@ -262,7 +262,7 @@ describe("formal execution schedule", () => {
     const patching = manifest();
     const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
     effects.reproducer = { ...effects.reproducer!, kind: "exported-regression", run: "patchedBudgetTest", failure: "s.readBudget == 30" };
-    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
+    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/models\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
   });
 
   it("rejects a generated history whose choice leaves the driver domain at generation time", () => {
@@ -499,8 +499,8 @@ describe("formal execution schedule", () => {
     refuse(catalogText([entry("M01", { typescript: { edits: [{ path: "typescript/test/a.ts", before: "alpha", after: "beta" }] } })]), /M01 edits typescript\/test\/a.ts outside the TypeScript port/);
     refuse(catalogText([entry("M01", { go: { edits: [{ path: "go/a_test.go", before: "alpha", after: "beta" }] } })]), /M01 edits go\/a_test.go outside the Go port/);
     refuse(catalogText([entry("M01", { typescript: { edits: [{ path: "typescript/src/a.ts", before: "alpha", after: "alpha" }] } })]), /M01 has an empty or unchanged edit in typescript\/src\/a.ts/);
-    refuse(catalogText([entry("M01")], 2), /Mutant catalog: expected the versioned catalog formal\/mutations.json/);
-    refuse(catalogText([]), /Mutant catalog: expected the versioned catalog formal\/mutations.json/);
+    refuse(catalogText([entry("M01")], 2), /Mutant catalog: expected the versioned catalog formal\/catalogs\/mutations.json/);
+    refuse(catalogText([]), /Mutant catalog: expected the versioned catalog formal\/catalogs\/mutations.json/);
     // Anchors are checked apart from the schema: edits apply in order, and every anchor must match the current text exactly once.
     const anchors = (mutations: unknown[]) => { const text = catalogText(mutations); return () => checkMutantAnchors(readMutantCatalog(read(text)), read(text)); };
     const sequential = entry("M01", { typescript: { edits: [{ path: "typescript/src/a.ts", before: "alpha", after: "gamma" }, { path: "typescript/src/a.ts", before: "gamma = 1", after: "gamma = 2" }] } });
@@ -537,7 +537,7 @@ describe("formal execution schedule", () => {
     };
     expect(() => validate(exported(r => { (r as Record<string, unknown>).seed = "0x1"; }))).toThrow(/unsupported reproducer field seed/);
     expect(() => validate(exported(r => { r.kind = "sampled"; }))).toThrow(/reproducer kind must be one of exported-regression, model-run/);
-    expect(() => validate(exported(r => { r.run = "inventedTest"; }))).toThrow(/reproducer run is not a scheduled regression of formal\/dialcache-source-budgets-conformance\.qnt: inventedTest/);
+    expect(() => validate(exported(r => { r.run = "inventedTest"; }))).toThrow(/reproducer run is not a scheduled regression of formal\/models\/dialcache-source-budgets-conformance\.qnt: inventedTest/);
     // The declared failure is the condition of one top-level expect in the cited run, compared token by token.
     expect(() => validate(exported(r => { delete (r as Partial<Reproducer>).failure; }))).toThrow(/reproducer failure must state the expect condition the fault breaks/);
     expect(() => validate(exported(r => { r.failure = "s.o.calls == List(CALL_PENDING, DEADLINE_ERROR) and s.o.loaders == 2"; })))
@@ -561,14 +561,14 @@ describe("formal execution schedule", () => {
     // model's own file may not name one, whatever its reproducer kind.
     const budgetsRun = { model: "formal/models/dialcache-source-budgets-conformance.qnt", run: "defaultSourceBudgetExpiresAtSixtySecondsTest", failure: "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2" };
     expect(() => validate(modelRun(r => { Object.assign(r, budgetsRun); })))
-      .toThrow(/reproducer model must name another profile model or vector model reached by a shared-library fault.*: formal\/dialcache-source-budgets-conformance\.qnt/);
+      .toThrow(/reproducer model must name another profile model or vector model reached by a shared-library fault.*: formal\/models\/dialcache-source-budgets-conformance\.qnt/);
     expect(() => validate(shared(r => { r.model = "formal/models/dialcache-stale-recovery.qnt"; }))).toThrow(/reproducer model must name another profile model/);
-    expect(() => validate(shared(r => { r.model = "formal/models/dialcache-core.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/dialcache-core\.qnt/);
-    expect(() => validate(shared(r => { r.model = "formal/models/invented.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/invented\.qnt/);
+    expect(() => validate(shared(r => { r.model = "formal/models/dialcache-core.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/models\/dialcache-core\.qnt/);
+    expect(() => validate(shared(r => { r.model = "formal/models/invented.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/models\/invented\.qnt/);
     expect(() => validate(shared(r => { r.kind = "model-run"; r.scope = "Pretend it is model-only."; }))).toThrow(/reproducer model must name another profile model/);
     expect(() => validate(shared(r => { r.run = "localHitDoesNotRenewInsertionTtlTest"; }))).toThrow(/has no top-level expect whose condition is the declared failure/);
     expect(() => validate(shared(r => { r.profiles = ["formal/models/dialcache-stale-recovery.qnt", "recovery", "shadow"]; r.exclusions.policy = "excluded anyway"; })))
-      .toThrow(/must name known profiles and include formal\/dialcache-stale-recovery\.qnt and policy/);
+      .toThrow(/must name known profiles and include formal\/models\/dialcache-stale-recovery\.qnt and policy/);
     // Non-importers need no catalog entry; importing exclusions cannot disappear.
     expect(validate(shared(r => { delete r.exclusions.core; })).reproducers).toBe(liveReproducers());
     expect(() => validate(shared(r => { delete r.exclusions.core; r.profiles.push("core"); }))).toThrow(/listed profile does not import/);
@@ -580,7 +580,7 @@ describe("formal execution schedule", () => {
     const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
     const budget = "s.readBudget == 30";
     effects.reproducer = { ...effects.reproducer!, kind: "exported-regression", run: "patchedBudgetTest", failure: budget };
-    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
+    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/models\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
     effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "patchedBudgetTest", failure: budget, scope: "Patches the read budget directly." };
     // Supplying a deterministic model run must not downgrade a mapped native
     // fault to an unreproduced boundary while leaving both backlogs unchanged.
@@ -589,7 +589,7 @@ describe("formal execution schedule", () => {
     effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "lateSourceResultIsADeadlineErrorTest", failure: manifest().challenges.find(challenge => challenge.id === "effects-late-source-accepted")!.reproducer!.failure, scope: "Not a model-only run." };
     expect(() => validate(patching)).toThrow(/lateSourceResultIsADeadlineErrorTest is exported; cite it as an exported-regression reproducer/);
     expect(() => validate(modelRun(r => { delete r.scope; }))).toThrow(/model-run reproducer needs a scope/);
-    expect(() => validate(modelRun(r => { r.profiles = ["recovery"]; }))).toThrow(/must name known profiles and include formal\/dialcache-envelope-vectors\.qnt/);
+    expect(() => validate(modelRun(r => { r.profiles = ["recovery"]; }))).toThrow(/must name known profiles and include formal\/models\/dialcache-envelope-vectors\.qnt/);
     const exportedAsModelRun = exported(() => {});
     const budgets = exportedAsModelRun.challenges.find(challenge => challenge.id === "source-budgets-accepts-at-deadline-equality")!;
     budgets.reproducer = { ...budgets.reproducer!, kind: "model-run", scope: "Pretend it is model-only." };
@@ -598,7 +598,7 @@ describe("formal execution schedule", () => {
     const core = verification.challenges.find(challenge => challenge.id === "core-unhealthy-local-read-hits")!;
     core.reproducer = { kind: "exported-regression", run: "localReadFailureContinuesToRemoteTest", family: "unhealthy-read-served", profiles: ["formal/models/dialcache-core.qnt"], exclusions: {},
       failure: "s.origin == RemoteValue and s.localReads == 1 and s.remoteReads == 1 and s.sourceCalls == 0 and s.localWrites == 0" };
-    expect(() => validate(verification)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-core\.qnt/);
+    expect(() => validate(verification)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/models\/dialcache-core\.qnt/);
   }, 60_000);
 
   it("retains vector boundaries and native-free model reproducers", () => {

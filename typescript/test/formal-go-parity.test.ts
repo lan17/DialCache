@@ -22,7 +22,7 @@ type SemanticCases = { cases: Array<{ id: string; models: string[]; quintReplays
 type Profiles = { profiles: Array<{ id: string; model: string; smoke: string }> };
 type Inputs = { semantic?: SemanticCases; profileManifest?: Profiles };
 
-const formal = (name: string) => JSON.parse(readFileSync(new URL(`../../formal/${name}`, import.meta.url), "utf8"));
+const formal = (name: string) => JSON.parse(readFileSync(new URL(`../../formal/catalogs/${name}`, import.meta.url), "utf8"));
 const ledger = () => formal("go-parity.json") as Ledger;
 const semantic = () => formal("semantic-cases.json") as SemanticCases;
 const profiles = () => formal("profiles.json") as Profiles;
@@ -81,7 +81,7 @@ describe("Go parity ledger freshness", () => {
     expect(() => validate(ledger(), { profileManifest: moved })).toThrow(/model differs from execution.json/);
     const smoke = profiles();
     smoke.profiles[0]!.smoke = "formal/generated/missing-smoke.itf.json";
-    expect(() => validate(ledger(), { profileManifest: smoke })).toThrow(/missing or invalid repository path formal\/missing-smoke.itf.json/);
+    expect(() => validate(ledger(), { profileManifest: smoke })).toThrow(/missing or invalid repository path formal\/generated\/missing-smoke.itf.json/);
     const cases = ledger();
     cases.cases.pop();
     expect(() => validate(cases)).toThrow(/Semantic case inventory\/order differs/);

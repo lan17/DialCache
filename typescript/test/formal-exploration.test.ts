@@ -94,14 +94,14 @@ function completedWitnessReport(seed: string, profiles: readonly string[] = sele
 // The witness inventory a snapshot carries: the manifest's scheduled profiles
 // and the registry that names which of them have required witnesses.
 function writeWitnessInventory(directory: string, profiles: readonly string[]) {
-  mkdirSync(join(directory, "formal"), { recursive: true });
+  mkdirSync(join(directory, "formal/catalogs"), { recursive: true });
   writeFileSync(join(directory, "formal/catalogs/execution.json"), JSON.stringify({ models: profiles.map(profile => ({ profile })) }));
   writeFileSync(join(directory, "formal/catalogs/coverage-witnesses.json"), JSON.stringify(Object.fromEntries(profiles.map(profile => [profile, ["required"]]))));
 }
 
 function savedFixture(directory: string, languages: readonly unknown[] = ["typescript", "go", "rust"], results: readonly unknown[] = languages) {
   const saved = join(directory, "saved"), workspace = join(saved, "workspace");
-  mkdirSync(join(workspace, "formal"), { recursive: true });
+  for (const path of ["formal/catalogs", "formal/tools"]) mkdirSync(join(workspace, path), { recursive: true });
   mkdirSync(join(directory, "node_modules"));
   mkdirSync(join(directory, "typescript/node_modules"), { recursive: true });
   mkdirSync(join(workspace, "typescript"));
@@ -183,7 +183,7 @@ describe("isolated exploratory validation", () => {
     const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-test-"));
     try {
       const destination = join(directory, "snapshot");
-      mkdirSync(join(directory, "formal"));
+      mkdirSync(join(directory, "formal/models"), { recursive: true });
       writeFileSync(join(directory, "formal/models/rule.qnt"), "current rule");
       const hashes = snapshotSources(directory, destination, ["formal/models/rule.qnt", "removed.qnt"]);
       expect(Object.keys(hashes)).toEqual(["formal/models/rule.qnt"]);
@@ -317,7 +317,7 @@ describe("isolated exploratory validation", () => {
       const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-reproduce-"));
       try {
         const saved = savedFixture(directory, languages), original = readFileSync(saved.path, "utf8");
-        mkdirSync(join(directory, "formal"));
+        mkdirSync(join(directory, "formal/tools"), { recursive: true });
         writeFileSync(join(directory, "formal/tools/explore.mjs"), 'throw new Error("new checkout runner must not execute")');
         writeFileSync(join(directory, "formal/tools/validation.mjs"), 'throw new Error("new checkout prerequisites must not execute")');
         const output = await replayExploration(saved.path, { directory });

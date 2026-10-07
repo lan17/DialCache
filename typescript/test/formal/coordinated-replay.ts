@@ -18,7 +18,7 @@ import { BehaviorDriver, emptyObservation, type Fixture, type Input, type Observ
 export { wallEpochMs };
 
 export function smokeTracePath(profile: string): string {
-  return fileURLToPath(new URL(`../../../formal/${profile === "core" ? "conformance" : profile}-smoke.itf.json`, import.meta.url));
+  return fileURLToPath(new URL(`../../../formal/generated/${profile === "core" ? "conformance" : profile}-smoke.itf.json`, import.meta.url));
 }
 
 // A native driver as the coordinator sees it: it applies fixture-independent

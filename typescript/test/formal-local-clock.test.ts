@@ -18,7 +18,7 @@ const profile = "local-clock";
 const single = process.env.DIALCACHE_FEATURE_TRACE_FILE;
 const directory = process.env.DIALCACHE_FEATURE_TRACE_DIR;
 const paths = single !== undefined ? (single.includes(`/${profile}/`) || single.endsWith(`${profile}-smoke.itf.json`) ? [resolve(single)] : [])
-  : directory === undefined ? [fileURLToPath(new URL(`../../formal/${profile}-smoke.itf.json`, import.meta.url))]
+  : directory === undefined ? [fileURLToPath(new URL(`../../formal/generated/${profile}-smoke.itf.json`, import.meta.url))]
   : readdirSync(resolve(directory, profile)).filter(file => file.endsWith(".itf.json")).sort().map(file => resolve(directory, profile, file));
 if (directory !== undefined && single === undefined) {
   for (const name of scheduleExecution().models.find(model => model.profile === profile)?.replayRegressions ?? []) {

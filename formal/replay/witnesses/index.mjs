@@ -113,7 +113,7 @@ export function requiredActions(profile) {
   return Object.keys(definition.actions);
 }
 
-export function readWitnessRegistry(path = new URL("../../coverage-witnesses.json", import.meta.url)) {
+export function readWitnessRegistry(path = new URL("../../catalogs/coverage-witnesses.json", import.meta.url)) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 

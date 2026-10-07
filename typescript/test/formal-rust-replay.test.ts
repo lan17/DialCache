@@ -194,7 +194,7 @@ describe("Rust validation lanes", () => {
     const { delimiter, join } = await import("node:path");
     const temporary = mkdtempSync(join(tmpdir(), "dialcache-rust-prereq-"));
     try {
-      for (const path of ["bin", "formal", "node_modules/typescript", "rust"]) mkdirSync(join(temporary, path), { recursive: true });
+      for (const path of ["bin", "formal/generated", "node_modules/typescript", "rust"]) mkdirSync(join(temporary, path), { recursive: true });
       writeFileSync(join(temporary, "package.json"), '{"packageManager":"pnpm@10.33.0"}');
       writeFileSync(join(temporary, "node_modules/typescript/package.json"), "{}");
       writeFileSync(join(temporary, "formal/generated/generated-fixtures.lock.json"), '{"quintVersion":"0.32.0"}');

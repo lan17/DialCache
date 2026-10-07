@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { checkDocsLinks, checkDocsSources } from './check-docs.mjs';
+import { checkDocsLinks, checkDocsSources, checkFormalLinks } from './check-docs.mjs';
 
 test('catalogue evidence links land on test definitions rather than earlier comments', () => {
   const root = fileURLToPath(new URL('../', import.meta.url));
@@ -16,7 +16,7 @@ test('catalogue evidence links land on test definitions rather than earlier comm
     ['independent', 'staggeredSourceStartsKeepIndependentBudgetsTest'],
     ['local-failure', 'localReadFailureFallsThroughAndPreservesOldLocalTest'],
   ]) {
-    const path = `formal/dialcache-${model}-conformance.qnt`;
+    const path = `formal/models/dialcache-${model}-conformance.qnt`;
     const link = catalogue.split('\n').find(line => line.includes(`[${name}](`));
     const target = link?.match(new RegExp(`\\[${name}\\]\\([^)]*#L(\\d+)\\)`));
     assert.ok(target, `${name}: missing source line link`);
@@ -81,4 +81,24 @@ test('decodes escaped link and anchor attributes exactly once', t => {
   assert.deepEqual(checkDocsLinks(root), { pages: 1 });
   writeFileSync(join(out, 'index.html'), '<h1 id="literal&amp;quot;">Literal entity</h1><a href="#literal%26quot%3B">URL-encoded anchor</a>');
   assert.deepEqual(checkDocsLinks(root), { pages: 1 });
+});
+
+test('checks relative links in the formal guides and indexes and the repository READMEs', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dialcache-formal-links-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, 'formal/guides'), { recursive: true });
+  mkdirSync(join(root, 'formal/models/kernel'), { recursive: true });
+  writeFileSync(join(root, 'formal/guides/SPEC.md'), '# Spec\n\nSee [the kernel](../models/kernel/README.md#modules) and [the index](./README.md).\n');
+  writeFileSync(join(root, 'formal/guides/README.md'), '# Guides\n\n- [SPEC.md](./SPEC.md)\n');
+  writeFileSync(join(root, 'formal/models/kernel/README.md'), '# Kernel\n\n[rules](../cache-rules.qnt) and [replay](../../replay/)\n');
+  writeFileSync(join(root, 'formal/models/cache-rules.qnt'), 'module cache_rules {}\n');
+  mkdirSync(join(root, 'formal/replay'));
+  writeFileSync(join(root, 'formal/README.md'), '# Formal\n\n| [guides/](./guides/) | [SPEC](./guides/SPEC.md) |\n\nA code span is ignored: \`[x](./nowhere.md)\` and so is https://example.invalid/x.md.\n');
+  writeFileSync(join(root, 'README.md'), '# Repo\n\n[Quint specification](formal/README.md)\n');
+  assert.deepEqual(checkFormalLinks(root), { pages: 5 });
+  writeFileSync(join(root, 'formal/guides/README.md'), '# Guides\n\n- [SPEC.md](./SPEC.md)\n- [gone](./GONE.md#anchor)\n');
+  assert.throws(() => checkFormalLinks(root), /formal\/guides\/README\.md: missing link target \.\/GONE\.md#anchor/);
+  writeFileSync(join(root, 'formal/guides/README.md'), '# Guides\n\n- [SPEC.md](./SPEC.md)\n');
+  writeFileSync(join(root, 'README.md'), '# Repo\n\n[Quint specification](formal/SPEC.md)\n');
+  assert.throws(() => checkFormalLinks(root), /README\.md: missing link target formal\/SPEC\.md/);
 });

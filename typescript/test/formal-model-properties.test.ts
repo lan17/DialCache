@@ -229,7 +229,7 @@ describe("independent model challenge measurements", () => {
 
 describe("shared-library challenge partitions", () => {
   const models = ["listed", "cited", "excluded", "structural"].map(profile => ({
-    path: `formal/${profile}.qnt`, profile, invariants: ["obligation"], regressions: ["behaviorTest"],
+    path: `formal/models/${profile}.qnt`, profile, invariants: ["obligation"], regressions: ["behaviorTest"],
   }));
   const challenge: Challenge = { id: "shared-boundary", contract: "C01", source: "formal/models/kernel/shared.qnt", model: "formal/models/listed.qnt",
     invariant: "obligation", before: "true", after: "false", reproducer: {

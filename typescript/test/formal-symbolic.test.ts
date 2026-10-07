@@ -74,7 +74,7 @@ describe("symbolic verification evidence", () => {
     const directory = mkdtempSync(join(tmpdir(), "dialcache-symbolic-preflight-"));
     const report = join(directory, ".formal-traces/symbolic/report.json");
     try {
-      mkdirSync(join(directory, "formal"));
+      mkdirSync(join(directory, "formal/catalogs"), { recursive: true });
       mkdirSync(join(directory, ".formal-traces/symbolic"), { recursive: true });
       for (const manifest of ["{broken", JSON.stringify({ schemaVersion: 0 })]) {
         writeFileSync(report, JSON.stringify({ complete: true, checks: [{ status: "passed" }] }));

@@ -46,7 +46,7 @@ describe("shared validation runner", () => {
 
   beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), "dialcache-validation-"));
-    for (const path of ["bin", "formal", "typescript/dist", "node_modules/typescript", "rust"]) mkdirSync(join(directory, path), { recursive: true });
+    for (const path of ["bin", "formal/generated", "typescript/dist", "node_modules/typescript", "rust"]) mkdirSync(join(directory, path), { recursive: true });
     child = join(directory, "child.mjs");
     put("child.mjs", `import { appendFileSync } from 'node:fs';
 appendFileSync(process.env.RUNNER_EVENTS, JSON.stringify({ label: process.argv[2], cwd: process.cwd(),
