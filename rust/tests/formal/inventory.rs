@@ -161,7 +161,9 @@ impl Selection {
     /// plus the scheduled core regressions.
     pub fn core_paths(&self) -> Result<Vec<PathBuf>, String> {
         match &self.core {
-            TraceSource::Smoke => Ok(vec![repo_path("formal/generated/conformance-smoke.itf.json")]),
+            TraceSource::Smoke => Ok(vec![repo_path(
+                "formal/generated/conformance-smoke.itf.json",
+            )]),
             TraceSource::File(file) => Ok(vec![file.clone()]),
             TraceSource::Directory(directory) => {
                 let mut paths = glob_itf(directory)?;
@@ -217,7 +219,9 @@ impl Selection {
                 paths.extend(regression_paths(profile, directory)?);
                 Ok(paths)
             }
-            TraceSource::Smoke => Ok(vec![repo_path(&format!("formal/{profile}-smoke.itf.json"))]),
+            TraceSource::Smoke => Ok(vec![repo_path(&format!(
+                "formal/generated/{profile}-smoke.itf.json"
+            ))]),
         }
     }
 }
@@ -455,9 +459,9 @@ pub fn profile_registry_check_text(raw: &str, name: &str, version: i64) -> Resul
         count += 1;
         if profile.get("version").and_then(Value::as_f64) != Some(version as f64)
             || profile.get("model").and_then(Value::as_str)
-                != Some(format!("formal/dialcache-{name}-conformance.qnt").as_str())
+                != Some(format!("formal/models/dialcache-{name}-conformance.qnt").as_str())
             || profile.get("smoke").and_then(Value::as_str)
-                != Some(format!("formal/{name}-smoke.itf.json").as_str())
+                != Some(format!("formal/generated/{name}-smoke.itf.json").as_str())
         {
             return Err(format!("unsupported {name} profile definition/version"));
         }

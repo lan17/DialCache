@@ -95,7 +95,7 @@ def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_pat
     node = os.environ.get("NODE") or shutil.which("node")
     assert node, "Node 24 is required by Python validation"
     checkout = tmp_path
-    (checkout / "formal").mkdir()
+    (checkout / "formal/tools").mkdir(parents=True)
     tests = checkout / "python/tests"
     tests.mkdir(parents=True)
     shutil.copyfile(

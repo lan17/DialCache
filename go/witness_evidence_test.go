@@ -136,7 +136,7 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 	// required witnesses, the execution manifest, the profile's model and the
 	// observation library, then every Quint library, the shared replay closure
 	// (which holds the witness classifiers) and the profile's witness sources.
-	expectedInputs := []string{"formal/catalogs/profiles.json", "formal/catalogs/coverage-witnesses.json", "formal/catalogs/execution.json", "formal/dialcache-" + profile + "-conformance.qnt", "formal/models/conformance-observations.qnt"}
+	expectedInputs := []string{"formal/catalogs/profiles.json", "formal/catalogs/coverage-witnesses.json", "formal/catalogs/execution.json", "formal/models/dialcache-" + profile + "-conformance.qnt", "formal/models/conformance-observations.qnt"}
 	var execution struct {
 		Models []struct {
 			Path string `json:"path"`
@@ -234,12 +234,12 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 	return nil
 }
 
-// quintLibraries lists every Quint source under formal/ and formal/models/kernel/
+// quintLibraries lists every Quint source under formal/models/ and formal/models/kernel/
 // that no scheduled model claims, sorted, as formal/tools/execution.mjs derives the
 // libraries the witness evidence binds.
 func quintLibraries(root string, claimed map[string]bool) ([]string, error) {
 	libraries := []string{}
-	for _, folder := range []string{"formal", "formal/models/kernel"} {
+	for _, folder := range []string{"formal/models", "formal/models/kernel"} {
 		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(folder)))
 		if errors.Is(err, fs.ErrNotExist) {
 			continue

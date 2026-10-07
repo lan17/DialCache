@@ -32,7 +32,7 @@ func featurePaths(p string) ([]string, error) {
 		paths = append(paths, regressions...)
 		return paths, nil
 	}
-	return []string{filepath.Join("..", "formal", p+"-smoke.itf.json")}, nil
+	return []string{filepath.Join("..", "formal", "generated", p+"-smoke.itf.json")}, nil
 }
 
 // The exported regressions of a profile are the histories under

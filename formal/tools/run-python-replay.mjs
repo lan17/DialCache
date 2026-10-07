@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const python = process.env.PYTHON ?? resolve(root, 'python/.venv/bin/python');
 const result = spawnSync(python, [resolve(root, 'python/tests/run_conformance.py'), ...process.argv.slice(2)], {
   cwd: root,

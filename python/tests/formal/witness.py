@@ -78,7 +78,7 @@ def check_witness(profile, cases, completed, directory=None):
     models = {entry["path"] for entry in execution["models"]}
     libraries = sorted(
         str(path.relative_to(ROOT))
-        for folder in (ROOT / "formal", ROOT / "formal/models/kernel")
+        for folder in (ROOT / "formal/models", ROOT / "formal/models/kernel")
         for path in folder.glob("*.qnt")
         if str(path.relative_to(ROOT)) not in models
     )
@@ -96,7 +96,7 @@ def check_witness(profile, cases, completed, directory=None):
                 "formal/catalogs/profiles.json",
                 "formal/catalogs/coverage-witnesses.json",
                 "formal/catalogs/execution.json",
-                f"formal/dialcache-{profile}-conformance.qnt",
+                f"formal/models/dialcache-{profile}-conformance.qnt",
                 "formal/models/conformance-observations.qnt",
                 *libraries,
                 *replay,

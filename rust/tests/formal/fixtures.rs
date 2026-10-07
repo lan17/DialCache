@@ -6,7 +6,7 @@
 //! artifact registered in `formal/catalogs/execution.json`, after the artifact's
 //! provenance fingerprints are verified against the model sources.
 //!
-//! Include from a test binary with `#[path = "formal/models/fixtures.rs"] mod fixtures;`.
+//! Include from a test binary with `#[path = "formal/fixtures.rs"] mod fixtures;`.
 
 #![allow(dead_code)]
 
@@ -223,7 +223,8 @@ pub fn protocol_groups(selection: &str) -> BTreeMap<String, Vec<Value>> {
         "unknown protocol corpus selection {selection:?}"
     );
 
-    let fixed = load_json_marking_lone_surrogates(repo_path("formal/catalogs/protocol-vectors.json"));
+    let fixed =
+        load_json_marking_lone_surrogates(repo_path("formal/catalogs/protocol-vectors.json"));
     let fixed = fixed
         .as_object()
         .expect("protocol-vectors.json is an object");

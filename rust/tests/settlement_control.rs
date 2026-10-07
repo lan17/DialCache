@@ -31,7 +31,7 @@ const BEHAVIOR_SMOKE: [&str; 15] = [
 
 fn replay(coordinator: &mut Coordinator, profile: &str, skip_settle: bool) -> Result<(), String> {
     let path = repo_path(&format!(
-        "formal/{}-smoke.itf.json",
+        "formal/generated/{}-smoke.itf.json",
         if profile == "effects" {
             "effects"
         } else {

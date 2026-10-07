@@ -2,7 +2,7 @@
 //! groups against `dialcache::identity`.
 //!
 //! Include from a test binary alongside `fixtures.rs`:
-//! `#[path = "formal/models/fixtures.rs"] mod fixtures;`
+//! `#[path = "formal/fixtures.rs"] mod fixtures;`
 //! `#[path = "formal/key_vectors.rs"] mod key_vectors;`
 
 #![allow(dead_code)]

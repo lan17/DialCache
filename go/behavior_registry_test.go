@@ -24,7 +24,7 @@ func validateBehaviorProfileRegistry(raw []byte, name string, version int64) err
 			continue
 		}
 		count++
-		if bf(profile["version"]) != float64(version) || profile["model"] != "formal/dialcache-"+name+"-conformance.qnt" || profile["smoke"] != "formal/"+name+"-smoke.itf.json" {
+		if bf(profile["version"]) != float64(version) || profile["model"] != "formal/models/dialcache-"+name+"-conformance.qnt" || profile["smoke"] != "formal/generated/"+name+"-smoke.itf.json" {
 			return fmt.Errorf("unsupported %s profile definition/version", name)
 		}
 	}

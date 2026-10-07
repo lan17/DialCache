@@ -187,7 +187,7 @@ pub fn check_witness_evidence(
         "formal/catalogs/profiles.json".to_string(),
         "formal/catalogs/coverage-witnesses.json".to_string(),
         "formal/catalogs/execution.json".to_string(),
-        format!("formal/dialcache-{profile}-conformance.qnt"),
+        format!("formal/models/dialcache-{profile}-conformance.qnt"),
         "formal/models/conformance-observations.qnt".to_string(),
     ]
     .to_vec();
@@ -255,11 +255,11 @@ pub fn check_witness_evidence(
     Ok(())
 }
 
-/// Every Quint source in `formal/` and `formal/models/kernel/` not claimed by a
+/// Every Quint source in `formal/models/` and `formal/models/kernel/` not claimed by a
 /// scheduled model, sorted as `formal/tools/execution.mjs` derives library inputs.
 pub fn quint_libraries(root: &Path, claimed: &HashSet<String>) -> Result<Vec<String>, String> {
     let mut libraries = Vec::new();
-    for folder in ["formal", "formal/models/kernel"] {
+    for folder in ["formal/models", "formal/models/kernel"] {
         let directory = root.join(folder);
         let entries = match std::fs::read_dir(&directory) {
             Ok(entries) => entries,

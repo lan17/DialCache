@@ -997,7 +997,8 @@ fn registry_checks_match_go() {
         require_behavior_profile("core").is_err(),
         "core is not a behavior profile"
     );
-    let raw = std::fs::read_to_string(repo_root().join("formal/catalogs/profiles.json")).expect("registry");
+    let raw = std::fs::read_to_string(repo_root().join("formal/catalogs/profiles.json"))
+        .expect("registry");
     for mode in ["version", "missing", "duplicate", "model", "schema"] {
         let mut registry = strict_parse(&raw).expect("parse");
         let profiles = registry["profiles"].as_array().cloned().expect("profiles");
@@ -1303,7 +1304,10 @@ fn witness_evidence_binds_shared_replay_sources() {
     // Library membership is discovered from actual Quint sources, so adding
     // a kernel library must invalidate the old evidence even without a
     // manifest edit; updating its digest then makes subsequent drift visible.
-    root.write("formal/models/kernel/new-library.qnt", "new reviewed library");
+    root.write(
+        "formal/models/kernel/new-library.qnt",
+        "new reviewed library",
+    );
     let error = check().expect_err("new kernel library omitted from evidence");
     assert!(
         error.contains("incomplete witness definition fingerprints"),
@@ -1315,7 +1319,8 @@ fn witness_evidence_binds_shared_replay_sources() {
         Digest {
             path: "formal/models/kernel/new-library.qnt".to_string(),
             name: String::new(),
-            sha256: file_sha256(&root.0.join("formal/models/kernel/new-library.qnt")).expect("hash"),
+            sha256: file_sha256(&root.0.join("formal/models/kernel/new-library.qnt"))
+                .expect("hash"),
         },
     );
     write(&with_library);
@@ -1326,7 +1331,8 @@ fn witness_evidence_binds_shared_replay_sources() {
         error.contains("stale witness definition formal/models/kernel/new-library.qnt"),
         "{error}"
     );
-    std::fs::remove_file(root.0.join("formal/models/kernel/new-library.qnt")).expect("remove library");
+    std::fs::remove_file(root.0.join("formal/models/kernel/new-library.qnt"))
+        .expect("remove library");
     write(&evidence);
     check().expect("restored library inventory rejected");
 

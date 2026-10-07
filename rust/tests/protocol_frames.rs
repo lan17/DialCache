@@ -5,8 +5,8 @@
 #[path = "formal/digest.rs"]
 mod digest;
 
-// TODO(integrator): switch to `formal/models/fixtures.rs` and delete `formal/fixtures_tmp.rs`.
-#[path = "formal/models/fixtures.rs"]
+// TODO(integrator): switch to `formal/fixtures.rs` and delete `formal/fixtures_tmp.rs`.
+#[path = "formal/fixtures.rs"]
 mod fixtures;
 #[path = "formal/frame_vectors.rs"]
 mod frame_vectors;

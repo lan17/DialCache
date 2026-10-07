@@ -90,9 +90,11 @@ fn read(repo_root: &Path, relative: &str) -> Vec<u8> {
 /// the generator's model and script sources so stale generated vectors are
 /// rejected rather than replayed.
 pub fn load_corpus(repo_root: &Path, sha256_hex: impl Fn(&[u8]) -> String) -> Vec<Vector> {
-    let fixed: Corpus =
-        serde_json::from_slice(&read(repo_root, "formal/catalogs/invalidation-vectors.json"))
-            .expect("parse fixed invalidation corpus");
+    let fixed: Corpus = serde_json::from_slice(&read(
+        repo_root,
+        "formal/catalogs/invalidation-vectors.json",
+    ))
+    .expect("parse fixed invalidation corpus");
     assert_eq!(
         fixed.schema_version, SCHEMA_VERSION,
         "unsupported fixed corpus schema"
@@ -103,9 +105,11 @@ pub fn load_corpus(repo_root: &Path, sha256_hex: impl Fn(&[u8]) -> String) -> Ve
         "unsupported fixed corpus size"
     );
 
-    let generated: Corpus =
-        serde_json::from_slice(&read(repo_root, "formal/generated/quint-invalidation-vectors.json"))
-            .expect("parse Quint invalidation corpus");
+    let generated: Corpus = serde_json::from_slice(&read(
+        repo_root,
+        "formal/generated/quint-invalidation-vectors.json",
+    ))
+    .expect("parse Quint invalidation corpus");
     assert_eq!(
         generated.schema_version, SCHEMA_VERSION,
         "unsupported Quint corpus schema"
