@@ -14,11 +14,10 @@ export const isKernelSource = path => path.startsWith(`${kernelDirectory}/`);
 // not sources a model may import.
 export const isQuintSourcePath = path => /^formal\/models\/(kernel\/)?[\w-]+\.qnt$/.test(path);
 // Transitional (lan17/DialCache#221): a revision from before the layout move
-// keeps its Quint sources at the top of formal/ and in its kernel/ subdirectory,
-// and its manifests
-// at formal/*.json. The differential exports such a revision as its reference
-// and reads it through the layout its own listing shows. Delete the legacy
-// layout once the merge base with main carries the current one.
+// keeps its Quint sources at the top of formal/ and in its kernel/ subdirectory
+// and its manifests beside them. The differential exports such a revision as its
+// reference and reads it through the layout its own listing shows. Delete the
+// legacy layout once the merge base with main carries the current one.
 export const layouts = {
   current: { manifests: ['formal/catalogs/execution.json', 'formal/catalogs/profiles.json'], sourceDirectories: ['formal/models', kernelDirectory], isSource: isQuintSourcePath },
   legacy: { manifests: ['formal/execution.json', 'formal/profiles.json'], sourceDirectories: ['formal', 'formal/kernel'], isSource: path => /^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path) }, // layout-legacy: pre-move paths, kept verbatim
