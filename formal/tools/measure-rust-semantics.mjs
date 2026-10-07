@@ -12,7 +12,7 @@ import { fingerprintFiles, gateDetections, languages, selectMutations, selection
 // fault to an isolated copy of the crate, require it to compile, and run three
 // cohorts against it. Detection is an assertion failure; a compiler error,
 // crash, timeout, missing report or incomplete run fails the measurement.
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = file => JSON.parse(readFileSync(file, 'utf8'));
 

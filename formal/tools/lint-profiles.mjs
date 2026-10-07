@@ -57,7 +57,7 @@ import { fileURLToPath } from 'node:url';
 import { isKernelSource, quintSources } from './execution.mjs';
 import { CommandFailure, runPool, spawnBuffered } from './quint-pool.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 export const baselinePath = 'formal/catalogs/profile-lint-baseline.json';
 export const defaultObservationField = 'o';
 // The driver input every profile records; its assignment is the replay

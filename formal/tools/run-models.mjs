@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { readExecution, root, scheduleExecution, validateExecution } from './execution.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 import { normalizeTraceFiles } from './replay-inputs.mjs';
-import { bindTrace } from './replay/bindings.mjs';
+import { bindTrace } from '../replay/bindings.mjs';
 
 // The generation lane's command for one model, also issued by the corpus
 // differential for the reference and candidate trees so the two cannot drift:

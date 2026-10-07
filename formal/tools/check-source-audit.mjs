@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = (path, directory = root) => readFileSync(resolve(directory, path), 'utf8');
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
@@ -66,7 +66,7 @@ export function sourceSnapshot(directory = root) {
 }
 
 export function guideSnapshot(directory = root) {
-  const paths = [...readdirSync(resolve(directory, 'formal')).filter(p => p.endsWith('.md')).map(p => 'formal/' + p), 'go/README.md'];
+  const paths = [...readdirSync(resolve(directory, 'formal/guides')).filter(p => p.endsWith('.md')).map(p => 'formal/guides/' + p), 'formal/README.md', 'go/README.md'];
   return snapshot(paths, directory);
 }
 

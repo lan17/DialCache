@@ -3,19 +3,34 @@ import { dirname, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveVectorEvidence } from './vector-evidence.mjs';
 
-export const root = fileURLToPath(new URL('../', import.meta.url));
+export const root = fileURLToPath(new URL('../../', import.meta.url));
 // The kernel library's concern modules live in one directory; every tool that
 // needs to know that asks here.
 export const kernelDirectory = 'formal/models/kernel';
 export const isKernelSource = path => path.startsWith(`${kernelDirectory}/`);
-// Where a Quint source may live: formal/ for models and helper libraries,
-// formal/models/kernel/ for the kernel library's modules, no deeper.
-export const isQuintSourcePath = path => /^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path);
+// Where a Quint source may live: formal/models/ for models and helper
+// libraries, formal/models/kernel/ for the kernel library's modules, no deeper.
+// The fixtures under formal/models/fixtures/ are checked on their own and are
+// not sources a model may import.
+export const isQuintSourcePath = path => /^formal\/models\/(kernel\/)?[\w-]+\.qnt$/.test(path);
+// Transitional (lan17/DialCache#221): a revision from before the layout move
+// keeps its Quint sources at formal/*.qnt and formal/kernel/ and its manifests
+// at formal/*.json. The differential exports such a revision as its reference
+// and reads it through the layout its own listing shows. Delete the legacy
+// layout once the merge base with main carries the current one.
+export const layouts = {
+  current: { manifests: ['formal/catalogs/execution.json', 'formal/catalogs/profiles.json'], sourceDirectories: ['formal/models', kernelDirectory], isSource: isQuintSourcePath },
+  legacy: { manifests: ['formal/execution.json', 'formal/profiles.json'], sourceDirectories: ['formal', 'formal/kernel'], isSource: path => /^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path) },
+};
+export const layoutOfListing = paths =>
+  paths.includes(layouts.legacy.manifests[0]) && !paths.includes(layouts.current.manifests[0]) ? layouts.legacy : layouts.current;
+export const layoutOfDirectory = directory =>
+  existsSync(resolve(directory, layouts.legacy.manifests[0])) && !existsSync(resolve(directory, layouts.current.manifests[0])) ? layouts.legacy : layouts.current;
 // Every Quint source a model may import: the scheduled models and helper
-// libraries at formal/ and the kernel library modules at formal/models/kernel/.
+// libraries at formal/models/ and the kernel library modules at formal/models/kernel/.
 export function quintSources(directory = root) {
   const files = [];
-  for (const relative of ['formal', kernelDirectory]) {
+  for (const relative of layoutOfDirectory(directory).sourceDirectories) {
     const absolute = resolve(directory, relative);
     if (!existsSync(absolute)) continue;
     for (const name of readdirSync(absolute)) if (name.endsWith('.qnt')) files.push(`${relative}/${name}`);
@@ -721,13 +736,13 @@ export function validateExecution(manifest = readExecution(), {
   positiveInteger(test?.maxSamples, 'test.maxSamples');
   if (check.outputDirectory !== '.formal-traces/verification') throw new Error('Unsupported verification output directory');
 
-  // Scheduled models live at formal/; helper libraries live there or, for the
-  // kernel library's concern modules, at formal/models/kernel/, and are every Quint
+  // Scheduled models live at formal/models/; helper libraries live there or, for
+  // the kernel library's concern modules, at formal/models/kernel/, and are every Quint
   // source no model claims. Kernel modules are never scheduled on their own:
   // a composed profile executes them, and a fault in one is measured through
   // the profiles that compose it.
   const modelPaths = manifest.models.map(model => model.path);
-  if (manifest.models.some(model => typeof model.path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(model.path)) ||
+  if (manifest.models.some(model => typeof model.path !== 'string' || !/^formal\/models\/[\w-]+\.qnt$/.test(model.path)) ||
       new Set(modelPaths).size !== modelPaths.length || modelPaths.some(path => !files.includes(path))) throw new Error('Model/library file inventory changed; review the execution schedule');
   const libraries = libraryPaths(manifest, files);
   if (libraries.some(path => !isQuintSourcePath(path))) throw new Error('Model/library file inventory changed; review the execution schedule');
@@ -810,8 +825,8 @@ export function validateExecution(manifest = readExecution(), {
     if (model.vectorExport !== undefined) {
       const vector = model.vectorExport;
       if (model.profile !== undefined || !['protocol', 'invalidation'].includes(vector.kind)
-        || !/^formal\/generate-[\w-]+-vectors\.mjs$/.test(vector.generator)
-        || !/^formal\/quint-[\w-]+-vectors\.json$/.test(vector.artifact)
+        || !/^formal\/tools\/generate-[\w-]+-vectors\.mjs$/.test(vector.generator)
+        || !/^formal\/generated\/quint-[\w-]+-vectors\.json$/.test(vector.artifact)
         || !Array.isArray(vector.sources) || new Set(vector.sources).size !== vector.sources.length
         || !vector.sources.includes(model.path) || !vector.sources.includes(vector.generator)
         || vector.sources.some(path => path !== model.path && path !== vector.generator && !libraries.includes(path))) {

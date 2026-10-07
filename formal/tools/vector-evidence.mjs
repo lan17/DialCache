@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { countingPaths, diffPaths } from './replay/divergence.mjs';
+import { countingPaths, diffPaths } from '../replay/divergence.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);

@@ -11,7 +11,7 @@ import { boundaryEvidence, checkMutantAnchors, mutantsForPort, readMutantCatalog
 import { assessBoundary, classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 import { boundaryBaselines, boundaryTrace, mutationBoundaries, runBoundaryReplay } from './boundary-replay.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const language = languages.ts;
 // --shard=<index>/<count> measures a contiguous slice of the catalog after the
 // full baselines; --only=<id>,<id> measures the named mutants into a partial

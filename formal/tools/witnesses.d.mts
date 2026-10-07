@@ -1,4 +1,4 @@
-import type { TraceKind, TraceKinds, WitnessDiversity, WitnessEvidence } from "./replay/witnesses/evidence.mjs";
+import type { TraceKind, TraceKinds, WitnessDiversity, WitnessEvidence } from "../replay/witnesses/evidence.mjs";
 export interface WitnessOptions {
   command: "evaluate" | "report" | "baseline";
   profile: string;

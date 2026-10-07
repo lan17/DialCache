@@ -5,7 +5,7 @@ import { checkFeatureCoverage } from './check-feature-coverage.mjs';
 import { checkMutantAnchors, readExecution, readMutantCatalog, scanDeclarations, scheduleExecution, scheduledProperties, validateExecution } from './execution.mjs';
 import { protocolCorpus, readVectorArtifact } from './vector-artifacts.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = path => readFileSync(root + path, 'utf8');
 const parse = path => JSON.parse(read(path));
 const contractIds = [...read('formal/guides/CONTRACTS.md').matchAll(/^\| ([CW]\d{2}) \|/gm)].map(m => m[1]);

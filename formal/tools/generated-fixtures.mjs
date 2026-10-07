@@ -27,7 +27,7 @@ export function validateRecipes(book, execution = readExecution()) {
   if (book.schemaVersion !== 1 || !Array.isArray(book.artifacts) || !book.artifacts.length) fail('Invalid fixture recipe inventory');
   const paths = new Set();
   for (const artifact of book.artifacts) {
-    if (typeof artifact.path !== 'string' || !/^(formal\/[\w-]+-smoke\.itf|typescript\/test\/fixtures\/[\w-]+)\.json$/.test(artifact.path) || paths.has(artifact.path)) fail('Invalid/duplicate fixture path');
+    if (typeof artifact.path !== 'string' || !/^(formal\/generated\/[\w-]+-smoke\.itf|typescript\/test\/fixtures\/[\w-]+)\.json$/.test(artifact.path) || paths.has(artifact.path)) fail('Invalid/duplicate fixture path');
     paths.add(artifact.path);
     if (Object.keys(artifact).some(key => !['path', 'model', 'format', 'recipes'].includes(key))) fail('Unexpected artifact recipe field');
     if (!['smoke', 'named-map', 'named-list', 'excerpts'].includes(artifact.format) || !Array.isArray(artifact.recipes) || !artifact.recipes.length) fail('Invalid fixture format');

@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { settlementViolationPattern } from './replay/settlement.mjs';
+import { settlementViolationPattern } from '../replay/settlement.mjs';
 
 // A successful process alone is insufficient: an unmatched selector or an
 // entirely skipped cohort can exit successfully without executing assertions.

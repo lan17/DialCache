@@ -1,4 +1,4 @@
-import type { ReplayRecording } from './replay/coordinator.mjs';
+import type { ReplayRecording } from '../replay/coordinator.mjs';
 
 export interface BoundaryRecording extends ReplayRecording { history: string; via: 'coordinator' }
 export interface EvidenceHistory { history?: string }

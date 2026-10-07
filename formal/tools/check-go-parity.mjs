@@ -5,7 +5,7 @@ import ts from 'typescript';
 import { scheduleExecution } from './execution.mjs';
 import { readVectorArtifact } from './vector-artifacts.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = path => readFileSync(root + path, 'utf8');
 const json = path => JSON.parse(read(path));
 const digest = path => createHash('sha256').update(readFileSync(root + path)).digest('hex');

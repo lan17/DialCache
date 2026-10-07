@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { copySources, importClosure, quintSources, readExecution, reproducerCheckpoint, scheduleExecution, validateExecution } from './execution.mjs';
 import { printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 export function validatePropertyResult(result, exitCode, expectation) {
   if (!['baseline', 'mutant'].includes(expectation)) throw new Error('Unknown model measurement expectation');
   if (!result || !Array.isArray(result.errors) || result.errors.length ||

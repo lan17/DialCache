@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { mutantsForPort, readMutantCatalog } from './execution.mjs';
 import { fingerprintFiles, gateDetections, languages, sha256 } from './mutation-reports.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 
 // Fields a shard legitimately owns or that the merge recomputes. Every other
 // field describes the measured inputs and must be identical across shards.

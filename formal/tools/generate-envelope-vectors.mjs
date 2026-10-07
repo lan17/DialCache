@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { encodeJson } from './compact-json.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 // The corpus header stays indented; every vector row is one line.
 const encode = corpus => encodeJson(corpus, path => path.length === 2 && typeof path[1] === 'number');
 export const model = 'formal/models/dialcache-envelope-vectors.qnt';

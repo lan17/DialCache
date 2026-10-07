@@ -9,7 +9,7 @@ import { quintSources, readExecution, validateExecution } from './execution.mjs'
 import { prepareApalache } from './apalache.mjs';
 import { waitForApalache } from './apalache-readiness.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 export function validateSymbolicResult(result, exitCode) {
   if (exitCode !== 0 || result?.stage !== 'verifying' || result.status !== 'ok'

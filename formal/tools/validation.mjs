@@ -4,7 +4,7 @@ import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseOnly, parseShard } from './mutation-reports.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const replayTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts',
   'test/formal-local-clock.test.ts', 'test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const aggregateTargets = {
@@ -193,7 +193,7 @@ export function validationPlan(target, { directory = root, environment = process
         '--rcfile=python/pyproject.toml', '--data-file=coverage/python/.coverage-native', '-o', 'coverage/python/native.lcov')],
     docs: [pnpm('Build documentation', 'docs:build')],
     audit: ['execution', 'check-source-audit', 'check-semantic-coverage', 'check-feature-coverage', 'check-go-parity']
-      .map(name => node(`Check ${name}`, `formal/${name}.mjs`))
+      .map(name => node(`Check ${name}`, `formal/tools/${name}.mjs`))
       .concat(node('Verify committed fixture fingerprints', 'formal/tools/generated-fixtures.mjs', '--verify'),
         node('Check conditional fixture regeneration scope', '--test', '.github/scripts/fixture-scope.test.mjs')),
     smoke: [tsReplay(false), nativeGo(false), nativeRust(false),

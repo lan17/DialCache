@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boundaryEvidence, challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
-import { countingPaths } from './replay/divergence.mjs';
+import { countingPaths } from '../replay/divergence.mjs';
 import { assessVectorBoundary } from './vector-evidence.mjs';
 
 // Preserve profile/run identity when workspaces and artifact roots differ.
@@ -52,7 +52,7 @@ export function boundaryColumn(entries) {
 // merge-mutation-reports.mjs: the catalog selection, the input fingerprint,
 // the detection summary and the required-detection gate. One implementation
 // keeps a merged report exactly as strict as a single-process one.
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // --shard=<index>/<count> is 1-based; the default 1/1 is the complete

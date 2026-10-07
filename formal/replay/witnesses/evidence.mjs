@@ -15,14 +15,14 @@ export function witnessInputs(profile, directory = ".") {
   const execution = JSON.parse(readFileSync(resolve(directory, "formal/catalogs/execution.json"), "utf8"));
   const entry = registry.profiles.find(candidate => candidate.id === profile);
   if (entry === undefined) throw new Error(`Unknown witness profile ${profile}`);
-  // Every Quint library: each source under formal/ and formal/models/kernel/ that no
+  // Every Quint library: each source under formal/models/ and formal/models/kernel/ that no
   // scheduled model claims, in sorted order (formal/tools/execution.mjs libraryPaths;
   // the replay closure stays self-contained, and Go derives the same list).
   const models = new Set(execution.models.map(model => model.path));
-  const libraries = ["formal", "formal/models/kernel"].flatMap(folder => existsSync(resolve(directory, folder)) ? readdirSync(resolve(directory, folder))
+  const libraries = ["formal/models", "formal/models/kernel"].flatMap(folder => existsSync(resolve(directory, folder)) ? readdirSync(resolve(directory, folder))
     .filter(name => name.endsWith(".qnt")).map(name => `${folder}/${name}`) : []).sort().filter(path => !models.has(path));
   const inputs = [...new Set(["formal/catalogs/profiles.json", "formal/catalogs/coverage-witnesses.json", "formal/catalogs/execution.json",
-    `formal/dialcache-${profile}-conformance.qnt`, "formal/models/conformance-observations.qnt",
+    `formal/models/dialcache-${profile}-conformance.qnt`, "formal/models/conformance-observations.qnt",
     ...libraries, ...replaySources(directory), ...(entry.witnessSources ?? [])])];
   const foreign = inputs.filter(path => /^(test|src|go)\//.test(path));
   if (foreign.length) throw new Error(`Witness inputs must be language neutral; remove ${foreign.join(", ")} from witnessSources`);

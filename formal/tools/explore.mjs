@@ -11,7 +11,7 @@ import { checkRustReplay } from './check-rust-replay.mjs';
 import { checkPythonReplay } from './check-python-replay.mjs';
 import { canonicalSeed, reportFileName } from './witnesses.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const hash = value => createHash('sha256').update(value).digest('hex');
 const inside = (directory, path) => path.startsWith(directory + sep);
 const reportPaths = { typescript: '.formal-traces/ts-replay.json', go: '.formal-traces/go-replay.jsonl', rust: '.formal-traces/rust-replay.jsonl', python: '.formal-traces/python-replay.jsonl' };

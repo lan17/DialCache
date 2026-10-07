@@ -1,4 +1,2 @@
-formal/*-smoke.itf.json linguist-generated=true
-formal/quint-*-vectors.json linguist-generated=true
-formal/generated/generated-fixtures.lock.json linguist-generated=true
+formal/generated/** linguist-generated=true
 typescript/test/fixtures/*witness*.json linguist-generated=true

@@ -8,13 +8,13 @@ import { fileURLToPath } from 'node:url';
 import { boundaryEvidence, checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
 import { assessBoundary, classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 import { boundaryBaselines, boundaryTrace, mutationBoundaries, runBoundaryReplay } from './boundary-replay.mjs';
-import { settlementViolationPattern } from './replay/settlement.mjs';
+import { settlementViolationPattern } from '../replay/settlement.mjs';
 
 // The whole output line that carries a settlement violation. Anchored per
 // line so a multi-kilobyte expected/actual line costs a linear scan.
 const violationLine = new RegExp(`^.*${settlementViolationPattern.source}.*$`, 'm');
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = file => JSON.parse(readFileSync(file, 'utf8'));
 const protocolNames = ['TestProtocolKeys', 'TestProtocolFrames', 'TestProtocolDecoders', 'TestProtocolCohorts', 'TestProtocolRemainingVectors'];

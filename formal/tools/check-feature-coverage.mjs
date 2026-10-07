@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = path => {
   if (typeof path !== 'string' || path.startsWith('/') || path.split('/').includes('..')) throw new Error(`Invalid evidence path: ${path}`);
   return readFileSync(root + path, 'utf8');

@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readExecution, root, scheduleExecution } from './execution.mjs';
-import { witnessEvidence, writeWitnessEvidence } from './replay/witnesses/evidence.mjs';
-import { checkWitnesses, readWitnessRegistry, witnessProfiles } from './replay/witnesses/index.mjs';
+import { witnessEvidence, writeWitnessEvidence } from '../replay/witnesses/evidence.mjs';
+import { checkWitnesses, readWitnessRegistry, witnessProfiles } from '../replay/witnesses/index.mjs';
 
 // Language-neutral witness completion. Any port runs this over the generated
 // corpus instead of TypeScript's test suite: it evaluates the shared
