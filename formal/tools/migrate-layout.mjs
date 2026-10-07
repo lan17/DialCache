@@ -30,14 +30,19 @@ const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8'
 const tracked = () => git('ls-files', '-z').split('\0').filter(Boolean);
 
 const NAME = '[A-Za-z0-9_-]+';
-const END = '(?![\\w.-])';
+// A path ends where no word character, hyphen, or dot-plus-word-character
+// follows: "formal/profiles.json" is matched inside "formal/profiles.json."
+// at the end of a sentence but not inside "formal/profiles.jsonl".
+const END = '(?![\\w-])(?!\\.[\\w])';
 // Order matters: directories first, then the generated name shapes, then the
 // extensions. A path mapped by one rule contains a directory segment after
 // formal/ and therefore matches no later rule.
 export const kindRules = [
-  [new RegExp(`formal/fixtures/kernel(?![\\w-])`, 'g'), 'formal/models/fixtures/kernel'],
-  [new RegExp(`formal/fixtures(?![\\w/-])`, 'g'), 'formal/models/fixtures'],
-  [new RegExp(`formal/kernel(?![\\w-])`, 'g'), 'formal/models/kernel'],
+  // The directory rules exclude a following dot so the ports' own test modules
+  // under directories named formal/ (rust/tests/formal/fixtures.rs) stay put.
+  [new RegExp(`formal/fixtures/kernel(?![\\w.-])`, 'g'), 'formal/models/fixtures/kernel'],
+  [new RegExp(`formal/fixtures(?![\\w./-])`, 'g'), 'formal/models/fixtures'],
+  [new RegExp(`formal/kernel(?![\\w.-])`, 'g'), 'formal/models/kernel'],
   [new RegExp(`formal/(${NAME})-smoke\\.itf\\.json${END}`, 'g'), 'formal/generated/$1-smoke.itf.json'],
   [new RegExp(`formal/(quint-${NAME}-vectors\\.json)${END}`, 'g'), 'formal/generated/$1'],
   [new RegExp(`formal/generated-fixtures\\.lock\\.json${END}`, 'g'), 'formal/generated/generated-fixtures.lock.json'],
@@ -119,7 +124,9 @@ for (const [readFrom, logicalPath] of current) {
   const absolute = resolve(root, readFrom);
   if (!existsSync(absolute)) continue;
   const text = readFileSync(absolute, 'utf8');
-  const out = mapPath(text);
+  // A line marked layout-legacy names pre-move paths on purpose (the
+  // differential's reader of older revisions) and is never rewritten.
+  const out = text.split('\n').map(line => line.includes('layout-legacy') ? line : mapPath(line)).join('\n');
   if (out === text) continue;
   const count = (text.match(/formal\//g) || []).length - (out.match(/\bformal\/(?=[A-Za-z0-9_-]+\.(?:qnt|json|mjs|mts|sh|md)(?![\w.-]))/g) || []).length;
   literalEdits += Math.max(count, 1); perFile.push([logicalPath, Math.max(count, 1)]);
