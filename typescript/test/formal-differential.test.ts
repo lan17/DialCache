@@ -14,7 +14,7 @@ type Model = { path: string; generate: { outputDirectory: string; traces: number
 type Plan = { action: "skip" | "compare"; reason?: string; reference?: Model; candidate: Model; descriptor: unknown };
 type Report = { profile: string; skipped?: string; forward: { disagreed: number }; reverse: { disagreed: number };
   generation: { bytesPerStateRatio: number | null; maxBytesPerStateRatio: number; maxBytesPerStateRatioSource?: string; wallRatio: number | null } };
-const differential = await import(new URL("../../formal/differential.mjs", import.meta.url).href) as {
+const differential = await import(new URL("../../formal/tools/differential.mjs", import.meta.url).href) as {
   compareHistory(reference: History, replayed: History): { agree: boolean; step?: number; action?: string; choice?: number; reason?: string; fields?: string[] };
   chunked<T>(items: T[], size: number): T[][];
   bytesPerState(directory: string): { traces: number; states: number; bytes: number; bytesPerState: number };
@@ -40,11 +40,11 @@ const differential = await import(new URL("../../formal/differential.mjs", impor
   cursorVariable: string;
   maxBytesPerStateRatio: number;
 };
-const fixtures = await import(new URL("../../formal/generated-fixtures.mjs", import.meta.url).href) as {
+const fixtures = await import(new URL("../../formal/tools/generated-fixtures.mjs", import.meta.url).href) as {
   scheduleHistories(source: string, declarations: Map<string, unknown>, sourceMap: unknown, histories: Array<Array<[string, number]>>, options: { prefix: string; cursor: string }):
     { declarations: string[]; schedules: Array<{ init: string; step: string; steps: number }>; clones: number };
 };
-const { readExecution, quintSources, importClosure, copySources } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+const { readExecution, quintSources, importClosure, copySources } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
   readExecution(): { models: Array<{ path: string; profile?: string }> }; quintSources(directory?: string): string[]; importClosure(path: string, directory?: string): string[];
   copySources(from: string, to: string): string[];
 };
@@ -57,7 +57,7 @@ const manifests = (models: Array<Record<string, unknown>>, version = 2): Manifes
   execution: { settings: { backend: "rust", threads: 1, seed: "0xd1a1ca", verbosity: 1 }, models },
   registry: { profiles: [{ id: "layers", version }] },
 });
-const layersModel = (extra: Record<string, unknown> = {}) => ({ path: "formal/dialcache-layers-conformance.qnt", profile: "layers", invariants: ["a"], regressions: [],
+const layersModel = (extra: Record<string, unknown> = {}) => ({ path: "formal/models/dialcache-layers-conformance.qnt", profile: "layers", invariants: ["a"], regressions: [],
   generate: { maxSamples: 4, maxSteps: 4, traces: 2, outputDirectory: ".formal-traces/features/layers" }, ...extra });
 
 describe("corpus differential comparison", () => {
@@ -127,7 +127,7 @@ describe("corpus differential comparison", () => {
       reference: { behaviorVersion: 0, schemaVersion: 2 }, candidate: { behaviorVersion: 0 } });
     // The reference manifest is read as recorded: extra or missing keys are not validated against the working tree.
     const older = manifests([{ ...layersModel(), unrelatedKey: true }]);
-    (older.execution as Record<string, unknown>).kernel = ["formal/kernel/x.qnt"];
+    (older.execution as Record<string, unknown>).kernel = ["formal/models/kernel/x.qnt"];
     expect(differential.differentialPlan(older, candidate, "layers").action).toBe("compare");
     expect(differential.differentialPlan(manifests([]), candidate, "layers")).toMatchObject({ action: "skip", reason: /new profile/ });
     expect(differential.differentialPlan(manifests([layersModel()]), manifests([layersModel({ differential: { behaviorVersion: 1 } })]), "layers"))
@@ -141,7 +141,7 @@ describe("corpus differential comparison", () => {
     expect(differential.differentialPlan(manifests([layersModel()]), manifests([]), "layers")).toMatchObject({ action: "skip", reason: /profile removed/ });
     expect(() => differential.differentialPlan(manifests([]), manifests([]), "layers")).toThrow(/No generation profile named layers in either revision/);
     // A generated profile without an explicit-input driver descriptor is refused by name, not misreported.
-    const teleport = (extra: Record<string, unknown> = {}) => ({ path: "formal/dialcache-teleport-conformance.qnt", profile: "teleport", invariants: ["a"], regressions: [],
+    const teleport = (extra: Record<string, unknown> = {}) => ({ path: "formal/models/dialcache-teleport-conformance.qnt", profile: "teleport", invariants: ["a"], regressions: [],
       generate: { maxSamples: 4, maxSteps: 4, traces: 2, outputDirectory: ".formal-traces/teleport" }, ...extra });
     const teleportManifests = (models: Array<Record<string, unknown>>): Manifests => ({ execution: { settings: { backend: "rust", threads: 1, seed: "0xd1a1ca", verbosity: 1 }, models }, registry: { profiles: [{ id: "teleport", version: 1 }] } });
     expect(() => differential.differentialPlan(teleportManifests([teleport()]), teleportManifests([teleport()]), "teleport")).toThrow(/teleport has no explicit-input replay descriptor/);
@@ -194,11 +194,11 @@ describe("corpus differential comparison", () => {
   });
 
   it("skips a profile only when its import closure and generation inputs are identical in both revisions", () => {
-    const model = (extra: Record<string, unknown> = {}): Model => ({ path: "formal/dialcache-layers-conformance.qnt", generate: { outputDirectory: "x", traces: 2 }, invariants: ["a"],
+    const model = (extra: Record<string, unknown> = {}): Model => ({ path: "formal/models/dialcache-layers-conformance.qnt", generate: { outputDirectory: "x", traces: 2 }, invariants: ["a"],
       settings: { backend: "rust", seed: "0xd1a1ca" }, behaviorVersion: 0, schemaVersion: 2, ...extra } as Model);
-    const sources = { "formal/dialcache-layers-conformance.qnt": "aa", "formal/kernel/serving.qnt": "bb" };
+    const sources = { "formal/models/dialcache-layers-conformance.qnt": "aa", "formal/models/kernel/serving.qnt": "bb" };
     expect(differential.closureSkip(model(), model(), sources, { ...sources })).toBe("identical import closure and generation settings");
-    expect(differential.closureSkip(model(), model(), sources, { ...sources, "formal/kernel/serving.qnt": "cc" })).toBeNull();
+    expect(differential.closureSkip(model(), model(), sources, { ...sources, "formal/models/kernel/serving.qnt": "cc" })).toBeNull();
     expect(differential.closureSkip(model(), model({ invariants: ["a", "b"] }), sources, { ...sources })).toBeNull();
     expect(differential.closureSkip(model({ replayRegressions: ["bTest", "aTest"] }), model({ replayRegressions: ["aTest", "bTest"] }), sources, { ...sources })).toBe("identical import closure and generation settings");
     expect(differential.closureSkip(model({ replayRegressions: ["aTest"] }), model({ replayRegressions: ["aTest", "bTest"] }), sources, { ...sources })).toBeNull();
@@ -213,7 +213,7 @@ describe("corpus differential comparison", () => {
       const prepared = differential.prepare("HEAD", { output });
       expect(prepared.reference.revision).toMatch(/^[0-9a-f]{40}$/);
       for (const side of [prepared.reference, prepared.candidate]) {
-        expect(readFileSync(join(side.tree, "formal/dialcache-layers-conformance.qnt"), "utf8")).toContain("module dialcache_layers_conformance");
+        expect(readFileSync(join(side.tree, "formal/models/dialcache-layers-conformance.qnt"), "utf8")).toContain("module dialcache_layers_conformance");
         const layers = side.manifests.execution.models.find(model => model.profile === "layers") as { regressions?: string[]; replayRegressions?: string[] };
         expect(layers.regressions?.length).toBeGreaterThan(0);
         expect(layers.replayRegressions?.length).toBeGreaterThan(0);
@@ -227,36 +227,36 @@ describe("corpus differential comparison", () => {
     const referenceTree = mkdtempSync(join(tmpdir(), "differential-reference-"));
     const candidateTree = mkdtempSync(join(tmpdir(), "differential-candidate-"));
     try {
-      for (const tree of [referenceTree, candidateTree]) mkdirSync(join(tree, "formal/kernel"), { recursive: true });
-      writeFileSync(join(referenceTree, "formal/kernel/clock.qnt"), "module clock { pure def advance(n: int): int = n + 1 }");
-      writeFileSync(join(referenceTree, "formal/dialcache-a-conformance.qnt"), 'module a { import clock.* from "./kernel/clock" }');
-      writeFileSync(join(candidateTree, "formal/dialcache-a-conformance.qnt"), "module a { pure def advance(n: int): int = n + 1 }");
-      writeFileSync(join(candidateTree, "formal/kernel/clock.qnt"), "module clock { pure def advance(n: int): int = n + 1 }");
-      writeFileSync(join(candidateTree, "formal/dialcache-c-conformance.qnt"), 'module c { import clock.* from "./kernel/clock" }');
-      const reference = manifests([{ path: "formal/dialcache-a-conformance.qnt", profile: "a" }]);
-      const candidate = manifests([{ path: "formal/dialcache-a-conformance.qnt", profile: "a" }, { path: "formal/dialcache-c-conformance.qnt", profile: "c" }]);
+      for (const tree of [referenceTree, candidateTree]) mkdirSync(join(tree, "formal/models/kernel"), { recursive: true });
+      writeFileSync(join(referenceTree, "formal/models/kernel/clock.qnt"), "module clock { pure def advance(n: int): int = n + 1 }");
+      writeFileSync(join(referenceTree, "formal/models/dialcache-a-conformance.qnt"), 'module a { import clock.* from "./kernel/clock" }');
+      writeFileSync(join(candidateTree, "formal/models/dialcache-a-conformance.qnt"), "module a { pure def advance(n: int): int = n + 1 }");
+      writeFileSync(join(candidateTree, "formal/models/kernel/clock.qnt"), "module clock { pure def advance(n: int): int = n + 1 }");
+      writeFileSync(join(candidateTree, "formal/models/dialcache-c-conformance.qnt"), 'module c { import clock.* from "./kernel/clock" }');
+      const reference = manifests([{ path: "formal/models/dialcache-a-conformance.qnt", profile: "a" }]);
+      const candidate = manifests([{ path: "formal/models/dialcache-a-conformance.qnt", profile: "a" }, { path: "formal/models/dialcache-c-conformance.qnt", profile: "c" }]);
       expect(differential.selectProfiles({ reference: { manifests: reference, tree: referenceTree }, candidate: { manifests: candidate, tree: candidateTree } })).toEqual(["a", "c"]);
     } finally { rmSync(referenceTree, { recursive: true, force: true }); rmSync(candidateTree, { recursive: true, force: true }); }
     const tree = mkdtempSync(join(tmpdir(), "differential-composed-"));
     try {
-      mkdirSync(join(tree, "formal/kernel"), { recursive: true });
-      writeFileSync(join(tree, "formal/kernel/clock.qnt"), "module clock { pure def advance(n: int): int = n + 1 }");
-      writeFileSync(join(tree, "formal/helper.qnt"), 'module helper { import clock.* from "./kernel/clock" }');
-      writeFileSync(join(tree, "formal/dialcache-a-conformance.qnt"), 'module a { import helper.* from "./helper" }');
-      writeFileSync(join(tree, "formal/dialcache-b-conformance.qnt"), 'module b { import cache_rules.* from "./cache-rules" }');
-      const manifest = { models: [{ path: "formal/dialcache-a-conformance.qnt", profile: "a" }, { path: "formal/dialcache-b-conformance.qnt", profile: "b" }, { path: "formal/other.qnt" }] };
+      mkdirSync(join(tree, "formal/models/kernel"), { recursive: true });
+      writeFileSync(join(tree, "formal/models/kernel/clock.qnt"), "module clock { pure def advance(n: int): int = n + 1 }");
+      writeFileSync(join(tree, "formal/models/helper.qnt"), 'module helper { import clock.* from "./kernel/clock" }');
+      writeFileSync(join(tree, "formal/models/dialcache-a-conformance.qnt"), 'module a { import helper.* from "./helper" }');
+      writeFileSync(join(tree, "formal/models/dialcache-b-conformance.qnt"), 'module b { import cache_rules.* from "./cache-rules" }');
+      const manifest = { models: [{ path: "formal/models/dialcache-a-conformance.qnt", profile: "a" }, { path: "formal/models/dialcache-b-conformance.qnt", profile: "b" }, { path: "formal/models/other.qnt" }] };
       expect(differential.composedProfiles(manifest, { cwd: tree })).toEqual(["a"]);
-      expect(importClosure("formal/dialcache-a-conformance.qnt", tree)).toEqual(["formal/dialcache-a-conformance.qnt", "formal/helper.qnt", "formal/kernel/clock.qnt"]);
-      const digests = differential.closureDigests("formal/dialcache-a-conformance.qnt", { cwd: tree });
+      expect(importClosure("formal/models/dialcache-a-conformance.qnt", tree)).toEqual(["formal/models/dialcache-a-conformance.qnt", "formal/models/helper.qnt", "formal/models/kernel/clock.qnt"]);
+      const digests = differential.closureDigests("formal/models/dialcache-a-conformance.qnt", { cwd: tree });
       expect(Object.keys(digests)).toHaveLength(3);
-      writeFileSync(join(tree, "formal/kernel/clock.qnt"), "module clock { pure def advance(n: int): int = n + 2 }");
+      writeFileSync(join(tree, "formal/models/kernel/clock.qnt"), "module clock { pure def advance(n: int): int = n + 2 }");
       // A kernel-only edit changes the closure's provenance although the profile text is unchanged.
-      expect(differential.closureDigests("formal/dialcache-a-conformance.qnt", { cwd: tree })["formal/kernel/clock.qnt"]).not.toBe(digests["formal/kernel/clock.qnt"]);
-      expect(differential.closureDigests("formal/dialcache-a-conformance.qnt", { cwd: tree })["formal/dialcache-a-conformance.qnt"]).toBe(digests["formal/dialcache-a-conformance.qnt"]);
+      expect(differential.closureDigests("formal/models/dialcache-a-conformance.qnt", { cwd: tree })["formal/models/kernel/clock.qnt"]).not.toBe(digests["formal/models/kernel/clock.qnt"]);
+      expect(differential.closureDigests("formal/models/dialcache-a-conformance.qnt", { cwd: tree })["formal/models/dialcache-a-conformance.qnt"]).toBe(digests["formal/models/dialcache-a-conformance.qnt"]);
     } finally { rmSync(tree, { recursive: true, force: true }); }
     const sources = quintSources(root);
-    expect(sources).toContain("formal/dialcache-layers-conformance.qnt");
-    expect(sources).toContain("formal/kernel/serving.qnt");
+    expect(sources).toContain("formal/models/dialcache-layers-conformance.qnt");
+    expect(sources).toContain("formal/models/kernel/serving.qnt");
     expect([...sources].sort()).toEqual(sources);
   });
 
@@ -301,7 +301,7 @@ describe("corpus differential comparison", () => {
   it("refuses --shard outside --composed and a malformed shard before preparing any tree", () => {
     const output = mkdtempSync(join(tmpdir(), "differential-shard-"));
     try {
-      const run = (...args: string[]) => spawnSync(process.execPath, [resolve(root, "formal/differential.mjs"), ...args, `--out=${output}`], { cwd: root, encoding: "utf8" });
+      const run = (...args: string[]) => spawnSync(process.execPath, [resolve(root, "formal/tools/differential.mjs"), ...args, `--out=${output}`], { cwd: root, encoding: "utf8" });
       for (const args of [["layers", "--shard=1/4"], ["--shard=1/4", "--reference=HEAD"]]) {
         const result = run(...args);
         expect(result.status, args.join(" ")).toBe(1);
@@ -325,7 +325,7 @@ describe.skipIf(!quintAvailable)("corpus differential replay through a tree", ()
     const plan = differential.differentialPlan(differential.readManifests(root), differential.readManifests(root), "layers");
     return { model: plan.candidate, descriptor: plan.descriptor };
   };
-  const smokeHistory = (descriptor: unknown) => parseTrace(JSON.parse(readFileSync(resolve(root, "formal/layers-smoke.itf.json"), "utf8")), "layers-smoke", descriptor);
+  const smokeHistory = (descriptor: unknown) => parseTrace(JSON.parse(readFileSync(resolve(root, "formal/generated/layers-smoke.itf.json"), "utf8")), "layers-smoke", descriptor);
   const copyTree = (into: string) => { copySources(root, into); return into; };
 
   it("reports every replay batch in both directions while preserving all history verdicts", async () => {
@@ -405,7 +405,7 @@ describe.skipIf(!quintAvailable)("corpus differential replay through a tree", ()
   it("detects a candidate whose library changes an observation, naming the channel", async () => {
     const { model, descriptor } = layers();
     const candidate = copyTree(join(output, "mutant"));
-    const serving = join(candidate, "formal/kernel/serving.qnt");
+    const serving = join(candidate, "formal/models/kernel/serving.qnt");
     const text = readFileSync(serving, "utf8");
     expect(text).toContain("loaders: state.o.loaders + 1");
     writeFileSync(serving, text.replace("loaders: state.o.loaders + 1", "loaders: state.o.loaders + 2"));
@@ -427,7 +427,7 @@ describe.skipIf(!quintAvailable)("corpus differential replay through a tree", ()
     expect(older).toContain("action call(instance: int, offered: int)");
     expect(older).toContain("action step = any { constructInstance, advanceTicks, callCache }");
     writeFileSync(profile, older);
-    const smoke = parseTrace(JSON.parse(readFileSync(resolve(root, "formal/local-clock-smoke.itf.json"), "utf8")), "local-clock-smoke", descriptor);
+    const smoke = parseTrace(JSON.parse(readFileSync(resolve(root, "formal/generated/local-clock-smoke.itf.json"), "utf8")), "local-clock-smoke", descriptor);
     expect(smoke.steps.filter(entry => entry.action === "call").length).toBeGreaterThan(0);
     const [verdict] = await differential.replayHistories(reference, model, descriptor, [smoke], { chunk: 16, output: join(output, "pre-rename-out"), concurrency: 1 });
     expect(verdict).toEqual({ path: "local-clock-smoke", agree: true });

@@ -18,7 +18,7 @@ type Fixture = {
 type State = { input: { name: string; choice: unknown }; s: RecordValue };
 type Recipe = { id: string; actions: Array<[string, number]> };
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/formal-witness-boundaries.json", import.meta.url), "utf8")) as Fixture[];
-const recipes = JSON.parse(readFileSync(new URL("../../formal/fixture-recipes.json", import.meta.url), "utf8")) as { artifacts: Array<{ path: string; recipes: Recipe[] }> };
+const recipes = JSON.parse(readFileSync(new URL("../../formal/catalogs/fixture-recipes.json", import.meta.url), "utf8")) as { artifacts: Array<{ path: string; recipes: Recipe[] }> };
 
 // The fixture file contains histories selected from real Quint runs. Store
 // only changed fields to keep the examples readable without duplicating state.

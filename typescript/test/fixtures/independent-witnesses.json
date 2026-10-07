@@ -1,8 +1,8 @@
 {
   "staggeredSourceStartsKeepIndependentBudgetsTest": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/staggeredSourceStartsKeepIndependentBudgetsTest"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/staggeredSourceStartsKeepIndependentBudgetsTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -19,8 +19,8 @@
   },
   "staggeredSourcesExpireAtTheirOwnDeadlineTest": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/staggeredSourcesExpireAtTheirOwnDeadlineTest"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/staggeredSourcesExpireAtTheirOwnDeadlineTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -40,8 +40,8 @@
   },
   "independentReadDeadlinesStartSeparateSourcesTest": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/independentReadDeadlinesStartSeparateSourcesTest"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/independentReadDeadlinesStartSeparateSourcesTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -57,8 +57,8 @@
   },
   "timedOutReadCannotAffectAnotherCallTest": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/timedOutReadCannotAffectAnotherCallTest"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/timedOutReadCannotAffectAnotherCallTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -71,8 +71,8 @@
   },
   "readFailureCannotBorrowAnotherCallsRefillTest": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/readFailureCannotBorrowAnotherCallsRefillTest"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/readFailureCannotBorrowAnotherCallsRefillTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -86,8 +86,8 @@
   },
   "independentRecoveryAtCapturedAgeBoundaryTest": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/independentRecoveryAtCapturedAgeBoundaryTest"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/independentRecoveryAtCapturedAgeBoundaryTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -105,8 +105,8 @@
   },
   "independentRecoveriesServeDistinctAcquiredSnapshotsTest": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/independentRecoveriesServeDistinctAcquiredSnapshotsTest"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/independentRecoveriesServeDistinctAcquiredSnapshotsTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -124,8 +124,8 @@
   },
   "acquiredFreshDecodeSurvivesInvalidation": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/acquiredFreshDecodeSurvivesInvalidation"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/acquiredFreshDecodeSurvivesInvalidation"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -138,8 +138,8 @@
   },
   "lateSourceDoesNotAffectOtherCall": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/lateSourceDoesNotAffectOtherCall"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/lateSourceDoesNotAffectOtherCall"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -153,8 +153,8 @@
   },
   "failedRecoveryKeepsSourceError": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/failedRecoveryKeepsSourceError"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-witnesses.json/failedRecoveryKeepsSourceError"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},

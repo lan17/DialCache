@@ -751,7 +751,7 @@ describe("shared replay transport and source closure", () => {
       mkdirSync(resolve(directory, "formal/replay"), { recursive: true });
       const source = "formal/replay/mapping.mjs";
       writeFileSync(resolve(directory, source), "export const mapping = 1;\n");
-      writeFileSync(resolve(directory, "formal/profiles.json"), JSON.stringify({ replaySources: [source] }));
+      writeFileSync(resolve(directory, "formal/catalogs/profiles.json"), JSON.stringify({ replaySources: [source] }));
       expect(replaySources(directory)).toEqual([source]);
       writeFileSync(resolve(directory, "formal/replay/new-helper.mjs"), "new dependency");
       expect(() => replaySources(directory)).toThrow(/inventory differs/);

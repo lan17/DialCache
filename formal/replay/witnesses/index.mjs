@@ -32,7 +32,7 @@ import { readTrace, witnessStates } from "./trace.mjs";
 // regressions; TypeScript's test suite calls the same functions. Classifiers
 // read the declared inputs and public observations of the Quint histories;
 // which ones still read the model's private predictions, and the rule that
-// retires that, is recorded in formal/kernel/README.md. Driver observations
+// retires that, is recorded in formal/models/kernel/README.md. Driver observations
 // never reach this module, and nothing here supplies an implementation's
 // inputs.
 export const witnessProfiles = [...Object.keys(featureProfiles), "effects", "local-clock"];

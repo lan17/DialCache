@@ -81,11 +81,11 @@ pnpm-lock.yaml          # Shared workspace dependency lockfile
   `make docs` generates all native references and checks snippet sources and
   internal links; it requires the pinned Go and Rust toolchains, Python and Node.
   Run changed native examples with assertions (including Redis when relevant).
-- Start formal work at `formal/README.md`. `formal/WALKTHROUGH.md` follows one
+- Start formal work at `formal/README.md`. `formal/guides/WALKTHROUGH.md` follows one
   contract through Quint, generated inputs and the native language replays;
-  `formal/AUTHORING.md` explains how to extend that chain. Read the relevant
+  `formal/guides/AUTHORING.md` explains how to extend that chain. Read the relevant
   model and profile bindings before opening large generated JSON artifacts.
-- For formal specification changes, follow `formal/AUTHORING.md`: keep models
+- For formal specification changes, follow `formal/guides/AUTHORING.md`: keep models
   readable as behavior definitions, share helpers with identical meaning, retain
   independent property checks, and register executable evidence in the catalogs.
 - Define portable behavior in Quint first. Require consequential generated
@@ -93,7 +93,7 @@ pnpm-lock.yaml          # Shared workspace dependency lockfile
   native API, wire and integration tests for their explicit boundaries.
 - Use the shared behavioral testbed for portable features and bug fixes, with
   TypeScript as the executable reference. Follow the workflow in
-  `formal/AUTHORING.md` and preserve discovered bugs as deterministic regressions.
+  `formal/guides/AUTHORING.md` and preserve discovered bugs as deterministic regressions.
   Extend formal infrastructure when it closes a concrete coverage gap, corrects
   misleading evidence, or makes tests easier to author, understand or run.
 

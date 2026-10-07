@@ -2,11 +2,11 @@
 //!
 //! Mirrors `go/protocol_test.go` `vectors()` and
 //! `go/generated_protocol_test.go`: the fixed vectors in
-//! `formal/protocol-vectors.json` are merged with every generated protocol
-//! artifact registered in `formal/execution.json`, after the artifact's
+//! `formal/catalogs/protocol-vectors.json` are merged with every generated protocol
+//! artifact registered in `formal/catalogs/execution.json`, after the artifact's
 //! provenance fingerprints are verified against the model sources.
 //!
-//! Include from a test binary with `#[path = "formal/fixtures.rs"] mod fixtures;`.
+//! Include from a test binary with `#[path = "formal/models/fixtures.rs"] mod fixtures;`.
 
 #![allow(dead_code)]
 
@@ -110,12 +110,12 @@ fn unicode_escape_at(bytes: &[u8], index: usize) -> Option<u16> {
 
 pub use crate::digest::sha256_hex;
 
-/// Every generated protocol vector group registered in `formal/execution.json`,
+/// Every generated protocol vector group registered in `formal/catalogs/execution.json`,
 /// keyed by field name, after validating each artifact's schema, provenance
 /// and case inventory the way `go/generated_protocol_test.go` does.
 pub fn quint_protocol_groups() -> BTreeMap<String, Vec<Value>> {
-    let manifest: Value = serde_json::from_str(&read_repo_text("formal/execution.json"))
-        .expect("parse formal/execution.json");
+    let manifest: Value = serde_json::from_str(&read_repo_text("formal/catalogs/execution.json"))
+        .expect("parse formal/catalogs/execution.json");
     let models = manifest["models"]
         .as_array()
         .expect("execution.json models array");
@@ -223,7 +223,7 @@ pub fn protocol_groups(selection: &str) -> BTreeMap<String, Vec<Value>> {
         "unknown protocol corpus selection {selection:?}"
     );
 
-    let fixed = load_json_marking_lone_surrogates(repo_path("formal/protocol-vectors.json"));
+    let fixed = load_json_marking_lone_surrogates(repo_path("formal/catalogs/protocol-vectors.json"));
     let fixed = fixed
         .as_object()
         .expect("protocol-vectors.json is an object");

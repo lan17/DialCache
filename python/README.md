@@ -3,7 +3,7 @@
 An asyncio port of DialCache for Python 3.11 and later. Each use case declares
 its identity and policy; an enabled request scope opts into request memoization,
 local storage, Redis, and concurrent request sharing. The behavioral contract is
-the repository's [portable specification](https://github.com/lan17/DialCache/blob/main/formal/SPEC.md).
+the repository's [portable specification](https://github.com/lan17/DialCache/blob/main/formal/guides/SPEC.md).
 
 Once the first PyPI release is available, install it with:
 
@@ -240,6 +240,6 @@ local expiry, cancellation, and wire boundaries. Shared replay runs the real
 Python API through the repository's Node coordinator. Its inputs and expected
 observations come from the same Quint-generated histories used by the other
 ports; Node is a development dependency, not a runtime dependency of the
-Python library. See [the porting guide](https://github.com/lan17/DialCache/blob/main/formal/PORTING.md) for the completion
-and settlement requirements and [the feature map](https://github.com/lan17/DialCache/blob/main/formal/FEATURE-COVERAGE.md)
+Python library. See [the porting guide](https://github.com/lan17/DialCache/blob/main/formal/guides/PORTING.md) for the completion
+and settlement requirements and [the feature map](https://github.com/lan17/DialCache/blob/main/formal/guides/FEATURE-COVERAGE.md)
 for portable behavior versus native adapter obligations.

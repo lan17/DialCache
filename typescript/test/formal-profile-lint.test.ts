@@ -24,7 +24,7 @@ type Profile = { id: string; model: string };
 type Baseline = { schemaVersion: number; quintVersion: string; kernelModules: string[]; profiles: Array<{ id: string; model: string; module: string; libraryTransitions: string[]; compositionViolations: number }> };
 type LintOptions = { main?: string; kernelModules?: string[]; witnessPattern?: string; observationField?: string };
 const { lintModel, computeBaseline, checkBaseline, diffBaseline, ratchetDifferences, composedViolations, formatBaseline, baselinePath, kernelModulesOf } =
-  await import(new URL("../../formal/lint-profiles.mjs", import.meta.url).href) as {
+  await import(new URL("../../formal/tools/lint-profiles.mjs", import.meta.url).href) as {
     lintModel(model: string, options?: LintOptions): Promise<Report>;
     computeBaseline(options?: { profiles?: Profile[]; concurrency?: number }): Promise<Baseline>;
     checkBaseline(options?: { cwd?: string; path?: string; profiles?: Profile[]; concurrency?: number }): Promise<{ expected: Baseline; actual: Baseline; differences: string[] }>;
@@ -55,12 +55,12 @@ const witness = { witnessPattern: "^witnessed$" };
 // without Quint, so the parsing cases skip there and run in the formal lanes.
 const quintAvailable = spawnSync("quint", ["--version"], { encoding: "utf8" }).status === 0;
 const quintTimeout = 60_000;
-const cli = (...args: string[]) => spawnSync(process.execPath, ["formal/lint-profiles.mjs", ...args], { cwd: root, encoding: "utf8" });
+const cli = (...args: string[]) => spawnSync(process.execPath, ["formal/tools/lint-profiles.mjs", ...args], { cwd: root, encoding: "utf8" });
 
 describe("atomic profile restrictions", () => {
   it("requires every atomic-release profile to schedule the payload safety property", () => {
-    const baseline = JSON.parse(readFileSync(root + "formal/profile-lint-baseline.json", "utf8")) as Baseline;
-    const manifest = JSON.parse(readFileSync(root + "formal/execution.json", "utf8")) as { models: Array<{ profile?: string; path: string; invariants: string[] }> };
+    const baseline = JSON.parse(readFileSync(root + "formal/catalogs/profile-lint-baseline.json", "utf8")) as Baseline;
+    const manifest = JSON.parse(readFileSync(root + "formal/catalogs/execution.json", "utf8")) as { models: Array<{ profile?: string; path: string; invariants: string[] }> };
     const atomic = new Set(["serving::begin", "serving::release", "receipts::release", "remote_writes::releaseJudged", "shadow::begin", "shadow::release", "local_faults::begin"]);
     for (const profile of baseline.profiles.filter(profile => profile.libraryTransitions.some(transition => atomic.has(transition)))) {
       const model = manifest.models.find(model => model.profile === profile.id)!;
@@ -164,8 +164,8 @@ describe.skipIf(!quintAvailable)("kernel shape restrictions", () => {
 
 describe("profile lint baseline diff", () => {
   const baseline: Baseline = { schemaVersion: 3, quintVersion: "0.32.0", kernelModules: ["serving"], profiles: [
-    { id: "a", model: "formal/a.qnt", module: "a", libraryTransitions: ["serving::begin"], compositionViolations: 0 },
-    { id: "b", model: "formal/b.qnt", module: "b", libraryTransitions: [], compositionViolations: 12 },
+    { id: "a", model: "formal/models/a.qnt", module: "a", libraryTransitions: ["serving::begin"], compositionViolations: 0 },
+    { id: "b", model: "formal/models/b.qnt", module: "b", libraryTransitions: [], compositionViolations: 12 },
   ] };
   const clone = () => JSON.parse(JSON.stringify(baseline)) as Baseline;
 
@@ -197,7 +197,7 @@ describe("profile lint baseline diff", () => {
 
   it("reports missing and unexpected profiles and kernel modules", () => {
     const actual = clone();
-    actual.profiles.push({ id: "c", model: "formal/c.qnt", module: "c", libraryTransitions: [], compositionViolations: 1 });
+    actual.profiles.push({ id: "c", model: "formal/models/c.qnt", module: "c", libraryTransitions: [], compositionViolations: 1 });
     actual.kernelModules = ["serving", "clock"];
     const differences = ratchetDifferences(baseline, actual);
     expect(differences).toContain('baseline.kernelModules[1]: unexpected "clock"');
@@ -351,7 +351,7 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     expect(report.composition.violations).toEqual([]);
   }, quintTimeout);
 
-  it("discovers the kernel modules from formal/kernel only", () => {
+  it("discovers the kernel modules from formal/models/kernel only", () => {
     const modules = kernelModulesOf();
     expect(modules).toContain("serving");
     expect(modules).toContain("flights");
@@ -530,7 +530,7 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
   it("matches the committed baseline for every conformance profile", async () => {
     const { expected, actual, differences } = await checkBaseline();
     expect(differences).toEqual([]);
-    expect(actual.profiles.length).toBe((JSON.parse(readFileSync(new URL("../../formal/profiles.json", import.meta.url), "utf8")) as { profiles: unknown[] }).profiles.length);
+    expect(actual.profiles.length).toBe((JSON.parse(readFileSync(new URL("../../formal/catalogs/profiles.json", import.meta.url), "utf8")) as { profiles: unknown[] }).profiles.length);
     expect(expected.kernelModules).toEqual(kernelModulesOf());
     // A composed profile has no composition violation; every other count is
     // that profile's migration work list.

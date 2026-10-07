@@ -9,19 +9,19 @@ type Summary = {
 type Step = { label: string; command?: string; args?: string[]; cwd?: string; env?: NodeJS.ProcessEnv; stdoutFile?: string; remove?: string[] };
 type Record_ = Record<string, unknown>;
 
-const { checkRustReplay } = await import(new URL("../../formal/check-rust-replay.mjs", import.meta.url).href) as {
+const { checkRustReplay } = await import(new URL("../../formal/tools/check-rust-replay.mjs", import.meta.url).href) as {
   checkRustReplay(report: string, inventory?: Entry[]): Summary;
 };
-const { parseRustReport, adaptReport, nativeBinding } = await import(new URL("../../formal/conformance-adapters.mjs", import.meta.url).href) as {
+const { parseRustReport, adaptReport, nativeBinding } = await import(new URL("../../formal/tools/conformance-adapters.mjs", import.meta.url).href) as {
   parseRustReport(text: string, inventory: Entry[]): { startedAt: number; finishedAt: number; results: Array<{ id: string; status: string }> };
   adaptReport(language: string, text: string, context: unknown): unknown;
   nativeBinding(entry: Entry, language: string): unknown;
 };
-const { conformanceInventory, defaultSources } = await import(new URL("../../formal/conformance.mjs", import.meta.url).href) as {
+const { conformanceInventory, defaultSources } = await import(new URL("../../formal/tools/conformance.mjs", import.meta.url).href) as {
   conformanceInventory(): Entry[];
   defaultSources(language: string): string[];
 };
-const { validationPlan, checkPrerequisites } = await import(new URL("../../formal/validation.mjs", import.meta.url).href) as {
+const { validationPlan, checkPrerequisites } = await import(new URL("../../formal/tools/validation.mjs", import.meta.url).href) as {
   validationPlan(target: string, options?: { directory?: string; environment?: NodeJS.ProcessEnv }): Step[];
   checkPrerequisites(target: string, options?: { directory?: string; environment?: NodeJS.ProcessEnv; nodeVersion?: string }): void;
 };
@@ -149,7 +149,7 @@ describe("Rust validation lanes", () => {
   it("replays the complete corpus against the shared evidence and adapts the harness report into a completion", () => {
     const plan = validationPlan("formal-rust", { directory });
     expect(plan[0]).toEqual({ label: "Invalidate prior rust completion", remove: [".formal-traces/rust-completion.json"] });
-    expect(plan[1]!.args).toEqual(["formal/conformance.mjs", "prepare", "rust", ".formal-traces/rust-context.json"]);
+    expect(plan[1]!.args).toEqual(["formal/tools/conformance.mjs", "prepare", "rust", ".formal-traces/rust-context.json"]);
     const replay = plan[2]!;
     expect([replay.command, ...replay.args!]).toEqual(["cargo", "test", "--release", "--all-features", "--test", "conformance"]);
     expect(replay.cwd).toBe("rust");
@@ -161,12 +161,12 @@ describe("Rust validation lanes", () => {
       DIALCACHE_RUST_REPORT: "/checkout/.formal-traces/rust-replay.jsonl",
     });
     expect(replay.stdoutFile).toBeUndefined();
-    expect(plan[3]).toMatchObject({ args: ["formal/check-rust-replay.mjs"], stdoutFile: ".formal-traces/rust-replay-summary.json" });
-    expect(plan[4]).toMatchObject({ args: ["formal/conformance-adapters.mjs", "rust", ".formal-traces/rust-replay.jsonl", ".formal-traces/rust-context.json"], stdoutFile: ".formal-traces/rust-completion.json" });
-    expect(plan.at(-1)!.args).toEqual(["formal/conformance.mjs", "check", ".formal-traces/rust-completion.json", ".formal-traces/rust-context.json"]);
+    expect(plan[3]).toMatchObject({ args: ["formal/tools/check-rust-replay.mjs"], stdoutFile: ".formal-traces/rust-replay-summary.json" });
+    expect(plan[4]).toMatchObject({ args: ["formal/tools/conformance-adapters.mjs", "rust", ".formal-traces/rust-replay.jsonl", ".formal-traces/rust-context.json"], stdoutFile: ".formal-traces/rust-completion.json" });
+    expect(plan.at(-1)!.args).toEqual(["formal/tools/conformance.mjs", "check", ".formal-traces/rust-completion.json", ".formal-traces/rust-context.json"]);
     expect(plan).toHaveLength(6);
     // Go's parity ledger is Go-only; Rust neither checks it nor touches the other ports' reports.
-    expect(plan.some(step => step.args?.[0] === "formal/check-go-parity.mjs")).toBe(false);
+    expect(plan.some(step => step.args?.[0] === "formal/tools/check-go-parity.mjs")).toBe(false);
     expect(plan.some(step => step.args?.some(argument => /\.formal-traces\/(ts|go)-/.test(argument)))).toBe(false);
     const go = validationPlan("formal-go", { directory }).find(step => step.command === "go" && step.env)!;
     for (const key of Object.keys(go.env!)) expect(replay.env![key], key).toBe(go.env![key]);
@@ -197,7 +197,7 @@ describe("Rust validation lanes", () => {
       for (const path of ["bin", "formal", "node_modules/typescript", "rust"]) mkdirSync(join(temporary, path), { recursive: true });
       writeFileSync(join(temporary, "package.json"), '{"packageManager":"pnpm@10.33.0"}');
       writeFileSync(join(temporary, "node_modules/typescript/package.json"), "{}");
-      writeFileSync(join(temporary, "formal/generated-fixtures.lock.json"), '{"quintVersion":"0.32.0"}');
+      writeFileSync(join(temporary, "formal/generated/generated-fixtures.lock.json"), '{"quintVersion":"0.32.0"}');
       const tool = (name: string, body: string) => { const path = join(temporary, "bin", name); writeFileSync(path, `#!${process.execPath}\n${body}\n`); chmodSync(path, 0o755); };
       tool("corepack", 'console.log("10.33.0")');
       tool("go", 'console.log("go version go1.27.1 test/test")');

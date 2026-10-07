@@ -99,7 +99,7 @@ def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_pat
     tests = checkout / "python/tests"
     tests.mkdir(parents=True)
     shutil.copyfile(
-        ROOT / "formal/run-python-integration.mjs", checkout / "formal/run-python-integration.mjs"
+        ROOT / "formal/tools/run-python-integration.mjs", checkout / "formal/tools/run-python-integration.mjs"
     )
     shutil.copyfile(ROOT / "python/tests/run_integration.py", tests / "run_integration.py")
     configured = "-k test_inventory_only" if challenge == "configured_keyword" else ""
@@ -147,7 +147,7 @@ def test_integration_coordinator_requires_complete_cases_on_each_backend(tmp_pat
         "PYTEST_PLUGINS": "challenge_plugin" if external_plugin else "",
     }
     result = subprocess.run(
-        [node, "formal/run-python-integration.mjs", "--suite", suite],
+        [node, "formal/tools/run-python-integration.mjs", "--suite", suite],
         cwd=checkout,
         env=environment,
         text=True,

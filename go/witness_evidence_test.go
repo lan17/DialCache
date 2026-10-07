@@ -74,7 +74,7 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 	if evidence.SchemaVersion != 2 || evidence.Profile != profile || evidence.Traces != len(paths) || len(evidence.Corpus) != len(paths) {
 		return fmt.Errorf("unsupported/incomplete %s witness evidence", profile)
 	}
-	registryRaw, err := os.ReadFile(filepath.Join(root, "formal/coverage-witnesses.json"))
+	registryRaw, err := os.ReadFile(filepath.Join(root, "formal/catalogs/coverage-witnesses.json"))
 	if err != nil {
 		return err
 	}
@@ -136,13 +136,13 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 	// required witnesses, the execution manifest, the profile's model and the
 	// observation library, then every Quint library, the shared replay closure
 	// (which holds the witness classifiers) and the profile's witness sources.
-	expectedInputs := []string{"formal/profiles.json", "formal/coverage-witnesses.json", "formal/execution.json", "formal/dialcache-" + profile + "-conformance.qnt", "formal/conformance-observations.qnt"}
+	expectedInputs := []string{"formal/catalogs/profiles.json", "formal/catalogs/coverage-witnesses.json", "formal/catalogs/execution.json", "formal/dialcache-" + profile + "-conformance.qnt", "formal/models/conformance-observations.qnt"}
 	var execution struct {
 		Models []struct {
 			Path string `json:"path"`
 		} `json:"models"`
 	}
-	executionRaw, err := os.ReadFile(filepath.Join(root, "formal/execution.json"))
+	executionRaw, err := os.ReadFile(filepath.Join(root, "formal/catalogs/execution.json"))
 	if err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 			Sources []string `json:"witnessSources"`
 		} `json:"profiles"`
 	}
-	definitionsRaw, err := os.ReadFile(filepath.Join(root, "formal/profiles.json"))
+	definitionsRaw, err := os.ReadFile(filepath.Join(root, "formal/catalogs/profiles.json"))
 	if err != nil {
 		return err
 	}
@@ -234,12 +234,12 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 	return nil
 }
 
-// quintLibraries lists every Quint source under formal/ and formal/kernel/
-// that no scheduled model claims, sorted, as formal/execution.mjs derives the
+// quintLibraries lists every Quint source under formal/ and formal/models/kernel/
+// that no scheduled model claims, sorted, as formal/tools/execution.mjs derives the
 // libraries the witness evidence binds.
 func quintLibraries(root string, claimed map[string]bool) ([]string, error) {
 	libraries := []string{}
-	for _, folder := range []string{"formal", "formal/kernel"} {
+	for _, folder := range []string{"formal", "formal/models/kernel"} {
 		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(folder)))
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
@@ -325,7 +325,7 @@ func TestGeneratedWitnessEvidence(t *testing.T) {
 // Match the single registry inventory against the executable directory, rather
 // than maintaining another per-profile list of shared mappings in this port.
 func sharedReplaySources(root string) ([]string, error) {
-	raw, err := os.ReadFile(filepath.Join(root, "formal/profiles.json"))
+	raw, err := os.ReadFile(filepath.Join(root, "formal/catalogs/profiles.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -374,13 +374,13 @@ func TestWitnessEvidenceBindsSharedReplaySources(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	inputs := []string{"formal/profiles.json", "formal/coverage-witnesses.json", "formal/execution.json", "formal/dialcache-effects-conformance.qnt", "formal/conformance-observations.qnt", "formal/replay/coordinator.mjs", "formal/replay/mapping.mjs"}
+	inputs := []string{"formal/catalogs/profiles.json", "formal/catalogs/coverage-witnesses.json", "formal/catalogs/execution.json", "formal/models/dialcache-effects-conformance.qnt", "formal/models/conformance-observations.qnt", "formal/replay/coordinator.mjs", "formal/replay/mapping.mjs"}
 	for _, path := range inputs {
 		write(path, "reviewed input")
 	}
-	write("formal/profiles.json", `{"profiles":[{"id":"effects"}],"replaySources":["formal/replay/coordinator.mjs","formal/replay/mapping.mjs"]}`)
-	write("formal/coverage-witnesses.json", `{"effects":["observed"]}`)
-	write("formal/execution.json", `{"models":[{"path":"formal/dialcache-effects-conformance.qnt"}]}`)
+	write("formal/catalogs/profiles.json", `{"profiles":[{"id":"effects"}],"replaySources":["formal/replay/coordinator.mjs","formal/replay/mapping.mjs"]}`)
+	write("formal/catalogs/coverage-witnesses.json", `{"effects":["observed"]}`)
+	write("formal/catalogs/execution.json", `{"models":[{"path":"formal/models/dialcache-effects-conformance.qnt"}]}`)
 	write("trace.itf.json", "controlled trace")
 	evidence := witnessEvidence{SchemaVersion: 2, Profile: "effects", Traces: 1, Required: []string{"observed"}, Seen: []string{"observed"},
 		Labels: map[string]witnessLabel{"observed": {Sampled: 1, Traces: []witnessTrace{{Name: "trace.itf.json", Kind: "sampled", Checkpoints: []int{1}}}}}}

@@ -1,7 +1,7 @@
 //! Text payload conversion.
 //!
 //! Text frame payloads and decompressed `0x01` envelopes may hold any bytes.
-//! `formal/PROTOCOL.md` ("Text payload domain") fixes how they become text:
+//! `formal/guides/PROTOCOL.md` ("Text payload domain") fixes how they become text:
 //! the WHATWG UTF-8 decoder with replacement error handling and without BOM
 //! removal, so every maximal ill-formed subpart becomes exactly one U+FFFD.
 

@@ -12,7 +12,7 @@ type ProfileResult = { status: string; failed?: string[]; inconclusive?: Inconcl
 type ProfileCheck = (model: ProfileModel, label: string) => Promise<ProfileResult>;
 type MeasurementEntry = { id: string; baseline: string; mutant: string; error?: string };
 type MeasurementReport = { complete: boolean; partial: boolean; challenges: MeasurementEntry[] };
-const { validatePropertyResult, validateReproducerResult, validateProfileTests, challengePartitionPlan, checkChallengePartition, probeNames, selectChallenges, runChallengeMeasurements } = await import(new URL("../../formal/check-model-properties.mjs", import.meta.url).href) as {
+const { validatePropertyResult, validateReproducerResult, validateProfileTests, challengePartitionPlan, checkChallengePartition, probeNames, selectChallenges, runChallengeMeasurements } = await import(new URL("../../formal/tools/check-model-properties.mjs", import.meta.url).href) as {
   validatePropertyResult(result: unknown, exitCode: number, expectation: string): void;
   validateReproducerResult(output: unknown, exitCode: number | null, run: unknown, expectation: string): { status: string; code?: string };
   probeNames(run: string): { before: string; through: string };
@@ -27,10 +27,10 @@ const { validatePropertyResult, validateReproducerResult, validateProfileTests, 
     concurrency: number; save: () => void;
   }): Promise<void>;
 };
-const { reproducerCheckpoint } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+const { reproducerCheckpoint } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
   reproducerCheckpoint(source: string, run: string, failure: string): { before: string; through: string };
 };
-const manifest = JSON.parse(readFileSync(new URL("../../formal/execution.json", import.meta.url), "utf8")) as { challenges: Challenge[] };
+const manifest = JSON.parse(readFileSync(new URL("../../formal/catalogs/execution.json", import.meta.url), "utf8")) as { challenges: Challenge[] };
 // Shapes copied from `quint test --match=^(run|probes)$` on Quint 0.32.0: one
 // line per selected run, then one error block per failed run.
 type Failure = { name: string; code?: string; message?: string };
@@ -42,7 +42,7 @@ const report = (passed: string[], failed: Failure[]) => {
   if (failed.length) {
     lines.push(`  ${failed.length} failed`, "");
     failed.forEach(({ name, code = "QNT508", message = "Expect condition does not hold true" }, index) => {
-      lines.push(`  ${index + 1}) ${name}:`, `       Error [${code}]: ${message}`, "        at formal/x.qnt:198:54", `    Use --seed=0xd1a1ca --match=${name} to repeat.`, "");
+      lines.push(`  ${index + 1}) ${name}:`, `       Error [${code}]: ${message}`, "        at formal/models/x.qnt:198:54", `    Use --seed=0xd1a1ca --match=${name} to repeat.`, "");
     });
     lines.push("error: Tests failed");
   }
@@ -53,7 +53,7 @@ const { before, through } = probeNames(run);
 const clean = report([run, before, through], []);
 const detected = report([before], [{ name: run }, { name: through }]);
 const disabled = { code: "QNT513", message: "Cannot continue in `then` because the highlighted expression evaluated to false" };
-const compileError = "error: parsing failed\nformal/x.qnt:12:3 - error: [QNT000] mismatched input\n";
+const compileError = "error: parsing failed\nformal/models/x.qnt:12:3 - error: [QNT000] mismatched input\n";
 
 describe("model property challenge evidence", () => {
   it("accepts a successful baseline and a compiling initial-state invariant counterexample", () => {
@@ -231,30 +231,30 @@ describe("shared-library challenge partitions", () => {
   const models = ["listed", "cited", "excluded", "structural"].map(profile => ({
     path: `formal/${profile}.qnt`, profile, invariants: ["obligation"], regressions: ["behaviorTest"],
   }));
-  const challenge: Challenge = { id: "shared-boundary", contract: "C01", source: "formal/kernel/shared.qnt", model: "formal/listed.qnt",
+  const challenge: Challenge = { id: "shared-boundary", contract: "C01", source: "formal/models/kernel/shared.qnt", model: "formal/models/listed.qnt",
     invariant: "obligation", before: "true", after: "false", reproducer: {
-      kind: "exported-regression", run: "behaviorTest", model: "formal/cited.qnt", failure: "s.o.calls == List(1)", family: "shared-boundary",
+      kind: "exported-regression", run: "behaviorTest", model: "formal/models/cited.qnt", failure: "s.o.calls == List(1)", family: "shared-boundary",
       profiles: ["listed", "cited"], exclusions: { excluded: "Imports the rule but never exercises its boundary." },
     } };
   const plan: PartitionPlan = models.map(model => ({ model, mode: model.profile === "excluded" ? "excluded" : model.profile === "structural" ? "structural" : "listed" }));
-  const proven = new Set(["formal/cited.qnt"]);
+  const proven = new Set(["formal/models/cited.qnt"]);
   const pass = async () => ({ status: "passed", failed: [] });
 
   it("infers structural exclusions and requires decisions when imports reach the fault", () => {
     const directory = mkdtempSync(resolve(tmpdir(), "dialcache-partition-test-"));
     try {
-      mkdirSync(resolve(directory, "formal/kernel"), { recursive: true });
-      writeFileSync(resolve(directory, "formal/kernel/shared.qnt"), "module shared { pure val allowed = true }");
-      writeFileSync(resolve(directory, "formal/bridge.qnt"), 'module bridge { import shared.* from "./kernel/shared" }');
+      mkdirSync(resolve(directory, "formal/models/kernel"), { recursive: true });
+      writeFileSync(resolve(directory, "formal/models/kernel/shared.qnt"), "module shared { pure val allowed = true }");
+      writeFileSync(resolve(directory, "formal/models/bridge.qnt"), 'module bridge { import shared.* from "./kernel/shared" }');
       for (const model of models) writeFileSync(resolve(directory, model.path), `module ${model.profile} { ${model.profile === "structural" ? "" : 'import bridge.* from "./bridge"'} }`);
-      const inventory = { models, libraries: [challenge.source, "formal/bridge.qnt"] };
+      const inventory = { models, libraries: [challenge.source, "formal/models/bridge.qnt"] };
       expect(challengePartitionPlan(challenge, inventory, directory)).toEqual(plan);
       expect(() => challengePartitionPlan({ ...challenge, reproducer: { ...challenge.reproducer!, profiles: ["listed", "cited", "structural"] } }, inventory, directory)).toThrow(/listed profile does not import/);
       expect(() => challengePartitionPlan({ ...challenge, reproducer: { ...challenge.reproducer!, exclusions: {} } }, inventory, directory))
         .toThrow(/shared-boundary\/excluded: profile is neither listed nor excluded/);
       // An unrelated profile adds a structural result without editing every
       // challenge. If it later imports the source, its exclusion needs review.
-      const added = { ...models[3]!, path: "formal/added.qnt", profile: "added" };
+      const added = { ...models[3]!, path: "formal/models/added.qnt", profile: "added" };
       writeFileSync(resolve(directory, added.path), "module added { pure val unrelated = true }");
       const expanded = { ...inventory, models: [...models, added] };
       expect(challengePartitionPlan(challenge, expanded, directory)).toEqual([...plan, { model: added, mode: "structural" }]);
@@ -262,7 +262,7 @@ describe("shared-library challenge partitions", () => {
       expect(() => challengePartitionPlan(challenge, expanded, directory)).toThrow(/shared-boundary\/added: profile is neither listed nor excluded/);
       const reviewed = { ...challenge, reproducer: { ...challenge.reproducer!, exclusions: { ...challenge.reproducer!.exclusions, added: "Imports the rule without reaching its boundary." } } };
       expect(challengePartitionPlan(reviewed, expanded, directory)).toEqual([...plan, { model: added, mode: "excluded" }]);
-      expect(challengePartitionPlan({ ...challenge, source: "formal/listed.qnt" }, inventory, directory)).toEqual([]);
+      expect(challengePartitionPlan({ ...challenge, source: "formal/models/listed.qnt" }, inventory, directory)).toEqual([]);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 

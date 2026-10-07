@@ -14,7 +14,7 @@
 #[path = "formal/digest.rs"]
 mod digest;
 
-#[path = "formal/fixtures.rs"]
+#[path = "formal/models/fixtures.rs"]
 mod fixtures;
 mod formal;
 #[path = "formal/frame_vectors.rs"]

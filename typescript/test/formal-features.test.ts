@@ -60,7 +60,7 @@ const directory = process.env.DIALCACHE_FEATURE_TRACE_DIR;
 const selectedProfile = process.env.DIALCACHE_FEATURE_PROFILE;
 if (selectedProfile !== undefined && !Object.hasOwn(profiles, selectedProfile)) throw new Error(`Unknown selected feature profile: ${selectedProfile}`);
 // The exported regressions are each profile model's public-only runs, read from its Quint text.
-const { scheduleExecution } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+const { scheduleExecution } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
   scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
 };
 const execution = scheduleExecution();
@@ -78,7 +78,7 @@ for (const [name, profile] of Object.entries(profiles)) {
   // Each history is read and parsed once. The completion gate runs the shared
   // language-neutral evaluator over that corpus here, so only the steps the
   // replays need stay in memory for the rest of the file. `node
-  // formal/witnesses.mjs evaluate` is the sole producer of the reusable
+  // formal/tools/witnesses.mjs evaluate` is the sole producer of the reusable
   // evidence files; the gate only checks reachability.
   const corpus = loadCorpus(name, paths);
   const missing = directory !== undefined && single === undefined ? checkCorpus(name, corpus).missing : undefined;

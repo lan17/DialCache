@@ -1,5 +1,5 @@
 //! The portable wire protocol: frames, envelopes, text conversion and
-//! duration/timestamp domains (W04–W08 in `formal/CONTRACTS.md`).
+//! duration/timestamp domains (W04–W08 in `formal/guides/CONTRACTS.md`).
 
 mod envelope;
 mod frame;

@@ -3,8 +3,8 @@
     "witness": "first-stale-age-recovers-without-publication",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/first-stale-age-recovers-without-publication"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/first-stale-age-recovers-without-publication"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -29,8 +29,8 @@
     "witness": "last-recovery-age-serves",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/last-recovery-age-serves"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/last-recovery-age-serves"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -56,8 +56,8 @@
     "witness": "exact-maximum-after-decode-rejects",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/exact-maximum-after-decode-rejects"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/exact-maximum-after-decode-rejects"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -80,8 +80,8 @@
     "witness": "failed-fresh-decode-is-not-recovery",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/failed-fresh-decode-is-not-recovery"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/failed-fresh-decode-is-not-recovery"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -112,8 +112,8 @@
     "witness": "classifier-error-keeps-error-without-decode",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/classifier-error-keeps-error-without-decode"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/classifier-error-keeps-error-without-decode"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -125,8 +125,8 @@
     "witness": "same-c1-bytes-confirm-mismatch",
     "profile": "shadow",
     "provenance": {
-      "model": "formal/dialcache-shadow-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/same-c1-bytes-confirm-mismatch"
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/same-c1-bytes-confirm-mismatch"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [
@@ -171,8 +171,8 @@
     "witness": "different-c1-bytes-supersede",
     "profile": "shadow",
     "provenance": {
-      "model": "formal/dialcache-shadow-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/different-c1-bytes-supersede"
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/different-c1-bytes-supersede"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [
@@ -219,8 +219,8 @@
     "witness": "late-shadow-dump-cannot-dispatch-write",
     "profile": "shadow",
     "provenance": {
-      "model": "formal/dialcache-shadow-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/late-shadow-dump-cannot-dispatch-write"
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/late-shadow-dump-cannot-dispatch-write"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [
@@ -286,8 +286,8 @@
     "witness": "fill-write-error-preserves-caller",
     "profile": "shadow",
     "provenance": {
-      "model": "formal/dialcache-shadow-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/fill-write-error-preserves-caller"
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/fill-write-error-preserves-caller"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [
@@ -309,8 +309,8 @@
     "witness": "dark-read-error-still-allows-source-result",
     "profile": "shadow",
     "provenance": {
-      "model": "formal/dialcache-shadow-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/dark-read-error-still-allows-source-result"
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/dark-read-error-still-allows-source-result"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [

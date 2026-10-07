@@ -11,17 +11,17 @@ the test coordinator.
 
 | Task | Read first |
 | --- | --- |
-| Understand system behavior | [SPEC.md](./SPEC.md), then the relevant model below |
-| Follow one rule into all three implementations | [WALKTHROUGH.md](./WALKTHROUGH.md) |
-| Change a behavior or extend coverage | [AUTHORING.md](./AUTHORING.md) |
-| Implement another language | [PORTING.md](./PORTING.md) and [PROTOCOL.md](./PROTOCOL.md) |
-| Locate or reproduce a failing check | [TEST-MAP.md](./TEST-MAP.md) and the commands below |
-| Interpret validation results | [VALIDATION.md](./VALIDATION.md) |
+| Understand system behavior | [SPEC.md](./guides/SPEC.md), then the relevant model below |
+| Follow one rule into all three implementations | [WALKTHROUGH.md](./guides/WALKTHROUGH.md) |
+| Change a behavior or extend coverage | [AUTHORING.md](./guides/AUTHORING.md) |
+| Implement another language | [PORTING.md](./guides/PORTING.md) and [PROTOCOL.md](./guides/PROTOCOL.md) |
+| Locate or reproduce a failing check | [TEST-MAP.md](./guides/TEST-MAP.md) and the commands below |
+| Interpret validation results | [VALIDATION.md](./guides/VALIDATION.md) |
 
 Start with readable Quint and a named regression. The JSON catalogs are indexes
 and generated artifacts; a reader should not need to open them to learn a rule.
-[CONTRACTS.md](./CONTRACTS.md) gives stable obligation IDs and
-[FEATURE-COVERAGE.md](./FEATURE-COVERAGE.md) organizes their boundary cases.
+[CONTRACTS.md](./guides/CONTRACTS.md) gives stable obligation IDs and
+[FEATURE-COVERAGE.md](./guides/FEATURE-COVERAGE.md) organizes their boundary cases.
 
 ## How the specification connects to code
 
@@ -45,51 +45,51 @@ calling the helper they are meant to challenge.
 
 ## Models and composition profiles
 
-Read [cache-rules.qnt](./cache-rules.qnt) and
-[cache-contract.qnt](./cache-contract.qnt) for shared judgments and acquired
-ownership records. [SPEC.md](./SPEC.md#definition-ownership-and-executable-connections)
+Read [cache-rules.qnt](./models/cache-rules.qnt) and
+[cache-contract.qnt](./models/cache-contract.qnt) for shared judgments and acquired
+ownership records. [SPEC.md](./guides/SPEC.md#definition-ownership-and-executable-connections)
 maps them to the four checked profile connections.
-[dialcache-rule-checks.qnt](./dialcache-rule-checks.qnt) supplies the finite
+[dialcache-rule-checks.qnt](./models/dialcache-rule-checks.qnt) supplies the finite
 symbolic boundary checks.
 
 The verification models emphasize individual ownership or safety boundaries:
 
 | Model | Starting point |
 | --- | --- |
-| [dialcache-core.qnt](./dialcache-core.qnt) | Enabled scopes, traversal and publication |
-| [dialcache-runtime-policy.qnt](./dialcache-runtime-policy.qnt) | Sparse overlays and captured policy |
-| [dialcache-tracked-invalidation.qnt](./dialcache-tracked-invalidation.qnt) | Acquired snapshots, watermarks and delayed writes |
-| [dialcache-stale-recovery.qnt](./dialcache-stale-recovery.qnt) | Retained bytes, age checks and recovery authority |
-| [dialcache-redis-protocol.qnt](./dialcache-redis-protocol.qnt) | Frame/fence validation order |
+| [dialcache-core.qnt](./models/dialcache-core.qnt) | Enabled scopes, traversal and publication |
+| [dialcache-runtime-policy.qnt](./models/dialcache-runtime-policy.qnt) | Sparse overlays and captured policy |
+| [dialcache-tracked-invalidation.qnt](./models/dialcache-tracked-invalidation.qnt) | Acquired snapshots, watermarks and delayed writes |
+| [dialcache-stale-recovery.qnt](./models/dialcache-stale-recovery.qnt) | Retained bytes, age checks and recovery authority |
+| [dialcache-redis-protocol.qnt](./models/dialcache-redis-protocol.qnt) | Frame/fence validation order |
 
 Conformance profiles expose external commands that every language driver replays:
 
 | Profile | Behavior and interactions |
 | --- | --- |
-| [core](./dialcache-conformance.qnt) | Enabled traversal, hits, misses, publication and invalidation |
-| [effects](./dialcache-effects-conformance.qnt) | Pending reads, sources and serialization; deadlines, refill authority and late effects |
-| [scope](./dialcache-scope-conformance.qnt) | Nested enablement, request memoization, shared work and scope closure |
-| [recovery](./dialcache-recovery-conformance.qnt) | Retained stale bytes, classifier policy, age checks and request-only recovery publication |
-| [policy](./dialcache-policy-conformance.qnt) | Runtime overlays, captured policy, cache lifetime, capacity and coalescing changes |
-| [shadow](./dialcache-shadow-conformance.qnt) | Dark reads, source comparison, confirmation, conditional fills and diagnostic outcomes |
-| [admission](./dialcache-admission-conformance.qnt) | Served-hit shadow admission, deduplication, deadlines and capacity held by unfinished work |
-| [layers](./dialcache-layers-conformance.qnt) | Request/local/remote composition, instance and key isolation, publication and invalidation |
-| [independent](./dialcache-independent-conformance.qnt) | Uncoalesced callers, independent budgets, acquired snapshots and per-call refill authority |
-| [recovery-read](./dialcache-recovery-read-conformance.qnt) | Held reads/decode, compressed recovery, logical versus physical age, marker lifetime and publication |
-| [local-failure](./dialcache-local-failure-conformance.qnt) | Local storage faults, preserved source outcomes and request publication |
-| [runtime-boundaries](./dialcache-runtime-boundaries-conformance.qnt) | Omitted/invalid policy leaves, defaults, exact rollout cohorts and policy capture |
-| [shadow-layers](./dialcache-shadow-layers-conformance.qnt) | Dark fills and local/request reuse; independent sources and mixed served/dark capacity |
-| [local-clock](./dialcache-local-clock-conformance.qnt) | Fractional environment time and the shared whole-millisecond process-local expiry grid |
-| [source-budgets](./dialcache-source-budgets-conformance.qnt) | Default/unbounded/finite source deadlines, held policy, followers, outside calls and key failures |
-| [dark-layers](./dialcache-dark-layers-conformance.qnt) | Held dark work across request/local reuse, source deadlines, instance isolation, captured fill policy, tracked fences and clock rollback |
-| [shadow-read-deadlines](./dialcache-shadow-read-deadlines-conformance.qnt) | Separate C0/C1 read deadlines, raw capacity ownership, cancellation, captured read policy and whole-job ordering |
+| [core](./models/dialcache-conformance.qnt) | Enabled traversal, hits, misses, publication and invalidation |
+| [effects](./models/dialcache-effects-conformance.qnt) | Pending reads, sources and serialization; deadlines, refill authority and late effects |
+| [scope](./models/dialcache-scope-conformance.qnt) | Nested enablement, request memoization, shared work and scope closure |
+| [recovery](./models/dialcache-recovery-conformance.qnt) | Retained stale bytes, classifier policy, age checks and request-only recovery publication |
+| [policy](./models/dialcache-policy-conformance.qnt) | Runtime overlays, captured policy, cache lifetime, capacity and coalescing changes |
+| [shadow](./models/dialcache-shadow-conformance.qnt) | Dark reads, source comparison, confirmation, conditional fills and diagnostic outcomes |
+| [admission](./models/dialcache-admission-conformance.qnt) | Served-hit shadow admission, deduplication, deadlines and capacity held by unfinished work |
+| [layers](./models/dialcache-layers-conformance.qnt) | Request/local/remote composition, instance and key isolation, publication and invalidation |
+| [independent](./models/dialcache-independent-conformance.qnt) | Uncoalesced callers, independent budgets, acquired snapshots and per-call refill authority |
+| [recovery-read](./models/dialcache-recovery-read-conformance.qnt) | Held reads/decode, compressed recovery, logical versus physical age, marker lifetime and publication |
+| [local-failure](./models/dialcache-local-failure-conformance.qnt) | Local storage faults, preserved source outcomes and request publication |
+| [runtime-boundaries](./models/dialcache-runtime-boundaries-conformance.qnt) | Omitted/invalid policy leaves, defaults, exact rollout cohorts and policy capture |
+| [shadow-layers](./models/dialcache-shadow-layers-conformance.qnt) | Dark fills and local/request reuse; independent sources and mixed served/dark capacity |
+| [local-clock](./models/dialcache-local-clock-conformance.qnt) | Fractional environment time and the shared whole-millisecond process-local expiry grid |
+| [source-budgets](./models/dialcache-source-budgets-conformance.qnt) | Default/unbounded/finite source deadlines, held policy, followers, outside calls and key failures |
+| [dark-layers](./models/dialcache-dark-layers-conformance.qnt) | Held dark work across request/local reuse, source deadlines, instance isolation, captured fill policy, tracked fences and clock rollback |
+| [shadow-read-deadlines](./models/dialcache-shadow-read-deadlines-conformance.qnt) | Separate C0/C1 read deadlines, raw capacity ownership, cancellation, captured read policy and whole-job ordering |
 
 These profiles deliberately bound callers, keys, contexts, capacities, payloads
 and time. Their introduction does not imply that every product of those domains
-is explored. [profiles.json](./profiles.json) records profile versions, input
+is explored. [profiles.json](./catalogs/profiles.json) records profile versions, input
 encodings, smoke traces and implementation declarations.
 
-The [kernel library](./kernel/README.md) states shared portable rules as pure
+The [kernel library](./models/kernel/README.md) states shared portable rules as pure
 transitions; a composed profile assigns state only through them. Every profile
 except core composes this library. The corpus differential checks that changes
 preserve existing profiles' observable behavior; a new profile establishes its
@@ -107,7 +107,7 @@ from the native Rust port's compiler toolchain.
 `make formal` and `make explore` use the Rust evaluator and do not need Java.
 The separate `make model-check` target needs Java 21 and `tar`. Its standalone
 Apalache 0.56.1 runner downloads the versioned release, verifies the SHA-256 in
-[execution.json](./execution.json), and extracts those verified bytes afresh.
+[execution.json](./catalogs/execution.json), and extracts those verified bytes afresh.
 The archive is cached under `~/.cache/dialcache/apalache/0.56.1/`; for offline
 use, supply `APALACHE_ARCHIVE=/absolute/path/to/apalache-0.56.1.tgz`. Supplied
 archives must pass the same checksum check.
@@ -139,7 +139,7 @@ make ci NODE22_BIN=/absolute/path/to/node22/bin/node
 
 `make formal-check` is the Quint evidence lane: it typechecks and runs every
 scheduled model with the Rust evaluator, the public regressions and the model
-mutation challenges. Its first command, `node formal/run-models.mjs check`,
+mutation challenges. Its first command, `node formal/tools/run-models.mjs check`,
 runs only the unmodified model checks and regressions; the next step runs the
 complete pinned fault campaign. `make formal` and `make ci` require both steps.
 `make explore` retains the model checks, generation and all port replays but
@@ -153,7 +153,7 @@ depend only on the generated corpus and shared witness evidence, so hosted CI
 runs all six in parallel and none of them waits for the
 model check, which runs beside generation; the aggregate requires every lane.
 `make fixtures-check` recomputes committed artifacts; after an intentional model
-edit, update them with `node formal/generate-artifacts.mjs --write` first.
+edit, update them with `node formal/tools/generate-artifacts.mjs --write` first.
 `make ci` includes the separate symbolic checks after `make formal`, as well as
 the other local lanes.
 
@@ -163,7 +163,7 @@ tree, and replays each corpus through the other text (see kernel/README.md).
 
 Pinned acceptance clears inherited trace selectors and `QUINT_SEED`. Exploration
 keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. See
-[VALIDATION.md](./VALIDATION.md) for CI policy and report interpretation.
+[VALIDATION.md](./guides/VALIDATION.md) for CI policy and report interpretation.
 
 Scheduled named public-action Quint regressions exercise their declared
 boundaries independently of sampling. Every port replays those histories and the
@@ -176,11 +176,11 @@ checks stay model-only unless rewritten as public actions.
 The replay protocol schema types every observation, fixture sentinel and the
 wall epoch, and the coordinator rejects a malformed observation as an
 infrastructure error before any comparison; see the
-[observation contract](./PORTING.md#observation-contract).
+[observation contract](./guides/PORTING.md#observation-contract).
 
 `execution.json` also carries the challenge catalog: for every scheduled model,
 at least one compiling single-site fault that a named invariant must detect.
-`node formal/check-model-properties.mjs --only=<id>` measures one entry locally;
+`node formal/tools/check-model-properties.mjs --only=<id>` measures one entry locally;
 only the complete run is evidence.
 
 Replay one failing feature history in TypeScript or Go:
@@ -195,7 +195,7 @@ DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/regressions/shadow/confirmatio
 Core/effects use `DIALCACHE_MBT_TRACE_FILE` or `DIALCACHE_EFFECTS_TRACE_FILE`
 and their corresponding tests. Local-clock uses feature selectors with
 `typescript/test/formal-local-clock.test.ts` and the Go local-clock replay.
-The [walkthrough](./WALKTHROUGH.md#run-this-example) shows one history replayed
+The [walkthrough](./guides/WALKTHROUGH.md#run-this-example) shows one history replayed
 in all three languages, including Rust's feature-history selectors.
 
 ## Shared verification and replay rules
@@ -216,17 +216,17 @@ reviewed row for each language binding.
 
 ## Evidence and scope
 
-[execution.json](./execution.json) schedules model properties, exports and
+[execution.json](./catalogs/execution.json) schedules model properties, exports and
 bounds; every run a scheduled model declares is one of its regressions.
-[profiles.json](./profiles.json) declares the replay profiles.
-[SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md) explains witness and mutation evidence.
+[profiles.json](./catalogs/profiles.json) declares the replay profiles.
+[SEMANTIC-COVERAGE.md](./guides/SEMANTIC-COVERAGE.md) explains witness and mutation evidence.
 Query the inventories instead of copying changing totals between documents:
 
 ```sh
-node formal/execution.mjs
-node formal/check-semantic-coverage.mjs
-node formal/check-feature-coverage.mjs
-node formal/run-models.mjs check --dry-run
+node formal/tools/execution.mjs
+node formal/tools/check-semantic-coverage.mjs
+node formal/tools/check-feature-coverage.mjs
+node formal/tools/run-models.mjs check --dry-run
 ```
 
 The suite combines model properties, generated conformance histories,
@@ -237,5 +237,5 @@ assertion agrees with Quint.
 
 The specification and tests use declared finite domains. Environmental
 assumptions, allowed races and the limits of conformance claims are centralized
-in [SPEC.md](./SPEC.md#assumptions-evidence-and-claims); wire/binding obligations
-are in [PROTOCOL.md](./PROTOCOL.md) and [GO-PARITY.md](./GO-PARITY.md).
+in [SPEC.md](./guides/SPEC.md#assumptions-evidence-and-claims); wire/binding obligations
+are in [PROTOCOL.md](./guides/PROTOCOL.md) and [GO-PARITY.md](./guides/GO-PARITY.md).

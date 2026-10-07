@@ -13,7 +13,7 @@ type Audit = {
   reviewedGuides: Guide[];
 };
 const { sourceSnapshot, guideSnapshot, checkSourceAudit } = await import(
-  new URL("../../formal/check-source-audit.mjs", import.meta.url).href,
+  new URL("../../formal/tools/check-source-audit.mjs", import.meta.url).href,
 ) as {
   sourceSnapshot(directory: string): Snapshot[];
   guideSnapshot(directory: string): Snapshot[];
@@ -24,7 +24,7 @@ describe("reviewed documentation freshness", () => {
   let directory: string;
   let audit: Audit;
   const put = (path: string, text: string) => writeFileSync(join(directory, path), text);
-  const guide = (path = "formal/PORTING.md") => audit.reviewedGuides.find(entry => entry.path === path)!;
+  const guide = (path = "formal/guides/PORTING.md") => audit.reviewedGuides.find(entry => entry.path === path)!;
   const check = (input: unknown = audit) => checkSourceAudit(input, { directory });
 
   beforeEach(() => {
@@ -34,9 +34,9 @@ describe("reviewed documentation freshness", () => {
     put("typescript/README.md", "# TypeScript package\n");
     put("docs/usage.md", "# Public usage\n\nReviewed behavior.\n");
     put("typescript/test/cache.test.ts", 'it("returns the value", () => {});\n');
-    put("formal/CONTRACTS.md", "# Contracts\n\n| C01 | Admission |\n| B01 | Native API |\n");
-    put("formal/PORTING.md", "# Porting\n\n## Native driver\n\nReview the real observations.\n");
-    put("formal/VALIDATION.md", "# Validation snapshots\n\n## Prior run\n\nAn earlier revision passed two tests.\n");
+    put("formal/guides/CONTRACTS.md", "# Contracts\n\n| C01 | Admission |\n| B01 | Native API |\n");
+    put("formal/guides/PORTING.md", "# Porting\n\n## Native driver\n\nReview the real observations.\n");
+    put("formal/guides/VALIDATION.md", "# Validation snapshots\n\n## Prior run\n\nAn earlier revision passed two tests.\n");
     put("go/README.md", "# Go port\n\nThe native API uses explicit contexts.\n");
     audit = {
       schemaVersion: 1,
@@ -44,9 +44,9 @@ describe("reviewed documentation freshness", () => {
         entries: source.entries.map(entry => ({ ...entry, contracts: ["C01"] })),
       })),
       reviewedGuides: guideSnapshot(directory).map(source => ({ ...source,
-        review: source.path === "formal/VALIDATION.md"
+        review: source.path === "formal/guides/VALIDATION.md"
           ? { kind: "historical-evidence", scope: "A preserved prior execution with its original revision and results.", revisions: ["a".repeat(40)] }
-          : source.path === "formal/PORTING.md"
+          : source.path === "formal/guides/PORTING.md"
             ? { kind: "tooling-guide", scope: "Instructions for collecting native observations and producing reports." }
             : { kind: "contract-guide", scope: "An explanation of the public admission and binding requirements.", contracts: ["C01", "B01"] },
       })),
@@ -57,12 +57,12 @@ describe("reviewed documentation freshness", () => {
   it("checks guides separately from public behavior mappings and preserves historical results", () => {
     expect(check()).toEqual({ sources: 4, tests: 1, sections: 3, reviewedGuides: 4, guideSections: 6 });
     guide().review = { kind: "coverage-guide", scope: "Describes finite evidence accounting without claiming all histories pass.", contracts: [] };
-    put("formal/source-audit.json", JSON.stringify(audit));
+    put("formal/catalogs/source-audit.json", JSON.stringify(audit));
     expect(checkSourceAudit(undefined, { directory })).toMatchObject({ reviewedGuides: 4 });
   });
 
   it("rejects a body-only edit even when the section inventory stays unchanged", () => {
-    const path = "formal/PORTING.md";
+    const path = "formal/guides/PORTING.md";
     const before = readFileSync(join(directory, path), "utf8");
     put(path, before.replace("real observations", "expected model values"));
     expect(guideSnapshot(directory).find(entry => entry.path === path)!.entries).toEqual(guide(path).entries);
@@ -72,10 +72,10 @@ describe("reviewed documentation freshness", () => {
   });
 
   it("rejects a newly added or removed guide", () => {
-    put("formal/NEW.md", "# New guide\n");
+    put("formal/guides/NEW.md", "# New guide\n");
     expect(() => check()).toThrow(/guide file inventory/);
-    rmSync(join(directory, "formal/NEW.md"));
-    rmSync(join(directory, "formal/PORTING.md"));
+    rmSync(join(directory, "formal/guides/NEW.md"));
+    rmSync(join(directory, "formal/guides/PORTING.md"));
     expect(() => check()).toThrow(/guide file inventory/);
   });
 
@@ -95,7 +95,7 @@ describe("reviewed documentation freshness", () => {
   it("requires the guide collection and rejects duplicate or extra recorded files", () => {
     const { reviewedGuides: _guides, ...missing } = audit;
     expect(() => check(missing)).toThrow(/guide file inventory/);
-    for (const path of [guide().path, "formal/UNREVIEWED.md"]) {
+    for (const path of [guide().path, "formal/guides/UNREVIEWED.md"]) {
       const input = structuredClone(audit);
       input.reviewedGuides.push({ ...structuredClone(guide()), path });
       expect(() => check(input)).toThrow(/guide file inventory/);
@@ -106,7 +106,7 @@ describe("reviewed documentation freshness", () => {
     ["added", "# Porting\n\n## Native driver\n\n## New requirement\n"],
     ["removed", "# Porting\n\nThe driver requirement was removed.\n"],
   ])("rejects a %s section even if only the content fingerprint is refreshed", (_, text) => {
-    put("formal/PORTING.md", text);
+    put("formal/guides/PORTING.md", text);
     guide().sha256 = guideSnapshot(directory).find(entry => entry.path === guide().path)!.sha256;
     expect(() => check()).toThrow(/guide section inventory/);
   });
@@ -146,7 +146,7 @@ describe("reviewed documentation freshness", () => {
   });
 
   it("requires full unique revision identities for historical evidence", () => {
-    const review = guide("formal/VALIDATION.md").review!;
+    const review = guide("formal/guides/VALIDATION.md").review!;
     delete review.revisions;
     expect(() => check()).toThrow(/historical revision identity/);
     for (const revisions of [[], ["a".repeat(7)], ["z".repeat(40)], ["a".repeat(40), "A".repeat(40)]]) {
@@ -159,10 +159,10 @@ describe("reviewed documentation freshness", () => {
     const text = ["# Porting", "````markdown", "# Hidden", "```", "## Still hidden", "~~~~",
       "## Wrong marker", "```` trailing text", "## Invalid closer", "`````  ", "## After",
       "~~~text", "# Hidden too", "~~~", "### End"].join("\r\n");
-    put("formal/PORTING.md", text);
+    put("formal/guides/PORTING.md", text);
     put("docs/usage.md", text);
     const expected = [{ line: 1, title: "Porting" }, { line: 11, title: "After" }, { line: 15, title: "End" }];
-    expect(guideSnapshot(directory).find(entry => entry.path === "formal/PORTING.md")!.entries).toEqual(expected);
+    expect(guideSnapshot(directory).find(entry => entry.path === "formal/guides/PORTING.md")!.entries).toEqual(expected);
     expect(sourceSnapshot(directory).find(entry => entry.path === "docs/usage.md")!.entries).toEqual(expected);
   });
 

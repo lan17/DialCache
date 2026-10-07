@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scanDeclarationBodies } from '../formal/execution.mjs';
+import { scanDeclarationBodies } from '../formal/tools/execution.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: 'inherit' });
@@ -47,8 +47,8 @@ ${Object.entries(pythonModules).map(([name, text]) => `<section><h2 id="${name}"
   writeFileSync(resolve(destination, 'revision.json'), JSON.stringify({ revision }, null, 2) + '\n');
 }
 
-const inventory = JSON.parse(readFileSync(resolve(root, 'formal/semantic-cases.json'), 'utf8'));
-const profiles = JSON.parse(readFileSync(resolve(root, 'formal/profiles.json'), 'utf8'));
+const inventory = JSON.parse(readFileSync(resolve(root, 'formal/catalogs/semantic-cases.json'), 'utf8'));
+const profiles = JSON.parse(readFileSync(resolve(root, 'formal/catalogs/profiles.json'), 'utf8'));
 const md = text => escape(text).replaceAll('|', '&#124;').replaceAll('\n', ' ');
 const link = (label, path) => `[${md(label)}](${source(path)})`;
 const models = new Map();
@@ -67,9 +67,9 @@ const modelLink = ref => {
   return link(name, `${path}#L${line}`);
 };
 const pages = ['---', 'editLink: false', '---', '', '# Behavior catalogue', '',
-  'Generated from the reviewed [semantic case inventory](' + source('formal/semantic-cases.json') + '). ' + inventory.scope, '',
+  'Generated from the reviewed [semantic case inventory](' + source('formal/catalogs/semantic-cases.json') + '). ' + inventory.scope, '',
   'These links describe registered evidence and its scope. They are not a fresh test result or a claim of exhaustive coverage. ' +
-  'See the [validation guide](' + source('formal/VALIDATION.md') + ') for how a completed run is established.', '',
+  'See the [validation guide](' + source('formal/guides/VALIDATION.md') + ') for how a completed run is established.', '',
   'All supported ports replay the shared histories through their native drivers. ' +
   [link('TypeScript replay tests', 'typescript/test/formal-features.test.ts'), link('Go replay tests', 'go/feature_replay_test.go'), link('Rust replay tests', 'rust/tests/conformance.rs'), link('Python replay tests', 'python/tests/test_conformance.py')].join(' · ') + '.', '',
   '| Case | Behavior | Model and regression evidence | Shared replay evidence |',
@@ -78,7 +78,7 @@ for (const item of inventory.cases) {
   const models = (item.models ?? []).map(entry => `${modelLink(entry.ref)}: ${md(entry.scope)}`).join('<br>');
   const generated = (item.generated ?? []).map(entry => {
     const profile = profiles.profiles.find(profile => profile.id === entry.profile);
-    return `${link(entry.profile, profile?.model ?? 'formal/profiles.json')} / ${md(entry.witness)}`;
+    return `${link(entry.profile, profile?.model ?? 'formal/catalogs/profiles.json')} / ${md(entry.witness)}`;
   });
   const replays = (item.quintReplays ?? []).map(ref => md(ref));
   const vectors = (item.vectors ?? []).map(ref => md(typeof ref === 'string' ? ref : JSON.stringify(ref)));

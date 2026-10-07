@@ -3,8 +3,8 @@
     "regression": "acquiredMissDoesNotRereadBeforeFillTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/acquiredMissDoesNotRereadBeforeFillTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/acquiredMissDoesNotRereadBeforeFillTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -23,8 +23,8 @@
     "regression": "darkFailureDoesNotUseEligibleStaleBytesTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkFailureDoesNotUseEligibleStaleBytesTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkFailureDoesNotUseEligibleStaleBytesTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -39,8 +39,8 @@
     "regression": "darkFillRetainsPolicyThroughSerializationTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkFillRetainsPolicyThroughSerializationTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkFillRetainsPolicyThroughSerializationTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -62,8 +62,8 @@
     "regression": "darkPresentC0NeverBecomesLocalPublicationTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkPresentC0NeverBecomesLocalPublicationTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkPresentC0NeverBecomesLocalPublicationTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -81,8 +81,8 @@
     "regression": "darkPresentC0NeverBecomesRequestPublicationTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkPresentC0NeverBecomesRequestPublicationTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkPresentC0NeverBecomesRequestPublicationTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -102,8 +102,8 @@
     "regression": "darkPropagatedTimeoutIsSourceFailureTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkPropagatedTimeoutIsSourceFailureTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkPropagatedTimeoutIsSourceFailureTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -117,8 +117,8 @@
     "regression": "darkSourcePublishesLocalBeforeShadowWriteTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkSourcePublishesLocalBeforeShadowWriteTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkSourcePublishesLocalBeforeShadowWriteTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -134,8 +134,8 @@
     "regression": "darkSourcePublishesRequestBeforeShadowWriteTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkSourcePublishesRequestBeforeShadowWriteTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/darkSourcePublishesRequestBeforeShadowWriteTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -153,8 +153,8 @@
     "regression": "deduplicatedJobKeepsIndependentCallerSourcesTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/deduplicatedJobKeepsIndependentCallerSourcesTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/deduplicatedJobKeepsIndependentCallerSourcesTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -174,8 +174,8 @@
     "regression": "expiredC0CanFillAndServeNewValueTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/expiredC0CanFillAndServeNewValueTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/expiredC0CanFillAndServeNewValueTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -194,8 +194,8 @@
     "regression": "fullMixedInstanceDoesNotBlockAnotherInstanceTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/fullMixedInstanceDoesNotBlockAnotherInstanceTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/fullMixedInstanceDoesNotBlockAnotherInstanceTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -213,8 +213,8 @@
     "regression": "invalidShadowKeepsLocalPublicationTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/invalidShadowKeepsLocalPublicationTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/invalidShadowKeepsLocalPublicationTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -230,8 +230,8 @@
     "regression": "ordinaryServingMissDoesNotAdmitDiagnosticSourceTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/ordinaryServingMissDoesNotAdmitDiagnosticSourceTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/ordinaryServingMissDoesNotAdmitDiagnosticSourceTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -249,8 +249,8 @@
     "regression": "retainedFreshC0StillComparesAfterFreshnessBoundaryTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/retainedFreshC0StillComparesAfterFreshnessBoundaryTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/retainedFreshC0StillComparesAfterFreshnessBoundaryTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -266,8 +266,8 @@
     "regression": "servedAndDarkJobsShareCapacityButNotSourceOwnershipTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/servedAndDarkJobsShareCapacityButNotSourceOwnershipTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/servedAndDarkJobsShareCapacityButNotSourceOwnershipTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -290,8 +290,8 @@
     "regression": "servedDiagnosticSourceDoesNotPopulateLocalTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/servedDiagnosticSourceDoesNotPopulateLocalTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/servedDiagnosticSourceDoesNotPopulateLocalTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -308,8 +308,8 @@
     "regression": "servedPropagatedTimeoutPreservesHitTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/servedPropagatedTimeoutPreservesHitTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/servedPropagatedTimeoutPreservesHitTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -324,8 +324,8 @@
     "regression": "shadowCohortAboveAdmitsTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/shadowCohortAboveAdmitsTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/shadowCohortAboveAdmitsTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -339,8 +339,8 @@
     "regression": "shadowCohortBelowDoesNotAdmitTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/shadowCohortBelowDoesNotAdmitTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/shadowCohortBelowDoesNotAdmitTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -354,8 +354,8 @@
     "regression": "shadowCohortEqualityDoesNotAdmitTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/shadowCohortEqualityDoesNotAdmitTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/shadowCohortEqualityDoesNotAdmitTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -369,8 +369,8 @@
     "regression": "unboundedCallerSurvivesDarkJobDeadlineTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/unboundedCallerSurvivesDarkJobDeadlineTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/unboundedCallerSurvivesDarkJobDeadlineTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -387,8 +387,8 @@
     "regression": "validatedRemoteHitStopsFurtherShadowTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/validatedRemoteHitStopsFurtherShadowTest"
+        "model": "formal/models/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-layers-witnesses.json/validatedRemoteHitStopsFurtherShadowTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-const url = new URL("../../formal/generate-frame-vectors.mjs", import.meta.url).href;
+const url = new URL("../../formal/tools/generate-frame-vectors.mjs", import.meta.url).href;
 const { expectedCases, vectorsFromTrace, readGeneratedFrameVectors } = await import(url) as {
   expectedCases: number;
   vectorsFromTrace(trace: unknown): Record<string, Array<Record<string, unknown>>>;
@@ -68,6 +68,6 @@ describe("Quint frame vector export boundary", () => {
     expect(() => vectorsFromTrace(unsafe)).toThrow(/Inexact native vector integer/);
   });
   it("requires current source provenance for ordinary replay without Quint", () => {
-    expect(readGeneratedFrameVectors()).toMatchObject({ schemaVersion: 3, provenance: { model: "formal/dialcache-frame-vectors.qnt" } });
+    expect(readGeneratedFrameVectors()).toMatchObject({ schemaVersion: 3, provenance: { model: "formal/models/dialcache-frame-vectors.qnt" } });
   });
 });

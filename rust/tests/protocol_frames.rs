@@ -1,12 +1,12 @@
 //! Frame, decode, timestamp, duration and envelope conformance against the
-//! portable protocol corpus (`formal/protocol-vectors.json` plus the
+//! portable protocol corpus (`formal/catalogs/protocol-vectors.json` plus the
 //! Quint-generated frame and envelope artifacts).
 
 #[path = "formal/digest.rs"]
 mod digest;
 
-// TODO(integrator): switch to `formal/fixtures.rs` and delete `formal/fixtures_tmp.rs`.
-#[path = "formal/fixtures.rs"]
+// TODO(integrator): switch to `formal/models/fixtures.rs` and delete `formal/fixtures_tmp.rs`.
+#[path = "formal/models/fixtures.rs"]
 mod fixtures;
 #[path = "formal/frame_vectors.rs"]
 mod frame_vectors;

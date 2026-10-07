@@ -11,7 +11,7 @@ import { createWitnessRecorder } from "../../formal/replay/witnesses/recorder.mj
 import { parseLocalClockTrace, replayLocalClockTrace } from "./formal/local-clock-profile.js";
 
 // The exported regressions are the model's public-only runs, read from its Quint text.
-const { scheduleExecution } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+const { scheduleExecution } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
   scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
 };
 const profile = "local-clock";
@@ -64,7 +64,7 @@ describe("generated local-clock conformance", () => {
 // the selected replay is a different randomly generated clock history.
 describe("local-clock witness attribution", () => {
   const smoke = (): ReturnType<typeof parseLocalClockTrace> => parseLocalClockTrace(
-    JSON.parse(readFileSync(new URL("../../formal/local-clock-smoke.itf.json", import.meta.url), "utf8")), "clock witness fixture");
+    JSON.parse(readFileSync(new URL("../../formal/generated/local-clock-smoke.itf.json", import.meta.url), "utf8")), "clock witness fixture");
   it("observes both the fractional insertion boundary and the distinct construction phases", () => {
     expect([...localClockWitnesses([smoke()])]).toContain("fractional-insertion-expiry");
     expect([...localClockWitnesses([smoke()])]).toContain("shared-instance-grid");

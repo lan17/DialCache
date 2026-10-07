@@ -2,7 +2,7 @@
 //!
 //! Ports `checkWitnessEvidenceAt`, `witnessTraceKind` and `sharedReplaySources`
 //! from `go/witness_evidence_test.go`. Required reachability witnesses have one
-//! evaluator shared by the language drivers (`node formal/witnesses.mjs
+//! evaluator shared by the language drivers (`node formal/tools/witnesses.mjs
 //! evaluate`); reusing its result requires the exact corpus and definition
 //! hashes recorded in `<directory>/<profile>.json` to match this checkout byte
 //! for byte. It does not replace any native execution or observation assertion.
@@ -65,7 +65,7 @@ pub struct Label {
     pub traces: Vec<Trace>,
 }
 
-/// The evidence document written by `node formal/witnesses.mjs evaluate`.
+/// The evidence document written by `node formal/tools/witnesses.mjs evaluate`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Evidence {
@@ -113,7 +113,7 @@ pub fn check_witness_evidence(
         return Err(format!("unsupported/incomplete {profile} witness evidence"));
     }
     let registry: HashMap<String, Vec<String>> =
-        decode(&root.join("formal/coverage-witnesses.json"))?;
+        decode(&root.join("formal/catalogs/coverage-witnesses.json"))?;
     let required = registry.get(profile).cloned().unwrap_or_default();
     if required.is_empty() || required != evidence.required {
         return Err(format!("{profile} required witness registry differs"));
@@ -184,15 +184,15 @@ pub fn check_witness_evidence(
     // observation library, then every Quint library, the shared replay closure
     // (which holds the witness classifiers) and the profile's witness sources.
     let mut expected: Vec<String> = [
-        "formal/profiles.json".to_string(),
-        "formal/coverage-witnesses.json".to_string(),
-        "formal/execution.json".to_string(),
+        "formal/catalogs/profiles.json".to_string(),
+        "formal/catalogs/coverage-witnesses.json".to_string(),
+        "formal/catalogs/execution.json".to_string(),
         format!("formal/dialcache-{profile}-conformance.qnt"),
-        "formal/conformance-observations.qnt".to_string(),
+        "formal/models/conformance-observations.qnt".to_string(),
     ]
     .to_vec();
-    let execution = read_strict(&root.join("formal/execution.json"))?;
-    let definitions = read_strict(&root.join("formal/profiles.json"))?;
+    let execution = read_strict(&root.join("formal/catalogs/execution.json"))?;
+    let definitions = read_strict(&root.join("formal/catalogs/profiles.json"))?;
     let shared = shared_replay_sources(root)?;
     let claimed: HashSet<String> = execution
         .get("models")
@@ -255,11 +255,11 @@ pub fn check_witness_evidence(
     Ok(())
 }
 
-/// Every Quint source in `formal/` and `formal/kernel/` not claimed by a
-/// scheduled model, sorted as `formal/execution.mjs` derives library inputs.
+/// Every Quint source in `formal/` and `formal/models/kernel/` not claimed by a
+/// scheduled model, sorted as `formal/tools/execution.mjs` derives library inputs.
 pub fn quint_libraries(root: &Path, claimed: &HashSet<String>) -> Result<Vec<String>, String> {
     let mut libraries = Vec::new();
-    for folder in ["formal", "formal/kernel"] {
+    for folder in ["formal", "formal/models/kernel"] {
         let directory = root.join(folder);
         let entries = match std::fs::read_dir(&directory) {
             Ok(entries) => entries,
@@ -308,10 +308,10 @@ fn base_name(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// Matches `replaySources` of `formal/profiles.json` against the `.mjs`,
+/// Matches `replaySources` of `formal/catalogs/profiles.json` against the `.mjs`,
 /// `.mts` and `.json` files below `formal/replay`, sorted, and returns them.
 pub fn shared_replay_sources(root: &Path) -> Result<Vec<String>, String> {
-    let registry = read_strict(&root.join("formal/profiles.json"))?;
+    let registry = read_strict(&root.join("formal/catalogs/profiles.json"))?;
     let declared = strings_at(&registry, "replaySources")?;
     let mut actual = Vec::new();
     walk(root, &root.join("formal/replay"), &mut actual)?;

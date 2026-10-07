@@ -795,7 +795,7 @@ fn transport_validates_settlement_receipts_before_sending() {
 fn coordinator_prepares_and_replays_the_smoke_history_shape() {
     // The real coordinator's prepare result must satisfy every structural check.
     let mut coordinator = Coordinator::spawn().expect("shared replay requires Node 24 on PATH");
-    let path = repo_root().join("formal/conformance-smoke.itf.json");
+    let path = repo_root().join("formal/generated/conformance-smoke.itf.json");
     let raw = std::fs::read_to_string(&path).expect("smoke history");
     let prepared = coordinator
         .prepare("core", &path, Some(&raw))
@@ -961,7 +961,7 @@ fn inventory_ids_follow_the_shared_scheme() {
         trace_case_id("scope", regression, false),
         "regression/scope/absentValueIsMemoizedTest"
     );
-    let smoke = repo_root().join("formal/scope-smoke.itf.json");
+    let smoke = repo_root().join("formal/generated/scope-smoke.itf.json");
     assert_eq!(
         trace_case_id("scope", &smoke, false),
         "smoke/scope/scope-smoke.itf.json"
@@ -997,7 +997,7 @@ fn registry_checks_match_go() {
         require_behavior_profile("core").is_err(),
         "core is not a behavior profile"
     );
-    let raw = std::fs::read_to_string(repo_root().join("formal/profiles.json")).expect("registry");
+    let raw = std::fs::read_to_string(repo_root().join("formal/catalogs/profiles.json")).expect("registry");
     for mode in ["version", "missing", "duplicate", "model", "schema"] {
         let mut registry = strict_parse(&raw).expect("parse");
         let profiles = registry["profiles"].as_array().cloned().expect("profiles");
@@ -1008,7 +1008,7 @@ fn registry_checks_match_go() {
         let mut profile = profiles[at].clone();
         match mode {
             "version" => profile["version"] = json!(999),
-            "model" => profile["model"] = json!("formal/unknown.qnt"),
+            "model" => profile["model"] = json!("formal/models/unknown.qnt"),
             "schema" => registry["behavioralSchemaVersion"] = json!(999),
             _ => {}
         }
@@ -1132,25 +1132,25 @@ fn sha256_matches_known_vectors() {
 fn witness_evidence_binds_shared_replay_sources() {
     let root = TempDir::new("witness-root");
     let inputs = [
-        "formal/profiles.json",
-        "formal/coverage-witnesses.json",
-        "formal/execution.json",
-        "formal/dialcache-effects-conformance.qnt",
-        "formal/conformance-observations.qnt",
+        "formal/catalogs/profiles.json",
+        "formal/catalogs/coverage-witnesses.json",
+        "formal/catalogs/execution.json",
+        "formal/models/dialcache-effects-conformance.qnt",
+        "formal/models/conformance-observations.qnt",
         "formal/replay/coordinator.mjs",
         "formal/replay/mapping.mjs",
     ];
     for path in inputs {
         root.write(path, "reviewed input");
     }
-    root.write("formal/profiles.json", r#"{"profiles":[{"id":"effects"}],"replaySources":["formal/replay/coordinator.mjs","formal/replay/mapping.mjs"]}"#);
+    root.write("formal/catalogs/profiles.json", r#"{"profiles":[{"id":"effects"}],"replaySources":["formal/replay/coordinator.mjs","formal/replay/mapping.mjs"]}"#);
     root.write(
-        "formal/coverage-witnesses.json",
+        "formal/catalogs/coverage-witnesses.json",
         r#"{"effects":["observed"]}"#,
     );
     root.write(
-        "formal/execution.json",
-        r#"{"models":[{"path":"formal/dialcache-effects-conformance.qnt"}]}"#,
+        "formal/catalogs/execution.json",
+        r#"{"models":[{"path":"formal/models/dialcache-effects-conformance.qnt"}]}"#,
     );
     root.write("trace.itf.json", "controlled trace");
     let trace = root.0.join("trace.itf.json");
@@ -1303,7 +1303,7 @@ fn witness_evidence_binds_shared_replay_sources() {
     // Library membership is discovered from actual Quint sources, so adding
     // a kernel library must invalidate the old evidence even without a
     // manifest edit; updating its digest then makes subsequent drift visible.
-    root.write("formal/kernel/new-library.qnt", "new reviewed library");
+    root.write("formal/models/kernel/new-library.qnt", "new reviewed library");
     let error = check().expect_err("new kernel library omitted from evidence");
     assert!(
         error.contains("incomplete witness definition fingerprints"),
@@ -1313,20 +1313,20 @@ fn witness_evidence_binds_shared_replay_sources() {
     with_library.inputs.insert(
         5,
         Digest {
-            path: "formal/kernel/new-library.qnt".to_string(),
+            path: "formal/models/kernel/new-library.qnt".to_string(),
             name: String::new(),
-            sha256: file_sha256(&root.0.join("formal/kernel/new-library.qnt")).expect("hash"),
+            sha256: file_sha256(&root.0.join("formal/models/kernel/new-library.qnt")).expect("hash"),
         },
     );
     write(&with_library);
     check().expect("new library fingerprint rejected");
-    root.write("formal/kernel/new-library.qnt", "changed library");
+    root.write("formal/models/kernel/new-library.qnt", "changed library");
     let error = check().expect_err("stale kernel library digest accepted");
     assert!(
-        error.contains("stale witness definition formal/kernel/new-library.qnt"),
+        error.contains("stale witness definition formal/models/kernel/new-library.qnt"),
         "{error}"
     );
-    std::fs::remove_file(root.0.join("formal/kernel/new-library.qnt")).expect("remove library");
+    std::fs::remove_file(root.0.join("formal/models/kernel/new-library.qnt")).expect("remove library");
     write(&evidence);
     check().expect("restored library inventory rejected");
 
@@ -1352,7 +1352,7 @@ fn observe_requests_reach_the_coordinator_comparison() {
     // after the coordinator accepted the observe request shape and compared the
     // record: the failure is an observation mismatch, not a protocol violation.
     let mut coordinator = Coordinator::spawn().expect("shared replay requires Node 24 on PATH");
-    let path = repo_root().join("formal/conformance-smoke.itf.json");
+    let path = repo_root().join("formal/generated/conformance-smoke.itf.json");
     let prepared = coordinator.prepare("core", &path, None).expect("prepare");
     let mut applied = Vec::new();
     let error = coordinator

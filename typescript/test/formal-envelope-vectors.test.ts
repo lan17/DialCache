@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   readGeneratedEnvelopeVectors, validateGeneratedEnvelopeVectors, vectorsFromTrace,
   type EnvelopeSelection,
-} from "../../formal/generate-envelope-vectors.mjs";
+} from "../../formal/tools/generate-envelope-vectors.mjs";
 
 const corpus = readGeneratedEnvelopeVectors();
 const integer = (value: number) => ({ "#bigint": String(value) });

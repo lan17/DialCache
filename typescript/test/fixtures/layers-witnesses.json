@@ -1,8 +1,8 @@
 {
   "trackedWithoutRemotePublishesReusableLocalTest": {
     "source": {
-      "model": "formal/dialcache-layers-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/layers-witnesses.json/trackedWithoutRemotePublishesReusableLocalTest"
+      "model": "formal/models/dialcache-layers-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/layers-witnesses.json/trackedWithoutRemotePublishesReusableLocalTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"5"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},

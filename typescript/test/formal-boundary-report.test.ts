@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 type Evidence = { challenge: string; mutant: string; history: string; step: number; fields: string[] };
 type Recording = { path: string; completed: boolean; lastStep: number; divergences: Array<{ step: number; paths: string[] }>; error?: string };
 type Verdict = { state: string; matched?: string[]; reason?: string; divergences?: unknown[] };
-const { assessBoundary, boundaryReview, validateBoundaryReportFreshness, fingerprintFiles, sha256, languages } = await import(new URL("../../formal/mutation-reports.mjs", import.meta.url).href) as {
+const { assessBoundary, boundaryReview, validateBoundaryReportFreshness, fingerprintFiles, sha256, languages } = await import(new URL("../../formal/tools/mutation-reports.mjs", import.meta.url).href) as {
   assessBoundary(evidence: Evidence | { challenge: string; mutant: string; state: string }, recording?: Recording): Verdict;
   boundaryReview(report: unknown, evidence: unknown[], options?: { requireEntries?: boolean }): Verdict[];
   validateBoundaryReportFreshness(report: unknown, options?: { directory?: string }): void;
@@ -33,7 +33,7 @@ function measuredSnapshot(port: "ts" | "go") {
   for (const path of ["typescript/src", "typescript/test", "formal", "go", ...corpusPaths]) mkdirSync(join(directory, path), { recursive: true });
   const files: Record<string, string> = {
     "typescript/src/cache.ts": "export const value = 1;", "typescript/test/replay.ts": "compare(actual, expected);",
-    "formal/model.qnt": "pure val accepted = true", "formal/mutations.json": '{"mutations":[]}',
+    "formal/models/model.qnt": "pure val accepted = true", "formal/catalogs/mutations.json": '{"mutations":[]}',
     "go/cache.go": "package cache", "go/go.mod": "module cache", "go/go.sum": "dependency checksum",
     "package.json": '{"type":"module"}', "typescript/package.json": '{"name":"dialcache"}', "pnpm-workspace.yaml": "packages: [typescript]", "pnpm-lock.yaml": "lockfileVersion: 9.0", "typescript/tsconfig.json": "{}", "typescript/vitest.config.ts": "export default {};",
     ".formal-traces/regressions/shadow-layers/capturedTest.itf.json": '{"states":[{"input":{"name":"init"}}]}',
@@ -44,7 +44,7 @@ function measuredSnapshot(port: "ts" | "go") {
   }
   const configuration = ["package.json", "typescript/package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "typescript/tsconfig.json", "typescript/vitest.config.ts"];
   const report: Record<string, unknown> = {
-    complete: true, catalogSha256: sha256(readFileSync(join(directory, "formal/mutations.json"))),
+    complete: true, catalogSha256: sha256(readFileSync(join(directory, "formal/catalogs/mutations.json"))),
     inputs: fingerprintFiles(directory, languages[port].inputs), corpus: fingerprintFiles(directory, corpusPaths),
     ...(port === "go" ? { go: "go version go1.27.1" } : {
       configurationSha256: Object.fromEntries(configuration.map(path => [path, sha256(readFileSync(join(directory, path)))])),
@@ -57,7 +57,7 @@ function measuredSnapshot(port: "ts" | "go") {
 
 describe("gated boundary report freshness", () => {
   it("fails the actual gated command on stale inputs while historical inspection succeeds", async () => {
-    const { boundaryEvidence } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+    const { boundaryEvidence } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
       boundaryEvidence(): Array<Evidence | { challenge: string; mutant: string; state: string }>;
     };
     const mutations = new Map<string, { id: string; cohorts: object; boundary: unknown[] }>();
@@ -74,12 +74,12 @@ describe("gated boundary report freshness", () => {
     }
     const { directory, report } = measuredSnapshot("go");
     Object.assign(report, {
-      catalogSha256: sha256(readFileSync(new URL("../../formal/mutations.json", import.meta.url))),
+      catalogSha256: sha256(readFileSync(new URL("../../formal/catalogs/mutations.json", import.meta.url))),
       inputs: { files: 0, sha256: "stale" }, mutations: [...mutations.values()], boundaryBaselines: baselines,
     });
     const path = join(directory, "historical-report.json");
     writeFileSync(path, JSON.stringify(report));
-    const args = [fileURLToPath(new URL("../../formal/mutation-reports.mjs", import.meta.url)), "boundary", "--report", path];
+    const args = [fileURLToPath(new URL("../../formal/tools/mutation-reports.mjs", import.meta.url)), "boundary", "--report", path];
     const historical = spawnSync(process.execPath, args, { encoding: "utf8" });
     expect(historical.status, historical.stderr).toBe(0);
     const gated = spawnSync(process.execPath, [...args, "--gate"], { encoding: "utf8" });
@@ -90,7 +90,7 @@ describe("gated boundary report freshness", () => {
   it.each(["ts", "go"] as const)("accepts the original %s snapshot but rejects changed sources with unchanged boundary declarations", port => {
     const { directory, report } = measuredSnapshot(port);
     expect(() => validateBoundaryReportFreshness(report, { directory })).not.toThrow();
-    for (const path of [port === "ts" ? "typescript/src/cache.ts" : "go/cache.go", "formal/model.qnt"]) {
+    for (const path of [port === "ts" ? "typescript/src/cache.ts" : "go/cache.go", "formal/models/model.qnt"]) {
       const original = readFileSync(join(directory, path));
       writeFileSync(join(directory, path), "changed behavior at the same named checkpoint");
       // Historical inspection can still interpret the old recording, but its
@@ -103,7 +103,7 @@ describe("gated boundary report freshness", () => {
 
   it.each(["ts", "go"] as const)("rejects a changed catalog or corpus for %s", port => {
     const { directory, report } = measuredSnapshot(port);
-    const catalog = join(directory, "formal/mutations.json"), original = readFileSync(catalog);
+    const catalog = join(directory, "formal/catalogs/mutations.json"), original = readFileSync(catalog);
     writeFileSync(catalog, '{"mutations":[{"id":"M29","after":"different fault"}]}');
     expect(() => validateBoundaryReportFreshness(report, { directory })).toThrow(/mutation catalog differs/);
     writeFileSync(catalog, original);

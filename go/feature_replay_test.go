@@ -37,8 +37,8 @@ func featurePaths(p string) ([]string, error) {
 
 // The exported regressions of a profile are the histories under
 // <corpus>/../regressions/<profile>/. Which runs a model exports is read from
-// its Quint text by formal/execution.mjs, and the gate over this package's
-// report (formal/check-go-replay.mjs) requires exactly those histories, so
+// its Quint text by formal/tools/execution.mjs, and the gate over this package's
+// report (formal/tools/check-go-replay.mjs) requires exactly those histories, so
 // this reader lists the directory rather than the manifest.
 func featureRegressionPaths(profile, directory string) ([]string, error) {
 	paths, err := filepath.Glob(filepath.Join(directory, "..", "regressions", profile, "*.itf.json"))
@@ -142,7 +142,7 @@ func TestFeatureConformance(t *testing.T) {
 
 func TestFeatureParserRejectsMissingAndUnsafeInputs(t *testing.T) {
 	coordinator := newReplayCoordinator(t)
-	raw, err := os.ReadFile("../formal/scope-smoke.itf.json")
+	raw, err := os.ReadFile("../formal/generated/scope-smoke.itf.json")
 	if err != nil {
 		t.Fatal(err)
 	}

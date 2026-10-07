@@ -12,7 +12,7 @@ import { BehaviorDriver, type Input } from "./formal/behavior-driver.js";
 import { assertEffectsHistory } from "./formal/effects-contract.js";
 
 // The exported effects regressions are the model's public-only runs, read from its Quint text.
-const { scheduleExecution } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+const { scheduleExecution } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
   scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
 };
 const singleFile = process.env.DIALCACHE_EFFECTS_TRACE_FILE;
@@ -20,7 +20,7 @@ const directory = process.env.DIALCACHE_EFFECTS_TRACE_DIR;
 function loadTraces(): { traces: Trace[]; missing: string[] | undefined } {
   let paths: string[];
   if (singleFile !== undefined) paths = [resolve(singleFile)];
-  else if (directory === undefined) paths = [fileURLToPath(new URL("../../formal/effects-smoke.itf.json", import.meta.url))];
+  else if (directory === undefined) paths = [fileURLToPath(new URL("../../formal/generated/effects-smoke.itf.json", import.meta.url))];
   else {
     paths = readdirSync(directory).filter((name) => name.endsWith(".itf.json")).sort().map((name) => resolve(directory, name));
     for (const name of scheduleExecution().models.find(model => model.profile === "effects")?.replayRegressions ?? []) {
@@ -30,7 +30,7 @@ function loadTraces(): { traces: Trace[]; missing: string[] | undefined } {
   if (paths.length === 0) throw new Error("No effects conformance traces found");
   // Each history is read and parsed once. The shared language-neutral evaluator
   // gates that corpus here, so only the steps the replays need stay in memory;
-  // the CLI `node formal/witnesses.mjs evaluate` writes the reusable evidence.
+  // the CLI `node formal/tools/witnesses.mjs evaluate` writes the reusable evidence.
   const corpus = loadCorpus("effects", paths);
   const missing = directory !== undefined && singleFile === undefined ? checkCorpus("effects", corpus).missing : undefined;
   return { traces: corpus.map(({ path, steps }) => ({ path, steps })), missing };
@@ -110,7 +110,7 @@ describe("generated pending-effect conformance", () => {
   });
 
   it("fails a driver that skips settlement by settlement violation, never by mismatch", async () => {
-    const path = fileURLToPath(new URL("../../formal/effects-smoke.itf.json", import.meta.url));
+    const path = fileURLToPath(new URL("../../formal/generated/effects-smoke.itf.json", import.meta.url));
     const error = await replay(parseTrace(JSON.parse(readFileSync(path, "utf8")), path), { settle: false }).then(() => "passed", (cause: unknown) => String(cause));
     expect(error).toMatch(/Settlement violation: \d+ runnable task\(s\) at observation/);
     expect(error).not.toMatch(/expected:[\s\S]*actual:/);

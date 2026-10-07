@@ -282,7 +282,7 @@ type invalidationState struct {
 }
 
 func testInvalidationVectors(t *testing.T, environment redisEnvironment) {
-	raw, err := os.ReadFile("../../../formal/invalidation-vectors.json")
+	raw, err := os.ReadFile("../../../formal/catalogs/invalidation-vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,15 +308,15 @@ func testInvalidationVectors(t *testing.T, environment redisEnvironment) {
 	// emitted by Quint; ordinary Redis runs reject stale model/generator inputs.
 	generated := corpus
 	generated.Vectors = nil
-	raw, err = os.ReadFile("../../../formal/quint-invalidation-vectors.json")
+	raw, err = os.ReadFile("../../../formal/generated/quint-invalidation-vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err = json.Unmarshal(raw, &generated); err != nil || generated.SchemaVersion != 2 || len(generated.Vectors) != 288 {
 		t.Fatal("unsupported Quint invalidation corpus", err)
 	}
-	const model = "formal/dialcache-invalidation-transition.qnt"
-	const generator = "formal/generate-invalidation-vectors.mjs"
+	const model = "formal/models/dialcache-invalidation-transition.qnt"
+	const generator = "formal/tools/generate-invalidation-vectors.mjs"
 	if generated.Provenance.Model != model || len(generated.Provenance.SourceSHA256) != 2 {
 		t.Fatal("invalid Quint invalidation provenance")
 	}

@@ -850,11 +850,11 @@ func TestReplayCoordinatorMutationEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	original, err := os.ReadFile("../formal/conformance-smoke.itf.json")
+	original, err := os.ReadFile("../formal/generated/conformance-smoke.itf.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	evaluator, err := filepath.Abs("../formal/measure-go-semantics.mjs")
+	evaluator, err := filepath.Abs("../formal/tools/measure-go-semantics.mjs")
 	if err != nil {
 		t.Fatal(err)
 	}
