@@ -8,12 +8,12 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "f3989f3032706ec6880ea29805dd1634964d868a2c3d99188adc6eaa1aac68ca",
-    "executionSha256": "bdb8428c4fc4b34d7eed84d60f53fce53331bc3d3f16433c720e34331a9ea64f",
-    "sourceAuditSha256": "b3c2a358529c0d72e40103fc919dc9b07121802ad715106312d7df691d56ad85",
-    "featureCoverageSha256": "e177762da07f2b796a8bd9bc9ba69f6261b82cd9cee98391e97c2bfc3253d964",
+    "semanticCasesSha256": "f5f7ee357201b343eb00f8f9c783c92af0d722709137edc0f55e0a52b3cdec0a",
+    "executionSha256": "29a412f87329347840f000ea44a6e95332464c0b01b92b4e41c615af3c9157cd",
+    "sourceAuditSha256": "3cd6dbe51d9de38b63917cbfcb0059909659922615f2d2152206a0f2f1aea890",
+    "featureCoverageSha256": "2d4e47ec18688c911ce4d6bda780edc8ee654069aa5704e15a39cbae35655ba7",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
-    "profilesSha256": "15fbdb476b5ee9f39ea017ef5668d9c26cb7d53ebc96a6b7c4f531cccfa8d897"
+    "profilesSha256": "9df8285820e4fff65f6a7753885bbb192c09f3f476eac8f9c98d130454ae1a28"
   },
   "inventory": {
     "behavioralCases": 244,
@@ -5249,7 +5249,7 @@
           "formal/models/cache-rules.qnt"
         ]
       },
-      "artifactSha256": "ccc462f8093da0d72b6db3f25a10945a3130bace6dffcac65e58ea9eef870064",
+      "artifactSha256": "a864b51d55b3122f1277a932083ab1b534d26b2126c84fb25c1a4ce2781cc71e",
       "status": "executable-vector-schedule"
     },
     {
@@ -5264,7 +5264,7 @@
           "formal/tools/generate-invalidation-vectors.mjs"
         ]
       },
-      "artifactSha256": "7916eb3c44bd23cfe4ac6d9a24b7d4ef9f217156b1bf9f3b343a89fc15b199ab",
+      "artifactSha256": "9e647b0e549790a8b39f8799606d3d8d3bebf4cc5cde89edb9a011cef52d1e49",
       "status": "executable-vector-schedule"
     },
     {
@@ -5281,7 +5281,7 @@
           "formal/models/cohort-boundaries.qnt"
         ]
       },
-      "artifactSha256": "e34a95a7f6a475fa542abf5c80e1626a712f6010e510c31e0bc5559ff1902d51",
+      "artifactSha256": "f9b618c224d5c7cee2894229c7656c34c25ae554bff3574f82788871b412fac1",
       "status": "executable-vector-schedule"
     },
     {
@@ -5297,7 +5297,7 @@
           "formal/tools/generate-envelope-vectors.mjs"
         ]
       },
-      "artifactSha256": "b154c5d764215a60413eda4248891fa58e17221b784346eaa304872be45de284",
+      "artifactSha256": "20991cdee71f7329a2227d05ffb58aa4763da5bc7f4098cb530389c6788bf3a2",
       "status": "executable-vector-schedule"
     }
   ]

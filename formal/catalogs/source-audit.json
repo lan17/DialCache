@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "54f1bc0f51873584135c99d057e46d8dbf8f628e80af8b826fbee45dedd49182",
+      "sha256": "8d0207d7edc3706ca8ff5d7d496086972258b07e4c41f52b1a5ac0c45097831f",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01"]},
         {"line":49,"title":"Install TypeScript","contracts":["B01"]},
@@ -37,7 +37,7 @@
     },
     {
       "path": "docs/authoring.md",
-      "sha256": "d7ab1c2906e3a6441b46adb677a4fcb7eb55f04810a1530b909d2c701a0a84b1",
+      "sha256": "757251e7c72ecdd3306ba812583ca67b5be564b6d4775f4e816246780bd0d124",
       "entries": [
         {"line":1,"title":"Writing shared documentation","contracts":["B01"]},
         {"line":8,"title":"Change a feature guide","contracts":["B01"]},
@@ -178,7 +178,7 @@
     },
     {
       "path": "docs/languages/python.md",
-      "sha256": "6b0625588d4028207e8069241a64a2d73e825d07f56e2d23111ee24fd4b5ad90",
+      "sha256": "3cc5db10e5e69b517b32120c8f8be2c461c08a633b33d042922a1cee05cd6b32",
       "entries": [
         {"line":1,"title":"Python integration","contracts":["B01"]},
         {"line":10,"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -332,7 +332,7 @@
     },
     {
       "path": "typescript/README.md",
-      "sha256": "c57210b637682308d7d5d16a01cdaa768ecf4a1949793d6cff3aa20e0836c978",
+      "sha256": "835c5dc135adefa04f7d009badb2abf8994b067d56861a9c64d93f5c6c703ca0",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01"]},
         {"line":30,"title":"Install","contracts":["B01"]},
@@ -1003,7 +1003,7 @@
     },
     {
       "path": "typescript/test/redis-real.integration.test.ts",
-      "sha256": "37e311c65c2329cef4942b7e485d5e652cdaf5738a19dc4b7c3a269a917c480c",
+      "sha256": "723e162a8984721d259808692cfe571b466583f84c1c637addd1a03c18a58e44",
       "entries": [
         {"line":204,"title":"`portable invalidation: ${vector.name}`","contracts":["W09"]},
         {"line":265,"title":"round-trips untracked UTF-8, binary, and inline-loader values","contracts":["W04","B01"]},
@@ -1083,8 +1083,26 @@
   ],
   "reviewedGuides": [
     {
+      "path": "formal/README.md",
+      "sha256": "7ad4d77aa162e93e8def416fb545c29586532138ffd2d2c68c6213a1bab7a23f",
+      "entries": [
+        {"line":1,"title":"Executable DialCache specification"},
+        {"line":10,"title":"Start with your task"},
+        {"line":26,"title":"Where things are"},
+        {"line":37,"title":"How the specification connects to code"},
+        {"line":57,"title":"Models and composition profiles"},
+        {"line":110,"title":"Generating and replaying behavior"},
+        {"line":212,"title":"Shared verification and replay rules"},
+        {"line":228,"title":"Evidence and scope"}
+      ],
+      "review": {
+        "kind": "tooling-guide",
+        "scope": "Task-based navigation through shared rules, acquired contracts, five scoped connections, readable models, native replay, symbolic checking and separate alternate-seed exploration. Commands and finite-evidence boundaries replace accumulating historical logs."
+      }
+    },
+    {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "bb0a72dd729b4b5f3cb2b922bb92233c2e6aac0a7dcd4b2038c1b54b489d4086",
+      "sha256": "8e23cd5252a5d7eb8a8e42cab301345f0c6ffa055994566076c45c979da5c8f0",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":20,"title":"Reading a model"},
@@ -1106,7 +1124,7 @@
     },
     {
       "path": "formal/guides/BEHAVIOR.md",
-      "sha256": "ee7e2809fe5a06a3252ffcd6089cf2e9b4f78548008b56853e5641889121896b",
+      "sha256": "6c835d7e3aecafce708b9ec7bf4b54d7c2d5daa4fa9c9a02ea71bbd5446b34a6",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1202,7 +1220,7 @@
     },
     {
       "path": "formal/guides/CONFORMANCE.md",
-      "sha256": "b73a1093794566545c102bcdebb0fda9f5d984698e5f3a1c9cd7f4e5a9eece21",
+      "sha256": "fb1edc1c05e51a8b647fcb1fe91fd5c75f48f6aae4920892ae479884af67adc7",
       "entries": [
         {"line":1,"title":"Core behavioral conformance profile"},
         {"line":5,"title":"Trace format and trust boundary"},
@@ -1233,7 +1251,7 @@
     },
     {
       "path": "formal/guides/CONTRACTS.md",
-      "sha256": "6c760c76f666b32cdacab7e65822529de0d24b241c0b463327ea8eaff61b8b8f",
+      "sha256": "6b6c3a08412f1ad1da0700dd4777a7e61306b6b7559e3409b83b15dda75ff8c6",
       "entries": [
         {"line":1,"title":"Portable contract inventory"},
         {"line":11,"title":"Where the boundary lies"},
@@ -1336,7 +1354,7 @@
     },
     {
       "path": "formal/guides/FEATURE-COVERAGE.md",
-      "sha256": "ef55f7f4ac68fe36051eb92f210c3bc9979e20819714f842e5b52338cd15b63c",
+      "sha256": "8368ec455fa600c89821853926ca1c5025ba18bb6dacdc6d6a34794d9ade8afb",
       "entries": [
         {"line":1,"title":"DialCache features and known behavioral corners"},
         {"line":16,"title":"What is accounted for"},
@@ -1352,7 +1370,7 @@
     },
     {
       "path": "formal/guides/GO-PARITY.md",
-      "sha256": "70604b4aad0e3e2c538105eb36d8c4f349c11935ae3fdae9469c7117e4e3e4a1",
+      "sha256": "8b6102a9e205231f2641dbdb3639431ce443c95cd10718cfbb1058927bd1ae43",
       "entries": [
         {"line":1,"title":"Go parity acceptance"},
         {"line":52,"title":"Required evidence"},
@@ -1367,7 +1385,7 @@
     },
     {
       "path": "formal/guides/PORTING.md",
-      "sha256": "6c22b3278ea14136fbf3dbcdc8725d053666cbead44a79683023b3f4235be0a9",
+      "sha256": "22d0c0dc6ad513ee29f7008a83d8152ea77d1fff5a72c8393a643e0e71d5fe06",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1387,15 +1405,15 @@
     },
     {
       "path": "formal/guides/PROTOCOL.md",
-      "sha256": "a1c7968445ced9922e7fc90dd6653e174e7f8890b5b2f8eeea053bec30648ffb",
+      "sha256": "5b096b3e419c0ad76bd8118b1d90985af57317a97e14b8dd6cd4844daec8f994",
       "entries": [
         {"line":1,"title":"Portable keys, frames, envelopes and invalidation"},
         {"line":10,"title":"Authority and generated artifacts"},
-        {"line":40,"title":"Text payload domain"},
-        {"line":86,"title":"Input strings and key escaping"},
-        {"line":101,"title":"Key normalization and rollout"},
-        {"line":127,"title":"Envelope selection and codec environment"},
-        {"line":163,"title":"Invalidation vector schema 2"}
+        {"line":41,"title":"Text payload domain"},
+        {"line":87,"title":"Input strings and key escaping"},
+        {"line":102,"title":"Key normalization and rollout"},
+        {"line":128,"title":"Envelope selection and codec environment"},
+        {"line":164,"title":"Invalidation vector schema 2"}
       ],
       "review": {
         "kind": "contract-guide",
@@ -1425,25 +1443,22 @@
       }
     },
     {
-      "path": "formal/README.md",
-      "sha256": "4b9114d19cf627e6d1c3b8bf6d82f193633ae6cec8986a4147f46bedacb161af",
+      "path": "formal/guides/README.md",
+      "sha256": "23b6f55ceb3b9ba09c84f7fdc39405cd9baffaaa04a3af0e852c26b4b872b0a7",
       "entries": [
-        {"line":1,"title":"Executable DialCache specification"},
-        {"line":10,"title":"Start with your task"},
-        {"line":26,"title":"How the specification connects to code"},
-        {"line":46,"title":"Models and composition profiles"},
-        {"line":99,"title":"Generating and replaying behavior"},
-        {"line":201,"title":"Shared verification and replay rules"},
-        {"line":217,"title":"Evidence and scope"}
+        {"line":1,"title":"Guides"},
+        {"line":9,"title":"Contract guides: what a port must preserve"},
+        {"line":17,"title":"Tooling guides: how to do the work"},
+        {"line":25,"title":"Coverage guides: what the evidence establishes"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Task-based navigation through shared rules, acquired contracts, five scoped connections, readable models, native replay, symbolic checking and separate alternate-seed exploration. Commands and finite-evidence boundaries replace accumulating historical logs."
+        "scope": "Index of the reviewed guides by the ledger's review kinds (contract, tooling, coverage), one line per page. Navigation only; it states no rule and claims no evidence."
       }
     },
     {
       "path": "formal/guides/SEMANTIC-COVERAGE.md",
-      "sha256": "c428c045c3df5d97cb0badff4d31e24d66ff0e0e963dbef4c8b91c87d6074a3a",
+      "sha256": "fda0d8e33d65d56129a9d38f828500843f01038d03772cba0ec7f9fe33a8bd0c",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1461,7 +1476,7 @@
     },
     {
       "path": "formal/guides/SPEC.md",
-      "sha256": "04fab67afcdac644a24b622072c425a3ecca68e9689c61563e8c9144c6ab1f9a",
+      "sha256": "869de9ced5a70b4bd966c8c0e94ead1b3df0b06a54ca7773e0307e4aa3e7cda4",
       "entries": [
         {"line":1,"title":"DialCache behavioral specification"},
         {"line":18,"title":"Definition ownership and executable connections"},
@@ -1552,7 +1567,7 @@
     },
     {
       "path": "formal/guides/TEST-AUDIT.md",
-      "sha256": "fda74847092b768ceb216d34f43465f5323b2bea3ddf9f97871d9fba17fca714",
+      "sha256": "690ccce01c2b9307099b7e53768ed23085fec1b56bddaddbbeabe8ba70a291f8",
       "entries": [
         {"line":1,"title":"Docs and test behavior audit"},
         {"line":13,"title":"Keeping the audit current"},
@@ -1566,7 +1581,7 @@
     },
     {
       "path": "formal/guides/TEST-MAP.md",
-      "sha256": "1882a0a430c22b5d1a50741a3121cc77b7810cb2f9b0cb65500489d479bbd883",
+      "sha256": "a32e4513667d38236aeb4df0b8c872912e725f1ae1605a6a91c07cb2970dc4d5",
       "entries": [
         {"line":1,"title":"Formal contract and implementation evidence map"},
         {"line":18,"title":"Behavioral map"},
@@ -1582,15 +1597,15 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "38668ddd9b3a64dbf821018b6bd638eae8fea0c524275fcc754c165de2376fdf",
+      "sha256": "70dcafee96aea5a927e7acc99021ddeec3818e176497c95d7f783ca8ca442cb6",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":77,"title":"Reading a completion report"},
         {"line":96,"title":"Mutation evidence"},
         {"line":210,"title":"Exploratory runs"},
-        {"line":261,"title":"A retained sampling regression"},
-        {"line":298,"title":"Historical results"}
+        {"line":266,"title":"A retained sampling regression"},
+        {"line":303,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1599,7 +1614,7 @@
     },
     {
       "path": "formal/guides/WALKTHROUGH.md",
-      "sha256": "e186d17ae2d9bea13c21863ae1c1f1bd7aa20f63f3aed06db72df4a2de7aba2d",
+      "sha256": "c7d3bdb1e65f3672f94c61c5a5cccaf9f2bfd061f5de3f226dfa93973f4fab59",
       "entries": [
         {"line":1,"title":"Follow one behavior from Quint to every port"},
         {"line":14,"title":"Read the named run first"},
@@ -1614,7 +1629,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "dcef48b1acaea88d04dd2ea49ed09f7ce7ea17a019f41b9df257a31b6560bebf",
+      "sha256": "97ceca7d13bc270a4e53341ce1d33b0a8f3906d4b4f26b7d2d30a8747f59f0f1",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
         {"line":23,"title":"Use"},

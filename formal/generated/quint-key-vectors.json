@@ -4,7 +4,7 @@
     "model": "formal/models/dialcache-key-protocol.qnt",
     "sourceSha256": {
       "formal/models/dialcache-key-protocol.qnt": "3e08df8a9af2182b66e8927542edabe5f82cef8d833563747fc68883660be1a2",
-      "formal/tools/generate-key-vectors.mjs": "05764a348b161ac01a30d7a723e5018cad200020a2e95a0888b544f2401fbeea",
+      "formal/tools/generate-key-vectors.mjs": "868993bb5f57e1363538adac4983c8a89d3edcd8c549d733877f91b191318145",
       "formal/models/wire-text.qnt": "c78f8c674f4e1470b0d2b605b209d82e3aab0e35fb4e0efae813247bf093eb27",
       "formal/models/cohort-boundaries.qnt": "700f0b9ee734f2511b3c7f10138b9636cef93bc1045b653479a05be1766e3407"
     }

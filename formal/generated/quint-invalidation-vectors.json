@@ -4,7 +4,7 @@
     "model": "formal/models/dialcache-invalidation-transition.qnt",
     "sourceSha256": {
       "formal/models/dialcache-invalidation-transition.qnt": "f1d3a70e5a8acb79b3ffd3558714a74fc456c7e2641c661c3fb4b61220236e69",
-      "formal/tools/generate-invalidation-vectors.mjs": "a5751b5b8cc1bce49d0daa7babc47a958a3d230c11b724d80858d228b61424ec"
+      "formal/tools/generate-invalidation-vectors.mjs": "c40646863e27363e30119510e82e09a589bbd1c5c00665e33e99556a1d485cb3"
     }
   },
   "vectors": [

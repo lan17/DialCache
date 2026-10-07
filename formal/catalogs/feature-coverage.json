@@ -1878,7 +1878,7 @@
           "test": "TestRedisIntegration",
           "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "f1919eacccda5cc36ac2d91c5d9afa415e230e68cfb35307ce640324631f6874"
+          "sha256": "69098d9e0cef31d38c94320d3bfd5a728cc175fc70a0d9c0c58542a0ac5cba5f"
         },
         {
           "test": "TestRedisAdapterReadsAndBoundaries",
@@ -1999,13 +1999,13 @@
           "test": "uses one wire format across node-redis and Valkey GLIDE",
           "path": "typescript/test/redis-real.integration.test.ts",
           "scope": "Asserts that the TypeScript binding uses one wire format across node-redis and Valkey GLIDE.",
-          "sha256": "37e311c65c2329cef4942b7e485d5e652cdaf5738a19dc4b7c3a269a917c480c"
+          "sha256": "723e162a8984721d259808692cfe571b466583f84c1c637addd1a03c18a58e44"
         },
         {
           "test": "round-trips compressed payloads through tracked writes and invalidation",
           "path": "typescript/test/redis-real.integration.test.ts",
           "scope": "Asserts that the TypeScript binding round-trips compressed payloads through tracked writes and invalidation.",
-          "sha256": "37e311c65c2329cef4942b7e485d5e652cdaf5738a19dc4b7c3a269a917c480c"
+          "sha256": "723e162a8984721d259808692cfe571b466583f84c1c637addd1a03c18a58e44"
         },
         {
           "test": "routes cache operations across slots and reloads invalidation scripts per node",
@@ -2025,7 +2025,7 @@
           "test": "TestRedisIntegration",
           "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "f1919eacccda5cc36ac2d91c5d9afa415e230e68cfb35307ce640324631f6874"
+          "sha256": "69098d9e0cef31d38c94320d3bfd5a728cc175fc70a0d9c0c58542a0ac5cba5f"
         }
       ],
       "adaptation": "Real-server dispatch, Lua semantics, topology and mixed-language data are outside an in-memory conformance driver.",
