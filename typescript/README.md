@@ -138,7 +138,7 @@ for sampling and comparison behavior.
 | Recovery from selected source failures | [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html) |
 | Shared execution and deadlines | [Coalescing and liveness](https://lan17.github.io/DialCache/coalescing.html) |
 | Methods, options, and exports | [API reference](https://lan17.github.io/DialCache/api.html) |
-| Go and Rust implementations and shared behavior contracts | [Go guide](go/README.md) · [Rust guide](rust/README.md) · [Quint specification](formal/README.md) · [Worked walkthrough](formal/guides/WALKTHROUGH.md) |
+| Go and Rust implementations and shared behavior contracts | [Go guide](../go/README.md) · [Rust guide](../rust/README.md) · [Quint specification](../formal/README.md) · [Worked walkthrough](../formal/guides/WALKTHROUGH.md) |
 
 The Go port, the Rust port and the TypeScript library replay the same
 Quint-generated histories. Whether those histories reach every required boundary is decided by

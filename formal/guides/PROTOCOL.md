@@ -11,8 +11,9 @@ Passing the finite examples does not replace implementing the stated rules.
 
 `execution.json` schedules each primitive model's independent properties,
 regressions and `vectorExport`. That entry records the generator, artifact,
-complete case count and source files. `generate-traces.sh` checks the committed
-artifact against fresh Quint output. An intentional model change uses its
+complete case count and source files. `make fixtures-check` (`node
+formal/tools/generate-artifacts.mjs --check`) checks the committed artifacts
+against fresh Quint output. An intentional model change uses its
 `generate-*-vectors.mjs --write` command, followed by review and `--check`.
 Do not hand-edit the expected output or compute it with production code.
 

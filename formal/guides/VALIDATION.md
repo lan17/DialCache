@@ -252,6 +252,11 @@ node formal/tools/explore.mjs --replay /absolute/path/to/exploration/report.json
 Snapshot replay verifies saved source fingerprints, uses that snapshot's runner
 and requires matching package/lock inputs for the installed dependencies. It
 writes a new evidence directory and preserves the original run.
+A run saved before the `formal/` layout move of October 2026 keeps its runner
+and catalogs at the old paths, which this checkout's `--replay` does not look
+for. Replay such a run from a checkout of the base revision its report records,
+with matching dependency manifests and installed dependencies; the replay
+refuses mismatched manifest bytes.
 
 Retain a failing seed, its source fingerprints and history. Turn a discovered
 behavioral counterexample into a named public-action Quint regression so future

@@ -36,6 +36,13 @@ go/                     # Go module, public cache and adapters, shared-corpus re
 rust/                   # Rust crate, public cache and adapters, shared-corpus replay (tests/conformance.rs)
 python/                 # Async Python package, borrowed Redis adapter, native tests and shared-corpus replay
 formal/                 # Quint behavioral source of truth, contracts and portable vectors
+  README.md             # Entry point: the task table and the directory map
+  guides/               # Reviewed guides: SPEC, CONTRACTS, AUTHORING, PORTING, WALKTHROUGH and the rest
+  models/               # Every Quint model and shared helper; kernel/ and fixtures/kernel/ beneath
+  replay/               # Shared replay coordinator, profile descriptors and witness classifiers
+  tools/                # Node scripts behind the make targets (validation.mjs dispatches them)
+  catalogs/             # Hand-maintained manifests, evidence catalogs, ledgers, baselines, fixed vectors
+  generated/            # Smoke traces, the fixtures lock and generated vectors; regenerate, never edit
 scripts/                # Shared documentation tools
 package.json            # Private shared tooling and TypeScript command dispatch
 pnpm-workspace.yaml     # TypeScript package membership and shared dependency policy
