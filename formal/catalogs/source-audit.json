@@ -332,7 +332,7 @@
     },
     {
       "path": "typescript/README.md",
-      "sha256": "835c5dc135adefa04f7d009badb2abf8994b067d56861a9c64d93f5c6c703ca0",
+      "sha256": "e45fc57974c0693ef3b704f8b571137c16b70df6244239555cbc2a3729f16f31",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01"]},
         {"line":30,"title":"Install","contracts":["B01"]},
@@ -1567,7 +1567,7 @@
     },
     {
       "path": "formal/guides/TEST-AUDIT.md",
-      "sha256": "690ccce01c2b9307099b7e53768ed23085fec1b56bddaddbbeabe8ba70a291f8",
+      "sha256": "40bfa79ffe73d35813ead894c92b0e776ba97e02b003f85d992df1a5c87bdd6a",
       "entries": [
         {"line":1,"title":"Docs and test behavior audit"},
         {"line":13,"title":"Keeping the audit current"},

@@ -4,7 +4,8 @@ The Node scripts behind the `make` targets. `make <target>` is
 `node formal/tools/validation.mjs <target>`; `make help` lists the targets and
 their prerequisites. Every script reads its inputs from
 [../catalogs/](../catalogs/README.md) and writes generated output only under
-[../generated/](../generated/README.md). Start with `validation.mjs` to see
+[../generated/](../generated/README.md) and, for the witness fixtures,
+`typescript/test/fixtures/`. Start with `validation.mjs` to see
 which scripts a target runs.
 
 ## Entry points
@@ -12,7 +13,7 @@ which scripts a target runs.
 - [validation.mjs](./validation.mjs): the target dispatcher; composes every `make` target from the scripts below and checks prerequisites.
 - [execution.mjs](./execution.mjs): reads and validates the execution manifest; `node formal/tools/execution.mjs` prints the inventory.
 
-## Checks (the `audit` lane runs the first five)
+## Checks (the `audit` lane runs `execution.mjs` and the first four)
 
 - [check-source-audit.mjs](./check-source-audit.mjs): the docs and test review ledger against the current files.
 - [check-semantic-coverage.mjs](./check-semantic-coverage.mjs): every semantic case cites scheduled checks, scenarios, vectors and witnesses.

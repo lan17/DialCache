@@ -40,8 +40,8 @@ and continue running in normal CI.
 
 ### Formal and Go guide review
 
-`reviewedGuides` additionally covers every top-level `formal/*.md` guide and
-`go/README.md`. Each record preserves the complete content hash and heading
+`reviewedGuides` additionally covers every guide under `formal/guides/`, the
+top-level `formal/README.md` and `go/README.md`. Each record preserves the complete content hash and heading
 inventory, with a reviewed purpose and scope. Contract guides name the relevant
 obligations; tooling and coverage guides describe workflow or evidence accounting
 without manufacturing behavioral coverage. Historical evidence records name
