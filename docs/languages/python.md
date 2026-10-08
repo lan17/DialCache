@@ -161,7 +161,7 @@ four-language client suite; it also requires the pinned Go and Rust toolchains.
 
 Generate the shared corpus with `make formal-generate`, then run
 `make formal-python` for complete prepared replay and completion checks. The
-[porting guide](https://github.com/lan17/DialCache/blob/main/formal/PORTING.md)
+[porting guide](https://github.com/lan17/DialCache/blob/main/formal/guides/PORTING.md)
 defines that evidence boundary. Passing committed smoke tests alone does not
 establish complete conformance. Node 24 is a test-tool dependency, not a Python
 package runtime dependency.

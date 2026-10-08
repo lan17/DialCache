@@ -25,9 +25,9 @@ type Manifest = {
 // The manifest with the schedule its Quint text states: every declared run is a regression, a profile's public-only runs are its replay regressions, and the libraries are the sources no model claims.
 type Scheduled = Omit<Manifest, "models"> & { libraries: string[]; models: Array<Manifest["models"][number] & { regressions: string[]; replayRegressions?: string[] }> };
 type Command = { command: string; args: string[]; outputDirectory?: string; expectedTraces?: number; explicitInputs?: boolean; expectedFiles?: string[]; profile?: string };
-const manifest = () => JSON.parse(readFileSync(new URL("../../formal/execution.json", import.meta.url), "utf8")) as Manifest;
-const moduleUrl = new URL("../../formal/execution.mjs", import.meta.url).href;
-const runner = fileURLToPath(new URL("../../formal/run-models.mjs", import.meta.url));
+const manifest = () => JSON.parse(readFileSync(new URL("../../formal/catalogs/execution.json", import.meta.url), "utf8")) as Manifest;
+const moduleUrl = new URL("../../formal/tools/execution.mjs", import.meta.url).href;
+const runner = fileURLToPath(new URL("../../formal/tools/run-models.mjs", import.meta.url));
 type PortSection = { edits?: unknown[]; requiredDetections: string[] };
 type MutantEntry = { id: string; case: string; description?: string; rationale?: string; typescript: PortSection; go: PortSection };
 type Catalog = { mutations: Map<string, MutantEntry>; caseContracts: Map<string, string[]> };
@@ -52,10 +52,10 @@ const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerC
   challengesByMutant(manifest: Manifest): Map<string, string[]>;
   nativeMutantKinds: readonly string[];
 };
-const { checkSemanticCoverage } = await import(new URL("../../formal/check-semantic-coverage.mjs", import.meta.url).href) as {
+const { checkSemanticCoverage } = await import(new URL("../../formal/tools/check-semantic-coverage.mjs", import.meta.url).href) as {
   checkSemanticCoverage(value: unknown): unknown;
 };
-const { bindGeneratedTrace } = await import(new URL("../../formal/run-models.mjs", import.meta.url).href) as {
+const { bindGeneratedTrace } = await import(new URL("../../formal/tools/run-models.mjs", import.meta.url).href) as {
   bindGeneratedTrace(profile: string, text: string, path: string): void;
 };
 // Exercise pure metadata checks directly: large catalogs must not depend on
@@ -73,7 +73,7 @@ const validate = (value: unknown, options?: Options) => validateExecution(value,
 // negatives about runs that are scheduled but never exported; every run the profiles declare is public.
 const withPatchingRun = (path: string) => {
   const source = readFileSync(root + path, "utf8");
-  if (path !== "formal/dialcache-effects-conformance.qnt") return source;
+  if (path !== "formal/models/dialcache-effects-conformance.qnt") return source;
   return source.replace(/\n}\s*$/, "\n  run patchedBudgetTest = tenMillisecondFixture.then(all { input' = input, s' = { readBudget: 30, ...s } }).expect(s.readBudget == 30)\n}\n");
 };
 const scheduled = () => scheduleExecution(manifest(), { scanSource });
@@ -87,7 +87,7 @@ describe("formal execution schedule", () => {
     // runs, every model is challenged or waived, and every challenge has both a
     // reproducer and a native mapping or an explicit explanation of its boundary.
     const raw = manifest(), current = scheduled(), catalog = readMutantCatalog();
-    const registry = JSON.parse(readFileSync(new URL("../../formal/profiles.json", import.meta.url), "utf8")) as { profiles: unknown[] };
+    const registry = JSON.parse(readFileSync(new URL("../../formal/catalogs/profiles.json", import.meta.url), "utf8")) as { profiles: unknown[] };
     const kinds = (kind: string) => raw.challenges.filter(challenge => challenge.nativeMutants?.kind === kind).length;
     const cited = new Set(raw.challenges.map(challenge => challenge.nativeMutants?.mutant).filter(mutant => mutant !== undefined));
     const challenged = new Set(raw.challenges.map(challenge => challenge.model)).size, waived = raw.models.filter(model => model.challengeWaiver !== undefined).length;
@@ -124,7 +124,7 @@ describe("formal execution schedule", () => {
     expect(() => validate(missingModel)).toThrow(new RegExp(`${dropped.path.replace(/[./]/g, "\\$&")}: a stateful Quint source must be a scheduled model`));
     // A scheduled path the tree does not have is an inventory change.
     const renamedModel = manifest();
-    renamedModel.models[0]!.path = "formal/dialcache-missing.qnt";
+    renamedModel.models[0]!.path = "formal/models/dialcache-missing.qnt";
     expect(() => validate(renamedModel)).toThrow(/file inventory changed/);
     // The lists are copies of the text and are refused rather than compared.
     const listed = manifest() as Manifest & { libraries?: string[] };
@@ -146,11 +146,11 @@ describe("formal execution schedule", () => {
 
   it("inventories the kernel library modules as libraries and keeps them pure", () => {
     const { libraries } = scheduled();
-    expect(libraries.filter(path => path.startsWith("formal/kernel/")).length).toBeGreaterThanOrEqual(8);
+    expect(libraries.filter(path => path.startsWith("formal/models/kernel/")).length).toBeGreaterThanOrEqual(8);
     expect(validate(manifest()).libraries).toBe(libraries.length);
-    const kernelSource = readFileSync(new URL("../../formal/kernel/clock.qnt", import.meta.url), "utf8");
-    expect(() => validate(manifest(), { readSource: (path: string) => path === "formal/kernel/clock.qnt" ? kernelSource.replace("type Timed[r]", "var leaked: int\n  type Timed[r]") : readFileSync(new URL(`../../${path}`, import.meta.url), "utf8") }))
-      .toThrow(/formal\/kernel\/clock\.qnt: a stateful Quint source must be a scheduled model/);
+    const kernelSource = readFileSync(new URL("../../formal/models/kernel/clock.qnt", import.meta.url), "utf8");
+    expect(() => validate(manifest(), { readSource: (path: string) => path === "formal/models/kernel/clock.qnt" ? kernelSource.replace("type Timed[r]", "var leaked: int\n  type Timed[r]") : readFileSync(new URL(`../../${path}`, import.meta.url), "utf8") }))
+      .toThrow(/formal\/models\/kernel\/clock\.qnt: a stateful Quint source must be a scheduled model/);
   });
 
   it("validates a composed profile's declared behavior version and bytes-per-state bound", () => {
@@ -179,20 +179,20 @@ describe("formal execution schedule", () => {
       expect(() => validate(bad.m), String(invalid)).toThrow(/maxBytesPerStateRatio must be a finite number of at least 1/);
     }
     const unscheduled = manifest();
-    (unscheduled.models.find(model => model.path === "formal/dialcache-core.qnt")! as typeof unscheduled.models[number] & { differential?: unknown }).differential = { behaviorVersion: 1 };
+    (unscheduled.models.find(model => model.path === "formal/models/dialcache-core.qnt")! as typeof unscheduled.models[number] & { differential?: unknown }).differential = { behaviorVersion: 1 };
     expect(() => validate(unscheduled)).toThrow(/unsupported differential settings/);
   });
 
-  it("refuses a Quint library no scheduled model imports, at formal/ or formal/kernel/", () => {
+  it("refuses a Quint library no scheduled model imports, at formal/ or formal/models/kernel/", () => {
     const stateless = "module orphan { pure def unused(n: int): int = n }";
-    const sources = (path: string) => ["formal/kernel/orphan.qnt", "formal/stray.qnt"].includes(path) ? stateless : readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
+    const sources = (path: string) => ["formal/models/kernel/orphan.qnt", "formal/models/stray.qnt"].includes(path) ? stateless : readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
     // Present in the tree, a library by construction, yet reached by no model: the orphan rule.
-    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/kernel/orphan.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/kernel\/orphan\.qnt/);
+    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/models/kernel/orphan.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/models\/kernel\/orphan\.qnt/);
     // The same rule is the inventory tripwire at formal/: a stateless source the listing would otherwise admit as
     // a library, and that no lane would typecheck, is refused by name rather than hashed into the evidence inputs.
-    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/stray.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/stray\.qnt;/);
-    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/kernel/orphan.qnt", "formal/stray.qnt"].sort() }))
-      .toThrow(/formal\/kernel\/orphan\.qnt, formal\/stray\.qnt/);
+    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/models/stray.qnt"] })).toThrow(/Quint libraries no scheduled model imports: formal\/models\/stray\.qnt;/);
+    expect(() => validate(manifest(), { readSource: sources, files: [...quintSources(), "formal/models/kernel/orphan.qnt", "formal/models/stray.qnt"].sort() }))
+      .toThrow(/formal\/models\/kernel\/orphan\.qnt, formal\/models\/stray\.qnt/);
     // Every library in the tree is reached, so the rule admits the current inventory.
     expect(() => validate(manifest())).not.toThrow();
   });
@@ -262,11 +262,11 @@ describe("formal execution schedule", () => {
     const patching = manifest();
     const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
     effects.reproducer = { ...effects.reproducer!, kind: "exported-regression", run: "patchedBudgetTest", failure: "s.readBudget == 30" };
-    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
+    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/models\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
   });
 
   it("rejects a generated history whose choice leaves the driver domain at generation time", () => {
-    const smoke = readFileSync(root + "formal/local-failure-smoke.itf.json", "utf8");
+    const smoke = readFileSync(root + "formal/generated/local-failure-smoke.itf.json", "utf8");
     expect(() => bindGeneratedTrace("local-failure", smoke, "smoke")).not.toThrow();
     const trace = JSON.parse(smoke) as { states: Array<Record<string, any>> };
     const step = trace.states.find(state => state.input.name === "beginCall")!;
@@ -289,7 +289,7 @@ describe("formal execution schedule", () => {
     missingAnchor.challenges[0]!.before = "this text is not in the model";
     expect(() => validate(missingAnchor)).toThrow(/mutation anchor must match exactly once/);
     const ambiguousAnchor = manifest();
-    const rules = ambiguousAnchor.challenges.find(challenge => challenge.source === "formal/cache-rules.qnt")!;
+    const rules = ambiguousAnchor.challenges.find(challenge => challenge.source === "formal/models/cache-rules.qnt")!;
     rules.before = "pure def";
     expect(() => validate(ambiguousAnchor)).toThrow(/mutation anchor must match exactly once/);
     const unscheduledInvariant = manifest();
@@ -299,7 +299,7 @@ describe("formal execution schedule", () => {
     foreignSource.challenges[0]!.source = "typescript/src/index.ts";
     expect(() => validate(foreignSource)).toThrow(/not a scheduled model or library/);
     const libraryModel = manifest();
-    libraryModel.challenges[0]!.model = "formal/cache-rules.qnt";
+    libraryModel.challenges[0]!.model = "formal/models/cache-rules.qnt";
     expect(() => validate(libraryModel)).toThrow(/challenged model is not scheduled/);
     const noop = manifest();
     noop.challenges[0]!.after = noop.challenges[0]!.before;
@@ -317,7 +317,7 @@ describe("formal execution schedule", () => {
 
   it("requires a challenge for every scheduled model unless the model carries an explicit waiver", () => {
     const uncovered = manifest();
-    const target = uncovered.models.find(model => model.path === "formal/dialcache-core.qnt")!;
+    const target = uncovered.models.find(model => model.path === "formal/models/dialcache-core.qnt")!;
     uncovered.challenges = uncovered.challenges.filter(challenge => challenge.model !== target.path);
     expect(() => validate(uncovered)).toThrow(/dialcache-core\.qnt: scheduled invariants have no model property challenge and no challengeWaiver/);
     target.challengeWaiver = "   ";
@@ -328,7 +328,7 @@ describe("formal execution schedule", () => {
     redundantWaiver.models[0]!.challengeWaiver = "Already challenged.";
     expect(() => validate(redundantWaiver)).toThrow(/challenge waiver must explain an unchallenged model/);
     const legacy = manifest();
-    (legacy.models[2] as Record<string, unknown>).propertyChallenge = "formal/check-model-properties.mjs";
+    (legacy.models[2] as Record<string, unknown>).propertyChallenge = "formal/tools/check-model-properties.mjs";
     expect(() => validate(legacy)).toThrow(/property challenges live in the manifest challenges catalog/);
   });
 
@@ -339,7 +339,7 @@ describe("formal execution schedule", () => {
     for (const challenge of current.challenges) expect(challenge.reproducer, challenge.id).toBeDefined();
     // A shared-rule fault of a verification model can be pinned by a profile's exported regression.
     expect(current.challenges.find(challenge => challenge.id === "stale-recovery-future-candidate")!.reproducer).toMatchObject({
-      model: "formal/dialcache-policy-conformance.qnt", run: "wallRollbackRejectsFutureRemoteFrameTest", profiles: ["formal/dialcache-stale-recovery.qnt", "recovery", "policy", "shadow", "recovery-read", "effects", "dark-layers"],
+      model: "formal/models/dialcache-policy-conformance.qnt", run: "wallRollbackRejectsFutureRemoteFrameTest", profiles: ["formal/models/dialcache-stale-recovery.qnt", "recovery", "policy", "shadow", "recovery-read", "effects", "dark-layers"],
     });
     const unlisted = manifest();
     const dropped = "core-unhealthy-local-read-hits";
@@ -478,7 +478,7 @@ describe("formal execution schedule", () => {
     const catalogText = (mutations: unknown[], schemaVersion = 1) => JSON.stringify({ schemaVersion, mutations });
     const files: Record<string, string> = { "typescript/src/a.ts": "export const alpha = 1;\n", "go/a.go": "package dialcache\n\nvar alpha = 1\n", "typescript/src/twice.ts": "alpha alpha\n" };
     const read = (text: string) => (path: string) => {
-      const found = ({ "formal/mutations.json": text, "formal/semantic-cases.json": cases, ...files })[path];
+      const found = ({ "formal/catalogs/mutations.json": text, "formal/catalogs/semantic-cases.json": cases, ...files })[path];
       if (found === undefined) throw new Error(`no such file ${path}`);
       return found;
     };
@@ -499,8 +499,8 @@ describe("formal execution schedule", () => {
     refuse(catalogText([entry("M01", { typescript: { edits: [{ path: "typescript/test/a.ts", before: "alpha", after: "beta" }] } })]), /M01 edits typescript\/test\/a.ts outside the TypeScript port/);
     refuse(catalogText([entry("M01", { go: { edits: [{ path: "go/a_test.go", before: "alpha", after: "beta" }] } })]), /M01 edits go\/a_test.go outside the Go port/);
     refuse(catalogText([entry("M01", { typescript: { edits: [{ path: "typescript/src/a.ts", before: "alpha", after: "alpha" }] } })]), /M01 has an empty or unchanged edit in typescript\/src\/a.ts/);
-    refuse(catalogText([entry("M01")], 2), /Mutant catalog: expected the versioned catalog formal\/mutations.json/);
-    refuse(catalogText([]), /Mutant catalog: expected the versioned catalog formal\/mutations.json/);
+    refuse(catalogText([entry("M01")], 2), /Mutant catalog: expected the versioned catalog formal\/catalogs\/mutations.json/);
+    refuse(catalogText([]), /Mutant catalog: expected the versioned catalog formal\/catalogs\/mutations.json/);
     // Anchors are checked apart from the schema: edits apply in order, and every anchor must match the current text exactly once.
     const anchors = (mutations: unknown[]) => { const text = catalogText(mutations); return () => checkMutantAnchors(readMutantCatalog(read(text)), read(text)); };
     const sequential = entry("M01", { typescript: { edits: [{ path: "typescript/src/a.ts", before: "alpha", after: "gamma" }, { path: "typescript/src/a.ts", before: "gamma = 1", after: "gamma = 2" }] } });
@@ -537,7 +537,7 @@ describe("formal execution schedule", () => {
     };
     expect(() => validate(exported(r => { (r as Record<string, unknown>).seed = "0x1"; }))).toThrow(/unsupported reproducer field seed/);
     expect(() => validate(exported(r => { r.kind = "sampled"; }))).toThrow(/reproducer kind must be one of exported-regression, model-run/);
-    expect(() => validate(exported(r => { r.run = "inventedTest"; }))).toThrow(/reproducer run is not a scheduled regression of formal\/dialcache-source-budgets-conformance\.qnt: inventedTest/);
+    expect(() => validate(exported(r => { r.run = "inventedTest"; }))).toThrow(/reproducer run is not a scheduled regression of formal\/models\/dialcache-source-budgets-conformance\.qnt: inventedTest/);
     // The declared failure is the condition of one top-level expect in the cited run, compared token by token.
     expect(() => validate(exported(r => { delete (r as Partial<Reproducer>).failure; }))).toThrow(/reproducer failure must state the expect condition the fault breaks/);
     expect(() => validate(exported(r => { r.failure = "s.o.calls == List(CALL_PENDING, DEADLINE_ERROR) and s.o.loaders == 2"; })))
@@ -559,16 +559,16 @@ describe("formal execution schedule", () => {
     expect(() => validate(exported(r => { r.scope = "not model-only"; }))).toThrow(/scope belongs only to a model-run reproducer/);
     // Another profile model's exported run may be cited only for a fault in a shared library: a fault in a
     // model's own file may not name one, whatever its reproducer kind.
-    const budgetsRun = { model: "formal/dialcache-source-budgets-conformance.qnt", run: "defaultSourceBudgetExpiresAtSixtySecondsTest", failure: "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2" };
+    const budgetsRun = { model: "formal/models/dialcache-source-budgets-conformance.qnt", run: "defaultSourceBudgetExpiresAtSixtySecondsTest", failure: "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2" };
     expect(() => validate(modelRun(r => { Object.assign(r, budgetsRun); })))
-      .toThrow(/reproducer model must name another profile model or vector model reached by a shared-library fault.*: formal\/dialcache-source-budgets-conformance\.qnt/);
-    expect(() => validate(shared(r => { r.model = "formal/dialcache-stale-recovery.qnt"; }))).toThrow(/reproducer model must name another profile model/);
-    expect(() => validate(shared(r => { r.model = "formal/dialcache-core.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/dialcache-core\.qnt/);
-    expect(() => validate(shared(r => { r.model = "formal/invented.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/invented\.qnt/);
+      .toThrow(/reproducer model must name another profile model or vector model reached by a shared-library fault.*: formal\/models\/dialcache-source-budgets-conformance\.qnt/);
+    expect(() => validate(shared(r => { r.model = "formal/models/dialcache-stale-recovery.qnt"; }))).toThrow(/reproducer model must name another profile model/);
+    expect(() => validate(shared(r => { r.model = "formal/models/dialcache-core.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/models\/dialcache-core\.qnt/);
+    expect(() => validate(shared(r => { r.model = "formal/models/invented.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/models\/invented\.qnt/);
     expect(() => validate(shared(r => { r.kind = "model-run"; r.scope = "Pretend it is model-only."; }))).toThrow(/reproducer model must name another profile model/);
     expect(() => validate(shared(r => { r.run = "localHitDoesNotRenewInsertionTtlTest"; }))).toThrow(/has no top-level expect whose condition is the declared failure/);
-    expect(() => validate(shared(r => { r.profiles = ["formal/dialcache-stale-recovery.qnt", "recovery", "shadow"]; r.exclusions.policy = "excluded anyway"; })))
-      .toThrow(/must name known profiles and include formal\/dialcache-stale-recovery\.qnt and policy/);
+    expect(() => validate(shared(r => { r.profiles = ["formal/models/dialcache-stale-recovery.qnt", "recovery", "shadow"]; r.exclusions.policy = "excluded anyway"; })))
+      .toThrow(/must name known profiles and include formal\/models\/dialcache-stale-recovery\.qnt and policy/);
     // Non-importers need no catalog entry; importing exclusions cannot disappear.
     expect(validate(shared(r => { delete r.exclusions.core; })).reproducers).toBe(liveReproducers());
     expect(() => validate(shared(r => { delete r.exclusions.core; r.profiles.push("core"); }))).toThrow(/listed profile does not import/);
@@ -580,7 +580,7 @@ describe("formal execution schedule", () => {
     const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
     const budget = "s.readBudget == 30";
     effects.reproducer = { ...effects.reproducer!, kind: "exported-regression", run: "patchedBudgetTest", failure: budget };
-    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
+    expect(() => validate(patching, { readSource: withPatchingRun })).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/models\/dialcache-effects-conformance\.qnt: patchedBudgetTest/);
     effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "patchedBudgetTest", failure: budget, scope: "Patches the read budget directly." };
     // Supplying a deterministic model run must not downgrade a mapped native
     // fault to an unreproduced boundary while leaving both backlogs unchanged.
@@ -589,16 +589,16 @@ describe("formal execution schedule", () => {
     effects.reproducer = { ...effects.reproducer!, kind: "model-run", run: "lateSourceResultIsADeadlineErrorTest", failure: manifest().challenges.find(challenge => challenge.id === "effects-late-source-accepted")!.reproducer!.failure, scope: "Not a model-only run." };
     expect(() => validate(patching)).toThrow(/lateSourceResultIsADeadlineErrorTest is exported; cite it as an exported-regression reproducer/);
     expect(() => validate(modelRun(r => { delete r.scope; }))).toThrow(/model-run reproducer needs a scope/);
-    expect(() => validate(modelRun(r => { r.profiles = ["recovery"]; }))).toThrow(/must name known profiles and include formal\/dialcache-envelope-vectors\.qnt/);
+    expect(() => validate(modelRun(r => { r.profiles = ["recovery"]; }))).toThrow(/must name known profiles and include formal\/models\/dialcache-envelope-vectors\.qnt/);
     const exportedAsModelRun = exported(() => {});
     const budgets = exportedAsModelRun.challenges.find(challenge => challenge.id === "source-budgets-accepts-at-deadline-equality")!;
     budgets.reproducer = { ...budgets.reproducer!, kind: "model-run", scope: "Pretend it is model-only." };
     expect(() => validate(exportedAsModelRun)).toThrow(/defaultSourceBudgetExpiresAtSixtySecondsTest is exported; cite it as an exported-regression reproducer/);
     const verification = manifest();
     const core = verification.challenges.find(challenge => challenge.id === "core-unhealthy-local-read-hits")!;
-    core.reproducer = { kind: "exported-regression", run: "localReadFailureContinuesToRemoteTest", family: "unhealthy-read-served", profiles: ["formal/dialcache-core.qnt"], exclusions: {},
+    core.reproducer = { kind: "exported-regression", run: "localReadFailureContinuesToRemoteTest", family: "unhealthy-read-served", profiles: ["formal/models/dialcache-core.qnt"], exclusions: {},
       failure: "s.origin == RemoteValue and s.localReads == 1 and s.remoteReads == 1 and s.sourceCalls == 0 and s.localWrites == 0" };
-    expect(() => validate(verification)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-core\.qnt/);
+    expect(() => validate(verification)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/models\/dialcache-core\.qnt/);
   }, 60_000);
 
   it("retains vector boundaries and native-free model reproducers", () => {
@@ -697,8 +697,8 @@ describe("formal execution schedule", () => {
   });
 
   it("rejects semantic evidence that names an existing but unscheduled helper", () => {
-    const catalog = JSON.parse(readFileSync(new URL("../../formal/semantic-cases.json", import.meta.url), "utf8"));
-    catalog.cases[0].models = ["formal/dialcache-core.qnt:callScopeLive"];
+    const catalog = JSON.parse(readFileSync(new URL("../../formal/catalogs/semantic-cases.json", import.meta.url), "utf8"));
+    catalog.cases[0].models = ["formal/models/dialcache-core.qnt:callScopeLive"];
     expect(() => checkSemanticCoverage(catalog)).toThrow(/not scheduled for execution/);
   });
 
@@ -806,9 +806,9 @@ describe("native boundary evidence", () => {
     expect(entries.get("effects-fenced-source-publishes")).toMatchObject({ fields: ["calls", "dumps", "writes"] });
     expect(entries.get("local-clock-precise-ttl")).toMatchObject({ fields: ["calls", "loaders"] });
     expect(entries.get("effects-wrong-acceptance-receipt")).toMatchObject({ step: 7, fields: ["events"], origin: "written" });
-    const effectsSource = readFileSync(root + "formal/dialcache-effects-conformance.qnt", "utf8");
+    const effectsSource = readFileSync(root + "formal/models/dialcache-effects-conformance.qnt", "utf8");
     expect(checkpointStep("tenMillisecondFixture", scanDeclarationBodies(effectsSource))).toBe(0);
-    const budgetsSource = readFileSync(root + "formal/dialcache-source-budgets-conformance.qnt", "utf8");
+    const budgetsSource = readFileSync(root + "formal/models/dialcache-source-budgets-conformance.qnt", "utf8");
     const repeated = reproducerCheckpoint(budgetsSource, "localEntryExpiresAfterItsTtlTest",
       "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.o.loaders == 2");
     expect(checkpointStep(repeated.before, scanDeclarationBodies(budgetsSource))).toBe(30);
@@ -918,7 +918,7 @@ describe("native boundary evidence", () => {
       parseItfTrace(raw: unknown, path: string): { states: Array<{ state: unknown }> };
       expectedCoreObservation(state: unknown): Record<string, unknown>;
     };
-    const registry = JSON.parse(readFileSync(root + "formal/profiles.json", "utf8")) as { profiles: Array<{ id: string; smoke: string }> };
+    const registry = JSON.parse(readFileSync(root + "formal/catalogs/profiles.json", "utf8")) as { profiles: Array<{ id: string; smoke: string }> };
     for (const entry of boundaryEvidence().filter(item => item.history !== undefined)) {
       if (entry.vector) {
         for (const sample of Object.values(entry.vector.samples)) for (const field of entry.fields!) {

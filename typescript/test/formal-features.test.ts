@@ -60,14 +60,14 @@ const directory = process.env.DIALCACHE_FEATURE_TRACE_DIR;
 const selectedProfile = process.env.DIALCACHE_FEATURE_PROFILE;
 if (selectedProfile !== undefined && !Object.hasOwn(profiles, selectedProfile)) throw new Error(`Unknown selected feature profile: ${selectedProfile}`);
 // The exported regressions are each profile model's public-only runs, read from its Quint text.
-const { scheduleExecution } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+const { scheduleExecution } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
   scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
 };
 const execution = scheduleExecution();
 for (const [name, profile] of Object.entries(profiles)) {
   if (selectedProfile !== undefined && selectedProfile !== name) continue;
   const paths = single !== undefined ? (single.includes(`/${name}/`) || single.endsWith(`${name}-smoke.itf.json`) ? [resolve(single)] : [])
-    : directory === undefined ? [fileURLToPath(new URL(`../../formal/${name}-smoke.itf.json`, import.meta.url))]
+    : directory === undefined ? [fileURLToPath(new URL(`../../formal/generated/${name}-smoke.itf.json`, import.meta.url))]
     : readdirSync(resolve(directory, name)).filter((file) => file.endsWith(".itf.json")).sort().map((file) => resolve(directory, name, file));
   if (directory !== undefined && single === undefined) {
     const regressions = execution.models.find(model => model.profile === name)?.replayRegressions ?? [];
@@ -78,7 +78,7 @@ for (const [name, profile] of Object.entries(profiles)) {
   // Each history is read and parsed once. The completion gate runs the shared
   // language-neutral evaluator over that corpus here, so only the steps the
   // replays need stay in memory for the rest of the file. `node
-  // formal/witnesses.mjs evaluate` is the sole producer of the reusable
+  // formal/tools/witnesses.mjs evaluate` is the sole producer of the reusable
   // evidence files; the gate only checks reachability.
   const corpus = loadCorpus(name, paths);
   const missing = directory !== undefined && single === undefined ? checkCorpus(name, corpus).missing : undefined;
@@ -127,7 +127,7 @@ for (const [name, profile] of Object.entries(profiles)) {
         await expect(replay(profile, trace)).rejects.toThrow(/step 1 action.*\nexpected:.*\nactual:/s);
       });
       it("fails a driver that skips settlement by settlement violation, never by mismatch", async () => {
-        const path = fileURLToPath(new URL(`../../formal/${name}-smoke.itf.json`, import.meta.url));
+        const path = fileURLToPath(new URL(`../../formal/generated/${name}-smoke.itf.json`, import.meta.url));
         const trace = parseTrace(JSON.parse(readFileSync(path, "utf8")), path, profile);
         const error = await replay(profile, trace, { settle: false }).then(() => "passed", (cause: unknown) => String(cause));
         expect(error).toMatch(/Settlement violation: \d+ runnable task\(s\) at observation/);

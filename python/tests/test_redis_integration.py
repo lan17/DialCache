@@ -26,8 +26,11 @@ from dialcache.redis import (
 pytestmark = pytest.mark.integration
 ROOT = Path(__file__).resolve().parents[2]
 INVALIDATION_CORPORA = [
-    json.loads((ROOT / "formal" / name).read_text())
-    for name in ["invalidation-vectors.json", "quint-invalidation-vectors.json"]
+    json.loads((ROOT / path).read_text())
+    for path in [
+        "formal/catalogs/invalidation-vectors.json",
+        "formal/generated/quint-invalidation-vectors.json",
+    ]
 ]
 INVALIDATIONS = [
     pytest.param(vector, id=vector["name"]) for corpus in INVALIDATION_CORPORA for vector in corpus["vectors"]

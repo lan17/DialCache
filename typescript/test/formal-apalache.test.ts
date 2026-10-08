@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-const { prepareApalache } = await import(new URL("../../formal/apalache.mjs", import.meta.url).href) as {
+const { prepareApalache } = await import(new URL("../../formal/tools/apalache.mjs", import.meta.url).href) as {
   prepareApalache(specification: unknown, options: { output: string; archivePath: string }): Promise<{
     launcher: string; jar: string; quintHome: string; archive: { path: string; sha256: string }; cleanup(): void;
   }>;

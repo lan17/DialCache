@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 
 type Buffered = { status: number | null; signal: string | null; error?: Error & { code?: string }; stdout: string; stderr: string; durationMs: number };
 const { resolveConcurrency, runPool, spawnBuffered, formatGroup, executionChains, executionPlan, generationArguments, CommandFailure } = {
-  ...await import(new URL("../../formal/quint-pool.mjs", import.meta.url).href),
-  ...await import(new URL("../../formal/run-models.mjs", import.meta.url).href),
+  ...await import(new URL("../../formal/tools/quint-pool.mjs", import.meta.url).href),
+  ...await import(new URL("../../formal/tools/run-models.mjs", import.meta.url).href),
 } as {
   resolveConcurrency(env: Record<string, string | undefined>, available?: number, memory?: number): number;
   runPool<T>(tasks: Array<() => Promise<T> | T>, options?: { concurrency?: number }): Promise<T[]>;
@@ -148,23 +148,23 @@ describe("Quint process pool", () => {
   });
 
   it("builds the generation lane's command once, for the lane and for the corpus differential", () => {
-    const manifest = JSON.parse(readFileSync(new URL("../../formal/execution.json", import.meta.url), "utf8")) as {
+    const manifest = JSON.parse(readFileSync(new URL("../../formal/catalogs/execution.json", import.meta.url), "utf8")) as {
       settings: { backend: string; threads: number; verbosity: number; seed: string };
       models: Array<{ path: string; invariants: string[]; generate?: { maxSamples: number; maxSteps: number; traces: number; outputDirectory: string } }>;
     };
-    const layers = manifest.models.find(model => model.path === "formal/dialcache-layers-conformance.qnt")!;
+    const layers = manifest.models.find(model => model.path === "formal/models/dialcache-layers-conformance.qnt")!;
     // An explicit seed: executionPlan otherwise follows QUINT_SEED from the environment.
     const planned = executionPlan("generate", manifest, manifest.settings.seed).find(job => job.command === "quint" && job.args[1] === layers.path && job.args.includes("--mbt"))!;
     const options = { settings: manifest.settings, seed: manifest.settings.seed, outputDirectory: layers.generate!.outputDirectory };
     expect(generationArguments(layers.path, layers.generate!, layers.invariants, options)).toEqual(planned.args);
     // The lane's command, literally, so a change to it is a deliberate one.
-    expect(planned.args).toEqual(["run", "formal/dialcache-layers-conformance.qnt", "--mbt", "--backend=rust", "--n-threads=1", "--seed=0xd1a1ca",
+    expect(planned.args).toEqual(["run", "formal/models/dialcache-layers-conformance.qnt", "--mbt", "--backend=rust", "--n-threads=1", "--seed=0xd1a1ca",
       "--max-samples=2048", "--max-steps=80", "--n-traces=512", "--out-itf=.formal-traces/features/layers/trace_{seq}.itf.json", "--verbosity=1", "--invariants",
       "sourceEffectsMatch", "capacityIsPerInstance", "closedScopesHaveNoMemo", "registeredSourcesArePending", "zeroCapacityHasNoLocalValues", "callsKeepSourceOutcome",
       "localMembershipMatchesLru", "absentRemoteHasNoAdapterEffects", "sourceOwnershipNeverCrossesKeyOrInstance", "atomicPathSeedsDecodableFrames"]);
-    const pilot = generationArguments("/differential/layers/candidate/formal/dialcache-layers-conformance.qnt", layers.generate!, ["a", "b"], { ...options, outputDirectory: "/scratch" });
+    const pilot = generationArguments("/differential/layers/candidate/formal/models/dialcache-layers-conformance.qnt", layers.generate!, ["a", "b"], { ...options, outputDirectory: "/scratch" });
     const shared = planned.args.slice(0, planned.args.indexOf("--invariants") + 1)
-      .map(arg => arg === layers.path ? "/differential/layers/candidate/formal/dialcache-layers-conformance.qnt" : arg.startsWith("--out-itf=") ? "--out-itf=/scratch/trace_{seq}.itf.json" : arg);
+      .map(arg => arg === layers.path ? "/differential/layers/candidate/formal/models/dialcache-layers-conformance.qnt" : arg.startsWith("--out-itf=") ? "--out-itf=/scratch/trace_{seq}.itf.json" : arg);
     expect(pilot).toEqual([...shared, "a", "b"]);
   });
 
@@ -173,7 +173,7 @@ describe("Quint process pool", () => {
       const plan = executionPlan(mode);
       const chains = executionChains(plan);
       const chained = chains.flat();
-      const challengeRuns = plan.filter(job => job.command === "node" && job.args[0] === "formal/check-model-properties.mjs");
+      const challengeRuns = plan.filter(job => job.command === "node" && job.args[0] === "formal/tools/check-model-properties.mjs");
       expect(challengeRuns).toEqual([]);
       expect(chained.length).toBe(plan.length);
       expect(new Set(chained).size).toBe(chained.length);
@@ -187,12 +187,12 @@ describe("Quint process pool", () => {
 
   it("chains a model's jobs in plan order and isolates node exports", () => {
     const plan = [
-      { command: "quint", args: ["typecheck", "formal/a.qnt"] },
-      { command: "quint", args: ["run", "formal/a.qnt", "--seed=1"] },
-      { command: "quint", args: ["test", "formal/a.qnt"] },
-      { command: "quint", args: ["typecheck", "formal/b.qnt"] },
-      { command: "node", args: ["formal/generate-key-vectors.mjs", "--check"] },
-      { command: "quint", args: ["run", "formal/b.qnt", "--mbt"] },
+      { command: "quint", args: ["typecheck", "formal/models/a.qnt"] },
+      { command: "quint", args: ["run", "formal/models/a.qnt", "--seed=1"] },
+      { command: "quint", args: ["test", "formal/models/a.qnt"] },
+      { command: "quint", args: ["typecheck", "formal/models/b.qnt"] },
+      { command: "node", args: ["formal/tools/generate-key-vectors.mjs", "--check"] },
+      { command: "quint", args: ["run", "formal/models/b.qnt", "--mbt"] },
     ];
     expect(executionChains(plan)).toEqual([
       [plan[0], plan[1], plan[2]],

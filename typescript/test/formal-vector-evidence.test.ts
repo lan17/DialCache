@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { assessVectorBoundary, resolveVectorEvidence, validVectorResult } from "../../formal/vector-evidence.mjs";
+import { assessVectorBoundary, resolveVectorEvidence, validVectorResult } from "../../formal/tools/vector-evidence.mjs";
 
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
-const manifest = JSON.parse(read("formal/execution.json"));
+const manifest = JSON.parse(read("formal/catalogs/execution.json"));
 const challenge = manifest.challenges.find((entry: { id: string }) => entry.id === "envelope-strips-unknown-zero-prefix");
 const model = manifest.models.find((entry: { path: string }) => entry.path === challenge.model);
 const written = challenge.nativeMutants.evidence.vector;
@@ -21,7 +21,7 @@ function recording(port: "typescript" | "go" = "typescript", changed = false) {
 describe("exact generated vector evidence", () => {
   it("selects one owned row per binding and sends no expectations to the worker", () => {
     expect(vector.samples.typescript.request).toEqual({ operation: "envelope", input: { inputHex: "0003" } });
-    expect(() => resolveVectorEvidence({ ...written, artifact: "formal/protocol-vectors.json" }, model, read)).toThrow();
+    expect(() => resolveVectorEvidence({ ...written, artifact: "formal/catalogs/protocol-vectors.json" }, model, read)).toThrow();
     expect(() => resolveVectorEvidence({ ...written, rows: { ...written.rows, go: "missing" } }, model, read)).toThrow(/exactly one/);
     expect(() => resolveVectorEvidence(written, model, path => {
       const corpus = JSON.parse(read(path)); corpus.envelopeVectors.push(corpus.envelopeVectors.find((row: { name: string }) => row.name === written.rows.go));
@@ -50,7 +50,7 @@ describe("exact generated vector evidence", () => {
     expect(assessVectorBoundary(evidence, wrong).state).toBe("unreached");
   });
   it("requires a clean baseline with the same port and vector declaration", async () => {
-    const url = new URL("../../formal/mutation-reports.mjs", import.meta.url).href;
+    const url = new URL("../../formal/tools/mutation-reports.mjs", import.meta.url).href;
     const { boundaryReview } = await import(url) as { boundaryReview(report: unknown, evidence: unknown[], options: unknown): Array<{state: string}> };
     const report: { configurationSha256?: object; go?: string; boundaryBaselines: Record<string, ReturnType<typeof recording>>;
       mutations: Array<{id: string; boundary: unknown[]}> } = { configurationSha256: {}, boundaryBaselines: { [evidence.history]: recording() }, mutations: [
@@ -84,7 +84,7 @@ describe("exact generated vector evidence", () => {
     }
   });
   it("permits another model's vector reproducer only for a shared rule", async () => {
-    const url = new URL("../../formal/execution.mjs", import.meta.url).href;
+    const url = new URL("../../formal/tools/execution.mjs", import.meta.url).href;
     const { validateExecution } = await import(url) as { validateExecution(value: unknown): unknown };
     const changed = structuredClone(manifest);
     const originalFrame = changed.challenges.find((entry: { id: string }) => entry.id === "frame-vectors-inclusive-fence");
@@ -97,7 +97,7 @@ describe("exact generated vector evidence", () => {
     // challenge runner must still measure the primary property and both
     // before/through probes against the shared edit.
     Object.assign(frame, { source: rule.source, before: rule.before, after: rule.after,
-      model: "formal/dialcache-redis-protocol.qnt", invariant: "trackedZeroTimestampIsNotHit", measures: "Fixture for shared vector citation validation." });
+      model: "formal/models/dialcache-redis-protocol.qnt", invariant: "trackedZeroTimestampIsNotHit", measures: "Fixture for shared vector citation validation." });
     Object.assign(frame.reproducer, { model: cited, profiles: [frame.model, cited],
       exclusions: Object.fromEntries(changed.models.filter((item: { profile?: string }) => item.profile)
         .map((item: { profile: string }) => [item.profile, "Schema fixture; runtime partition measurement is a separate mandatory check."])) });

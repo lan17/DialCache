@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const { checkSymbolicModels, startSymbolicServer, symbolicPlan, validateSymbolicResult } = await import(
-  new URL("../../formal/check-symbolic-models.mjs", import.meta.url).href,
+  new URL("../../formal/tools/check-symbolic-models.mjs", import.meta.url).href,
 ) as {
   symbolicPlan(manifest?: unknown): Array<{ model: string; args: string[]; maxSteps: number; timeoutMs: number }>;
   validateSymbolicResult(result: unknown, exitCode: number): void;
@@ -59,7 +59,7 @@ describe("symbolic verification evidence", () => {
 
   it("takes properties and bounds from the execution inventory and pins the symbolic backend", () => {
     const plan = symbolicPlan();
-    const rule = plan.find(job => job.model === "formal/dialcache-rule-checks.qnt")!;
+    const rule = plan.find(job => job.model === "formal/models/dialcache-rule-checks.qnt")!;
     expect(rule).toBeDefined();
     expect(rule.maxSteps).toBe(1);
     expect(rule.timeoutMs).toBeGreaterThan(0);
@@ -74,11 +74,11 @@ describe("symbolic verification evidence", () => {
     const directory = mkdtempSync(join(tmpdir(), "dialcache-symbolic-preflight-"));
     const report = join(directory, ".formal-traces/symbolic/report.json");
     try {
-      mkdirSync(join(directory, "formal"));
+      mkdirSync(join(directory, "formal/catalogs"), { recursive: true });
       mkdirSync(join(directory, ".formal-traces/symbolic"), { recursive: true });
       for (const manifest of ["{broken", JSON.stringify({ schemaVersion: 0 })]) {
         writeFileSync(report, JSON.stringify({ complete: true, checks: [{ status: "passed" }] }));
-        writeFileSync(join(directory, "formal/execution.json"), manifest);
+        writeFileSync(join(directory, "formal/catalogs/execution.json"), manifest);
         await expect(checkSymbolicModels({ directory })).rejects.toThrow();
         expect(JSON.parse(readFileSync(report, "utf8"))).toMatchObject({ complete: false, checks: [] });
         expect(JSON.parse(readFileSync(report, "utf8")).error).toBeTruthy();

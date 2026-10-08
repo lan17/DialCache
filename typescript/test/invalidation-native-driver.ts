@@ -1,6 +1,6 @@
 import { createClient } from "redis";
 import { INVALIDATE_CACHE_SCRIPT } from "../src/redis-protocol.js";
-import type { InvalidationVectorState } from "../../formal/generate-invalidation-vectors.mjs";
+import type { InvalidationVectorState } from "../../formal/tools/generate-invalidation-vectors.mjs";
 
 export type InvalidationInput = { existing: InvalidationVectorState; futureBufferMs: string; invalidatedAtMs: string };
 export type InvalidationActual = { outcome: "success" | "rejected"; kind: "absent" | "string" | "list"; content: string | string[]; ttlMs: number; elapsedMs: number };

@@ -1,7 +1,7 @@
 //! Text payload conversion.
 //!
 //! Text frame payloads and decompressed `0x01` envelopes may hold any bytes.
-//! `formal/PROTOCOL.md` ("Text payload domain") fixes how they become text:
+//! `formal/guides/PROTOCOL.md` ("Text payload domain") fixes how they become text:
 //! the WHATWG UTF-8 decoder with replacement error handling and without BOM
 //! removal, so every maximal ill-formed subpart becomes exactly one U+FFFD.
 
@@ -24,7 +24,7 @@ mod tests {
 
     #[test]
     fn protocol_replacement_table() {
-        // The representative outcomes fixed by formal/PROTOCOL.md.
+        // The representative outcomes fixed by formal/guides/PROTOCOL.md.
         assert_eq!(decoded(&[0x22, 0xFF, 0x22]), "\"\u{FFFD}\"");
         assert_eq!(decoded(&[0xE2, 0x82]), "\u{FFFD}");
         assert_eq!(decoded(&[0xE2, 0x82, 0x41]), "\u{FFFD}A");

@@ -7,9 +7,9 @@ use super::driver::{empty_observation, Driver};
 use super::inventory::repo_path;
 use super::json::{json_equal, strict_parse};
 
-/// Load and validate `formal/behavioral-scenarios.json`.
+/// Load and validate `formal/catalogs/behavioral-scenarios.json`.
 pub fn load_scenarios() -> Result<Vec<Value>, String> {
-    let text = std::fs::read_to_string(repo_path("formal/behavioral-scenarios.json"))
+    let text = std::fs::read_to_string(repo_path("formal/catalogs/behavioral-scenarios.json"))
         .map_err(|e| e.to_string())?;
     let corpus = strict_parse(&text)?;
     if corpus.get("schemaVersion").and_then(Value::as_i64) != Some(2) {

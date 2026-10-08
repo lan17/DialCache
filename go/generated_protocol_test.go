@@ -13,7 +13,7 @@ import (
 // committed Quint expectations. It does not compute any expected wire result.
 func generatedProtocolGroups(t *testing.T) map[string][]json.RawMessage {
 	t.Helper()
-	raw, err := os.ReadFile("../formal/execution.json")
+	raw, err := os.ReadFile("../formal/catalogs/execution.json")
 	if err != nil {
 		t.Fatal(err)
 	}

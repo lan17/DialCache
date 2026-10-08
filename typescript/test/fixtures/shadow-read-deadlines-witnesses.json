@@ -3,8 +3,8 @@
     "regression": "c0ReadDeadlineKeepsRawCapacityTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/c0ReadDeadlineKeepsRawCapacityTest"
+        "model": "formal/models/dialcache-shadow-read-deadlines-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/c0ReadDeadlineKeepsRawCapacityTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -23,8 +23,8 @@
     "regression": "c1ReadDeadlineKeepsRawCapacityTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/c1ReadDeadlineKeepsRawCapacityTest"
+        "model": "formal/models/dialcache-shadow-read-deadlines-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/c1ReadDeadlineKeepsRawCapacityTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -46,8 +46,8 @@
     "regression": "jobDeadlineThenReadDeadlineReportsOneVerdictTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/jobDeadlineThenReadDeadlineReportsOneVerdictTest"
+        "model": "formal/models/dialcache-shadow-read-deadlines-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/jobDeadlineThenReadDeadlineReportsOneVerdictTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -67,8 +67,8 @@
     "regression": "confirmationKeepsCapturedReadBudgetTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/confirmationKeepsCapturedReadBudgetTest"
+        "model": "formal/models/dialcache-shadow-read-deadlines-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/confirmationKeepsCapturedReadBudgetTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -88,8 +88,8 @@
     "regression": "confirmationReadBudgetStartsAtItsOwnDispatchTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/confirmationReadBudgetStartsAtItsOwnDispatchTest"
+        "model": "formal/models/dialcache-shadow-read-deadlines-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/confirmationReadBudgetStartsAtItsOwnDispatchTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},
@@ -108,8 +108,8 @@
     "regression": "readBeforeDeadlineCanFillAndCancelsItsTimerTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-shadow-read-deadlines-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/readBeforeDeadlineCanFillAndCancelsItsTimerTest"
+        "model": "formal/models/dialcache-shadow-read-deadlines-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/shadow-read-deadlines-witnesses.json/readBeforeDeadlineCanFillAndCancelsItsTimerTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]},"io":{"aborted":[],"budgets":[],"sourceErrors":[]}}},

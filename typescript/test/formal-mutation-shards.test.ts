@@ -1,4 +1,4 @@
-import type { VectorEvidence } from "../../formal/vector-evidence.mjs";
+import type { VectorEvidence } from "../../formal/tools/vector-evidence.mjs";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,7 +17,7 @@ type Language = { name: string; output: string; catalog: string; inputs: string[
 type Fingerprint = { files: number; sha256: string };
 type Context = { catalog: Catalog; catalogSha256: string; inputs?: Fingerprint | undefined };
 
-const shared = await import(new URL("../../formal/mutation-reports.mjs", import.meta.url).href) as {
+const shared = await import(new URL("../../formal/tools/mutation-reports.mjs", import.meta.url).href) as {
   parseShard(value?: string): Shard;
   parseOnly(value?: string): string[] | undefined;
   selectionFromArguments(argv: string[]): Selection;
@@ -35,13 +35,13 @@ const shared = await import(new URL("../../formal/mutation-reports.mjs", import.
   gateDetections(language: Language, report: Report, entries: CatalogEntry[], options?: { directory?: string; summarize?: boolean }): void;
   languages: { ts: Language; go: Language; rust: Language & { exclude: string[] } };
 };
-const merge = await import(new URL("../../formal/merge-mutation-reports.mjs", import.meta.url).href) as {
+const merge = await import(new URL("../../formal/tools/merge-mutation-reports.mjs", import.meta.url).href) as {
   canonical(value: unknown): string;
   mergeShardReports(language: Language, shards: Report[], context: Context): Report;
   readShardReports(directory: string): Report[];
   mergeMutationReports(name: string, options?: { directory?: string; shardsDirectory?: string; outputDirectory?: string }): Report;
 };
-const { boundaryEvidence, challengesByMutant } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+const { boundaryEvidence, challengesByMutant } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
   boundaryEvidence(): Boundary[];
   challengesByMutant(manifest: { challenges: Array<{ id: string; nativeMutants?: { mutant?: string } }> }): Map<string, string[]>;
 };
@@ -52,7 +52,7 @@ const repo = new URL("../../", import.meta.url);
 const readRepo = (path: string) => readFileSync(new URL(path, repo));
 const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 type UnifiedEntry = { id: string; case: string; description: string; typescript: { requiredDetections: string[] }; go: { requiredDetections: string[] } };
-const unified = JSON.parse(readRepo("formal/mutations.json").toString()) as { mutations: UnifiedEntry[] };
+const unified = JSON.parse(readRepo("formal/catalogs/mutations.json").toString()) as { mutations: UnifiedEntry[] };
 // One catalog, two port views: each measurer applies and gates its own section.
 const portView = (port: "typescript" | "go"): Catalog => ({ mutations: unified.mutations.map(mutation => ({ id: mutation.id, case: mutation.case, description: mutation.description, requiredDetections: mutation[port].requiredDetections })) });
 const goCatalog = portView("go");
@@ -62,12 +62,12 @@ const ids = goCatalog.mutations.map(mutation => mutation.id);
 // hold as the catalogs grow. A TypeScript mutant counts as a protocol mutant
 // when its case carries vectors, whatever cohort detects it: W03.cohort-assignment
 // (the serving ramp) is a vector case although its mutant is detected behaviorally.
-const semanticCases = (JSON.parse(readRepo("formal/semantic-cases.json").toString()) as { cases: Array<{ id: string; vectors: unknown[] }> }).cases;
+const semanticCases = (JSON.parse(readRepo("formal/catalogs/semantic-cases.json").toString()) as { cases: Array<{ id: string; vectors: unknown[] }> }).cases;
 const protocolIds = tsCatalog.mutations.filter(mutation => semanticCases.find(entry => entry.id === mutation.case)!.vectors.length > 0).map(mutation => mutation.id);
 const whole = { index: 1, count: 1 };
 const slices = (count: number) => Array.from({ length: count }, (_, position) => partitionMutations(ids, { index: position + 1, count }));
 // The Challenges column names the model challenges each mutant is the native twin of.
-const challengesOf = (id: string) => (challengesByMutant(JSON.parse(readRepo("formal/execution.json").toString())).get(id) ?? []).join(", ") || "none";
+const challengesOf = (id: string) => (challengesByMutant(JSON.parse(readRepo("formal/catalogs/execution.json").toString())).get(id) ?? []).join(", ") || "none";
 const evidence = boundaryEvidence();
 // Synthetic observations exercise the report merger; these are harness fixtures,
 // never native measurement evidence. Every vector fixture has typed actual output.
@@ -292,7 +292,7 @@ describe("mutation shard partition", () => {
 });
 
 describe("mutation shard merge", () => {
-  const catalogSha256 = sha256(readRepo("formal/mutations.json"));
+  const catalogSha256 = sha256(readRepo("formal/catalogs/mutations.json"));
   const inputs = { files: 367, sha256: "56af679ac31469b1f608e8d13fa7771b762d19ccbb648987438a6d8b8f732b2e" };
   const context = { catalog: goCatalog, catalogSha256, inputs };
   const single = goSingleReport(catalogSha256, inputs);
@@ -451,7 +451,7 @@ describe("mutation shard merge", () => {
     const extraField = shards();
     extraField[1]!.unexpected = true;
     refuse(extraField, /unexpected differs between shards 1 and 2/);
-    refuse(shards(), /catalogSha256 .* was measured, but this checkout's formal\/mutations.json hashes to/, { catalogSha256: sha256("edited catalog") });
+    refuse(shards(), /catalogSha256 .* was measured, but this checkout's formal\/catalogs\/mutations.json hashes to/, { catalogSha256: sha256("edited catalog") });
     refuse(shards(), /inputs fingerprint .* was measured, but this checkout's formal\/go\/typescript\/test\/typescript\/src hash to/, { inputs: { files: 367, sha256: "different" } });
     // Without a checkout fingerprint the shards need only agree with each other.
     expect(merged(shards(), { inputs: undefined }).complete).toBe(true);
@@ -504,9 +504,9 @@ describe("mutation shard merge over a shard directory", () => {
   let directory: string;
   beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), "dialcache-mutation-shards-"));
-    for (const path of ["formal", "typescript/src", "typescript/test", "go", "shards"]) mkdirSync(join(directory, path), { recursive: true });
-    for (const path of ["formal/mutations.json", "formal/semantic-cases.json", "formal/execution.json"]) copyFileSync(new URL(path, repo), join(directory, path));
-    const manifest = JSON.parse(readRepo("formal/execution.json").toString()) as { models: { path: string; vectorExport?: {artifact: string} }[] };
+    for (const path of ["formal/catalogs", "formal/models", "formal/generated", "typescript/src", "typescript/test", "go", "shards"]) mkdirSync(join(directory, path), { recursive: true });
+    for (const path of ["formal/catalogs/mutations.json", "formal/catalogs/semantic-cases.json", "formal/catalogs/execution.json"]) copyFileSync(new URL(path, repo), join(directory, path));
+    const manifest = JSON.parse(readRepo("formal/catalogs/execution.json").toString()) as { models: { path: string; vectorExport?: {artifact: string} }[] };
     for (const model of manifest.models) {
       copyFileSync(new URL(model.path, repo), join(directory, model.path));
       if (model.vectorExport) copyFileSync(new URL(model.vectorExport.artifact, repo), join(directory, model.vectorExport.artifact));
@@ -526,7 +526,7 @@ describe("mutation shard merge over a shard directory", () => {
   const readReport = (path: string) => JSON.parse(readFileSync(join(directory, path), "utf8")) as Report;
 
   it("reads <index>-of-<count>/report.json entries and rejects misplaced or unreadable ones", () => {
-    const catalogSha256 = sha256(readRepo("formal/mutations.json"));
+    const catalogSha256 = sha256(readRepo("formal/catalogs/mutations.json"));
     const reports = goShardReports(goSingleReport(catalogSha256, fingerprintFiles(directory, languages.go.inputs)), 3);
     writeShards(reports);
     writeFileSync(join(directory, "shards/.DS_Store"), "");
@@ -544,7 +544,7 @@ describe("mutation shard merge over a shard directory", () => {
   });
 
   it("writes the complete Go report and markdown where the single run writes them", () => {
-    const catalogSha256 = sha256(readRepo("formal/mutations.json"));
+    const catalogSha256 = sha256(readRepo("formal/catalogs/mutations.json"));
     const single = goSingleReport(catalogSha256, fingerprintFiles(directory, languages.go.inputs));
     writeShards(goShardReports(single, 3), join(directory, ".formal-traces/go-semantic/shards"));
     const report = mergeMutationReports("go", { directory });
@@ -561,7 +561,7 @@ describe("mutation shard merge over a shard directory", () => {
   });
 
   it("writes the complete TypeScript report with the behavioral/protocol split the single run computes", () => {
-    const catalogSha256 = sha256(readRepo("formal/mutations.json"));
+    const catalogSha256 = sha256(readRepo("formal/catalogs/mutations.json"));
     const inputs = fingerprintFiles(directory, languages.ts.inputs);
     writeShards(tsShardReports(catalogSha256, inputs, 3), join(directory, ".formal-traces/semantic/shards"));
     const report = mergeMutationReports("ts", { directory });
@@ -584,7 +584,7 @@ describe("mutation shard merge over a shard directory", () => {
   });
 
   it("leaves an incomplete report naming the refusal and exits nonzero from the command line", async () => {
-    const catalogSha256 = sha256(readRepo("formal/mutations.json"));
+    const catalogSha256 = sha256(readRepo("formal/catalogs/mutations.json"));
     const single = goSingleReport(catalogSha256, fingerprintFiles(directory, languages.go.inputs));
     writeShards(goShardReports(single, 3).slice(0, 2), join(directory, ".formal-traces/go-semantic/shards"));
     mkdirSync(join(directory, ".formal-traces/go-semantic"), { recursive: true });
@@ -606,9 +606,9 @@ describe("mutation shard merge over a shard directory", () => {
     expect(readReport(".formal-traces/go-semantic/report.json")).toMatchObject({ complete: false, error: expect.stringContaining("no shard directory") });
     // The command line rejects a bad language before touching any report directory.
     const { spawnSync } = await import("node:child_process");
-    const usage = spawnSync(process.execPath, [new URL("../../formal/merge-mutation-reports.mjs", import.meta.url).pathname, "zig"], { encoding: "utf8" });
+    const usage = spawnSync(process.execPath, [new URL("../../formal/tools/merge-mutation-reports.mjs", import.meta.url).pathname, "zig"], { encoding: "utf8" });
     expect(usage.status).toBe(2);
-    expect(usage.stderr).toMatch(/Usage: node formal\/merge-mutation-reports.mjs <ts\|go\|rust>/);
+    expect(usage.stderr).toMatch(/Usage: node formal\/tools\/merge-mutation-reports.mjs <ts\|go\|rust>/);
   });
 });
 
@@ -619,7 +619,7 @@ describe("Rust mutation language", () => {
   const put = (path: string, text: string) => { mkdirSync(join(directory, path, ".."), { recursive: true }); writeFileSync(join(directory, path), text); };
 
   it("fingerprints the crate sources and files without the build directory", () => {
-    for (const path of ["formal/rust-mutations.json", "typescript/test/a.test.ts", "typescript/src/a.ts", "go/redis_adapter.go", "rust/Cargo.toml", "rust/Cargo.lock", "rust/src/lib.rs", "rust/tests/conformance.rs"]) put(path, path);
+    for (const path of ["formal/catalogs/rust-mutations.json", "typescript/test/a.test.ts", "typescript/src/a.ts", "go/redis_adapter.go", "rust/Cargo.toml", "rust/Cargo.lock", "rust/src/lib.rs", "rust/tests/conformance.rs"]) put(path, path);
     const clean = fingerprintFiles(directory, languages.rust.inputs, { exclude: languages.rust.exclude });
     put("rust/target/release/deps/libdialcache.rlib", "build output");
     put("rust/target/semantic/report.json", "{}");
@@ -632,9 +632,9 @@ describe("Rust mutation language", () => {
   });
 
   it("merges the separate Rust catalog without claiming shared model-boundary evidence", () => {
-    const catalogBytes = readRepo("formal/rust-mutations.json");
+    const catalogBytes = readRepo("formal/catalogs/rust-mutations.json");
     const catalog = JSON.parse(catalogBytes.toString()) as Catalog;
-    for (const path of languages.rust.inputs) mkdirSync(join(directory, path), { recursive: true });
+    for (const path of [...languages.rust.inputs, "formal/catalogs"]) mkdirSync(join(directory, path), { recursive: true });
     writeFileSync(join(directory, languages.rust.catalog), catalogBytes);
     const catalogSha256 = sha256(catalogBytes);
     const inputs = fingerprintFiles(directory, languages.rust.inputs, { exclude: languages.rust.exclude });

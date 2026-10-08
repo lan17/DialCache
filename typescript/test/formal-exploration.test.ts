@@ -9,7 +9,7 @@ type Entry = { id: string; category: string; profile: string; path?: string };
 type Result = { language: string; status: string; witnessFailures: string[]; caseFailures: string[] };
 type Step = { args?: string[]; env?: Record<string, string>; nativeReport?: string; explorationContext?: string };
 const { explorationSeed, explorationPlan, snapshotSources, nativeExplorationResult, runExplorationSteps, explore, replayExploration } = await import(
-  new URL("../../formal/explore.mjs", import.meta.url).href,
+  new URL("../../formal/tools/explore.mjs", import.meta.url).href,
 ) as {
   explorationSeed(value?: string): string;
   explorationPlan(directory: string, seed: string): Step[];
@@ -19,7 +19,7 @@ const { explorationSeed, explorationPlan, snapshotSources, nativeExplorationResu
   explore(seed: string, options: { directory: string; run?: () => Promise<unknown[]> }): Promise<string>;
   replayExploration(path: string, options: { directory: string }): Promise<string>;
 };
-const { nativeBinding } = await import(new URL("../../formal/conformance-bindings.mjs", import.meta.url).href) as {
+const { nativeBinding } = await import(new URL("../../formal/tools/conformance-bindings.mjs", import.meta.url).href) as {
   nativeBinding(entry: Entry, language: string, directory?: string): string | [string, string];
 };
 const inventory: Entry[] = [
@@ -30,7 +30,7 @@ const packageName = "example.com/exploration";
 const context = (language: string) => ({ kind: "exploration", language, createdAt: 1, inventory,
   specification: {}, implementation: {}, corpus: language === "python" ? Object.fromEntries(inventory.filter(entry => entry.path)
     .map(entry => [entry.path!, createHash("sha256").update("synthetic exploratory history").digest("hex")])) : {} });
-const { selectedProfiles } = await import(new URL("../../formal/witnesses.mjs", import.meta.url).href) as { selectedProfiles(selection: string): string[] };
+const { selectedProfiles } = await import(new URL("../../formal/tools/witnesses.mjs", import.meta.url).href) as { selectedProfiles(selection: string): string[] };
 function tsReport(directory: string, failure?: string) {
   const ancestorTitles = ["generated recovery conformance"];
   const assertionResults = inventory.map(entry => {
@@ -84,7 +84,7 @@ function goReport(failure?: string) {
   return events.map(event => JSON.stringify(event)).join("\n");
 }
 
-// A completed evaluator report for a seed: what formal/witnesses.mjs evaluate
+// A completed evaluator report for a seed: what formal/tools/witnesses.mjs evaluate
 // writes when every scheduled witness profile was evaluated and nothing failed.
 function completedWitnessReport(seed: string, profiles: readonly string[] = selectedProfiles("all")) {
   return { schemaVersion: 1, command: "evaluate", seed, failed: [] as string[], incomplete: [] as string[],
@@ -94,14 +94,14 @@ function completedWitnessReport(seed: string, profiles: readonly string[] = sele
 // The witness inventory a snapshot carries: the manifest's scheduled profiles
 // and the registry that names which of them have required witnesses.
 function writeWitnessInventory(directory: string, profiles: readonly string[]) {
-  mkdirSync(join(directory, "formal"), { recursive: true });
-  writeFileSync(join(directory, "formal/execution.json"), JSON.stringify({ models: profiles.map(profile => ({ profile })) }));
-  writeFileSync(join(directory, "formal/coverage-witnesses.json"), JSON.stringify(Object.fromEntries(profiles.map(profile => [profile, ["required"]]))));
+  mkdirSync(join(directory, "formal/catalogs"), { recursive: true });
+  writeFileSync(join(directory, "formal/catalogs/execution.json"), JSON.stringify({ models: profiles.map(profile => ({ profile })) }));
+  writeFileSync(join(directory, "formal/catalogs/coverage-witnesses.json"), JSON.stringify(Object.fromEntries(profiles.map(profile => [profile, ["required"]]))));
 }
 
 function savedFixture(directory: string, languages: readonly unknown[] = ["typescript", "go", "rust"], results: readonly unknown[] = languages) {
   const saved = join(directory, "saved"), workspace = join(saved, "workspace");
-  mkdirSync(join(workspace, "formal"), { recursive: true });
+  for (const path of ["formal/catalogs", "formal/tools"]) mkdirSync(join(workspace, path), { recursive: true });
   mkdirSync(join(directory, "node_modules"));
   mkdirSync(join(directory, "typescript/node_modules"), { recursive: true });
   mkdirSync(join(workspace, "typescript"));
@@ -112,9 +112,9 @@ function savedFixture(directory: string, languages: readonly unknown[] = ["types
     "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
     // The saved snapshot schedules one witness profile; the current checkout
     // schedules fourteen. A replay is judged against the saved inventory.
-    "formal/execution.json": JSON.stringify({ models: [{ profile: "effects" }] }),
-    "formal/coverage-witnesses.json": JSON.stringify({ effects: ["required"] }),
-    "formal/explore.mjs": `import { writeFileSync } from 'node:fs';
+    "formal/catalogs/execution.json": JSON.stringify({ models: [{ profile: "effects" }] }),
+    "formal/catalogs/coverage-witnesses.json": JSON.stringify({ effects: ["required"] }),
+    "formal/tools/explore.mjs": `import { writeFileSync } from 'node:fs';
       export const explorationPlan = (directory, seed) => ${JSON.stringify(languages)}.map(nativeReport => ({ directory, seed, runner: 'saved', nativeReport }));
       export async function runExplorationSteps(plan, options) {
         writeFileSync(options.directory + '/.formal-traces/saved-runner.json', JSON.stringify(plan));
@@ -122,7 +122,7 @@ function savedFixture(directory: string, languages: readonly unknown[] = ["types
         writeFileSync(options.directory + '/.formal-traces/witness-report.json', ${JSON.stringify(JSON.stringify(completedWitnessReport("0x2a", ["effects"])))});
         return ${JSON.stringify(results)}.map(language => ({ language, status: 'passed' }));
       }`,
-    "formal/validation.mjs": `import { mkdirSync, writeFileSync } from 'node:fs';
+    "formal/tools/validation.mjs": `import { mkdirSync, writeFileSync } from 'node:fs';
       export function checkPrerequisites(target, { directory }) {
         mkdirSync(directory + '/.formal-traces', { recursive: true });
         writeFileSync(directory + '/.formal-traces/saved-prerequisites.txt', target);
@@ -155,50 +155,50 @@ describe("isolated exploratory validation", () => {
     const seeded = plan.filter(step => step.env?.QUINT_SEED);
     expect(seeded).toHaveLength(3);
     expect(seeded.map(step => step.args?.slice(0, 2))).toEqual([
-      ["formal/run-models.mjs", "check"], ["formal/run-models.mjs", "generate"], ["formal/witnesses.mjs", "evaluate"],
+      ["formal/tools/run-models.mjs", "check"], ["formal/tools/run-models.mjs", "generate"], ["formal/tools/witnesses.mjs", "evaluate"],
     ]);
     for (const step of seeded) expect(step.env?.QUINT_SEED).toBe("0x2a");
     // Only the identical pinned fault campaign is omitted. Clean model
     // checks/regressions, lint, fixtures, generation and witnesses remain.
     expect(plan.filter(step => step.args?.[0]?.startsWith("formal/")).map(step => step.args)).toEqual([
-      ["formal/run-models.mjs", "check"],
-      ["formal/lint-profiles.mjs", "baseline", "--check"],
-      ["formal/check-kernel-fixtures.mjs"],
-      ["formal/run-models.mjs", "generate"],
-      ["formal/generated-fixtures.mjs", "--check"],
-      ["formal/witnesses.mjs", "evaluate", "--profile", "all"],
-      ["formal/check-go-parity.mjs"],
-      ["formal/run-python-replay.mjs", "--generated", "--scenarios", "--complete", "--report", ".formal-traces/python-replay.jsonl"],
+      ["formal/tools/run-models.mjs", "check"],
+      ["formal/tools/lint-profiles.mjs", "baseline", "--check"],
+      ["formal/tools/check-kernel-fixtures.mjs"],
+      ["formal/tools/run-models.mjs", "generate"],
+      ["formal/tools/generated-fixtures.mjs", "--check"],
+      ["formal/tools/witnesses.mjs", "evaluate", "--profile", "all"],
+      ["formal/tools/check-go-parity.mjs"],
+      ["formal/tools/run-python-replay.mjs", "--generated", "--scenarios", "--complete", "--report", ".formal-traces/python-replay.jsonl"],
     ]);
     const replays = plan.filter(step => step.nativeReport);
     expect(replays.map(step => step.nativeReport)).toEqual(["typescript", "go", "rust", "python"]);
     for (const step of replays.filter(item => item.nativeReport !== "python")) expect(step.env?.DIALCACHE_FEATURE_TRACE_DIR).toBe(`${directory}/.formal-traces/features`);
     expect(plan.filter(step => step.explorationContext).map(step => step.explorationContext)).toEqual(["typescript", "go", "rust", "python"]);
-    expect(plan.some(step => step.args?.includes("formal/check-go-replay.mjs") || step.args?.includes("formal/check-rust-replay.mjs")
-      || step.args?.includes("formal/check-python-replay.mjs") || step.args?.includes("formal/conformance-adapters.mjs"))).toBe(false);
-    expect(plan.some(step => step.args?.[0] === "formal/conformance.mjs" && step.args[1] === "check")).toBe(false);
+    expect(plan.some(step => step.args?.includes("formal/tools/check-go-replay.mjs") || step.args?.includes("formal/tools/check-rust-replay.mjs")
+      || step.args?.includes("formal/tools/check-python-replay.mjs") || step.args?.includes("formal/tools/conformance-adapters.mjs"))).toBe(false);
+    expect(plan.some(step => step.args?.[0] === "formal/tools/conformance.mjs" && step.args[1] === "check")).toBe(false);
   });
 
   it("copies dirty/new sources, rejects links and cannot overwrite a snapshot target", () => {
     const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-test-"));
     try {
       const destination = join(directory, "snapshot");
-      mkdirSync(join(directory, "formal"));
-      writeFileSync(join(directory, "formal/rule.qnt"), "current rule");
-      const hashes = snapshotSources(directory, destination, ["formal/rule.qnt", "removed.qnt"]);
-      expect(Object.keys(hashes)).toEqual(["formal/rule.qnt"]);
-      expect(hashes["formal/rule.qnt"]).toBe(createHash("sha256").update("current rule").digest("hex"));
-      writeFileSync(join(destination, "formal/rule.qnt"), "exploratory edit");
-      expect(readFileSync(join(directory, "formal/rule.qnt"), "utf8")).toBe("current rule");
-      expect(() => snapshotSources(directory, destination, ["formal/rule.qnt"])).toThrow();
+      mkdirSync(join(directory, "formal/models"), { recursive: true });
+      writeFileSync(join(directory, "formal/models/rule.qnt"), "current rule");
+      const hashes = snapshotSources(directory, destination, ["formal/models/rule.qnt", "removed.qnt"]);
+      expect(Object.keys(hashes)).toEqual(["formal/models/rule.qnt"]);
+      expect(hashes["formal/models/rule.qnt"]).toBe(createHash("sha256").update("current rule").digest("hex"));
+      writeFileSync(join(destination, "formal/models/rule.qnt"), "exploratory edit");
+      expect(readFileSync(join(directory, "formal/models/rule.qnt"), "utf8")).toBe("current rule");
+      expect(() => snapshotSources(directory, destination, ["formal/models/rule.qnt"])).toThrow();
       for (const path of ["../outside", "/outside", "node_modules", "node_modules/pkg", "typescript/node_modules", "typescript/node_modules/pkg", ".formal-traces", ".formal-traces/report.json", ".git/config"]) {
         expect(() => snapshotSources(directory, destination, [path])).toThrow();
       }
-      for (const [name, target] of [["external", directory], ["internal", join(directory, "formal/rule.qnt")], ["dangling", join(directory, "missing")]]) {
+      for (const [name, target] of [["external", directory], ["internal", join(directory, "formal/models/rule.qnt")], ["dangling", join(directory, "missing")]]) {
         symlinkSync(target!, join(directory, name!));
         expect(() => snapshotSources(directory, destination, [name!])).toThrow(/Symbolic link/);
       }
-      expect(() => snapshotSources(directory, destination, ["external/formal/rule.qnt"])).toThrow(/Symbolic link/);
+      expect(() => snapshotSources(directory, destination, ["external/formal/models/rule.qnt"])).toThrow(/Symbolic link/);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
@@ -317,9 +317,9 @@ describe("isolated exploratory validation", () => {
       const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-reproduce-"));
       try {
         const saved = savedFixture(directory, languages), original = readFileSync(saved.path, "utf8");
-        mkdirSync(join(directory, "formal"));
-        writeFileSync(join(directory, "formal/explore.mjs"), 'throw new Error("new checkout runner must not execute")');
-        writeFileSync(join(directory, "formal/validation.mjs"), 'throw new Error("new checkout prerequisites must not execute")');
+        mkdirSync(join(directory, "formal/tools"), { recursive: true });
+        writeFileSync(join(directory, "formal/tools/explore.mjs"), 'throw new Error("new checkout runner must not execute")');
+        writeFileSync(join(directory, "formal/tools/validation.mjs"), 'throw new Error("new checkout prerequisites must not execute")');
         const output = await replayExploration(saved.path, { directory });
         const report = JSON.parse(readFileSync(join(output, "report.json"), "utf8"));
         expect(report).toMatchObject({ status: "passed", acceptance: false, seed: "0x2a", baseRevision: saved.report.baseRevision,
@@ -370,7 +370,7 @@ describe("isolated exploratory validation", () => {
   it.each(["changed", "deleted"])("rejects a %s saved source before rerunning", async change => {
     const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-drift-"));
     try {
-      const saved = savedFixture(directory), source = join(saved.workspace, "formal/explore.mjs");
+      const saved = savedFixture(directory), source = join(saved.workspace, "formal/tools/explore.mjs");
       const original = readFileSync(saved.path, "utf8");
       if (change === "changed") writeFileSync(source, "changed saved runner"); else rmSync(source);
       await expect(replayExploration(saved.path, { directory })).rejects.toThrow();
@@ -445,7 +445,7 @@ describe("isolated exploratory validation", () => {
   });
   it("reports a tolerated evaluator failure to the caller instead of swallowing it", async () => {
     const tolerated: string[] = [];
-    const results = await runExplorationSteps([{ label: "Evaluate shared witness evidence", args: ["formal/witnesses.mjs", "evaluate"], tolerateFailure: true } as unknown as Step], {
+    const results = await runExplorationSteps([{ label: "Evaluate shared witness evidence", args: ["formal/tools/witnesses.mjs", "evaluate"], tolerateFailure: true } as unknown as Step], {
       directory: "/isolated", execute: async () => { throw new Error("evaluator crashed after writing evidence"); },
       onToleratedFailure: (step: unknown, error: unknown) => { tolerated.push(`${(step as { label?: string }).label}: ${String(error)}`); },
     } as never);

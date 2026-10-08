@@ -18,7 +18,7 @@ type Fixture = {
 type State = { input: { name: string; choice: unknown }; s: RecordValue };
 type Recipe = { id: string; actions: Array<[string, number]> };
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/formal-witness-boundaries.json", import.meta.url), "utf8")) as Fixture[];
-const recipes = JSON.parse(readFileSync(new URL("../../formal/fixture-recipes.json", import.meta.url), "utf8")) as { artifacts: Array<{ path: string; recipes: Recipe[] }> };
+const recipes = JSON.parse(readFileSync(new URL("../../formal/catalogs/fixture-recipes.json", import.meta.url), "utf8")) as { artifacts: Array<{ path: string; recipes: Recipe[] }> };
 
 // The fixture file contains histories selected from real Quint runs. Store
 // only changed fields to keep the examples readable without duplicating state.
@@ -42,7 +42,7 @@ function integer(value: number): RecordValue { return { "#bigint": String(value)
 const explicitInput = (name: string, choice?: Choice) => ({ name, choice: choice === undefined || choice.tag === "None" ? integer(-1) : choice.value });
 function initialInput(fixture: Fixture): { name: string; choice: unknown } {
   if (fixture.profile === "layers") return explicitInput("excerpt");
-  const reference = fixture.provenance.recipe.replace(/^formal\/fixture-recipes\.json#/, "");
+  const reference = fixture.provenance.recipe.replace(/^formal\/catalogs\/fixture-recipes\.json#/, "");
   const separator = reference.lastIndexOf("/");
   const recipe = recipes.artifacts.find(artifact => artifact.path === reference.slice(0, separator))?.recipes.find(item => item.id === reference.slice(separator + 1));
   if (recipe === undefined) throw new Error(`Missing recipe for ${fixture.witness}`);

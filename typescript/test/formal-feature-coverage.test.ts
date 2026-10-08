@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const script = fileURLToPath(new URL("../../formal/check-feature-coverage.mjs", import.meta.url));
-const inventory = JSON.parse(readFileSync(new URL("../../formal/feature-coverage.json", import.meta.url), "utf8")) as {
+const script = fileURLToPath(new URL("../../formal/tools/check-feature-coverage.mjs", import.meta.url));
+const inventory = JSON.parse(readFileSync(new URL("../../formal/catalogs/feature-coverage.json", import.meta.url), "utf8")) as {
   features: Array<{ id: string; cases: string[]; nativeCases: string[]; contracts: string[] }>;
   nativeCases: Array<{ id: string; go: Array<{ path: string; test: string; scope: string }>; typescript: Array<{ path: string; test: string; scope: string }> }>;
 };

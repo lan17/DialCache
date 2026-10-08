@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
-import { boundaryBaselines, boundaryTrace, goBoundarySelection, mutationBoundaries, readBoundaryRecording, type BoundaryRecording } from "../../formal/boundary-replay.mjs";
+import { boundaryBaselines, boundaryTrace, goBoundarySelection, mutationBoundaries, readBoundaryRecording, type BoundaryRecording } from "../../formal/tools/boundary-replay.mjs";
 
 const directory = mkdtempSync(resolve(tmpdir(), "dialcache-boundary-test-"));
 const file = resolve(directory, "recordings.jsonl");

@@ -1,9 +1,9 @@
 //! Real-server replay of the invalidation transition vectors
-//! (`formal/PROTOCOL.md`, "Invalidation vector schema 2").
+//! (`formal/guides/PROTOCOL.md`, "Invalidation vector schema 2").
 //!
 //! Mirrors `go/internal/testsuite/redis_integration_test.go` `testInvalidationVectors`: the 49
-//! fixed vectors of `formal/invalidation-vectors.json` are merged with the
-//! 288 Quint-generated vectors of `formal/quint-invalidation-vectors.json`
+//! fixed vectors of `formal/catalogs/invalidation-vectors.json` are merged with the
+//! 288 Quint-generated vectors of `formal/generated/quint-invalidation-vectors.json`
 //! after the generated corpus's provenance fingerprints are verified. Each
 //! vector installs `existing` atomically, runs the adapter's raw decimal
 //! invalidation, then observes type, content and retention atomically and
@@ -29,8 +29,8 @@ pub const FIXED_VECTORS: usize = 49;
 /// Generated corpus size pinned by every port.
 pub const GENERATED_VECTORS: usize = 288;
 const SCHEMA_VERSION: u64 = 2;
-const MODEL: &str = "formal/dialcache-invalidation-transition.qnt";
-const GENERATOR: &str = "formal/generate-invalidation-vectors.mjs";
+const MODEL: &str = "formal/models/dialcache-invalidation-transition.qnt";
+const GENERATOR: &str = "formal/tools/generate-invalidation-vectors.mjs";
 
 /// One tagged Redis key state: `absent`, `string` with `value`, or `list`
 /// with ordered `values`; `ttl_ms` is `-2` absent, `-1` persistent or positive.
@@ -90,9 +90,11 @@ fn read(repo_root: &Path, relative: &str) -> Vec<u8> {
 /// the generator's model and script sources so stale generated vectors are
 /// rejected rather than replayed.
 pub fn load_corpus(repo_root: &Path, sha256_hex: impl Fn(&[u8]) -> String) -> Vec<Vector> {
-    let fixed: Corpus =
-        serde_json::from_slice(&read(repo_root, "formal/invalidation-vectors.json"))
-            .expect("parse fixed invalidation corpus");
+    let fixed: Corpus = serde_json::from_slice(&read(
+        repo_root,
+        "formal/catalogs/invalidation-vectors.json",
+    ))
+    .expect("parse fixed invalidation corpus");
     assert_eq!(
         fixed.schema_version, SCHEMA_VERSION,
         "unsupported fixed corpus schema"
@@ -103,9 +105,11 @@ pub fn load_corpus(repo_root: &Path, sha256_hex: impl Fn(&[u8]) -> String) -> Ve
         "unsupported fixed corpus size"
     );
 
-    let generated: Corpus =
-        serde_json::from_slice(&read(repo_root, "formal/quint-invalidation-vectors.json"))
-            .expect("parse Quint invalidation corpus");
+    let generated: Corpus = serde_json::from_slice(&read(
+        repo_root,
+        "formal/generated/quint-invalidation-vectors.json",
+    ))
+    .expect("parse Quint invalidation corpus");
     assert_eq!(
         generated.schema_version, SCHEMA_VERSION,
         "unsupported Quint corpus schema"

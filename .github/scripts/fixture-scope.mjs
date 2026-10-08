@@ -8,10 +8,11 @@ export function affectsQuintArtifacts(path, declaredInputs = new Set()) {
   return declaredInputs.has(path)
     || /^formal\/.*\.(qnt|mjs|mts|sh)$/.test(path)
     || /^formal\/.*\.itf\.json$/.test(path)
-    || /^formal\/quint-.*\.json$/.test(path)
-    || /^formal\/(execution|profiles|fixture-recipes|generated-fixtures\.lock|profile-lint-baseline)\.json$/.test(path)
+    || /^formal\/generated\/quint-.*\.json$/.test(path)
+    || /^formal\/generated\/generated-fixtures\.lock\.json$/.test(path)
+    || /^formal\/catalogs\/(execution|profiles|fixture-recipes|profile-lint-baseline)\.json$/.test(path)
     || /^typescript\/test\/fixtures\/.*witness.*\.json$/.test(path)
-    || /^formal\/fixtures\/kernel\/.*\.qnt$/.test(path)
+    || /^formal\/models\/fixtures\/kernel\/.*\.qnt$/.test(path)
     || /^\.github\/(actions|scripts|workflows)\//.test(path)
     || /^((typescript\/)?package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|\.nvmrc|\.node-version|\.tool-versions|Makefile|go\/go\.(mod|sum))$/.test(path);
 }
@@ -37,7 +38,7 @@ export function fixtureScope(eventName, event, git = args => execFileSync('git',
 function main() {
   let result;
   try {
-    const lock = JSON.parse(readFileSync('formal/generated-fixtures.lock.json', 'utf8'));
+    const lock = JSON.parse(readFileSync('formal/generated/generated-fixtures.lock.json', 'utf8'));
     if (!lock.inputs || !lock.artifacts) throw new Error('Fixture lock has no declared input/artifact inventory');
     const declaredInputs = new Set([...Object.keys(lock.inputs), ...Object.keys(lock.artifacts)]);
     const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));

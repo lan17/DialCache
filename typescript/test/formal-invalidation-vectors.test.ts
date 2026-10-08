@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   readGeneratedInvalidationVectors, validateGeneratedInvalidationVectors, vectorsFromTrace,
   type InvalidationVectorState,
-} from "../../formal/generate-invalidation-vectors.mjs";
+} from "../../formal/tools/generate-invalidation-vectors.mjs";
 
 // Re-wrap the committed Quint input/output as ITF solely to challenge the
 // representation converter. These controls never add behavioral or mutation

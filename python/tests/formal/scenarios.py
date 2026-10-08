@@ -8,7 +8,7 @@ from .schema import ROOT, json_equal, strict_json, validate
 
 
 def scenarios():
-    corpus = strict_json((ROOT / "formal/behavioral-scenarios.json").read_text())
+    corpus = strict_json((ROOT / "formal/catalogs/behavioral-scenarios.json").read_text())
     if corpus["schemaVersion"] != 2 or not corpus["scenarios"]:
         raise RuntimeError("Unsupported or empty behavioral scenario corpus")
     names = [item["name"] for item in corpus["scenarios"]]

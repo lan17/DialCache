@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-const url = new URL("../../formal/generate-key-vectors.mjs", import.meta.url).href;
+const url = new URL("../../formal/tools/generate-key-vectors.mjs", import.meta.url).href;
 const { expectedCases, vectorsFromTrace, readGeneratedKeyVectors, validateGeneratedKeyVectors } = await import(url) as {
   expectedCases: number;
   vectorsFromTrace(trace: unknown): Record<string, Array<Record<string, unknown>>>;
@@ -89,9 +89,9 @@ describe("Quint key vector export boundary", () => {
   });
   it("requires current provenance and complete committed groups", () => {
     const current = readGeneratedKeyVectors();
-    expect(current).toMatchObject({ schemaVersion: 3, provenance: { model: "formal/dialcache-key-protocol.qnt" } });
+    expect(current).toMatchObject({ schemaVersion: 3, provenance: { model: "formal/models/dialcache-key-protocol.qnt" } });
     const stale = structuredClone(current);
-    (stale.provenance as { sourceSha256: Record<string, string> }).sourceSha256["formal/dialcache-key-protocol.qnt"] = "0".repeat(64);
+    (stale.provenance as { sourceSha256: Record<string, string> }).sourceSha256["formal/models/dialcache-key-protocol.qnt"] = "0".repeat(64);
     expect(() => validateGeneratedKeyVectors(stale)).toThrow(/Stale Quint/);
     const truncated = structuredClone(current); (truncated.keyVectors as unknown[]).pop();
     expect(() => validateGeneratedKeyVectors(truncated)).toThrow(/Incomplete committed/);

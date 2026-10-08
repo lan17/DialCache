@@ -19,7 +19,7 @@ type Step = {
 };
 type Options = { directory?: string; environment?: NodeJS.ProcessEnv; runnerNode?: string; nodeVersion?: string };
 const { validationPlan, executeSteps, checkPrerequisites, cleanEnvironment, targetDescriptions } = await import(
-  new URL("../../formal/validation.mjs", import.meta.url).href,
+  new URL("../../formal/tools/validation.mjs", import.meta.url).href,
 ) as {
   validationPlan(target: string, options?: Options): Step[];
   executeSteps(steps: Step[], options?: Options & { log?: (message: string) => void }): Promise<void>;
@@ -46,7 +46,7 @@ describe("shared validation runner", () => {
 
   beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), "dialcache-validation-"));
-    for (const path of ["bin", "formal", "typescript/dist", "node_modules/typescript", "rust"]) mkdirSync(join(directory, path), { recursive: true });
+    for (const path of ["bin", "formal/generated", "typescript/dist", "node_modules/typescript", "rust"]) mkdirSync(join(directory, path), { recursive: true });
     child = join(directory, "child.mjs");
     put("child.mjs", `import { appendFileSync } from 'node:fs';
 appendFileSync(process.env.RUNNER_EVENTS, JSON.stringify({ label: process.argv[2], cwd: process.cwd(),
@@ -60,7 +60,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     delete environment.NODE22_BIN;
     put("package.json", '{"packageManager":"pnpm@10.33.0"}');
     put("node_modules/typescript/package.json", "{}");
-    put("formal/generated-fixtures.lock.json", '{"quintVersion":"0.32.0"}');
+    put("formal/generated/generated-fixtures.lock.json", '{"quintVersion":"0.32.0"}');
     fakeTool("corepack", 'console.log("10.33.0")');
     fakeTool("go", 'console.log("go version go1.27.1 test/test")');
     fakeTool("cargo", 'console.log("cargo 1.98.1 (test 2026-08-05)")');
@@ -100,10 +100,10 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
   });
 
   it("excludes only opt-in Go workers from complete replay and exploration", async () => {
-    const { loadGoReplayInventory } = await import(new URL("../../formal/check-go-replay.mjs", import.meta.url).href) as {
+    const { loadGoReplayInventory } = await import(new URL("../../formal/tools/check-go-replay.mjs", import.meta.url).href) as {
       loadGoReplayInventory(): { required: Array<{ name: string }> };
     };
-    const { explorationPlan } = await import(new URL("../../formal/explore.mjs", import.meta.url).href) as {
+    const { explorationPlan } = await import(new URL("../../formal/tools/explore.mjs", import.meta.url).href) as {
       explorationPlan(directory: string, seed: string): Step[];
     };
     const goTest = (step: Step) => step.command === "go" && step.args?.includes("test");
@@ -148,25 +148,25 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
   it("orders generation and shared witness evaluation before every port replay without duplicate wire generation", () => {
     const plan = validationPlan("formal", { directory });
     const position = (script: string, argument: string) => plan.findIndex(step => step.args?.[0] === script && step.args.includes(argument));
-    const tsPrepare = position("formal/conformance.mjs", "typescript");
-    const goPrepare = position("formal/conformance.mjs", "go");
-    const rustPrepare = position("formal/conformance.mjs", "rust");
-    const goCompletion = position("formal/conformance.mjs", ".formal-traces/go-completion.json");
-    const rustCompletion = position("formal/conformance.mjs", ".formal-traces/rust-completion.json");
-    const tsCompletion = position("formal/conformance.mjs", ".formal-traces/ts-completion.json");
-    const witnesses = position("formal/witnesses.mjs", "evaluate");
-    expect(position("formal/run-models.mjs", "check")).toBeLessThan(position("formal/run-models.mjs", "generate"));
-    expect(position("formal/run-models.mjs", "generate")).toBeLessThan(witnesses);
+    const tsPrepare = position("formal/tools/conformance.mjs", "typescript");
+    const goPrepare = position("formal/tools/conformance.mjs", "go");
+    const rustPrepare = position("formal/tools/conformance.mjs", "rust");
+    const goCompletion = position("formal/tools/conformance.mjs", ".formal-traces/go-completion.json");
+    const rustCompletion = position("formal/tools/conformance.mjs", ".formal-traces/rust-completion.json");
+    const tsCompletion = position("formal/tools/conformance.mjs", ".formal-traces/ts-completion.json");
+    const witnesses = position("formal/tools/witnesses.mjs", "evaluate");
+    expect(position("formal/tools/run-models.mjs", "check")).toBeLessThan(position("formal/tools/run-models.mjs", "generate"));
+    expect(position("formal/tools/run-models.mjs", "generate")).toBeLessThan(witnesses);
     expect(witnesses).toBeLessThan(tsPrepare);
     expect(tsPrepare).toBeLessThan(tsCompletion);
     expect(tsCompletion).toBeLessThan(goPrepare);
     expect(goPrepare).toBeLessThan(goCompletion);
     expect(goCompletion).toBeLessThan(rustPrepare);
     expect(rustPrepare).toBeLessThan(rustCompletion);
-    expect(plan.filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "generate")).toHaveLength(1);
-    expect(plan.filter(step => step.args?.[0] === "formal/witnesses.mjs")).toHaveLength(1);
-    expect(plan.some(step => step.args?.[0] === "formal/generate-artifacts.mjs")).toBe(false);
-    expect(plan[0]!.args).toEqual(["formal/run-models.mjs", "check"]);
+    expect(plan.filter(step => step.args?.[0] === "formal/tools/run-models.mjs" && step.args[1] === "generate")).toHaveLength(1);
+    expect(plan.filter(step => step.args?.[0] === "formal/tools/witnesses.mjs")).toHaveLength(1);
+    expect(plan.some(step => step.args?.[0] === "formal/tools/generate-artifacts.mjs")).toBe(false);
+    expect(plan[0]!.args).toEqual(["formal/tools/run-models.mjs", "check"]);
     expect(plan.find(step => step.remove)!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json", ".formal-traces/rust-completion.json", ".formal-traces/python-completion.json"]);
     // The aggregate is exactly these lanes in order, so a CI job running
     // one lane executes the same steps as the local sequential run.
@@ -177,25 +177,25 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     // The check (typechecks, bounded runs, regressions and challenges) is
     // evidence about Quint; generation is the only producer downstream reads.
     expect(validationPlan("formal-check", { directory })).toEqual([
-      { label: "Check every scheduled Quint model", command: process.execPath, args: ["formal/run-models.mjs", "check"] },
-      { label: "Measure every pinned model fault", command: process.execPath, args: ["formal/check-model-properties.mjs"] },
-      { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/lint-profiles.mjs", "baseline", "--check"] },
-      { label: "Check the kernel library fixtures", command: process.execPath, args: ["formal/check-kernel-fixtures.mjs"] },
+      { label: "Check every scheduled Quint model", command: process.execPath, args: ["formal/tools/run-models.mjs", "check"] },
+      { label: "Measure every pinned model fault", command: process.execPath, args: ["formal/tools/check-model-properties.mjs"] },
+      { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/tools/lint-profiles.mjs", "baseline", "--check"] },
+      { label: "Check the kernel library fixtures", command: process.execPath, args: ["formal/tools/check-kernel-fixtures.mjs"] },
     ]);
     const generate = validationPlan("formal-generate", { directory });
-    expect(generate.some(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toBe(false);
-    expect(generate.some(step => step.args?.[0] === "formal/check-model-properties.mjs")).toBe(false);
+    expect(generate.some(step => step.args?.[0] === "formal/tools/run-models.mjs" && step.args[1] === "check")).toBe(false);
+    expect(generate.some(step => step.args?.[0] === "formal/tools/check-model-properties.mjs")).toBe(false);
     for (const target of ["formal-ts", "formal-go", "formal-rust", "formal-python", "mutations"]) {
-      expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/run-models.mjs")).toBe(false);
+      expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/tools/run-models.mjs")).toBe(false);
     }
     // Every acceptance entry point keeps one complete campaign, after all
     // unmodified model checks. No filtered --only run can replace that gate.
     for (const target of ["formal-check", "formal", "ci"]) {
       const plan = validationPlan(target, { directory });
-      const checks = plan.filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check");
-      const campaigns = plan.filter(step => step.args?.[0] === "formal/check-model-properties.mjs");
+      const checks = plan.filter(step => step.args?.[0] === "formal/tools/run-models.mjs" && step.args[1] === "check");
+      const campaigns = plan.filter(step => step.args?.[0] === "formal/tools/check-model-properties.mjs");
       expect(checks, target).toHaveLength(1);
-      expect(campaigns.map(step => step.args), target).toEqual([["formal/check-model-properties.mjs"]]);
+      expect(campaigns.map(step => step.args), target).toEqual([["formal/tools/check-model-properties.mjs"]]);
       expect(plan.indexOf(checks[0]!), target).toBeLessThan(plan.indexOf(campaigns[0]!));
     }
   });
@@ -203,15 +203,15 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
 
   it("gates composition in the differential lane: the lint baseline, then both-direction replay against the configured reference", () => {
     expect(validationPlan("differential", { directory, environment: { ...environment, DIFFERENTIAL_REFERENCE: "origin/release" } })).toEqual([
-      { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/lint-profiles.mjs", "baseline", "--check"] },
-      { label: "Check the kernel library fixtures", command: process.execPath, args: ["formal/check-kernel-fixtures.mjs"] },
-      { label: "Replay composed profiles against their reference corpus", command: process.execPath, args: ["formal/differential.mjs", "--composed", "--reference=origin/release"] },
+      { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/tools/lint-profiles.mjs", "baseline", "--check"] },
+      { label: "Check the kernel library fixtures", command: process.execPath, args: ["formal/tools/check-kernel-fixtures.mjs"] },
+      { label: "Replay composed profiles against their reference corpus", command: process.execPath, args: ["formal/tools/differential.mjs", "--composed", "--reference=origin/release"] },
     ]);
-    expect(validationPlan("differential", { directory, environment }).at(-1)!.args).toEqual(["formal/differential.mjs", "--composed", "--reference=origin/main"]);
+    expect(validationPlan("differential", { directory, environment }).at(-1)!.args).toEqual(["formal/tools/differential.mjs", "--composed", "--reference=origin/main"]);
     // DIFFERENTIAL_SHARD narrows the replay to one shard, keeps the two cheap checks in every shard, and is validated as the script parses it.
     const sharded = validationPlan("differential", { directory, environment: { ...environment, DIFFERENTIAL_SHARD: "2/4" } });
-    expect(sharded.map(step => step.args)).toEqual([["formal/lint-profiles.mjs", "baseline", "--check"], ["formal/check-kernel-fixtures.mjs"],
-      ["formal/differential.mjs", "--composed", "--reference=origin/main", "--shard=2/4"]]);
+    expect(sharded.map(step => step.args)).toEqual([["formal/tools/lint-profiles.mjs", "baseline", "--check"], ["formal/tools/check-kernel-fixtures.mjs"],
+      ["formal/tools/differential.mjs", "--composed", "--reference=origin/main", "--shard=2/4"]]);
     expect(validationPlan("differential", { directory, environment }).flatMap(step => step.args ?? []).some(argument => argument.startsWith("--shard"))).toBe(false);
     for (const value of ["0/4", "5/4", "2", "a/b", ""]) {
       expect(() => validationPlan("differential", { directory, environment: { ...environment, DIFFERENTIAL_SHARD: value } }), value).toThrow(/DIFFERENTIAL_SHARD must be <index>\/<count>/);
@@ -224,22 +224,22 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
   });
   it("ends generation with the shared witness evaluation and starts each replay lane from a prepared context", () => {
     const generate = validationPlan("formal-generate", { directory });
-    expect(generate.at(-1)!.args).toEqual(["formal/witnesses.mjs", "evaluate", "--profile", "all"]);
-    expect(generate.map(step => step.args?.slice(0, 2))).toEqual([undefined, ["formal/run-models.mjs", "generate"],
-      ["formal/generated-fixtures.mjs", "--check"], ["formal/witnesses.mjs", "evaluate"]]);
-    expect(generate.some(step => step.args?.[0] === "formal/conformance.mjs")).toBe(false);
+    expect(generate.at(-1)!.args).toEqual(["formal/tools/witnesses.mjs", "evaluate", "--profile", "all"]);
+    expect(generate.map(step => step.args?.slice(0, 2))).toEqual([undefined, ["formal/tools/run-models.mjs", "generate"],
+      ["formal/tools/generated-fixtures.mjs", "--check"], ["formal/tools/witnesses.mjs", "evaluate"]]);
+    expect(generate.some(step => step.args?.[0] === "formal/tools/conformance.mjs")).toBe(false);
     expect(generate.some(step => step.command === "corepack" || step.command === "go")).toBe(false);
     const ts = validationPlan("formal-ts", { directory });
     expect(ts[0]!.remove).toEqual([".formal-traces/ts-completion.json"]);
-    expect(ts[1]!.args).toEqual(["formal/conformance.mjs", "prepare", "typescript", ".formal-traces/ts-context.json"]);
-    expect(ts.at(-1)!.args).toEqual(["formal/conformance.mjs", "check", ".formal-traces/ts-completion.json", ".formal-traces/ts-context.json"]);
-    expect(ts.some(step => step.args?.[0] === "formal/witnesses.mjs" || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
+    expect(ts[1]!.args).toEqual(["formal/tools/conformance.mjs", "prepare", "typescript", ".formal-traces/ts-context.json"]);
+    expect(ts.at(-1)!.args).toEqual(["formal/tools/conformance.mjs", "check", ".formal-traces/ts-completion.json", ".formal-traces/ts-context.json"]);
+    expect(ts.some(step => step.args?.[0] === "formal/tools/witnesses.mjs" || step.args?.[0] === "formal/tools/run-models.mjs")).toBe(false);
   });
 
   it("replays Rust from its crate with full corpus selectors and a dedicated report before the completion gate", () => {
     const plan = validationPlan("formal-rust", { directory, environment });
     expect(plan[0]!.remove).toEqual([".formal-traces/rust-completion.json"]);
-    expect(plan[1]!.args).toEqual(["formal/conformance.mjs", "prepare", "rust", ".formal-traces/rust-context.json"]);
+    expect(plan[1]!.args).toEqual(["formal/tools/conformance.mjs", "prepare", "rust", ".formal-traces/rust-context.json"]);
     const replay = plan.find(step => step.command === "cargo")!;
     expect(replay).toMatchObject({ cwd: "rust", args: ["test", "--release", "--all-features", "--test", "conformance"] });
     expect(replay.env).toEqual({
@@ -250,9 +250,9 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       DIALCACHE_RUST_REPORT: join(directory, ".formal-traces/rust-replay.jsonl"),
     });
     expect(plan.slice(plan.indexOf(replay) + 1).map(step => step.args)).toEqual([
-      ["formal/check-rust-replay.mjs"],
-      ["formal/conformance-adapters.mjs", "rust", ".formal-traces/rust-replay.jsonl", ".formal-traces/rust-context.json"],
-      ["formal/conformance.mjs", "check", ".formal-traces/rust-completion.json", ".formal-traces/rust-context.json"],
+      ["formal/tools/check-rust-replay.mjs"],
+      ["formal/tools/conformance-adapters.mjs", "rust", ".formal-traces/rust-replay.jsonl", ".formal-traces/rust-context.json"],
+      ["formal/tools/conformance.mjs", "check", ".formal-traces/rust-completion.json", ".formal-traces/rust-context.json"],
     ]);
     const smoke = validationPlan("smoke", { directory }).find(step => step.command === "cargo")!;
     expect(smoke.args).toEqual(["test", "--all-features", "--test", "conformance"]);
@@ -269,14 +269,14 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       "--data-file=coverage/python/.coverage-native", "-o", "coverage/python/native.lcov"]);
     const plan = validationPlan("formal-python", { directory, environment });
     expect(plan[0]!.remove).toEqual([".formal-traces/python-completion.json"]);
-    expect(plan[1]!.args).toEqual(["formal/conformance.mjs", "prepare", "python", ".formal-traces/python-context.json"]);
-    expect(plan[2]!.args).toEqual(["formal/run-python-replay.mjs", "--generated", "--scenarios", "--complete", "--report", ".formal-traces/python-replay.jsonl"]);
+    expect(plan[1]!.args).toEqual(["formal/tools/conformance.mjs", "prepare", "python", ".formal-traces/python-context.json"]);
+    expect(plan[2]!.args).toEqual(["formal/tools/run-python-replay.mjs", "--generated", "--scenarios", "--complete", "--report", ".formal-traces/python-replay.jsonl"]);
     expect(plan[2]!.env).toEqual({ PYTHON: environment.PYTHON });
-    expect(plan.at(-1)!.args).toEqual(["formal/conformance.mjs", "check", ".formal-traces/python-completion.json", ".formal-traces/python-context.json"]);
+    expect(plan.at(-1)!.args).toEqual(["formal/tools/conformance.mjs", "check", ".formal-traces/python-completion.json", ".formal-traces/python-context.json"]);
     expect(validationPlan("smoke", { directory, environment }).at(-1)!.args).toEqual(["-m", "pytest", "python/tests/test_conformance.py"]);
-    expect(validationPlan("integration-python", { directory, environment })[0]!.args).toEqual(["formal/run-python-integration.mjs"]);
+    expect(validationPlan("integration-python", { directory, environment })[0]!.args).toEqual(["formal/tools/run-python-integration.mjs"]);
     expect(validationPlan("integration-wire", { directory, environment })[0]).toMatchObject({
-      args: ["formal/run-python-integration.mjs", "--suite", "wire"], env: { PYTHON: environment.PYTHON },
+      args: ["formal/tools/run-python-integration.mjs", "--suite", "wire"], env: { PYTHON: environment.PYTHON },
     });
   });
 
@@ -308,30 +308,30 @@ else if (process.env.PYTHONPATH !== ${JSON.stringify(expected)}) throw new Error
   });
 
   it("lets Go parity and every mutation measurement run off the generated corpus without completion checks", () => {
-    const isCompletionCheck = (step: Step) => step.args?.[0] === "formal/conformance.mjs" && step.args[1] === "check";
+    const isCompletionCheck = (step: Step) => step.args?.[0] === "formal/tools/conformance.mjs" && step.args[1] === "check";
     const go = validationPlan("formal-go", { directory });
     expect(go[0]!.remove).toEqual([".formal-traces/go-completion.json"]);
     expect(go.some(step => step.args?.some(argument => argument.startsWith(".formal-traces/ts-")))).toBe(false);
-    expect(go.filter(isCompletionCheck).map(step => step.args)).toEqual([["formal/conformance.mjs", "check", ".formal-traces/go-completion.json", ".formal-traces/go-context.json"]]);
-    expect(go.some(step => step.args?.[0] === "formal/witnesses.mjs" || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
-    for (const [target, script] of [["mutations-ts", "formal/measure-semantics.mjs"], ["mutations-go", "formal/measure-go-semantics.mjs"], ["mutations-rust", "formal/measure-rust-semantics.mjs"]] as const) {
+    expect(go.filter(isCompletionCheck).map(step => step.args)).toEqual([["formal/tools/conformance.mjs", "check", ".formal-traces/go-completion.json", ".formal-traces/go-context.json"]]);
+    expect(go.some(step => step.args?.[0] === "formal/tools/witnesses.mjs" || step.args?.[0] === "formal/tools/run-models.mjs")).toBe(false);
+    for (const [target, script] of [["mutations-ts", "formal/tools/measure-semantics.mjs"], ["mutations-go", "formal/tools/measure-go-semantics.mjs"], ["mutations-rust", "formal/tools/measure-rust-semantics.mjs"]] as const) {
       expect(validationPlan(target, { directory }).map(step => step.args)).toEqual([[script]]);
     }
     const all = validationPlan("mutations", { directory });
-    expect(all.map(step => step.args?.[0])).toEqual(["formal/measure-semantics.mjs", "formal/measure-go-semantics.mjs", "formal/measure-rust-semantics.mjs"]);
+    expect(all.map(step => step.args?.[0])).toEqual(["formal/tools/measure-semantics.mjs", "formal/tools/measure-go-semantics.mjs", "formal/tools/measure-rust-semantics.mjs"]);
     expect(all.some(isCompletionCheck)).toBe(false);
-    expect(all.some(step => step.remove || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
+    expect(all.some(step => step.remove || step.args?.[0] === "formal/tools/run-models.mjs")).toBe(false);
   });
 
   it("shards a mutation lane only through MUTATION_SHARD on its own target and validates the value", () => {
     const sharded = { ...environment, MUTATION_SHARD: "2/3" };
     expect(validationPlan("mutations-ts", { directory, environment: sharded })).toEqual([
-      { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/measure-semantics.mjs", "--shard=2/3"] },
+      { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/tools/measure-semantics.mjs", "--shard=2/3"] },
     ]);
-    expect(validationPlan("mutations-go", { directory, environment: sharded }).map(step => step.args)).toEqual([["formal/measure-go-semantics.mjs", "--shard=2/3"]]);
-    expect(validationPlan("mutations-rust", { directory, environment: sharded }).map(step => step.args)).toEqual([["formal/measure-rust-semantics.mjs", "--shard=2/3"]]);
+    expect(validationPlan("mutations-go", { directory, environment: sharded }).map(step => step.args)).toEqual([["formal/tools/measure-go-semantics.mjs", "--shard=2/3"]]);
+    expect(validationPlan("mutations-rust", { directory, environment: sharded }).map(step => step.args)).toEqual([["formal/tools/measure-rust-semantics.mjs", "--shard=2/3"]]);
     // Unset, the plan is exactly today's complete measurement.
-    expect(validationPlan("mutations-ts", { directory, environment }).map(step => step.args)).toEqual([["formal/measure-semantics.mjs"]]);
+    expect(validationPlan("mutations-ts", { directory, environment }).map(step => step.args)).toEqual([["formal/tools/measure-semantics.mjs"]]);
     for (const value of ["0/3", "4/3", "1/0", "a/b", "1", "01/3", "1/3/", " 1/3", ""]) {
       expect(() => validationPlan("mutations-ts", { directory, environment: { ...environment, MUTATION_SHARD: value } }), value).toThrow(/MUTATION_SHARD must be <index>\/<count>/);
     }
@@ -349,10 +349,10 @@ else if (process.env.PYTHONPATH !== ${JSON.stringify(expected)}) throw new Error
   it("measures named mutants only through MUTATION_ONLY on its own target, never together with a shard", () => {
     const partial = { ...environment, MUTATION_ONLY: "M14,M15" };
     expect(validationPlan("mutations-ts", { directory, environment: partial })).toEqual([
-      { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/measure-semantics.mjs", "--only=M14,M15"] },
+      { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/tools/measure-semantics.mjs", "--only=M14,M15"] },
     ]);
-    expect(validationPlan("mutations-go", { directory, environment: partial }).map(step => step.args)).toEqual([["formal/measure-go-semantics.mjs", "--only=M14,M15"]]);
-    expect(validationPlan("mutations-rust", { directory, environment: { ...environment, MUTATION_ONLY: "M01,M02" } }).map(step => step.args)).toEqual([["formal/measure-rust-semantics.mjs", "--only=M01,M02"]]);
+    expect(validationPlan("mutations-go", { directory, environment: partial }).map(step => step.args)).toEqual([["formal/tools/measure-go-semantics.mjs", "--only=M14,M15"]]);
+    expect(validationPlan("mutations-rust", { directory, environment: { ...environment, MUTATION_ONLY: "M01,M02" } }).map(step => step.args)).toEqual([["formal/tools/measure-rust-semantics.mjs", "--only=M01,M02"]]);
     for (const value of ["", "M14,", "M14,M14", "m14", "14", "M14 M15"]) {
       expect(() => validationPlan("mutations-ts", { directory, environment: { ...environment, MUTATION_ONLY: value } }), value).toThrow(/MUTATION_ONLY must be <id>,<id> naming distinct mutant ids/);
     }
@@ -371,10 +371,10 @@ else if (process.env.PYTHONPATH !== ${JSON.stringify(expected)}) throw new Error
 
   it("merges each language's shards with a plain Node step that needs no native toolchains or Quint", () => {
     expect(validationPlan("mutations-merge-ts", { directory })).toEqual([
-      { label: "Merge TypeScript mutation shards", command: process.execPath, args: ["formal/merge-mutation-reports.mjs", "ts"] },
+      { label: "Merge TypeScript mutation shards", command: process.execPath, args: ["formal/tools/merge-mutation-reports.mjs", "ts"] },
     ]);
-    expect(validationPlan("mutations-merge-go", { directory }).map(step => step.args)).toEqual([["formal/merge-mutation-reports.mjs", "go"]]);
-    expect(validationPlan("mutations-merge-rust", { directory }).map(step => step.args)).toEqual([["formal/merge-mutation-reports.mjs", "rust"]]);
+    expect(validationPlan("mutations-merge-go", { directory }).map(step => step.args)).toEqual([["formal/tools/merge-mutation-reports.mjs", "go"]]);
+    expect(validationPlan("mutations-merge-rust", { directory }).map(step => step.args)).toEqual([["formal/tools/merge-mutation-reports.mjs", "rust"]]);
     fakeTool("quint", 'console.error("quint: not installed"); process.exit(1)');
     fakeTool("go", 'console.error("go: not installed"); process.exit(1)');
     fakeTool("cargo", 'console.error("cargo: not installed"); process.exit(1)');
@@ -384,7 +384,7 @@ else if (process.env.PYTHONPATH !== ${JSON.stringify(expected)}) throw new Error
     }
     // The merge is not part of the local aggregates: they measure unsharded.
     for (const target of ["mutations", "ci"]) {
-      expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/merge-mutation-reports.mjs"), target).toBe(false);
+      expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/tools/merge-mutation-reports.mjs"), target).toBe(false);
     }
   });
 
@@ -420,9 +420,9 @@ else if (process.env.PYTHONPATH !== ${JSON.stringify(expected)}) throw new Error
     }
     for (const target of ["check-ts", "formal", "formal-check", "formal-generate", "formal-ts", "explore"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
-      expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/check-symbolic-models.mjs")).toBe(false);
+      expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/tools/check-symbolic-models.mjs")).toBe(false);
     }
-    expect(validationPlan("ci", { directory }).filter(step => step.args?.[0] === "formal/check-symbolic-models.mjs")).toHaveLength(1);
+    expect(validationPlan("ci", { directory }).filter(step => step.args?.[0] === "formal/tools/check-symbolic-models.mjs")).toHaveLength(1);
     fakeTool("java", 'console.log("openjdk 21.0.11 2026-04-21 LTS")');
     expect(() => checkPrerequisites("model-check", { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
     // The pinned Apalache archive is unpacked with tar; only the symbolic lane needs it.
@@ -515,7 +515,7 @@ describe("full formal workflow shape", () => {
     // the shard fails. The matrix must keep every shard inside the job timeout, so growing the
     // catalog fails here until the matrix grows. The shard count in the matrix and in MUTATION_SHARD
     // must agree or the merge refuses the shards.
-    const catalogSize = (JSON.parse(readFileSync(new URL("../../formal/mutations.json", import.meta.url), "utf8")) as { mutations: unknown[] }).mutations.length;
+    const catalogSize = (JSON.parse(readFileSync(new URL("../../formal/catalogs/mutations.json", import.meta.url), "utf8")) as { mutations: unknown[] }).mutations.length;
     const baselineMinutes = 4;
     const table = [
       { lane: "typescript-mutations", language: "ts", output: ".formal-traces/semantic", artifact: "typescript-semantic", timeout: 40, shards: 6, slowMinutesPerMutant: 2, hungCohortMinutes: 9, go: undefined },
@@ -641,7 +641,7 @@ describe("full formal workflow shape", () => {
 
 describe("kernel fixture checker", () => {
   it("lists a fixture's declared runs and rejects a name quint test would not select", async () => {
-    const { declaredRuns } = await import(new URL("../../formal/check-kernel-fixtures.mjs", import.meta.url).href) as { declaredRuns(source: string): string[] };
+    const { declaredRuns } = await import(new URL("../../formal/tools/check-kernel-fixtures.mjs", import.meta.url).href) as { declaredRuns(source: string): string[] };
     expect(declaredRuns("module m {\n  run firstTest = init\n  run secondTest = init.then(step)\n}\n")).toEqual(["firstTest", "secondTest"]);
     expect(() => declaredRuns("module m {\n  run firstTest = init\n  run probe = init\n}\n")).toThrow(/Kernel fixture runs must end in Test: probe/);
   });

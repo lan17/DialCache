@@ -25,7 +25,7 @@ import { LocalCache } from "../src/internal/local-cache.js";
 type Raw = { states: Array<Record<string, unknown> & { s: Record<string, unknown> }> };
 function smoke(profile: string): Raw {
   const name = profile === "core" ? "conformance" : profile;
-  return JSON.parse(readFileSync(fileURLToPath(new URL(`../../formal/${name}-smoke.itf.json`, import.meta.url)), "utf8")) as Raw;
+  return JSON.parse(readFileSync(fileURLToPath(new URL(`../../formal/generated/${name}-smoke.itf.json`, import.meta.url)), "utf8")) as Raw;
 }
 const environment = { wallMs: wallEpochMs };
 const roundtrip = (value: unknown) => parseJSON(JSON.stringify(value));
@@ -748,10 +748,10 @@ describe("shared replay transport and source closure", () => {
   it("requires the exact shared source inventory before recording witness evidence", () => {
     const directory = mkdtempSync(resolve(tmpdir(), "dialcache-replay-sources-"));
     try {
-      mkdirSync(resolve(directory, "formal/replay"), { recursive: true });
+      for (const path of ["formal/replay", "formal/catalogs"]) mkdirSync(resolve(directory, path), { recursive: true });
       const source = "formal/replay/mapping.mjs";
       writeFileSync(resolve(directory, source), "export const mapping = 1;\n");
-      writeFileSync(resolve(directory, "formal/profiles.json"), JSON.stringify({ replaySources: [source] }));
+      writeFileSync(resolve(directory, "formal/catalogs/profiles.json"), JSON.stringify({ replaySources: [source] }));
       expect(replaySources(directory)).toEqual([source]);
       writeFileSync(resolve(directory, "formal/replay/new-helper.mjs"), "new dependency");
       expect(() => replaySources(directory)).toThrow(/inventory differs/);

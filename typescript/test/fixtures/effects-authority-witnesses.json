@@ -3,8 +3,8 @@
     "regression": "observerFailuresCannotPreventCacheHitTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-effects-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/observerFailuresCannotPreventCacheHitTest"
+        "model": "formal/models/dialcache-effects-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/observerFailuresCannotPreventCacheHitTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"events":[]}},
@@ -20,8 +20,8 @@
     "regression": "observerFailuresCannotPreventPublicationTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-effects-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/observerFailuresCannotPreventPublicationTest"
+        "model": "formal/models/dialcache-effects-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/observerFailuresCannotPreventPublicationTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"events":[]}},
@@ -41,8 +41,8 @@
     "regression": "observerFailuresCannotReplaceSourceErrorTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-effects-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/observerFailuresCannotReplaceSourceErrorTest"
+        "model": "formal/models/dialcache-effects-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/observerFailuresCannotReplaceSourceErrorTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"events":[]}},
@@ -57,8 +57,8 @@
     "regression": "writeStampAfterSerializationClearsInterveningFenceTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-effects-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/writeStampAfterSerializationClearsInterveningFenceTest"
+        "model": "formal/models/dialcache-effects-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/writeStampAfterSerializationClearsInterveningFenceTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"events":[]}},
@@ -79,8 +79,8 @@
     "regression": "futureFrameReportsPositiveObservingOffsetTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-effects-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/futureFrameReportsPositiveObservingOffsetTest"
+        "model": "formal/models/dialcache-effects-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/futureFrameReportsPositiveObservingOffsetTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"events":[]}},
@@ -96,8 +96,8 @@
     "regression": "coalescedFailureKeepsOneLeaderAndFollowerTrailTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-effects-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/coalescedFailureKeepsOneLeaderAndFollowerTrailTest"
+        "model": "formal/models/dialcache-effects-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/coalescedFailureKeepsOneLeaderAndFollowerTrailTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"events":[]}},
@@ -112,8 +112,8 @@
     "regression": "frameReplyAtLastFreshMillisecondHitsTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-effects-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/frameReplyAtLastFreshMillisecondHitsTest"
+        "model": "formal/models/dialcache-effects-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/frameReplyAtLastFreshMillisecondHitsTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"events":[]}},
@@ -129,8 +129,8 @@
     "regression": "staleFrameReplyExpiresRefillsAndIsReadableTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-effects-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/staleFrameReplyExpiresRefillsAndIsReadableTest"
+        "model": "formal/models/dialcache-effects-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/effects-authority-witnesses.json/staleFrameReplyExpiresRefillsAndIsReadableTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"events":[]}},

@@ -17,7 +17,7 @@ func TestGeneratedFixtureFreshness(t *testing.T) {
 		Inputs        map[string]string `json:"inputs"`
 		Artifacts     map[string]string `json:"artifacts"`
 	}
-	raw, err := os.ReadFile("../formal/generated-fixtures.lock.json")
+	raw, err := os.ReadFile("../formal/generated/generated-fixtures.lock.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestGeneratedFixtureFreshness(t *testing.T) {
 			Path string `json:"path"`
 		} `json:"artifacts"`
 	}
-	raw, err = os.ReadFile("../formal/fixture-recipes.json")
+	raw, err = os.ReadFile("../formal/catalogs/fixture-recipes.json")
 	if err != nil {
 		t.Fatal(err)
 	}

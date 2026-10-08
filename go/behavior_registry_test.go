@@ -24,7 +24,7 @@ func validateBehaviorProfileRegistry(raw []byte, name string, version int64) err
 			continue
 		}
 		count++
-		if bf(profile["version"]) != float64(version) || profile["model"] != "formal/dialcache-"+name+"-conformance.qnt" || profile["smoke"] != "formal/"+name+"-smoke.itf.json" {
+		if bf(profile["version"]) != float64(version) || profile["model"] != "formal/models/dialcache-"+name+"-conformance.qnt" || profile["smoke"] != "formal/generated/"+name+"-smoke.itf.json" {
 			return fmt.Errorf("unsupported %s profile definition/version", name)
 		}
 	}
@@ -35,7 +35,7 @@ func validateBehaviorProfileRegistry(raw []byte, name string, version int64) err
 }
 func requireBehaviorProfile(t *testing.T, name string) {
 	t.Helper()
-	raw, err := os.ReadFile("../formal/profiles.json")
+	raw, err := os.ReadFile("../formal/catalogs/profiles.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func requireBehaviorProfile(t *testing.T, name string) {
 	}
 }
 func TestBehaviorProfileRegistryRejectsDrift(t *testing.T) {
-	raw, err := os.ReadFile("../formal/profiles.json")
+	raw, err := os.ReadFile("../formal/catalogs/profiles.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestBehaviorProfileRegistryRejectsDrift(t *testing.T) {
 				case "duplicate":
 					registry["profiles"] = append(profiles, profile)
 				case "model":
-					profile["model"] = "formal/unknown.qnt"
+					profile["model"] = "formal/models/unknown.qnt"
 				case "schema":
 					registry["behavioralSchemaVersion"] = 999
 				}

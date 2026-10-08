@@ -91,7 +91,7 @@ function insertAfter(states: State[], after: State, action: string, choice: numb
 describe("independent source-budget witnesses from inputs and public observations", () => {
   it("reads fixtures that carry only the recorded input, the asserted observation and read IO", () => {
     for (const [name, fixture] of Object.entries(fixtures)) {
-      expect(fixture.source.model, name).toBe("formal/dialcache-independent-conformance.qnt");
+      expect(fixture.source.model, name).toBe("formal/models/dialcache-independent-conformance.qnt");
       for (const state of fixture.states) expect(Object.keys(state.s).sort(), name).toEqual(["io", "o"]);
     }
   });
@@ -328,7 +328,7 @@ describe("shadow fidelity against the model's private predictions", () => {
   };
 
   it("matches the model at every step of the shadow walk, which takes every action", () => {
-    expect(predictedFixtures.shadowWalk!.source.model).toBe("formal/dialcache-independent-conformance.qnt");
+    expect(predictedFixtures.shadowWalk!.source.model).toBe("formal/models/dialcache-independent-conformance.qnt");
     expect(() => independentWitnesses([walk()])).not.toThrow();
     expect(new Set(predictedFixtures.shadowWalk!.states.map(state => state.input.name))).toEqual(new Set(["init", ...Object.keys(independent.actions)]));
   });

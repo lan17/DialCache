@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readGeneratedInvalidationVectors } from "../../formal/generate-invalidation-vectors.mjs";
+import { readGeneratedInvalidationVectors } from "../../formal/tools/generate-invalidation-vectors.mjs";
 import { readFileSync } from "node:fs";
 
 import * as valkeyGlide from "@valkey/valkey-glide";
@@ -191,7 +191,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
     | { kind: "absent"; ttlMs: -2 }
     | { kind: "string"; value: string; ttlMs: number }
     | { kind: "list"; values: string[]; ttlMs: number };
-  const invalidationVectors = JSON.parse(readFileSync(new URL("../../formal/invalidation-vectors.json", import.meta.url), "utf8")) as {
+  const invalidationVectors = JSON.parse(readFileSync(new URL("../../formal/catalogs/invalidation-vectors.json", import.meta.url), "utf8")) as {
     schemaVersion: number;
     vectors: Array<{
       name: string; existing: InvalidationVectorState;

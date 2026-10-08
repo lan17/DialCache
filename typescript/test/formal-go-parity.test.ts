@@ -22,11 +22,11 @@ type SemanticCases = { cases: Array<{ id: string; models: string[]; quintReplays
 type Profiles = { profiles: Array<{ id: string; model: string; smoke: string }> };
 type Inputs = { semantic?: SemanticCases; profileManifest?: Profiles };
 
-const formal = (name: string) => JSON.parse(readFileSync(new URL(`../../formal/${name}`, import.meta.url), "utf8"));
+const formal = (name: string) => JSON.parse(readFileSync(new URL(`../../formal/catalogs/${name}`, import.meta.url), "utf8"));
 const ledger = () => formal("go-parity.json") as Ledger;
 const semantic = () => formal("semantic-cases.json") as SemanticCases;
 const profiles = () => formal("profiles.json") as Profiles;
-const checker = new URL("../../formal/check-go-parity.mjs", import.meta.url).href;
+const checker = new URL("../../formal/tools/check-go-parity.mjs", import.meta.url).href;
 // Keep the ledger in-process: these assertions test the exported accounting
 // checker, so a subprocess adds no behavioral coverage.
 const { checkGoParity: validate } = await import(checker) as {
@@ -77,11 +77,11 @@ describe("Go parity ledger freshness", () => {
     dropped.profiles.shift();
     expect(() => validate(ledger(), { profileManifest: dropped })).toThrow(/Profile inventory differs between execution.json and profiles.json/);
     const moved = profiles();
-    moved.profiles[0]!.model = "formal/dialcache-missing.qnt";
+    moved.profiles[0]!.model = "formal/models/dialcache-missing.qnt";
     expect(() => validate(ledger(), { profileManifest: moved })).toThrow(/model differs from execution.json/);
     const smoke = profiles();
-    smoke.profiles[0]!.smoke = "formal/missing-smoke.itf.json";
-    expect(() => validate(ledger(), { profileManifest: smoke })).toThrow(/missing or invalid repository path formal\/missing-smoke.itf.json/);
+    smoke.profiles[0]!.smoke = "formal/generated/missing-smoke.itf.json";
+    expect(() => validate(ledger(), { profileManifest: smoke })).toThrow(/missing or invalid repository path formal\/generated\/missing-smoke.itf.json/);
     const cases = ledger();
     cases.cases.pop();
     expect(() => validate(cases)).toThrow(/Semantic case inventory\/order differs/);
@@ -89,7 +89,7 @@ describe("Go parity ledger freshness", () => {
 
   it("derives each case's Quint evidence from semantic-cases.json and checks it against the schedule", () => {
     const unscheduled = semantic();
-    unscheduled.cases[0]!.models = ["formal/dialcache-core.qnt:unknownInvariant"];
+    unscheduled.cases[0]!.models = ["formal/models/dialcache-core.qnt:unknownInvariant"];
     expect(() => validate(ledger(), { semantic: unscheduled })).toThrow(/Quint check is not independently scheduled/);
     const replay = semantic();
     replay.cases.find(row => row.quintReplays?.length)!.quintReplays = ["core/doesNotExistTest"];

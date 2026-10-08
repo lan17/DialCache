@@ -3,8 +3,8 @@
     "regression": "rejectedDarkSourceSeedsNoLayerTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/rejectedDarkSourceSeedsNoLayerTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/rejectedDarkSourceSeedsNoLayerTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -20,8 +20,8 @@
     "regression": "uncoalescedPublicationDoesNotPreemptTheRegisteredLeaderTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/uncoalescedPublicationDoesNotPreemptTheRegisteredLeaderTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/uncoalescedPublicationDoesNotPreemptTheRegisteredLeaderTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -40,8 +40,8 @@
     "regression": "darkFillCarriesCapturedRetentionOnTheHeldPathTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/darkFillCarriesCapturedRetentionOnTheHeldPathTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/darkFillCarriesCapturedRetentionOnTheHeldPathTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -59,8 +59,8 @@
     "regression": "fillAtTheWatermarkInstantIsFencedTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/fillAtTheWatermarkInstantIsFencedTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/fillAtTheWatermarkInstantIsFencedTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -76,8 +76,8 @@
     "regression": "frameAtTheWatermarkIsFencedFromTheDarkReadTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/frameAtTheWatermarkIsFencedFromTheDarkReadTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/frameAtTheWatermarkIsFencedFromTheDarkReadTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -95,8 +95,8 @@
     "regression": "fillFenceIsRejudgedAfterAWallRollbackTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/fillFenceIsRejudgedAfterAWallRollbackTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/fillFenceIsRejudgedAfterAWallRollbackTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -115,8 +115,8 @@
     "regression": "staleVisibleFrameDeclinedByTheDarkReadFillsUnfencedTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/staleVisibleFrameDeclinedByTheDarkReadFillsUnfencedTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/staleVisibleFrameDeclinedByTheDarkReadFillsUnfencedTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -138,8 +138,8 @@
     "regression": "undecodableDarkC0IsNeverRepairedTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/undecodableDarkC0IsNeverRepairedTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/undecodableDarkC0IsNeverRepairedTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -156,8 +156,8 @@
     "regression": "unsupportedEncodingFailsTheDarkReadTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/unsupportedEncodingFailsTheDarkReadTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/unsupportedEncodingFailsTheDarkReadTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -173,8 +173,8 @@
     "regression": "sourceDeadlineExpiresTheDarkJobAndAttributesToTheLocalLayerTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/sourceDeadlineExpiresTheDarkJobAndAttributesToTheLocalLayerTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/sourceDeadlineExpiresTheDarkJobAndAttributesToTheLocalLayerTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -190,8 +190,8 @@
     "regression": "sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/sameKeyCallersOnTwoInstancesKeepSeparateFlightsTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -206,8 +206,8 @@
     "regression": "closedScopeCallerBypassesLayersAndAdmitsNoJobTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/closedScopeCallerBypassesLayersAndAdmitsNoJobTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/closedScopeCallerBypassesLayersAndAdmitsNoJobTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -222,8 +222,8 @@
     "regression": "fullInstanceDropsAnotherKeyWhileTheC0ReadIsHeldTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/fullInstanceDropsAnotherKeyWhileTheC0ReadIsHeldTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/fullInstanceDropsAnotherKeyWhileTheC0ReadIsHeldTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -238,8 +238,8 @@
     "regression": "dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/dumpFaultEndsTheFillWithoutReplacingTheCallerResultTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -256,8 +256,8 @@
     "regression": "localPublicationStopsLaterDarkWorkTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/localPublicationStopsLaterDarkWorkTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/localPublicationStopsLaterDarkWorkTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -273,8 +273,8 @@
     "regression": "retainedC0AgeIsSampledAtTheVerdictTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/retainedC0AgeIsSampledAtTheVerdictTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/retainedC0AgeIsSampledAtTheVerdictTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -293,8 +293,8 @@
     "regression": "rollbackMakesTheSeededFrameFutureAndReportsItsOffsetTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/rollbackMakesTheSeededFrameFutureAndReportsItsOffsetTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/rollbackMakesTheSeededFrameFutureAndReportsItsOffsetTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -313,8 +313,8 @@
     "regression": "transientRequestOnlySourceFailureIsAttributedToRequestLayerTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/transientRequestOnlySourceFailureIsAttributedToRequestLayerTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/transientRequestOnlySourceFailureIsAttributedToRequestLayerTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -329,8 +329,8 @@
     "regression": "laterDarkSourceKeepsItsWholeBudgetTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/laterDarkSourceKeepsItsWholeBudgetTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/laterDarkSourceKeepsItsWholeBudgetTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -346,8 +346,8 @@
     "regression": "timedOutDarkReadKeepsCapacityUntilRawReleaseTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkReadKeepsCapacityUntilRawReleaseTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkReadKeepsCapacityUntilRawReleaseTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -366,8 +366,8 @@
     "regression": "timedOutDarkDecodeKeepsCapacityUntilRawReleaseTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkDecodeKeepsCapacityUntilRawReleaseTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkDecodeKeepsCapacityUntilRawReleaseTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -388,8 +388,8 @@
     "regression": "timedOutDarkConfirmationKeepsCapacityUntilRawReleaseTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkConfirmationKeepsCapacityUntilRawReleaseTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkConfirmationKeepsCapacityUntilRawReleaseTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -411,8 +411,8 @@
     "regression": "timedOutDarkDumpKeepsCapacityUntilRawReleaseTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkDumpKeepsCapacityUntilRawReleaseTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkDumpKeepsCapacityUntilRawReleaseTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -432,8 +432,8 @@
     "regression": "timedOutDarkWriteKeepsCapacityUntilRawReleaseTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkWriteKeepsCapacityUntilRawReleaseTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/timedOutDarkWriteKeepsCapacityUntilRawReleaseTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -454,8 +454,8 @@
     "regression": "inspectionTracksKeysFollowersAndOldestLeaderTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionTracksKeysFollowersAndOldestLeaderTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionTracksKeysFollowersAndOldestLeaderTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -479,8 +479,8 @@
     "regression": "inspectionIsPerInstanceAndUsesMonotonicTimeTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionIsPerInstanceAndUsesMonotonicTimeTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionIsPerInstanceAndUsesMonotonicTimeTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -501,8 +501,8 @@
     "regression": "inspectionExcludesRequestOnlyAndUncoalescedWorkTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionExcludesRequestOnlyAndUncoalescedWorkTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionExcludesRequestOnlyAndUncoalescedWorkTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -521,8 +521,8 @@
     "regression": "inspectionClearsTimedOutCallersWhileRawWorkRemainsTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionClearsTimedOutCallersWhileRawWorkRemainsTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionClearsTimedOutCallersWhileRawWorkRemainsTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},
@@ -543,8 +543,8 @@
     "regression": "inspectionExcludesUnfinishedShadowAfterCallerSuccessTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-dark-layers-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionExcludesUnfinishedShadowAfterCallerSuccessTest"
+        "model": "formal/models/dialcache-dark-layers-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/dark-layers-witnesses.json/inspectionExcludesUnfinishedShadowAfterCallerSuccessTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"inspections":[]}}},

@@ -16,17 +16,17 @@ type InventoryInputs = {
   scenarios: { scenarios: Array<{ feature: string; name: string }> };
   protocol: Record<string, unknown>;
 };
-const moduleUrl = new URL("../../formal/check-go-replay.mjs", import.meta.url).href;
+const moduleUrl = new URL("../../formal/tools/check-go-replay.mjs", import.meta.url).href;
 const { checkGoReplay, loadGoReplayInventory, buildGoReplayInventory } = await import(moduleUrl) as {
   loadGoReplayInventory(): Inventory;
   buildGoReplayInventory(input: InventoryInputs): Inventory;
   checkGoReplay(report: string, inventory: Inventory): Result;
 };
-const { protocolCorpus } = await import(new URL("../../formal/vector-artifacts.mjs", import.meta.url).href) as {
+const { protocolCorpus } = await import(new URL("../../formal/tools/vector-artifacts.mjs", import.meta.url).href) as {
   protocolCorpus(manifest?: InventoryInputs["execution"]): InventoryInputs["protocol"];
 };
 // The manifest with the schedule its Quint text states (regressions and exported replay regressions per model).
-const { scheduleExecution } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+const { scheduleExecution } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
   scheduleExecution(): InventoryInputs["execution"];
 };
 const inventory = loadGoReplayInventory();
@@ -45,7 +45,7 @@ const completed = (): Event[] => {
   return [...events, event("pass")];
 };
 const check = (events: unknown[]): Result => checkGoReplay(encode(events), inventory);
-const readFixture = (path: string): unknown => JSON.parse(readFileSync(new URL(`../../formal/${path}`, import.meta.url), "utf8"));
+const readFixture = (path: string): unknown => JSON.parse(readFileSync(new URL(`../../formal/catalogs/${path}`, import.meta.url), "utf8"));
 const inventoryInputs = (): InventoryInputs => ({
   packageName: inventory.packageName,
   execution: scheduleExecution(),
