@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 // directory closure prevents a newly imported mapping from silently escaping
 // isolated witness fingerprints before the full completion gate is reached.
 export function replaySources(directory = ".") {
-  const registry = JSON.parse(readFileSync(resolve(directory, "formal/profiles.json"), "utf8"));
+  const registry = JSON.parse(readFileSync(resolve(directory, "formal/catalogs/profiles.json"), "utf8"));
   const actual = [];
   function visit(relative) {
     for (const entry of readdirSync(resolve(directory, relative), { withFileTypes: true })) {

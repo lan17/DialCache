@@ -29,7 +29,7 @@ def check_witness(profile, cases, completed, directory=None):
         or evidence.get("traces") != len(selected)
     ):
         raise AssertionError(f"Unsupported or incomplete {profile} witness evidence")
-    required = strict_json((ROOT / "formal/coverage-witnesses.json").read_text())[profile]
+    required = strict_json((ROOT / "formal/catalogs/coverage-witnesses.json").read_text())[profile]
     if not required or evidence.get("required") != required:
         raise AssertionError(f"{profile} required witness registry differs")
     seen = evidence.get("seen", [])
@@ -73,12 +73,12 @@ def check_witness(profile, cases, completed, directory=None):
         if any(label.get(kind) != count for kind, count in counts.items()):
             raise AssertionError(f"{profile} witness {name} provenance counts differ")
 
-    registry = strict_json((ROOT / "formal/profiles.json").read_text())
-    execution = strict_json((ROOT / "formal/execution.json").read_text())
+    registry = strict_json((ROOT / "formal/catalogs/profiles.json").read_text())
+    execution = strict_json((ROOT / "formal/catalogs/execution.json").read_text())
     models = {entry["path"] for entry in execution["models"]}
     libraries = sorted(
         str(path.relative_to(ROOT))
-        for folder in (ROOT / "formal", ROOT / "formal/kernel")
+        for folder in (ROOT / "formal/models", ROOT / "formal/models/kernel")
         for path in folder.glob("*.qnt")
         if str(path.relative_to(ROOT)) not in models
     )
@@ -93,11 +93,11 @@ def check_witness(profile, cases, completed, directory=None):
     inputs = list(
         dict.fromkeys(
             [
-                "formal/profiles.json",
-                "formal/coverage-witnesses.json",
-                "formal/execution.json",
-                f"formal/dialcache-{profile}-conformance.qnt",
-                "formal/conformance-observations.qnt",
+                "formal/catalogs/profiles.json",
+                "formal/catalogs/coverage-witnesses.json",
+                "formal/catalogs/execution.json",
+                f"formal/models/dialcache-{profile}-conformance.qnt",
+                "formal/models/conformance-observations.qnt",
                 *libraries,
                 *replay,
                 *definition.get("witnessSources", []),

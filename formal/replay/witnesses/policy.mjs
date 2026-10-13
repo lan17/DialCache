@@ -128,7 +128,7 @@ function shadowHistory(steps, path) {
 }
 
 // The shadow in the model's own field names: dialcache-policy-conformance.qnt
-// composed from formal/kernel. The wall clock is now plus skew; the pending
+// composed from formal/models/kernel. The wall clock is now plus skew; the pending
 // caller is the gate's one held entry (its policy call index is its caller
 // index, every caller makes a policy call); the single local slot is the one
 // non-empty per-key slot of a capacity-1 instance, whose LRU order names it;

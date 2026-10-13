@@ -13,12 +13,12 @@ and failure-isolated observability.
 The [Quint models](../formal/README.md) are the behavioral source of truth. All three
 implementations replay the same sampled histories and named public-action
 regressions, plus fixed scenarios and Quint-derived protocol vectors. The current
-inventory comes from [execution.json](../formal/execution.json); real integration
+inventory comes from [execution.json](../formal/catalogs/execution.json); real integration
 checks run invalidation cases on Redis, Valkey and Redis Cluster and exercise
 bidirectional TypeScript/Go payload and invalidation interoperability.
 These are finite checks of the documented contract, not proof of every
-possible input or schedule. See [parity acceptance](../formal/GO-PARITY.md)
-and the [feature and corner-case map](../formal/FEATURE-COVERAGE.md).
+possible input or schedule. See [parity acceptance](../formal/guides/GO-PARITY.md)
+and the [feature and corner-case map](../formal/guides/FEATURE-COVERAGE.md).
 
 ## Use
 
@@ -188,7 +188,7 @@ same registry and prefix. To reuse externally registered collectors, supply
 their actual instances and construction schemas through
 `NewPrometheusMetricsWithBindings`. The schema is a caller precondition because
 Go's native registry cannot expose empty histogram buckets; see the precise
-[binding contract](../formal/GO-PARITY.md#current-configuration-and-observability-bindings).
+[binding contract](../formal/guides/GO-PARITY.md#current-configuration-and-observability-bindings).
 
 ## Validation and reproducing a trace
 
@@ -237,7 +237,7 @@ external commands and checks observations; all cache behavior executes in Go.
 Native source/adapter gates and clocks control the run. Expected states stay in
 the coordinator and never enter the native driver. The witness report Go
 consumes certifies reached boundaries only. It is produced by the shared
-`node formal/witnesses.mjs evaluate` command over the same corpus and binds only
+`node formal/tools/witnesses.mjs evaluate` command over the same corpus and binds only
 Quint models, the manifest/registry files and the `formal/replay` closure, so no
 TypeScript test run is a prerequisite for Go's completion. Negative harness
 tests challenge those boundaries.
@@ -248,4 +248,4 @@ and sampled histories provide evidence for exercised executions, not exhaustive
 concurrency verification or an external Redis durability guarantee.
 
 For complete artifact regeneration, driver requirements and the reusable
-language-neutral completion report, see [PORTING.md](../formal/PORTING.md).
+language-neutral completion report, see [PORTING.md](../formal/guides/PORTING.md).

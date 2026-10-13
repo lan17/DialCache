@@ -118,7 +118,7 @@ def main():
         if args.profile or args.trace or not args.report:
             parser.error("--complete requires --report and cannot select a profile or trace")
         args.generated = args.scenarios = True
-    profiles = json.loads((ROOT / "formal/profiles.json").read_text())["profiles"]
+    profiles = json.loads((ROOT / "formal/catalogs/profiles.json").read_text())["profiles"]
     known = {entry["id"] for entry in profiles}
     if args.profile and args.profile not in known:
         parser.error(f"Unknown profile {args.profile}")
@@ -138,7 +138,7 @@ def main():
         # Inventory is owned by the shared execution manifest; no native copy of
         # trace counts, exported regression names or profile tables may drift.
         listing = subprocess.run(
-            [node_binary(), "formal/conformance.mjs", "inventory"],
+            [node_binary(), "formal/tools/conformance.mjs", "inventory"],
             cwd=ROOT,
             text=True,
             capture_output=True,

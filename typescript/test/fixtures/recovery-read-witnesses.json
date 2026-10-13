@@ -3,8 +3,8 @@
     "regression": "closedRequestCannotReceiveCompressedRecoveryTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/closedRequestCannotReceiveCompressedRecoveryTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/closedRequestCannotReceiveCompressedRecoveryTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -22,8 +22,8 @@
     "regression": "compressedRecoveryMemoizesWithoutLocalPublicationTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/compressedRecoveryMemoizesWithoutLocalPublicationTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/compressedRecoveryMemoizesWithoutLocalPublicationTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -41,8 +41,8 @@
     "regression": "compressedRecoveryRechecksMaximumAfterDecodeTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/compressedRecoveryRechecksMaximumAfterDecodeTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/compressedRecoveryRechecksMaximumAfterDecodeTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -59,8 +59,8 @@
     "regression": "corruptCompressedReadReportsRawFallbackTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/corruptCompressedReadReportsRawFallbackTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/corruptCompressedReadReportsRawFallbackTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -76,8 +76,8 @@
     "regression": "corruptCompressedRecoveryKeepsOriginalSourceErrorTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/corruptCompressedRecoveryKeepsOriginalSourceErrorTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/corruptCompressedRecoveryKeepsOriginalSourceErrorTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -93,8 +93,8 @@
     "regression": "failedInvalidationDoesNotCreateMarkerTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/failedInvalidationDoesNotCreateMarkerTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/failedInvalidationDoesNotCreateMarkerTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -108,8 +108,8 @@
     "regression": "failedInvalidationPreservesExistingMarkerTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/failedInvalidationPreservesExistingMarkerTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/failedInvalidationPreservesExistingMarkerTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -126,8 +126,8 @@
     "regression": "freshCompressedReadReportsDecompressionTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/freshCompressedReadReportsDecompressionTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/freshCompressedReadReportsDecompressionTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -142,8 +142,8 @@
     "regression": "freshnessAfterHeldReadTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/freshnessAfterHeldReadTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/freshnessAfterHeldReadTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -160,8 +160,8 @@
     "regression": "heldReadJustBeforeFreshnessBoundaryStillHitsTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/heldReadJustBeforeFreshnessBoundaryStillHitsTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/heldReadJustBeforeFreshnessBoundaryStillHitsTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -177,8 +177,8 @@
     "regression": "laterInvalidationDoesNotRewriteObservedMissFenceTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/laterInvalidationDoesNotRewriteObservedMissFenceTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/laterInvalidationDoesNotRewriteObservedMissFenceTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -196,8 +196,8 @@
     "regression": "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/maximumAgeBeforeDecodeKeepsOriginalErrorTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/maximumAgeBeforeDecodeKeepsOriginalErrorTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -213,8 +213,8 @@
     "regression": "ordinaryValueWorkDoesNotCreateMarkerTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/ordinaryValueWorkDoesNotCreateMarkerTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/ordinaryValueWorkDoesNotCreateMarkerTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -234,8 +234,8 @@
     "regression": "ordinaryValueWorkDoesNotExtendMarkerTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/ordinaryValueWorkDoesNotExtendMarkerTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/ordinaryValueWorkDoesNotExtendMarkerTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -259,8 +259,8 @@
     "regression": "physicalCapDoesNotClampLogicalRecoveryTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/physicalCapDoesNotClampLogicalRecoveryTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/physicalCapDoesNotClampLogicalRecoveryTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -277,8 +277,8 @@
     "regression": "retainedCompressedRecoverySurvivesInvalidationTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/retainedCompressedRecoverySurvivesInvalidationTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/retainedCompressedRecoverySurvivesInvalidationTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -299,8 +299,8 @@
     "regression": "retainedSnapshotSurvivesPhysicalExpiryTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/retainedSnapshotSurvivesPhysicalExpiryTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/retainedSnapshotSurvivesPhysicalExpiryTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -320,8 +320,8 @@
     "regression": "trackedEncodingFailureSuppressesRefillTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/trackedEncodingFailureSuppressesRefillTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/trackedEncodingFailureSuppressesRefillTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -337,8 +337,8 @@
     "regression": "trackedPhysicalRetentionExpiresAtCapTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/trackedPhysicalRetentionExpiresAtCapTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/trackedPhysicalRetentionExpiresAtCapTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -356,8 +356,8 @@
     "regression": "trackedSourceNeedsRemoteValidationBeforeLocalReuseTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/trackedSourceNeedsRemoteValidationBeforeLocalReuseTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/trackedSourceNeedsRemoteValidationBeforeLocalReuseTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -376,8 +376,8 @@
     "regression": "unsafeTimestampSkipsSerializerAndAllowsRefillTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/unsafeTimestampSkipsSerializerAndAllowsRefillTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/unsafeTimestampSkipsSerializerAndAllowsRefillTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -395,8 +395,8 @@
     "regression": "unsupportedVersionSkipsSerializerAndAllowsRefillTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/unsupportedVersionSkipsSerializerAndAllowsRefillTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/unsupportedVersionSkipsSerializerAndAllowsRefillTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -414,8 +414,8 @@
     "regression": "untrackedCompressedRecoveryDoesNotWarmLocalTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/untrackedCompressedRecoveryDoesNotWarmLocalTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/untrackedCompressedRecoveryDoesNotWarmLocalTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"0"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},
@@ -432,8 +432,8 @@
     "regression": "untrackedEncodingFailureStillPublishesLocalTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-recovery-read-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/untrackedEncodingFailureStillPublishesLocalTest"
+        "model": "formal/models/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/recovery-read-witnesses.json/untrackedEncodingFailureStillPublishesLocalTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"0"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"markers":[],"compression":[]}},

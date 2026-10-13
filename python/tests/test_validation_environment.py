@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-VALIDATION = ROOT / "formal/validation.mjs"
+VALIDATION = ROOT / "formal/tools/validation.mjs"
 NODE_BRIDGE = r"""
 import { pathToFileURL } from 'node:url';
 let input = ''; for await (const chunk of process.stdin) input += chunk;

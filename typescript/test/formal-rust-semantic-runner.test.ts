@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const moduleUrl = new URL("../../formal/measure-rust-semantics.mjs", import.meta.url).href;
+const moduleUrl = new URL("../../formal/tools/measure-rust-semantics.mjs", import.meta.url).href;
 type Cohort = { state: string; passed: number; failed: number; failingTests: string[]; executedTests: string[]; assertionKinds: Record<string, string>; assertionEvidence: Record<string, string> };
 const { evaluateCargoTestOutput, evaluateRustReport, infrastructureTestFile, rustMutationScope, rustTargetDirectory } = await import(moduleUrl) as {
   evaluateCargoTestOutput(output: string, exitCode: number, expectedBinaries?: number): Cohort;
@@ -130,8 +130,8 @@ describe("Rust harness report evaluation", () => {
 describe("Rust fault catalog", () => {
   const readRepo = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
   type Entry = { id: string; case: string; description: string; typescriptMutation: string; edits: { path: string; before: string; after: string }[]; requiredDetections: string[]; typescriptRequiredDetections: string[] };
-  const catalog = JSON.parse(readRepo("formal/rust-mutations.json")) as { schemaVersion: number; mutations: Entry[] };
-  const typescript = JSON.parse(readRepo("formal/mutations.json")) as { mutations: { id: string; case: string; description: string; typescript: { requiredDetections: string[] } }[] };
+  const catalog = JSON.parse(readRepo("formal/catalogs/rust-mutations.json")) as { schemaVersion: number; mutations: Entry[] };
+  const typescript = JSON.parse(readRepo("formal/catalogs/mutations.json")) as { mutations: { id: string; case: string; description: string; typescript: { requiredDetections: string[] } }[] };
 
   it("maps each scoped Rust fault once into the current shared catalog", () => {
     expect(catalog.schemaVersion).toBe(1);

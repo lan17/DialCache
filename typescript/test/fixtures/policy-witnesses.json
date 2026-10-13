@@ -1,8 +1,8 @@
 {
   "localHitDoesNotRenewInsertionTtlTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/localHitDoesNotRenewInsertionTtlTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/localHitDoesNotRenewInsertionTtlTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -20,8 +20,8 @@
   },
   "wallRollbackDoesNotExtendLocalTtlTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/wallRollbackDoesNotExtendLocalTtlTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/wallRollbackDoesNotExtendLocalTtlTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -39,8 +39,8 @@
   },
   "wallRollbackRejectsFutureRemoteFrameTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/wallRollbackRejectsFutureRemoteFrameTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/wallRollbackRejectsFutureRemoteFrameTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -55,8 +55,8 @@
   },
   "exactRemoteFreshBoundaryStartsSourceTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/exactRemoteFreshBoundaryStartsSourceTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/exactRemoteFreshBoundaryStartsSourceTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -71,8 +71,8 @@
   },
   "increasedFreshTtlCanReusePhysicallyRetainedValueTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/increasedFreshTtlCanReusePhysicallyRetainedValueTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/increasedFreshTtlCanReusePhysicallyRetainedValueTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -88,8 +88,8 @@
   },
   "increasedFreshTtlCannotResurrectExpiredStorageTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/increasedFreshTtlCannotResurrectExpiredStorageTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/increasedFreshTtlCannotResurrectExpiredStorageTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -105,8 +105,8 @@
   },
   "remoteHitStartsFullLocalInsertionTtlTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/remoteHitStartsFullLocalInsertionTtlTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/remoteHitStartsFullLocalInsertionTtlTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -125,8 +125,8 @@
   },
   "providerFailureBypassesAndPreservesExistingLocalTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/providerFailureBypassesAndPreservesExistingLocalTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/providerFailureBypassesAndPreservesExistingLocalTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -144,8 +144,8 @@
   },
   "disablingServingKeepsExistingLocalForReenablementTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/disablingServingKeepsExistingLocalForReenablementTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/disablingServingKeepsExistingLocalForReenablementTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -163,8 +163,8 @@
   },
   "untrackedReadFailureStillWarmsActiveLocalTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/untrackedReadFailureStillWarmsActiveLocalTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/untrackedReadFailureStillWarmsActiveLocalTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -178,8 +178,8 @@
   },
   "independentLocalPublicationUsesLastCompletionTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/independentLocalPublicationUsesLastCompletionTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/independentLocalPublicationUsesLastCompletionTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -196,8 +196,8 @@
   },
   "independentFailureKeepsSettledLocalValueTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/independentFailureKeepsSettledLocalValueTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/independentFailureKeepsSettledLocalValueTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -214,8 +214,8 @@
   },
   "independentRemotePublicationUsesLastCompletionTest": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/independentRemotePublicationUsesLastCompletionTest"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/independentRemotePublicationUsesLastCompletionTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -232,8 +232,8 @@
   },
   "inactiveLayersStartIndependentSources": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/inactiveLayersStartIndependentSources"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/inactiveLayersStartIndependentSources"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -246,8 +246,8 @@
   },
   "expiredLocalEntryMissesAfterRollback": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/expiredLocalEntryMissesAfterRollback"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/expiredLocalEntryMissesAfterRollback"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -263,8 +263,8 @@
   },
   "rollbackWithinElapsedTimeServesFrame": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/rollbackWithinElapsedTimeServesFrame"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/rollbackWithinElapsedTimeServesFrame"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},
@@ -280,8 +280,8 @@
   },
   "staleFrameMissesAfterRollback": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/staleFrameMissesAfterRollback"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-witnesses.json/staleFrameMissesAfterRollback"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"policyErrors":[]}},

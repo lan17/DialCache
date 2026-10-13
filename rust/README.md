@@ -264,14 +264,14 @@ make check-rust        # fmt, clippy, unit tests, protocol vectors, fixed scenar
 make integration-rust  # Real Redis, Valkey and Cluster servers through Docker, plus every invalidation vector
 make formal            # Quint model checks, full corpus, then TypeScript, Go and Rust replay
 make formal-rust       # Complete prepared Rust replay of the generated corpus
-make mutations-rust    # Measure the Rust fault catalog (formal/rust-mutations.json) against the replay
+make mutations-rust    # Measure the Rust fault catalog (formal/catalogs/rust-mutations.json) against the replay
 ```
 
 `make mutations-rust` applies each catalogued single-site fault to an isolated
 copy of the crate and requires the conformance harness to detect it
 (`DIALCACHE_RUST_SUITE=generated` for the Quint-generated evidence,
 `DIALCACHE_RUST_SUITE=fixed` for the fixed scenarios); see
-[SEMANTIC-COVERAGE.md](https://github.com/lan17/DialCache/blob/main/formal/SEMANTIC-COVERAGE.md).
+[SEMANTIC-COVERAGE.md](https://github.com/lan17/DialCache/blob/main/formal/guides/SEMANTIC-COVERAGE.md).
 
 Without overrides, `cargo test --all-features --test conformance` replays the
 committed smoke histories, every fixed scenario and every protocol vector.
@@ -306,4 +306,4 @@ every behavior-driver-backed smoke history.
   tasks, independently attributing each write to its actual source callback.
 - The core replay, the exporters and the Redis adapter follow their Go
   counterparts; real-server integration is a separate lane, as in the other
-  ports, and not part of the completion claim (see `formal/profiles.json`).
+  ports, and not part of the completion claim (see `formal/catalogs/profiles.json`).

@@ -8,7 +8,7 @@ and API links while preserving the shared explanation and feature URL.
 ## Change a feature guide
 
 1. Read the relevant contract and TypeScript reference behavior. For a new
-   portable behavior, follow [formal authoring](https://github.com/lan17/DialCache/blob/main/formal/AUTHORING.md)
+   portable behavior, follow [formal authoring](https://github.com/lan17/DialCache/blob/main/formal/guides/AUTHORING.md)
    and record a distinguishing regression before documenting it as supported.
 2. Explain the rule, observable outcome, and limitations once. Keep concrete
    API names in small native notes where they help a reader act.

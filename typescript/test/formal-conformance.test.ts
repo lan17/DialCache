@@ -14,7 +14,7 @@ import { record } from "./formal/itf.js";
 import { FakeRedis } from "./fake-redis.js";
 
 // The exported core regressions are the model's public-only runs, read from its Quint text.
-const { scheduleExecution } = await import(new URL("../../formal/execution.mjs", import.meta.url).href) as {
+const { scheduleExecution } = await import(new URL("../../formal/tools/execution.mjs", import.meta.url).href) as {
   scheduleExecution(): { models: Array<{ profile?: string; replayRegressions?: string[] }> };
 };
 
@@ -128,7 +128,7 @@ function readItfTrace(path: string): Trace {
 }
 
 function loadTraces(generatedDir: string | undefined): Trace[] {
-  if (generatedDir === undefined) return [readItfTrace(fileURLToPath(new URL("../../formal/conformance-smoke.itf.json", import.meta.url)))];
+  if (generatedDir === undefined) return [readItfTrace(fileURLToPath(new URL("../../formal/generated/conformance-smoke.itf.json", import.meta.url)))];
   const root = resolve(generatedDir);
   const paths = readdirSync(root).filter((name) => name.endsWith(".itf.json")).sort();
   if (paths.length === 0) throw new Error(`${root}: no .itf.json conformance traces found`);
@@ -182,7 +182,7 @@ describe("Quint model-based conformance", () => {
 });
 
 describe("conformance harness trust boundary", () => {
-  const smokePath = fileURLToPath(new URL("../../formal/conformance-smoke.itf.json", import.meta.url));
+  const smokePath = fileURLToPath(new URL("../../formal/generated/conformance-smoke.itf.json", import.meta.url));
   const smoke = readItfTrace(smokePath);
 
   it("accepts explicit commands without MBT metadata", async () => {

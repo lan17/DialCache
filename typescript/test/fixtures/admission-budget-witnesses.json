@@ -3,8 +3,8 @@
     "regression": "laterServedShadowKeepsItsWholeBudgetTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-admission-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/admission-budget-witnesses.json/laterServedShadowKeepsItsWholeBudgetTest"
+        "model": "formal/models/dialcache-admission-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/admission-budget-witnesses.json/laterServedShadowKeepsItsWholeBudgetTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},

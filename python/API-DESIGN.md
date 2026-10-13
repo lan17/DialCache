@@ -2,7 +2,7 @@
 
 The Python binding was designed after reviewing [rungalileo/gcache at a688049](https://github.com/rungalileo/gcache/tree/a68804986782cb0b7e8b7dc6bfc34c718c177189), including `src/gcache/gcache.py`, `config.py`, `proto_serializer.py`, and the context, layer wrappers, local cache, Redis cache, and event-loop thread implementations under `_internal/`.
 
-DialCache's [Quint specification](../formal/SPEC.md) and TypeScript implementation define portable behavior. Gcache supplies useful Python interface ideas; its implementation is not a compatible DialCache backend.
+DialCache's [Quint specification](../formal/guides/SPEC.md) and TypeScript implementation define portable behavior. Gcache supplies useful Python interface ideas; its implementation is not a compatible DialCache backend.
 
 The primary decorator style selects identity explicitly with
 `cache_key=lambda user_id, locale: {"id": user_id, "args": {"locale": locale}}`

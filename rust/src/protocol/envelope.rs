@@ -5,7 +5,7 @@
 //! collide, `0x01` marks a zstd frame of UTF-8 text and `0x02` a zstd frame of
 //! binary bytes. Raw output is escaped on every write, and every read
 //! interprets the envelope, so disabling compression never strands entries.
-//! See "Envelope selection and codec environment" in `formal/PROTOCOL.md`.
+//! See "Envelope selection and codec environment" in `formal/guides/PROTOCOL.md`.
 
 use crate::codec::Payload;
 use crate::limits::{DEFAULT_COMPRESSION_THRESHOLD_BYTES, DEFAULT_ZSTD_LEVEL, MAX_SAFE_INTEGER};

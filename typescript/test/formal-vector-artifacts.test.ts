@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 
 type ExportModel = { path: string; vectorExport: { artifact: string; sources: string[]; cases: number; kind: string } };
 type Artifact = { provenance: { model: string; sourceSha256: Record<string, string> }; [group: string]: unknown };
-const manifest = JSON.parse(readFileSync(new URL("../../formal/execution.json", import.meta.url), "utf8")) as { models: ExportModel[] };
-const url = new URL("../../formal/vector-artifacts.mjs", import.meta.url).href;
+const manifest = JSON.parse(readFileSync(new URL("../../formal/catalogs/execution.json", import.meta.url), "utf8")) as { models: ExportModel[] };
+const url = new URL("../../formal/tools/vector-artifacts.mjs", import.meta.url).href;
 const { readVectorArtifact, protocolCorpus } = await import(url) as {
   readVectorArtifact(model: ExportModel, options?: { readSource(path: string): string }): Artifact;
   protocolCorpus(manifest?: unknown, selection?: string): Record<string, unknown>;
@@ -22,7 +22,7 @@ describe("Quint vector artifact authority", () => {
     expect(() => check(stale)).toThrow(/Stale generated vector source/);
     const incomplete = artifact(); delete incomplete.provenance.sourceSha256[model.vectorExport.sources.at(-1)!];
     expect(() => check(incomplete)).toThrow(/Incomplete vector source fingerprint/);
-    const different = artifact(); different.provenance.model = "formal/unrelated.qnt";
+    const different = artifact(); different.provenance.model = "formal/models/unrelated.qnt";
     expect(() => check(different)).toThrow(/provenance/);
   });
   it("rejects missing rows and duplicate names even if the artifact still parses", () => {
@@ -37,7 +37,7 @@ describe("Quint vector artifact authority", () => {
       .filter((entry): entry is [string, Array<{ name: string }>] => Array.isArray(entry[1]))
       .flatMap(([group, rows]) => rows.map(row => `${group}/${row.name}`)));
     const all = names("all"), fixed = names("fixed"), generated = names("generated");
-    expect(fixed.size).toBe(Object.values(JSON.parse(read("formal/protocol-vectors.json")) as Record<string, unknown>).filter(Array.isArray).reduce((total, rows) => total + rows.length, 0));
+    expect(fixed.size).toBe(Object.values(JSON.parse(read("formal/catalogs/protocol-vectors.json")) as Record<string, unknown>).filter(Array.isArray).reduce((total, rows) => total + rows.length, 0));
     expect(generated.size).toBe(manifest.models.filter(m => m.vectorExport?.kind === "protocol").reduce((n, m) => n + m.vectorExport.cases, 0));
     expect([...fixed].some(name => generated.has(name))).toBe(false);
     expect(new Set([...fixed, ...generated])).toEqual(all);

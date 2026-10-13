@@ -15,7 +15,7 @@ const fixtures = JSON.parse(readFileSync(new URL("./fixtures/policy-witnesses.js
 // The same model's runs projected with their private layout, for the fidelity check.
 const predictedFixtures = JSON.parse(readFileSync(new URL("./fixtures/policy-shadow-witnesses.json", import.meta.url), "utf8")) as Record<string, History>;
 const policy = profiles.policy!;
-const smoke = fileURLToPath(new URL("../../formal/policy-smoke.itf.json", import.meta.url));
+const smoke = fileURLToPath(new URL("../../formal/generated/policy-smoke.itf.json", import.meta.url));
 
 // The fixtures are public Quint runs of the policy model projected to the
 // recorded inputs and the observation a driver is asserted against. The
@@ -62,7 +62,7 @@ const positive: Array<[string, string]> = [
 describe("policy witnesses from inputs and public observations", () => {
   it("reads fixtures that carry only the recorded input and the asserted observation", () => {
     for (const [name, fixture] of Object.entries(fixtures)) {
-      expect(fixture.source.model, name).toBe("formal/dialcache-policy-conformance.qnt");
+      expect(fixture.source.model, name).toBe("formal/models/dialcache-policy-conformance.qnt");
       for (const state of fixture.states) expect(Object.keys(state.s).sort(), name).toEqual(["o", "policyErrors"]);
     }
   });

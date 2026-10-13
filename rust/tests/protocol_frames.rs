@@ -1,5 +1,5 @@
 //! Frame, decode, timestamp, duration and envelope conformance against the
-//! portable protocol corpus (`formal/protocol-vectors.json` plus the
+//! portable protocol corpus (`formal/catalogs/protocol-vectors.json` plus the
 //! Quint-generated frame and envelope artifacts).
 
 #[path = "formal/digest.rs"]

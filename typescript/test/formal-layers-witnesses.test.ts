@@ -38,7 +38,7 @@ function rechoose(state: State, choice: number): void {
 describe("layers witnesses from inputs and public observations", () => {
   it("reads a fixture that carries only the recorded input and the asserted observation", () => {
     for (const [name, fixture] of Object.entries(fixtures)) {
-      expect(fixture.source.model, name).toBe("formal/dialcache-layers-conformance.qnt");
+      expect(fixture.source.model, name).toBe("formal/models/dialcache-layers-conformance.qnt");
       for (const state of fixture.states) expect(Object.keys(state.s), name).toEqual(["o"]);
     }
   });

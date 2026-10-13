@@ -10,7 +10,7 @@ from formal.coordinator import Coordinator, node_binary
 from formal.scenarios import replay_scenario, scenarios
 from formal.schema import ROOT, json_equal, strict_json, validate
 
-PROFILES = json.loads((ROOT / "formal/profiles.json").read_text())["profiles"]
+PROFILES = json.loads((ROOT / "formal/catalogs/profiles.json").read_text())["profiles"]
 SELECTED = [
     entry
     for entry in PROFILES
@@ -137,7 +137,7 @@ def test_complete_report_gate_requires_every_native_assertion():
     # or presented as implementation evidence.
     program = r"""
       import assert from 'node:assert/strict';
-      import { checkPythonReplay } from './formal/check-python-replay.mjs';
+      import { checkPythonReplay } from './formal/tools/check-python-replay.mjs';
       const inventory = ['sampled','regression','scenario','protocol','witness'].map(category => ({id: `${category}/example`, category}));
       const make = () => [
         {kind:'start',schemaVersion:1,implementation:'python',scope:'conformance',selection:'generated',partial:false,startedAt:1},

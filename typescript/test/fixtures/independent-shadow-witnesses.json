@@ -1,8 +1,8 @@
 {
   "shadowWalk": {
     "source": {
-      "model": "formal/dialcache-independent-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/independent-shadow-witnesses.json/shadowWalk"
+      "model": "formal/models/dialcache-independent-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/independent-shadow-witnesses.json/shadowWalk"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"deadlines":[],"drained":[],"io":{"aborted":[],"budgets":[],"sourceErrors":[]},"loaders":[],"loads":[],"now":{"#bigint":"0"},"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"owners":[],"readBudget":{"#bigint":"5"},"reads":[],"retained":[],"sources":[],"ttls":{"freshMs":{"#bigint":"1000"},"localMs":{"#bigint":"0"},"retentionMs":{"#bigint":"5000"}}}},

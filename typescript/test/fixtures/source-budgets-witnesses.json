@@ -3,8 +3,8 @@
     "regression": "abandonedSourceCannotReplaceSuccessfulRetryTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-source-budgets-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/abandonedSourceCannotReplaceSuccessfulRetryTest"
+        "model": "formal/models/dialcache-source-budgets-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/abandonedSourceCannotReplaceSuccessfulRetryTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -24,8 +24,8 @@
     "regression": "defaultSourceBudgetExpiresAtSixtySecondsTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-source-budgets-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/defaultSourceBudgetExpiresAtSixtySecondsTest"
+        "model": "formal/models/dialcache-source-budgets-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/defaultSourceBudgetExpiresAtSixtySecondsTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"0"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -43,8 +43,8 @@
     "regression": "heldPolicyDoesNotSpendSourceBudgetTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-source-budgets-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/heldPolicyDoesNotSpendSourceBudgetTest"
+        "model": "formal/models/dialcache-source-budgets-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/heldPolicyDoesNotSpendSourceBudgetTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -62,8 +62,8 @@
     "regression": "invalidKeyStillKeepsEnabledSourceDeadlineTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-source-budgets-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/invalidKeyStillKeepsEnabledSourceDeadlineTest"
+        "model": "formal/models/dialcache-source-budgets-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/invalidKeyStillKeepsEnabledSourceDeadlineTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -80,8 +80,8 @@
     "regression": "lateFollowerUsesLeadersRemainingBudgetTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-source-budgets-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/lateFollowerUsesLeadersRemainingBudgetTest"
+        "model": "formal/models/dialcache-source-budgets-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/lateFollowerUsesLeadersRemainingBudgetTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -99,8 +99,8 @@
     "regression": "outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-source-budgets-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest"
+        "model": "formal/models/dialcache-source-budgets-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -118,8 +118,8 @@
     "regression": "unboundedEnabledSourcePublishesAfterSixtySecondsTest",
     "trace": {
       "source": {
-        "model": "formal/dialcache-source-budgets-conformance.qnt",
-        "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/unboundedEnabledSourcePublishesAfterSixtySecondsTest"
+        "model": "formal/models/dialcache-source-budgets-conformance.qnt",
+        "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/source-budgets-witnesses.json/unboundedEnabledSourcePublishesAfterSixtySecondsTest"
       },
       "states": [
         {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},

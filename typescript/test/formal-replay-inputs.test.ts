@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const url = new URL("../../formal/replay-inputs.mjs", import.meta.url).href;
+const url = new URL("../../formal/tools/replay-inputs.mjs", import.meta.url).href;
 const { normalizeReplayInputs, normalizeTraceFiles } = await import(url) as {
   normalizeReplayInputs(trace: unknown): Record<string, unknown>;
   normalizeTraceFiles(directory: string): number;

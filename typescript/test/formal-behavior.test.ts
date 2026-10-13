@@ -13,7 +13,7 @@ interface Scenario {
   fixture: Fixture;
   steps: Array<{ input: Input; expect: Partial<Observation> }>;
 }
-const corpus = JSON.parse(readFileSync(new URL("../../formal/behavioral-scenarios.json", import.meta.url), "utf8")) as {
+const corpus = JSON.parse(readFileSync(new URL("../../formal/catalogs/behavioral-scenarios.json", import.meta.url), "utf8")) as {
   schemaVersion: number; scenarios: Scenario[];
 };
 
@@ -43,7 +43,7 @@ async function replay(scenario: Scenario, driver = new BehaviorDriver(scenario.f
 
 describe("portable behavioral scenarios", () => {
   it("keeps every ordinary test and documentation section in the reviewed source audit", () => {
-    execFileSync(process.execPath, [fileURLToPath(new URL("../../formal/check-source-audit.mjs", import.meta.url))]);
+    execFileSync(process.execPath, [fileURLToPath(new URL("../../formal/tools/check-source-audit.mjs", import.meta.url))]);
   });
   it("has a nonempty versioned corpus and unique names", () => {
     expect(corpus.schemaVersion).toBe(2);

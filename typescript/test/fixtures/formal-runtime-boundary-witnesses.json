@@ -1,8 +1,8 @@
 {
   "disabledBaselineRampedUpKeepsDefaultSharingTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/disabledBaselineRampedUpKeepsDefaultSharingTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/disabledBaselineRampedUpKeepsDefaultSharingTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"8"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"8"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -21,8 +21,8 @@
   },
   "explicitNullCoalesceBypassesWithoutReplacingRemoteTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/explicitNullCoalesceBypassesWithoutReplacingRemoteTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/explicitNullCoalesceBypassesWithoutReplacingRemoteTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"5"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -40,8 +40,8 @@
   },
   "explicitNullRequestLocalBypassesWithoutReplacingRemoteTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/explicitNullRequestLocalBypassesWithoutReplacingRemoteTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/explicitNullRequestLocalBypassesWithoutReplacingRemoteTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"5"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -59,8 +59,8 @@
   },
   "falseRequestLeafPreservesMemoForReenablementTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/falseRequestLeafPreservesMemoForReenablementTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/falseRequestLeafPreservesMemoForReenablementTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"3"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"3"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -78,8 +78,8 @@
   },
   "fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"9"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"9"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -102,8 +102,8 @@
   },
   "inheritedFalseKeepsIndependentMemoizingSourcesTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/inheritedFalseKeepsIndependentMemoizingSourcesTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/inheritedFalseKeepsIndependentMemoizingSourcesTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"0"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -119,8 +119,8 @@
   },
   "invalidCoalesceBypassesWithoutReplacingRemoteTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/invalidCoalesceBypassesWithoutReplacingRemoteTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/invalidCoalesceBypassesWithoutReplacingRemoteTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"5"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -138,8 +138,8 @@
   },
   "invalidRequestLocalBypassesWithoutReplacingRemoteTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/invalidRequestLocalBypassesWithoutReplacingRemoteTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/invalidRequestLocalBypassesWithoutReplacingRemoteTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"5"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -157,8 +157,8 @@
   },
   "localAbsenceAndLiteralTextStayDistinctTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/localAbsenceAndLiteralTextStayDistinctTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/localAbsenceAndLiteralTextStayDistinctTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -174,8 +174,8 @@
   },
   "localCohortEqualityBypassesBeforeAboveSampleCachesTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/localCohortEqualityBypassesBeforeAboveSampleCachesTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/localCohortEqualityBypassesBeforeAboveSampleCachesTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -193,8 +193,8 @@
   },
   "localFalsyValuesRemainDistinctAndReusableTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/localFalsyValuesRemainDistinctAndReusableTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/localFalsyValuesRemainDistinctAndReusableTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -222,8 +222,8 @@
   },
   "nullProviderInheritsConfiguredServingAndDefaultSharingTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/nullProviderInheritsConfiguredServingAndDefaultSharingTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/nullProviderInheritsConfiguredServingAndDefaultSharingTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"5"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -239,8 +239,8 @@
   },
   "omittedRampAndSharingUseLibraryDefaultsTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/omittedRampAndSharingUseLibraryDefaultsTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/omittedRampAndSharingUseLibraryDefaultsTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"5"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -255,8 +255,8 @@
   },
   "reenablingSharingUsesTheOmittedTrueDefaultTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/reenablingSharingUsesTheOmittedTrueDefaultTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/reenablingSharingUsesTheOmittedTrueDefaultTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"3"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"3"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -276,8 +276,8 @@
   },
   "remoteAbsenceAndLiteralTextStayDistinctTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/remoteAbsenceAndLiteralTextStayDistinctTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/remoteAbsenceAndLiteralTextStayDistinctTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -293,8 +293,8 @@
   },
   "remoteCohortEqualityBypassesBeforeAboveSampleCachesTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/remoteCohortEqualityBypassesBeforeAboveSampleCachesTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/remoteCohortEqualityBypassesBeforeAboveSampleCachesTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -312,8 +312,8 @@
   },
   "remoteFalsyValuesRemainDistinctAndReusableTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/remoteFalsyValuesRemainDistinctAndReusableTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/remoteFalsyValuesRemainDistinctAndReusableTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"2"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -341,8 +341,8 @@
   },
   "requestAbsenceAndLiteralTextStayDistinctTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/requestAbsenceAndLiteralTextStayDistinctTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/requestAbsenceAndLiteralTextStayDistinctTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"0"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -358,8 +358,8 @@
   },
   "requestFalsyValuesRemainDistinctAndReusableTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/requestFalsyValuesRemainDistinctAndReusableTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/requestFalsyValuesRemainDistinctAndReusableTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"0"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -387,8 +387,8 @@
   },
   "runtimeLocalTtlWithoutRampActivatesLayerTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/runtimeLocalTtlWithoutRampActivatesLayerTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/runtimeLocalTtlWithoutRampActivatesLayerTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"6"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"6"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -405,8 +405,8 @@
   },
   "runtimeRemoteTtlWithoutRampActivatesLayerTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/runtimeRemoteTtlWithoutRampActivatesLayerTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/runtimeRemoteTtlWithoutRampActivatesLayerTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"7"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"7"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
@@ -423,8 +423,8 @@
   },
   "runtimeTrueEnablesSharingOverFalseDefaultTest": {
     "source": {
-      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/runtimeTrueEnablesSharingOverFalseDefaultTest"
+      "model": "formal/models/dialcache-runtime-boundaries-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-boundary-witnesses.json/runtimeTrueEnablesSharingOverFalseDefaultTest"
     },
     "states": [
       {"input":{"choice":{"#bigint":"0"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},

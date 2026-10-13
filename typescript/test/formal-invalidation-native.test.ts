@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readGeneratedInvalidationVectors } from "../../formal/generate-invalidation-vectors.mjs";
+import { readGeneratedInvalidationVectors } from "../../formal/tools/generate-invalidation-vectors.mjs";
 import { invalidationClient, recordInvalidation } from "./invalidation-native-driver.js";
-import { validVectorResult } from "../../formal/vector-evidence.mjs";
+import { validVectorResult } from "../../formal/tools/vector-evidence.mjs";
 
 // Mutation runners provision a private real server. Ordinary unit runs leave
 // this lane disabled; make integration has its own vector replay. Mutation

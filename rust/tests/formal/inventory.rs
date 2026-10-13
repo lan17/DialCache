@@ -3,7 +3,7 @@
 //! Ports the trace selection of the Go harness (`TestCoreConformance`,
 //! `effectsPaths`, `featurePaths`, `featureRegressionPaths`), its registry
 //! checks (`validateRegistry`, `validateBehaviorProfileRegistry`) and the id
-//! scheme of `formal/conformance.mjs` `conformanceInventory`, so the Rust
+//! scheme of `formal/tools/conformance.mjs` `conformanceInventory`, so the Rust
 //! replay reports the same `sampled/…`, `regression/…`, `scenario/…`,
 //! `protocol/…` and `witness/…` ids the completion checker requires.
 
@@ -19,7 +19,7 @@ pub fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Resolves a repository-relative path such as `formal/profiles.json`.
+/// Resolves a repository-relative path such as `formal/catalogs/profiles.json`.
 pub fn repo_path(relative: &str) -> PathBuf {
     repo_root().join(relative)
 }
@@ -161,7 +161,9 @@ impl Selection {
     /// plus the scheduled core regressions.
     pub fn core_paths(&self) -> Result<Vec<PathBuf>, String> {
         match &self.core {
-            TraceSource::Smoke => Ok(vec![repo_path("formal/conformance-smoke.itf.json")]),
+            TraceSource::Smoke => Ok(vec![repo_path(
+                "formal/generated/conformance-smoke.itf.json",
+            )]),
             TraceSource::File(file) => Ok(vec![file.clone()]),
             TraceSource::Directory(directory) => {
                 let mut paths = glob_itf(directory)?;
@@ -177,7 +179,7 @@ impl Selection {
     /// Effects histories, including scheduled regressions for a directory corpus.
     pub fn effects_paths(&self) -> Result<Vec<PathBuf>, String> {
         let paths = match &self.effects {
-            TraceSource::Smoke => vec![repo_path("formal/effects-smoke.itf.json")],
+            TraceSource::Smoke => vec![repo_path("formal/generated/effects-smoke.itf.json")],
             TraceSource::File(file) => vec![file.clone()],
             TraceSource::Directory(directory) => {
                 let mut paths = glob_itf(directory)?;
@@ -217,7 +219,9 @@ impl Selection {
                 paths.extend(regression_paths(profile, directory)?);
                 Ok(paths)
             }
-            TraceSource::Smoke => Ok(vec![repo_path(&format!("formal/{profile}-smoke.itf.json"))]),
+            TraceSource::Smoke => Ok(vec![repo_path(&format!(
+                "formal/generated/{profile}-smoke.itf.json"
+            ))]),
         }
     }
 }
@@ -378,14 +382,14 @@ pub fn behavior_profile_version(profile: &str) -> Option<i64> {
         .map(|(_, version)| *version)
 }
 
-/// Ports `validateRegistry`: `formal/profiles.json` must declare schema 1,
+/// Ports `validateRegistry`: `formal/catalogs/profiles.json` must declare schema 1,
 /// specification 0.1.0, protocol schema 3 and exactly one core profile at version 1.
 pub fn registry_check() -> Result<(), String> {
     registry_check_text(&read_registry_text()?)
 }
 
 fn read_registry_text() -> Result<String, String> {
-    let path = repo_path("formal/profiles.json");
+    let path = repo_path("formal/catalogs/profiles.json");
     std::fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))
 }
 
@@ -421,7 +425,7 @@ pub fn registry_check_text(raw: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Ports `validateBehaviorProfileRegistry` against `formal/profiles.json`.
+/// Ports `validateBehaviorProfileRegistry` against `formal/catalogs/profiles.json`.
 pub fn profile_registry_check(profile: &str, version: i64) -> Result<(), String> {
     profile_registry_check_text(&read_registry_text()?, profile, version)
 }
@@ -455,9 +459,9 @@ pub fn profile_registry_check_text(raw: &str, name: &str, version: i64) -> Resul
         count += 1;
         if profile.get("version").and_then(Value::as_f64) != Some(version as f64)
             || profile.get("model").and_then(Value::as_str)
-                != Some(format!("formal/dialcache-{name}-conformance.qnt").as_str())
+                != Some(format!("formal/models/dialcache-{name}-conformance.qnt").as_str())
             || profile.get("smoke").and_then(Value::as_str)
-                != Some(format!("formal/{name}-smoke.itf.json").as_str())
+                != Some(format!("formal/generated/{name}-smoke.itf.json").as_str())
         {
             return Err(format!("unsupported {name} profile definition/version"));
         }

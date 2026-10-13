@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 type Step = { label: string; command: string; args: string[]; stdoutFile?: string };
-const { executeSteps } = await import(new URL("../../formal/validation.mjs", import.meta.url).href) as {
+const { executeSteps } = await import(new URL("../../formal/tools/validation.mjs", import.meta.url).href) as {
   executeSteps(steps: Step[], options: { directory: string; log(message: string): void }): Promise<void>;
 };
 

@@ -157,11 +157,11 @@ for sampling and comparison behavior.
 | Recovery from selected source failures | [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html) |
 | Shared execution and deadlines | [Coalescing and liveness](https://lan17.github.io/DialCache/coalescing.html) |
 | Methods, options, and exports | [API reference](https://lan17.github.io/DialCache/api.html) |
-| Native implementations and shared behavior contracts | [TypeScript guide](typescript/README.md) · [Go guide](go/README.md) · [Rust guide](rust/README.md) · [Python guide](python/README.md) · [Quint specification](formal/README.md) · [Worked walkthrough](formal/WALKTHROUGH.md) |
+| Native implementations and shared behavior contracts | [TypeScript guide](typescript/README.md) · [Go guide](go/README.md) · [Rust guide](rust/README.md) · [Python guide](python/README.md) · [Quint specification](formal/README.md) · [Worked walkthrough](formal/guides/WALKTHROUGH.md) |
 
 The Go, Rust, and Python ports and the TypeScript library replay the same
 Quint-generated histories. Whether those histories reach every required boundary is decided by
-one language-neutral evaluator, `node formal/witnesses.mjs evaluate`, that any
+one language-neutral evaluator, `node formal/tools/witnesses.mjs evaluate`, that any
 port runs over the same corpus; no port depends on another port's test suite
 for its completion evidence.
 

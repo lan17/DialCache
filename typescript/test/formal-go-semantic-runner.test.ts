@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-const moduleUrl = new URL("../../formal/measure-go-semantics.mjs", import.meta.url).href;
+const moduleUrl = new URL("../../formal/tools/measure-go-semantics.mjs", import.meta.url).href;
 const { evaluateGoTestEvents } = await import(moduleUrl) as {
   evaluateGoTestEvents(events: string, exitCode: number, expectedPackages?: number): { state: string; assertionKinds: Record<string, string> };
 };

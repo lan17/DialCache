@@ -1,7 +1,7 @@
 import { createServer, type ServerHttp2Session, type ServerHttp2Stream } from "node:http2";
 import { afterEach, describe, expect, it } from "vitest";
 
-const { waitForApalache } = await import(new URL("../../formal/apalache-readiness.mjs", import.meta.url).href) as {
+const { waitForApalache } = await import(new URL("../../formal/tools/apalache-readiness.mjs", import.meta.url).href) as {
   waitForApalache(endpoint: string, assertAlive: () => void, timeoutMs?: number): Promise<void>;
 };
 const field = (number: number, value: Buffer) => Buffer.concat([Buffer.from([number * 8 + 2, value.length]), value]);

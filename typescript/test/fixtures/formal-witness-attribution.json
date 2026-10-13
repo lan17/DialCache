@@ -3,8 +3,8 @@
     "witness": "recovery-age-sampled-at-successful-decode",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/recovery-age-sampled-at-successful-decode"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/recovery-age-sampled-at-successful-decode"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -29,8 +29,8 @@
     "witness": "fenced-read-does-not-retain",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/fenced-read-does-not-retain"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/fenced-read-does-not-retain"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -46,8 +46,8 @@
     "witness": "future-read-preserves-source-error",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/future-read-preserves-source-error"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/future-read-preserves-source-error"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -62,8 +62,8 @@
     "witness": "classifier-error-keeps-error-without-decode",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/classifier-error-keeps-error-without-decode"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/classifier-error-keeps-error-without-decode"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -75,8 +75,8 @@
     "witness": "maximum-age-read-preserves-source-error",
     "profile": "recovery",
     "provenance": {
-      "model": "formal/dialcache-recovery-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/maximum-age-read-preserves-source-error"
+      "model": "formal/models/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/maximum-age-read-preserves-source-error"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}},
     "steps": [
@@ -107,8 +107,8 @@
     "witness": "fenced-c1-supersedes-without-repair",
     "profile": "shadow",
     "provenance": {
-      "model": "formal/dialcache-shadow-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/fenced-c1-supersedes-without-repair"
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-attribution.json/fenced-c1-supersedes-without-repair"
     },
     "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
     "steps": [

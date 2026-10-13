@@ -1,6 +1,6 @@
 """Async DialCache engine: admission, captured policy, traversal and ownership.
 
-The implementation follows formal/SPEC.md. External work is kept alive when a
+The implementation follows formal/guides/SPEC.md. External work is kept alive when a
 deadline stops a caller waiting: timing out never grants late work permission
 to publish a value or cancels another caller's shared source.
 """

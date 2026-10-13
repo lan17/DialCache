@@ -4,8 +4,8 @@
     "witness": "invalidation-preserves-request-hit",
     "profile": "layers",
     "provenance": {
-      "model": "formal/dialcache-layers-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-witness-boundaries.json/memo-created-after-invalidation"
+      "model": "formal/models/dialcache-layers-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-witness-boundaries.json/memo-created-after-invalidation"
     },
     "initialState": {"capacity":{"#bigint":"2"},"closed":[false,false,false],"created":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"localValues":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"lru":[[],[]],"memo":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"memoSlots":[],"now":{"#bigint":"10000"},"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"owners":[],"policy":{"#bigint":"0"},"processFlights":[{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"}],"remoteAvailable":true,"remoteValues":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"requestFlights":[{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"}],"sources":[],"tracked":true,"watermark":[{"#bigint":"0"},{"#bigint":"0"}]},
     "steps": [
@@ -21,8 +21,8 @@
     "witness": "invalidation-preserves-request-hit",
     "profile": "layers",
     "provenance": {
-      "model": "formal/dialcache-layers-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/formal-runtime-witness-boundaries.json/preexisting-memo-survives"
+      "model": "formal/models/dialcache-layers-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-runtime-witness-boundaries.json/preexisting-memo-survives"
     },
     "initialState": {"capacity":{"#bigint":"0"},"closed":[false,false,false],"created":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"localValues":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"lru":[[],[]],"memo":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"memoSlots":[],"now":{"#bigint":"10000"},"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"owners":[],"policy":{"#bigint":"0"},"processFlights":[{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"}],"remoteAvailable":true,"remoteValues":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"requestFlights":[{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"},{"#bigint":"-1"}],"sources":[],"tracked":true,"watermark":[{"#bigint":"0"},{"#bigint":"0"}]},
     "steps": [

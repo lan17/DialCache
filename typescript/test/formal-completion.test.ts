@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
-const { checkCompletion, fingerprint, conformanceInventory, defaultSources } = await import(new URL("../../formal/conformance.mjs", import.meta.url).href);
-const { nativeBinding, parseTypeScriptReport } = await import(new URL("../../formal/conformance-adapters.mjs", import.meta.url).href);
+const { checkCompletion, fingerprint, conformanceInventory, defaultSources } = await import(new URL("../../formal/tools/conformance.mjs", import.meta.url).href);
+const { nativeBinding, parseTypeScriptReport } = await import(new URL("../../formal/tools/conformance-adapters.mjs", import.meta.url).href);
 type Entry = { id: string; category: string; profile?: string; path?: string; name?: string; feature?: string; group?: string };
 const inventory = conformanceInventory() as Entry[];
 const context = () => ({ schemaVersion: 1, language: "third-port", runId: "e702fcba-42cc-4fbc-9a57-7ac556162d96", createdAt: 1,
-  specification: { "formal/model.qnt": "a".repeat(64) }, implementation: { "third-port/cache": "b".repeat(64) },
+  specification: { "formal/models/model.qnt": "a".repeat(64) }, implementation: { "third-port/cache": "b".repeat(64) },
   corpus: { "trace.itf.json": "c".repeat(64) }, inventory: [{ id: "sampled/core/0", category: "sampled" }, { id: "witness/effects", category: "witness" }] });
 const completed = (ctx = context()) => ({ schemaVersion: 1, language: ctx.language, runId: ctx.runId, contextSha256: fingerprint(ctx),
   startedAt: 2, finishedAt: 3, status: "passed", nativeReportSha256: "d".repeat(64), results: ctx.inventory.map(c => ({ id: c.id, status: "passed" })) });
@@ -26,8 +26,8 @@ function nativeReport() {
 describe("portable completion contract", () => {
   it("binds Go's shared definitions, fixtures and consumed witness evidence", () => {
     const inputs = new Set(defaultSources("go") as string[]);
-    const profiles = JSON.parse(readFileSync(new URL("../../formal/profiles.json", import.meta.url), "utf8")) as { profiles: Array<{ id: string; witnessSources?: string[] }> };
-    const lock = JSON.parse(readFileSync(new URL("../../formal/generated-fixtures.lock.json", import.meta.url), "utf8")) as { artifacts: Record<string, string> };
+    const profiles = JSON.parse(readFileSync(new URL("../../formal/catalogs/profiles.json", import.meta.url), "utf8")) as { profiles: Array<{ id: string; witnessSources?: string[] }> };
+    const lock = JSON.parse(readFileSync(new URL("../../formal/generated/generated-fixtures.lock.json", import.meta.url), "utf8")) as { artifacts: Record<string, string> };
     const shared = ["typescript/src/prometheus.ts", ...profiles.profiles.flatMap(profile => profile.witnessSources ?? []), ...Object.keys(lock.artifacts)];
     for (const path of shared.filter(path => !path.startsWith("formal/"))) expect(inputs.has(path), path).toBe(true);
     for (const profile of profiles.profiles.filter(profile => profile.id !== "core")) {

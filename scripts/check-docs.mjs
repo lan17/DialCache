@@ -115,6 +115,28 @@ export function checkDocsLinks(directory = root) {
   return { pages: pages.length };
 }
 
+// Relative links inside the formal guides and indexes, and in the repository
+// READMEs that point into formal/, resolve to existing files. The site check
+// above walks only the built docs/ pages and skips external links, so these
+// links were unchecked before the formal/ layout move (#221). Anchors are not
+// checked; a target that is a directory counts as existing.
+export function checkFormalLinks(directory = root) {
+  const pages = [...files(resolve(directory, 'formal'), '.md'),
+    ...['README.md', 'typescript/README.md', 'go/README.md', 'rust/README.md', 'python/README.md'].map(path => resolve(directory, path)).filter(path => existsSync(path))];
+  const failures = [];
+  for (const page of pages) {
+    const text = readFileSync(page, 'utf8').replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
+    const targets = [...text.matchAll(/\]\(([^)\s]+)\)/g), ...text.matchAll(/^\[[^\]]+\]:[ \t]+(\S+)/gm)].map(match => match[1]);
+    for (const target of targets) {
+      if (/^(?:[a-z][a-z0-9+.-]*:|#)/i.test(target)) continue;
+      const path = target.split('#')[0];
+      if (path && !existsSync(resolve(dirname(page), decodeURIComponent(path)))) failures.push(`${relative(directory, page)}: missing link target ${target}`);
+    }
+  }
+  if (failures.length) throw new Error([...new Set(failures)].join('\n'));
+  return { pages: pages.length };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  console.log(process.argv.includes('--links') ? checkDocsLinks() : checkDocsSources());
+  console.log(process.argv.includes('--links') ? checkDocsLinks() : { ...checkDocsSources(), formalLinks: checkFormalLinks() });
 }

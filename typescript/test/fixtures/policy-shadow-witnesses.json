@@ -1,8 +1,8 @@
 {
   "shadowWalk": {
     "source": {
-      "model": "formal/dialcache-policy-conformance.qnt",
-      "recipe": "formal/fixture-recipes.json#typescript/test/fixtures/policy-shadow-witnesses.json/shadowWalk"
+      "model": "formal/models/dialcache-policy-conformance.qnt",
+      "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/policy-shadow-witnesses.json/shadowWalk"
     },
     "states": [
       {"input":{"choice":{"#bigint":"-1"},"name":"init"},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"created":[{"#bigint":"0"},{"#bigint":"0"}],"dumpFailed":false,"expires":[{"#bigint":"0"},{"#bigint":"0"}],"held":[],"localExpires":[{"#bigint":"0"},{"#bigint":"0"}],"localValues":[{"#bigint":"0"},{"#bigint":"0"}],"lru":[[]],"now":{"#bigint":"0"},"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"owners":[],"policy":{"#bigint":"0"},"policyErrors":[],"processFlights":[{"#bigint":"-1"},{"#bigint":"-1"}],"providerFailed":false,"readFailed":false,"receipt":{"caller":{"#bigint":"-1"},"key":{"#bigint":"-1"},"layer":{"#bigint":"0"},"localExpires":{"#bigint":"0"},"localValue":{"#bigint":"0"}},"remoteValues":[{"#bigint":"0"},{"#bigint":"0"}],"skew":{"#bigint":"100000"},"sources":[],"writeFailed":false}},

@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { it } from "vitest";
 
-import { boundaryTrace } from "../../formal/boundary-replay.mjs";
+import { boundaryTrace } from "../../formal/tools/boundary-replay.mjs";
 import { ReplayCoordinator, type ReplayRecording } from "../../formal/replay/coordinator.mjs";
 import { replayThroughCoordinator } from "./formal/coordinated-replay.js";
 

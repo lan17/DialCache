@@ -27,12 +27,12 @@ from dialcache.serializer import UNDEFINED
 
 ROOT = Path(__file__).resolve().parents[2]
 CORPORA = [
-    json.loads((ROOT / "formal" / name).read_text())
-    for name in (
-        "protocol-vectors.json",
-        "quint-key-vectors.json",
-        "quint-frame-vectors.json",
-        "quint-envelope-vectors.json",
+    json.loads((ROOT / path).read_text())
+    for path in (
+        "formal/catalogs/protocol-vectors.json",
+        "formal/generated/quint-key-vectors.json",
+        "formal/generated/quint-frame-vectors.json",
+        "formal/generated/quint-envelope-vectors.json",
     )
 ]
 

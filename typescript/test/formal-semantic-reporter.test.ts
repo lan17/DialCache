@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
-const moduleUrl = new URL("../../formal/semantic-reporter.mjs", import.meta.url).href;
+const moduleUrl = new URL("../../formal/tools/semantic-reporter.mjs", import.meta.url).href;
 const { evaluateSemanticTestReport } = await import(moduleUrl) as {
   evaluateSemanticTestReport(data: unknown, execution: unknown, exitCode: number | null): {
     state: string; passed: number; failed: number; failingTests: string[]; unhandledErrors?: string[];
@@ -15,7 +15,7 @@ const { evaluateSemanticTestReport } = await import(moduleUrl) as {
 it("requires executed assertions and distinguishes detection from infrastructure failures", () => {
   const workspace = mkdtempSync(join(tmpdir(), "dialcache-semantic-reporter-"));
   const dependencies = fileURLToPath(new URL("../node_modules", import.meta.url));
-  const reporter = fileURLToPath(new URL("../../formal/semantic-reporter.mjs", import.meta.url));
+  const reporter = fileURLToPath(new URL("../../formal/tools/semantic-reporter.mjs", import.meta.url));
   try {
     symlinkSync(dependencies, join(workspace, "node_modules"), "dir");
     writeFileSync(join(workspace, "vitest.config.mjs"), 'export default { test: { include: ["probe.test.mjs"] } };');
@@ -76,7 +76,7 @@ it("requires executed assertions and distinguishes detection from infrastructure
     // A settlement violation is the driver failing its own contract, not the
     // library failing a comparison: infrastructure, even beside a real mismatch.
     const unsettled = run(`import { it } from "vitest";
-      it("unsettled driver", () => { throw new Error("formal/scope-smoke.itf.json step 4 action beginCall: Settlement violation: 1 runnable task(s) at observation"); });`);
+      it("unsettled driver", () => { throw new Error("formal/generated/scope-smoke.itf.json step 4 action beginCall: Settlement violation: 1 runnable task(s) at observation"); });`);
     expect(unsettled.status).toBe(1);
     expect(unsettled.execution).toEqual({ reason: "failed", collectionErrors: [], unhandledErrors: [] });
     expect(unsettled.evaluate).toThrow(/infrastructure\/import error, not evidence of detection/);

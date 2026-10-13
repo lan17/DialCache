@@ -7,7 +7,7 @@ import { corpusDiversity, labelProvenance, witnessEvidence } from "../../formal/
 import { checkWitnesses, historySequences } from "../../formal/replay/witnesses/index.mjs";
 import { publicCheckpoint, publicPrefixRule, publicPrefixWitnesses, witnessCommand } from "../../formal/replay/witnesses/public-prefix.mjs";
 import { createWitnessRecorder, standaloneRecorder } from "../../formal/replay/witnesses/recorder.mjs";
-import { baselineFindings, canonicalSeed, gateRule, parseArguments, profileReport, readBaseline, recordBaseline, sampledCorpusFingerprint, staleBaselineProblem, traceKind } from "../../formal/witnesses.mjs";
+import { baselineFindings, canonicalSeed, gateRule, parseArguments, profileReport, readBaseline, recordBaseline, sampledCorpusFingerprint, staleBaselineProblem, traceKind } from "../../formal/tools/witnesses.mjs";
 import type { WitnessEvidence } from "../../formal/replay/witnesses/evidence.mjs";
 import type { WitnessHistory } from "../../formal/replay/witnesses/index.mjs";
 
@@ -108,7 +108,7 @@ describe("witness corpus kinds and diversity", () => {
 describe("witness evidence schema 2", () => {
   it("carries provenance and diversity beside the schema 1 fields", () => {
     const root = fileURLToPath(new URL("../../", import.meta.url));
-    const path = resolve(root, "formal/effects-smoke.itf.json");
+    const path = resolve(root, "formal/generated/effects-smoke.itf.json");
     const check = checkWitnesses("effects", [path]);
     const kinds = new Map<string, "sampled" | "regression">([["effects-smoke.itf.json", "sampled"]]);
     const evidence: WitnessEvidence = witnessEvidence("effects", check, { paths: [path], kinds }, root);
@@ -261,7 +261,7 @@ describe("witness baseline gate", () => {
   });
 
   it("parses the evaluate, report and baseline commands", () => {
-    expect(parseArguments(["evaluate"])).toMatchObject({ command: "evaluate", profile: "all", traces: ".formal-traces", out: ".formal-traces/go-parity-witnesses", baseline: "formal/witness-baseline.json", write: false });
+    expect(parseArguments(["evaluate"])).toMatchObject({ command: "evaluate", profile: "all", traces: ".formal-traces", out: ".formal-traces/go-parity-witnesses", baseline: "formal/catalogs/witness-baseline.json", write: false });
     expect(parseArguments(["report", "--profile", "effects", "--baseline", "b.json"])).toMatchObject({ command: "report", profile: "effects", baseline: "b.json" });
     expect(parseArguments(["baseline", "--write", "--traces", "corpus"])).toMatchObject({ command: "baseline", write: true, traces: "corpus" });
     for (const args of [["baseline"], ["report", "--out", "x"], ["check"], ["evaluate", "--profile"], ["evaluate", "--unknown", "x"]]) {

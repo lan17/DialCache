@@ -96,7 +96,7 @@ interface ProtocolVectors {
   }>;
 }
 
-const corpusUrl = new URL("../../formal/vector-artifacts.mjs", import.meta.url).href;
+const corpusUrl = new URL("../../formal/tools/vector-artifacts.mjs", import.meta.url).href;
 const { protocolCorpus } = await import(corpusUrl) as { protocolCorpus(manifest?: unknown, selection?: string): ProtocolVectors };
 const vectors = protocolCorpus(undefined, process.env.DIALCACHE_PROTOCOL_CORPUS ?? "all");
 
@@ -106,7 +106,7 @@ describe("formal protocol conformance vectors", () => {
   });
 
   it("requires a nonempty versioned invalidation corpus for integration replay", () => {
-    const corpus = JSON.parse(readFileSync(new URL("../../formal/invalidation-vectors.json", import.meta.url), "utf8")) as {
+    const corpus = JSON.parse(readFileSync(new URL("../../formal/catalogs/invalidation-vectors.json", import.meta.url), "utf8")) as {
       schemaVersion: number; vectors: Array<{ name: string }>;
     };
     expect(corpus.schemaVersion).toBe(2);
