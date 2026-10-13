@@ -9,6 +9,7 @@ DialCache has TypeScript, Go, Rust and Python implementations with explicit requ
 ```text
 README.md              # Landing page and documentation entry point
 docs/                  # User guides and API reference
+design/                # Design records: why selected changes took their shape
 typescript/             # Published npm package, README and build configuration
   src/
     index.ts            # Public root entry point (barrel)
@@ -88,6 +89,15 @@ pnpm-lock.yaml          # Shared workspace dependency lockfile
   `make docs` generates all native references and checks snippet sources and
   internal links; it requires the pinned Go and Rust toolchains, Python and Node.
   Run changed native examples with assertions (including Redis when relevant).
+- Write a design record, as `design/README.md` describes, before implementing
+  a change that needs one: for example a new or changed portable contract, a
+  new conformance profile or a public API reshape. Before changing a feature,
+  search `design/` and the issues, closed ones included, for its contract IDs
+  and API names. Leave each decision `Open` until a maintainer confirms it, and
+  keep the implementing pull request in draft until then. Name the record in
+  the pull request description and add any departure from it to the record in
+  the same pull request. Records explain decisions; Quint and the formal guides
+  define behavior.
 - Start formal work at `formal/README.md`. `formal/guides/WALKTHROUGH.md` follows one
   contract through Quint, generated inputs and the native language replays;
   `formal/guides/AUTHORING.md` explains how to extend that chain. Read the relevant
