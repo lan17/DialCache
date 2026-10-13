@@ -65,7 +65,7 @@ other allowed choices. Each transition records its external command in
 flowchart LR
   Q[Quint history] --> I[Recorded external input]
   Q --> P[Predicted observation]
-  I --> D[TypeScript, Go or Rust driver]
+  I --> D[TypeScript, Go, Rust or Python driver]
   D --> C[Real DialCache API]
   C --> O[Actual results and effects]
   P --> A[Compare observations]
@@ -84,10 +84,12 @@ using the published mapping, rather than supplying the predicted call result.
 | TS real API execution | [behavior-driver.ts](../../typescript/test/formal/behavior-driver.ts), `BehaviorDriver.apply` and `snapshot` |
 | Go real API execution | [behavior_driver_test.go](../../go/behavior_driver_test.go), `behaviorDriver.apply` and `observation` |
 | Rust real API execution | [driver.rs](../../rust/tests/formal/driver.rs), `Driver::apply` and `Driver::observation` |
+| Python real API execution | [driver.py](../../python/tests/formal/driver.py), `BehaviorDriver.apply` and `observe` |
 | Shared projection and per-step assertion | [features.mjs](../replay/features.mjs), `projectObservation` and `assertFeatureObservation` |
 | TS replay | [formal-features.test.ts](../../typescript/test/formal-features.test.ts), `replay` |
 | Go replay transport | [feature_replay_test.go](../../go/feature_replay_test.go), `TestFeatureConformance`, and [replay_coordinator_test.go](../../go/replay_coordinator_test.go) |
 | Rust replay transport | [conformance.rs](../../rust/tests/conformance.rs), `Run::replay_behavior`, and [transport.rs](../../rust/tests/formal/transport.rs), `Coordinator::execute` |
+| Python replay transport | [run_conformance.py](../../python/tests/run_conformance.py), `_replay_case`, and [coordinator.py](../../python/tests/formal/coordinator.py), `Coordinator.replay` |
 
 The shared fixture installs a real cache with a local TTL and a held runtime-policy
 provider. Source loaders, policy replies and time are controlled at their
@@ -157,11 +159,16 @@ DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/walkthrough/source-budgets/hel
   DIALCACHE_FEATURE_TRACE_FILE="$PWD/../.formal-traces/walkthrough/source-budgets/heldPolicyDoesNotSpendSourceBudgetTest.itf.json" \
     cargo test --locked --all-features --test conformance
 )
+
+node formal/tools/run-python-replay.mjs --profile=source-budgets \
+  --trace=.formal-traces/walkthrough/source-budgets/heldPolicyDoesNotSpendSourceBudgetTest.itf.json
 ```
 
 The Rust command selects this history for feature replay and skips fixed
 scenarios; its harness also runs the core/effects smoke histories and protocol
-vectors. Keep Node 24 on `PATH` for the shared replay coordinator.
+vectors. The Python runner replays only the selected history; it uses
+`python/.venv` unless `PYTHON` names another prepared interpreter.
+Keep Node 24 on `PATH` for the shared replay coordinator.
 
 These are focused debugging checks. They do not produce full acceptance or
 satisfy the complete witness inventory. After changing the rule or its driver,

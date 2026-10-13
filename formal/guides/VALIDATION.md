@@ -9,9 +9,9 @@ lists tool prerequisites and focused reproduction commands.
 | Task | Command | Evidence |
 | --- | --- | --- |
 | Routine implementation checks | `make check` | Native tests, coverage, package, docs and source audits |
-| Full portable acceptance | `make formal` | Quint model checks with the Rust evaluator, generated histories, shared witness evaluation, TypeScript/Go/Rust replay, exact completion inventories; no Java |
+| Full portable acceptance | `make formal` | Quint model checks with the Rust evaluator, generated histories, shared witness evaluation, TypeScript/Go/Rust/Python replay, exact completion inventories; no Java |
 | Finite symbolic rules | `make model-check` | Scheduled bounded checks with checksummed standalone Apalache; requires Java 21, `tar` and pinned Quint |
-| Challenge implementation assertions | `make mutations` | Compiling semantic faults tested against every completed port |
+| Challenge implementation assertions | `make mutations` | Compiling semantic faults tested against the TypeScript, Go and Rust suites; Python has no mutation campaign |
 | Real server behavior | `make integration` | Redis, Valkey, Cluster and cross-language interoperability |
 | Explore another schedule sample | `make explore` | Separate source snapshot, recorded random seed, every port's replay |
 | Check composed profiles against their previous text | `make differential` | Lint baseline, then both-direction replay against the merge base with `origin/main`; fails on any disagreement or trace growth above the model's bound |
@@ -25,8 +25,8 @@ It produces nothing the port lanes consume, so the hosted workflow runs it as a
 immediately after generation, before any port replays. That shared,
 language-neutral step is the sole producer of `.formal-traces/go-parity-witnesses/`;
 the TypeScript suite only checks the same gate. `make formal-ts`, `make formal-go`,
-`make formal-rust`, `make mutations-ts`, `make mutations-go` and
-`make mutations-rust` depend only on the generated corpus
+`make formal-rust`, `make formal-python`, `make mutations-ts`, `make mutations-go`
+and `make mutations-rust` depend only on the generated corpus
 and that witness evidence, so the hosted workflow runs them in parallel and the
 aggregate requires all of them.
 
@@ -189,7 +189,8 @@ Its separate catalog and evidence scope are described in
 report for authoring; it is never complete evidence.
 
 The workflow's `formal-full` aggregate job retains a small `formal-summary` artifact for 90
-days: every port's completion and context reports, the Go replay summary, the model
+days: every port's completion and context reports, the Go, Rust and Python replay
+summaries, the model
 properties `report.json` from the `check-models` job, the symbolic `report.json`
 and, on scheduled or exploration runs, each exploration `report.json`. Trace
 corpora, model check counterexamples and mutation evidence keep the 14-day
@@ -220,8 +221,8 @@ The weekly full workflow runs this lane alongside pinned validation. Exploration
 does not produce an acceptance completion: its separate report distinguishes
 native replay failures, witness-check failures and other infrastructure failures.
 A witness-check failure can mean an unreached boundary or invalid witness
-evidence; inspect the native report before attributing it to sampling. Go replay
-still runs after a TypeScript witness-check failure. The exploration report
+evidence; inspect the native report before attributing it to sampling. The Go, Rust and
+Python replays still run after a TypeScript witness-check failure. The exploration report
 keeps that seed's witness report under `witnesses`. The witness step itself is
 tolerated so every port replays, but its baseline gate decides the outcome
 afterwards: when every required label is present and all ports pass yet a

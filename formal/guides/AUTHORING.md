@@ -4,8 +4,8 @@ The Quint files should let a reader understand a behavior without translating
 the TypeScript implementation. Readability is part of the specification's
 acceptance criteria. Executable checks then challenge that written behavior.
 TypeScript is the executable reference these models formalize; Quint is the
-independently reviewed contract that TypeScript, Go, Rust and future ports are held
-to. When the two disagree, neither side is edited to match the other quietly:
+independently reviewed contract that TypeScript, Go, Rust, Python and future ports
+are held to. When the two disagree, neither side is edited to match the other quietly:
 the change lands with a regression that distinguishes the two behaviors and a
 comment recording the decision about which one is intended. The prose explains
 the contract; implementation tests must not become an independent, drifting
@@ -13,7 +13,8 @@ definition of the same portable rule.
 
 For a first contribution, start with the [worked walkthrough](./WALKTHROUGH.md).
 It follows one existing contract from a named Quint regression through actual
-TypeScript, Go and Rust assertions, and identifies the catalog entry each edit owns.
+TypeScript, Go, Rust and Python assertions, and identifies the catalog entry each
+edit owns.
 Then use the checklist below for your rule; it applies the same path to another
 behavior.
 
@@ -195,7 +196,7 @@ own API and integration tests.
    [Mapping every challenge to native mutants](#mapping-every-challenge-to-native-mutants)).
 4. **Exercise every supported implementation.** Require a generated witness or exported
    Quint regression that exposes the rule's consequence, and replay the same
-   history in TypeScript, Go and Rust. Preserve a discovered portable bug as a
+   history in TypeScript, Go, Rust and Python. Preserve a discovered portable bug as a
    deterministic exported regression. Fixed scenarios preserve narrow regressions;
    protocol vectors and native
    tests cover wire and language boundaries. The driver supplies only external inputs and asserts actual public
@@ -223,8 +224,9 @@ establish another port's conformance. Behavior, model and replay changes require
 
 Fault-detection evidence is specific to each port. Rust uses
 [its own mutation catalog](./SEMANTIC-COVERAGE.md#reproduction-and-ci); the
-TypeScript/Go mappings above do not establish Rust detection. Add equivalent
-native faults where applicable and report remaining gaps explicitly.
+TypeScript/Go mappings above do not establish Rust detection. Python has no
+native mutation campaign, so nothing yet measures fault detection by its replay.
+Add equivalent native faults where applicable and report remaining gaps explicitly.
 
 Extend formal infrastructure when a concrete behavior cannot be expressed or
 tested clearly, evidence gives misleading credit, or authoring and execution
