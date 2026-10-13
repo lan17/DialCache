@@ -19,7 +19,7 @@ The checker reports these distinct categories:
 | Model | A cited invariant scheduled in [execution.json](../catalogs/execution.json) or a run declared by a scheduled model |
 | Portable | Fixed scenarios, witnesses, exported Quint regressions or wire vectors |
 | Generated witness | A required consequential history in [coverage-witnesses.json](../catalogs/coverage-witnesses.json) |
-| Quint regression replay | A named public-action regression exported and replayed in both ports |
+| Quint regression replay | A named public-action regression exported and replayed in every port |
 | Quint vector replay | Expected primitive outputs exported from a scheduled Quint model |
 | Quint-driven | The union of the preceding three Quint execution categories |
 
@@ -38,7 +38,7 @@ check is scheduled and that a cited definition is an action, def or val of a
 scheduled model or library rather than a scheduled property; it cannot automate
 the semantic judgment in the scope text. Generated witness reachability and
 implementation replay are recorded separately: a citation alone does not
-establish that a witness was reached or that both implementations passed. Weak
+establish that a witness was reached or that every implementation passed. Weak
 accounting checks such as policy `hitsSkipSource` (loaders <= callers), recovery
 `singleReadPerFlight` (reads <= callers) and age-sample counts are not treated
 as proofs of hit traversal, single execution or sample time. No general
@@ -82,7 +82,7 @@ histories against those records.
 | Finite symbolic rule checks | Every decision in the declared finite domain satisfies the independently stated property |
 | Sampled connection checks | Explored profile histories preserve the selected snapshot, timing and ownership contracts |
 | Compiling model mutations | The named property detects that deliberate semantic change to a transition |
-| Exported boundary regressions | The exact public command sequence is checked in Quint and against both implementations |
+| Exported boundary regressions | The exact public command sequence is checked in Quint and against every implementation |
 
 `make model-check` runs the symbolic checks declared in `execution.json` through
 checksummed standalone Apalache; see the [tool prerequisites](../README.md#generating-and-replaying-behavior).
@@ -101,7 +101,7 @@ invariant rejects that one deliberate change under the manifest bounds. Model
 receipts preserve the timestamp, captured policy and owner at acceptance.
 Every challenge is pinned by its `reproducer` to one deterministic history
 that passes clean and fails under the fault at a declared expectation, either
-an exported public regression both ports replay or a documented model-only
+an exported public regression every port replays or a documented model-only
 run. Missing reproducers fail validation. See the
 [authoring rules](./AUTHORING.md#challenging-every-model).
 Each challenge also carries a `nativeMutants` entry naming the TypeScript and
@@ -114,7 +114,7 @@ explanation fails validation. See
 [mapping every challenge to native mutants](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
 Ownership receipts, failed-read state, closed-scope memo cleanup and initial
 recovery retention have exact model checkpoints. The closed-scope and recovery
-histories also use public inputs replayed by both ports, but their additional
+histories also use public inputs replayed by every port, but their additional
 private-state assertions remain model evidence; they do not create native
 mutation coverage where later native checks hide the same internal fault.
 Boundary properties can challenge an eligibility helper by stating the
@@ -161,14 +161,14 @@ results; fresh measurements belong with their exact source and corpus artifacts.
 Use the [shared Make targets and pinned prerequisites](../README.md#generating-and-replaying-behavior):
 
 ```sh
-make formal        # Regenerate and complete prepared TS, Go and Rust replay.
+make formal        # Regenerate and complete prepared TS, Go, Rust and Python replay.
 make mutations     # Measure every fault catalog over the generated corpus.
 ```
 
 `make mutations-ts`, `make mutations-go` and `make mutations-rust` depend only
 on the corpus produced by `make formal-generate` and its shared witness
 evidence, not on any port's completion report. Hosted CI runs the three
-mutation lanes in parallel with the three parity lanes off one generation job;
+mutation lanes in parallel with the four parity lanes off one generation job;
 the aggregate requires all of them. Each report records the source, corpus and
 witness fingerprints it measured. Raw measurement programs remain
 `measure-semantics.mjs`, `measure-go-semantics.mjs` and
@@ -241,9 +241,9 @@ with source fingerprints, tools and bounds, and fingerprints `execution.json` as
 `catalogSha256` in its report. This measures the specification separately from
 implementation mutation detection.
 
-Every effects replay also runs `assertEffectsHistory` over actual external source starts/settlements and public fallback/write observations. Its C23/C25/C26 checks cover source-relative budget/duration, strict deadline acceptance, and a preceding accepted success before publication. It consumes no expected model phases and permits pending prefixes. An additional causal monitor in both drivers ties writes to their actual invocation/source callback and rejects publication after that source settled too late; negative tests distinguish property failures from malformed monitor inputs. This is a bounded connection for selected properties, not full model refinement or liveness proof.
+Every effects replay also runs `assertEffectsHistory` over actual external source starts/settlements and public fallback/write observations. Its C23/C25/C26 checks cover source-relative budget/duration, strict deadline acceptance, and a preceding accepted success before publication. It consumes no expected model phases and permits pending prefixes. An additional causal monitor in the TypeScript, Go and Rust drivers ties writes to their actual invocation/source callback and rejects publication after that source settled too late; negative tests distinguish property failures from malformed monitor inputs. This is a bounded connection for selected properties, not full model refinement or liveness proof.
 
-The Go driver executes the same generated corpus through its own cache implementation. Its value-domain and API adaptations appear in [`go/README.md`](../../go/README.md). `measure-go-semantics.mjs` independently measures the Go fault catalog; TypeScript mutation results are never credited to Go. The Go race detector covers only exercised schedules.
+The Go driver executes the same generated corpus through its own cache implementation. Its value-domain and API adaptations appear in [`go/README.md`](../../go/README.md). `measure-go-semantics.mjs` independently measures the Go fault catalog; TypeScript mutation results are never credited to Go. The Go race detector covers only exercised schedules. The Rust and Python drivers execute the same corpus through their own implementations; Rust's mutation campaign uses its separate catalog, and Python has none.
 
 
 Generated invalidation vectors also run inside both standard native mutation

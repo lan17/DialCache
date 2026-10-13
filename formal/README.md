@@ -1,7 +1,7 @@
 # Executable DialCache specification
 
-Quint defines the portable contracts that TypeScript, Go, Rust and future ports
-must preserve. TypeScript is the executable reference those contracts formalize; a
+Quint defines the portable contracts that TypeScript, Go, Rust, Python and future
+ports must preserve. TypeScript is the executable reference those contracts formalize; a
 disagreement between the two is settled by a distinguishing regression and a
 recorded decision, not by editing the easier side. Native drivers execute
 external commands against the real libraries; generated expectations stay in
@@ -12,7 +12,7 @@ the test coordinator.
 | Task | Read first |
 | --- | --- |
 | Understand system behavior | [SPEC.md](./guides/SPEC.md), then the relevant model below |
-| Follow one rule into all three implementations | [WALKTHROUGH.md](./guides/WALKTHROUGH.md) |
+| Follow one rule into all four implementations | [WALKTHROUGH.md](./guides/WALKTHROUGH.md) |
 | Change a behavior or extend coverage | [AUTHORING.md](./guides/AUTHORING.md) |
 | Implement another language | [PORTING.md](./guides/PORTING.md) and [PROTOCOL.md](./guides/PROTOCOL.md) |
 | Locate or reproduce a failing check | [TEST-MAP.md](./guides/TEST-MAP.md) and the commands below |
@@ -109,9 +109,12 @@ every supported implementation.
 
 ## Generating and replaying behavior
 
-Use Node 24, pnpm 10.33.0, Go 1.27.1 and Rust/cargo 1.98.1 to match CI.
+Use Node 24, pnpm 10.33.0, Go 1.27.1, Rust/cargo 1.98.1 and Python 3.11 or later
+to match CI.
 Install dependencies with `corepack pnpm install --frozen-lockfile`; rustup reads
-the native Rust toolchain pin from `rust/rust-toolchain.toml`.
+the native Rust toolchain pin from `rust/rust-toolchain.toml`. Create
+`python/.venv` and run `python/.venv/bin/python -m pip install -e './python[test,redis]'`,
+or set `PYTHON` to another prepared interpreter.
 Model work requires Quint 0.32.0 and its Rust evaluator 0.6.0
 (`npm install --global @informalsystems/quint@0.32.0`). The evaluator is separate
 from the native Rust port's compiler toolchain.
@@ -157,11 +160,11 @@ complete pinned fault campaign. `make formal` and `make ci` require both steps.
 omits that identical pinned campaign; its result remains non-acceptance evidence.
 `make formal-generate` runs generation, fixture
 recomputation and the shared witness evaluation; `make formal-ts`,
-`make formal-go` and `make formal-rust` then complete each port's replay against
-that exact corpus. `make mutations-ts`, `make mutations-go` and
+`make formal-go`, `make formal-rust` and `make formal-python` then complete each
+port's replay against that exact corpus. `make mutations-ts`, `make mutations-go` and
 `make mutations-rust` split the fault campaigns. The parity and mutation lanes
 depend only on the generated corpus and shared witness evidence, so hosted CI
-runs all six in parallel and none of them waits for the
+runs all seven in parallel and none of them waits for the
 model check, which runs beside generation; the aggregate requires every lane.
 `make fixtures-check` recomputes committed artifacts; after an intentional model
 edit, update them with `node formal/tools/generate-artifacts.mjs --write` first.
@@ -207,7 +210,8 @@ Core/effects use `DIALCACHE_MBT_TRACE_FILE` or `DIALCACHE_EFFECTS_TRACE_FILE`
 and their corresponding tests. Local-clock uses feature selectors with
 `typescript/test/formal-local-clock.test.ts` and the Go local-clock replay.
 The [walkthrough](./guides/WALKTHROUGH.md#run-this-example) shows one history replayed
-in all three languages, including Rust's feature-history selectors.
+in all four languages, including Rust's feature-history selectors and the Python
+replay runner.
 
 ## Shared verification and replay rules
 

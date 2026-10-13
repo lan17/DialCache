@@ -8,7 +8,8 @@ The specification is experimental and versioned in [profiles.json](../catalogs/p
 Pin a repository commit and corpus when developing a port.
 
 Start with the [worked walkthrough](./WALKTHROUGH.md) to follow one source
-deadline contract from a Quint regression to its TypeScript, Go and Rust assertions.
+deadline contract from a Quint regression to its TypeScript, Go, Rust and Python
+assertions.
 Then use this guide to implement the remaining profiles and completion reports.
 
 ## What a port supplies
@@ -17,12 +18,13 @@ Supply a native implementation, a controlled test environment, a driver for the
 shared commands, and assertion results in the completion format below.
 The shared [replay coordinator](../replay/coordinator.mjs) owns profile parsing,
 action mappings and observation assertions. TypeScript imports those same
-modules; Go and Rust use a persistent Node process over JSON lines. A new port can
+modules; Go, Rust and Python use a persistent Node process over JSON lines. A new port can
 reuse that protocol instead of translating every profile's tables.
 Existing implementations
 are examples: [the TypeScript driver](../../typescript/test/formal/behavior-driver.ts),
-[the Go driver](../../go/behavior_driver_test.go) and
-[the Rust driver](../../rust/tests/formal/driver.rs). A port need not copy their public
+[the Go driver](../../go/behavior_driver_test.go),
+[the Rust driver](../../rust/tests/formal/driver.rs) and
+[the Python driver](../../python/tests/formal/driver.py). A port need not copy their public
 API names, threading model, internal storage, or scheduling implementation.
 
 | Driver operation | Required behavior |
@@ -34,7 +36,7 @@ API names, threading model, internal storage, or scheduling implementation.
 | External effects | Hold/release actual policy, Redis read/write, serialization, and decoding operations by their invocation IDs. A held operation cannot finish until its external release or specified failure. |
 | Clock control | Control wall time and elapsed time separately. Advance or shift only the specified clock; follow the profile's timer-delivery rule. Preserve fractional units in the local-clock profile. |
 | Storage inputs | Seed the specified bytes/value/TTL or execute invalidation. The adapter must expose the requested atomic primary snapshot and maintenance result. |
-| Settle | After every command, bring the implementation to quiescence under the `causally-ready-v1` contract: every task spawned by the implementation or the driver has finished or is blocked on a driver-owned gate, a driver-owned timer that is not yet due, or a driver-owned scope gate, and nothing is runnable. This obligation falls on the library as well as the test: it must expose its detached scheduling to the test executor (Go's `Defer` hook drained under `synctest.Wait`, the Node fake-timer microtask queue drained by `advanceTimersByTimeAsync(0)`) so the driver reaches quiescence without guessing turn counts or advancing deadline time. The coordinator checks this contract by name on every behavior `observe` through the driver's settlement receipt, rules R1 to R5 in the [trace and observation contract](#trace-and-observation-contract); a failed rule is a `Settlement violation`, an infrastructure error that earns no comparison credit. Both ports include a no-settle control: [formal-settlement-control.test.ts](../../typescript/test/formal-settlement-control.test.ts) skips the TypeScript drain, and [settlement_control_replay_test.go](../../go/settlement_control_replay_test.go) reports the Go observation held before the drain; each must fail with a settlement violation, never an observation mismatch, on the smoke history of every behavior-driver profile. A further port carries an equivalent control against its own driver. |
+| Settle | After every command, bring the implementation to quiescence under the `causally-ready-v1` contract: every task spawned by the implementation or the driver has finished or is blocked on a driver-owned gate, a driver-owned timer that is not yet due, or a driver-owned scope gate, and nothing is runnable. This obligation falls on the library as well as the test: it must expose its detached scheduling to the test executor (Go's `Defer` hook drained under `synctest.Wait`, the Node fake-timer microtask queue drained by `advanceTimersByTimeAsync(0)`) so the driver reaches quiescence without guessing turn counts or advancing deadline time. The coordinator checks this contract by name on every behavior `observe` through the driver's settlement receipt, rules R1 to R5 in the [trace and observation contract](#trace-and-observation-contract); a failed rule is a `Settlement violation`, an infrastructure error that earns no comparison credit. Every port includes a no-settle control: [formal-settlement-control.test.ts](../../typescript/test/formal-settlement-control.test.ts) skips the TypeScript drain, [settlement_control_replay_test.go](../../go/settlement_control_replay_test.go) reports the Go observation held before the drain, [settlement_control.rs](../../rust/tests/settlement_control.rs) skips the Rust drain, and `test_no_settle_control` in [test_conformance.py](../../python/tests/test_conformance.py) skips the Python settlement; each must fail with a settlement violation, never an observation mismatch, on the smoke history of every behavior-driver profile. A further port carries an equivalent control against its own driver. |
 | Observe | Read actual caller outcomes, source/effect counts, event order, timestamps, values and error categories after the step. Collect observations independently of expected model state. |
 | Cleanup | Drain or release test-owned work, restore clock/fault hooks, and isolate the next history. Unfinished work must not silently leak into another history. |
 
@@ -334,7 +336,7 @@ from the repository root:
 
 ```sh
 make check         # Fast native checks and committed smoke; not full acceptance.
-make formal        # Quint model/corpus checks, then prepared TS, Go and Rust replay.
+make formal        # Quint model/corpus checks, then prepared TS, Go, Rust and Python replay.
 make model-check   # Separate finite symbolic checks; requires Java 21 and tar.
 make mutations     # Measures every fault catalog over the generated corpus.
 make integration   # Real-server interoperability; requires Docker.
@@ -345,8 +347,9 @@ including symbolic checks and the exact Node 22.15.0 package floor.
 `make formal-check` runs the Quint evidence lane (every scheduled model, its
 public regressions and the model mutation challenges); the aggregate requires
 it, but the port lanes do not wait for it. `make formal-generate` produces the
-full corpus and the shared witness evidence; `make formal-ts`, `make formal-go`
-and `make formal-rust` each prepare and complete one port's run against them. The
+full corpus and the shared witness evidence; `make formal-ts`, `make formal-go`,
+`make formal-rust` and `make formal-python` each prepare and complete one port's
+run against them. The
 parity and mutation lanes depend only on the generated corpus and shared witness
 evidence and run in parallel in hosted CI, whose aggregate requires all of them.
 These are the same entry points used by hosted CI.
@@ -359,7 +362,7 @@ complete inventory. A green smoke lane supplies no full-parity claim.
 Print the current required IDs with `node formal/tools/conformance.mjs inventory`.
 The commands below describe
 the lower-level completion API for implementers of another port; the Make
-targets already orchestrate it for TypeScript, Go and Rust.
+targets already orchestrate it for TypeScript, Go, Rust and Python.
 
 The shared inventory contains stable language-neutral IDs:
 
@@ -376,7 +379,7 @@ the exact inventory; a passing smoke test cannot substitute for a scheduled
 history. Witness gates establish reachability across the corpus and are
 separate from implementation assertions. `make formal-generate` evaluates them
 once with the shared `node formal/tools/witnesses.mjs evaluate` command described under
-[Witness evidence](#witness-evidence). Go and Rust consume that evidence after
+[Witness evidence](#witness-evidence). Go, Rust and Python consume that evidence after
 checking its exact corpus and definition hashes; TypeScript checks the same
 witness gate. Each port independently executes and asserts every history.
 
@@ -387,6 +390,7 @@ Then prepare a separate context before each port's native tests:
 node formal/tools/conformance.mjs prepare typescript .formal-traces/ts-context.json
 node formal/tools/conformance.mjs prepare go .formal-traces/go-context.json
 node formal/tools/conformance.mjs prepare rust .formal-traces/rust-context.json
+node formal/tools/conformance.mjs prepare python .formal-traces/python-context.json
 ```
 
 Each port can prepare, replay and validate independently once those shared
@@ -395,7 +399,7 @@ corpus and witness evidence unchanged between preparation and completion. Hosted
 CI runs the lanes in separate jobs; a local checkout must also keep their output
 paths distinct and avoid regenerating shared inputs while replays are running.
 
-TypeScript, Go and Rust have built-in default source inventories. For another
+TypeScript, Go, Rust and Python have built-in default source inventories. For another
 language, supply a JSON array containing every repository-relative
 implementation, driver, adapter, dependency-lock and test-configuration file
 that affects execution:
@@ -408,22 +412,25 @@ These commands do not run the implementation. They record a unique run ID,
 preparation time, specification/source fingerprints, the exact corpus bytes,
 and the required case inventory. A port's source manifest is a reviewed input
 declaration; the checker cannot discover an omitted native dependency itself.
-The Go and Rust default inputs also include the shared source/fixture
-definitions and the evaluated witness JSON under
-`.formal-traces/go-parity-witnesses/`. Another port that consumes auxiliary
+The Go, Rust and Python default inputs include the evaluated witness JSON under
+`.formal-traces/go-parity-witnesses/`; the Go and Rust inputs also include the
+shared source/fixture definitions. Another port that consumes auxiliary
 evidence must include those files in its input manifest.
 
 Run native tests with complete trace directory selectors. Preserve the original
 assertion report and its timestamps. The supplied report adapters accept
-Vitest JSON, `go test -json` and the Rust harness's JSON-lines report:
+Vitest JSON, `go test -json` and the Rust harness's and Python runner's JSON-lines
+reports:
 
 ```sh
 node formal/tools/conformance-adapters.mjs typescript .formal-traces/ts-replay.json .formal-traces/ts-context.json > .formal-traces/ts-completion.json
 node formal/tools/conformance-adapters.mjs go .formal-traces/go-replay.jsonl .formal-traces/go-context.json > .formal-traces/go-completion.json
 node formal/tools/conformance-adapters.mjs rust .formal-traces/rust-replay.jsonl .formal-traces/rust-context.json > .formal-traces/rust-completion.json
+node formal/tools/conformance-adapters.mjs python .formal-traces/python-replay.jsonl .formal-traces/python-context.json > .formal-traces/python-completion.json
 node formal/tools/conformance.mjs check .formal-traces/ts-completion.json .formal-traces/ts-context.json
 node formal/tools/conformance.mjs check .formal-traces/go-completion.json .formal-traces/go-context.json
 node formal/tools/conformance.mjs check .formal-traces/rust-completion.json .formal-traces/rust-context.json
+node formal/tools/conformance.mjs check .formal-traces/python-completion.json .formal-traces/python-context.json
 ```
 
 Another language emits the same JSON completion schema: `schemaVersion: 1`,

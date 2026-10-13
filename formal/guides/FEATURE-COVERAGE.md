@@ -8,7 +8,7 @@ input or combination of features.
 
 Quint defines the portable state transitions and their independently checked
 properties. Generated histories exercise those transitions through the real
-TypeScript and Go implementations. Fixed scenarios preserve narrow examples;
+TypeScript, Go, Rust and Python implementations. Fixed scenarios preserve narrow examples;
 wire vectors and native tests cover boundaries that need different evidence.
 Use [CONTRACTS.md](./CONTRACTS.md) for the obligations and
 [AUTHORING.md](./AUTHORING.md) to read or extend their models.
@@ -163,7 +163,7 @@ only after that raw effect settles. Shadow-read-deadlines separately exercises
 C0/C1 read expiry, cancellation and raw-capacity retention, including both
 read/job deadline orderings. Confirmation keeps its admitted read budget after
 a runtime change and starts that budget at its own dispatch. These histories
-replay in both ports; a whole-job timeout alone does not establish a read deadline.
+replay in every port; a whole-job timeout alone does not establish a read deadline.
 
 Those additions do not enumerate arbitrary request trees, operation/key/instance
 sets, capacities or simultaneous failures. The short shadow job budget limits

@@ -18,7 +18,7 @@ validation workflow and report requirements.
 ## Behavioral map
 
 The verification models emphasize individual rules. Conformance profiles expose
-public inputs that both implementations replay. Their current versions, bounds,
+public inputs that every implementation replays. Their current versions, bounds,
 sampled trace counts and exported regressions live in
 [profiles.json](../catalogs/profiles.json) and [execution.json](../catalogs/execution.json).
 
@@ -60,7 +60,7 @@ Six focused profiles close gaps without turning one model into the whole cache:
 | `source-budgets` | Held policy time does not spend the source budget; default, finite and unbounded calls, followers and disabled/key-error paths preserve their distinct deadlines |
 
 Each exportable regression invokes actual public model actions. Explicit
-`input: { name, choice }` survives Quint test export and drives both ports.
+`input: { name, choice }` survives Quint test export and drives every port.
 Expected state supplies assertions only. Native local-failure and local-clock
 seams control the environment while exercising real cache behavior; they do not
 add production fault APIs or redefine the model's expected outcome.
@@ -126,6 +126,6 @@ from parser, classifier and deliberately broken-driver controls.
 measurements; historical run results live in PR summaries and workflow artifacts.
 
 When behavior disagrees, review the intended contract, change Quint with an
-independent regression, replay it in both ports, and update explanatory docs and
+independent regression, replay it in every port, and update explanatory docs and
 case mappings. A formal model is authoritative only within its declared scope;
 its notation does not remove the need to review the actual consequence.

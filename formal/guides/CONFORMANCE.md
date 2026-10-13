@@ -1,6 +1,6 @@
 # Core behavioral conformance profile
 
-This document specifies the bounded `core` profile implemented by the TypeScript and Go replay drivers. Its model is `dialcache-conformance.qnt`; the full port target also requires the other profiles registered in [execution.json](../catalogs/execution.json).
+This document specifies the bounded `core` profile implemented by the TypeScript, Go, Rust and Python replay drivers. Its model is `dialcache-conformance.qnt`; the full port target also requires the other profiles registered in [execution.json](../catalogs/execution.json).
 
 ## Trace format and trust boundary
 
