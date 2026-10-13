@@ -31,3 +31,62 @@ output lives in [../generated/](../generated/README.md), never here.
 
 - [protocol-vectors.json](./protocol-vectors.json): the fixed protocol vector corpus (schema 3) every port replays; the smoke and protocol lanes; by hand.
 - [invalidation-vectors.json](./invalidation-vectors.json): the fixed invalidation vector corpus (schema 2) replayed against a real Redis; the integration and mutation lanes; by hand.
+
+## Refresh after an edit
+
+A ledger records that a person reviewed a file at a given hash, so an edit to a
+pinned file fails the required `test` check until the ledger is refreshed. The
+ledgers pin these files:
+
+- `source-audit.json`: the root, `typescript/` and `go/` READMEs, every authored
+  page under `docs/`, `formal/README.md`, `formal/guides/*.md`, and ordinary
+  (non-`formal-`) tests in `typescript/test/`.
+- `feature-coverage.json`: the TypeScript and Go test files it cites.
+- `go-parity.json`: `typescript/src/`, the bound Go files, the generated vector
+  artifacts and six catalogs: `semantic-cases`, `execution`, `source-audit`,
+  `feature-coverage`, `coverage-witnesses` and `profiles`.
+- The fixtures lock (`formal/generated/generated-fixtures.lock.json`): the
+  `.qnt` files, recipes and generators behind the committed fixtures, comments
+  included.
+
+Review the changed paragraph or assertion before refreshing its pin, and never
+refresh only to make a check pass. Refresh in this order, because each step
+feeds the next:
+
+1. **Fixtures lock.** After any `.qnt`, `fixture-recipes.json` or generator
+   edit, comments included, run
+   `node formal/tools/generate-artifacts.mjs --write` with Quint 0.32.0 on
+   `PATH`, then `make fixtures-check`.
+2. **Baselines.** Rewrite `witness-baseline.json` only after a deliberate model
+   or classifier change, under the manifest seed and never an exploration
+   seed: run `make formal-generate`, then
+   `node formal/tools/witnesses.mjs baseline --write --profile all`. When the
+   intended change lowers a gated witness count, the last step of
+   `make formal-generate` (the witness evaluation) exits 1; the corpus it
+   generated is complete, so continue to the rewrite. Run
+   `node formal/tools/lint-profiles.mjs baseline --write` only after reviewing
+   what `baseline --check` reports: a fallen violation count, a new or removed
+   profile or kernel module, changed library transitions or a Quint upgrade.
+   Never record a risen count; a composed profile reports zero. An intended
+   observable change bumps the model's `differential.behaviorVersion` in
+   `execution.json`, or the profile's `version` in `profiles.json` when the
+   driver-asserted channels change. Either bump makes `make differential` skip
+   that profile instead of comparing it, so the pull request names each bump
+   and its reason.
+3. **`source-audit.json`.** Update each changed file's `sha256`, its heading or
+   test entries and their contract dispositions; a changed line count moves
+   every later entry. `sourceSnapshot()` and `guideSnapshot()` in
+   `formal/tools/check-source-audit.mjs` print the current values, for example
+   `node --input-type=module -e 'const m = await import("./formal/tools/check-source-audit.mjs"); console.log(JSON.stringify(m.guideSnapshot()))'`.
+   Check with `node formal/tools/check-source-audit.mjs`.
+4. **`feature-coverage.json`.** Update a reviewed test's `sha256`, then run
+   `node formal/tools/check-feature-coverage.mjs`.
+5. **`go-parity.json`, last.** Update its input hashes, the `typescript/src/`
+   and bound Go file hashes after a binding review, the vector hashes and the
+   inventory counts. A new documentation page or ordinary test file needs a Go
+   applicability row, and a new `typescript/src/` file needs a source inventory
+   row with its reviewed Go bindings. Check with
+   `node formal/tools/check-go-parity.mjs`.
+
+`make audit` runs every ledger check. On a rebase conflict in a ledger, take
+`main`'s copy and refresh again instead of merging the JSON by hand.

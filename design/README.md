@@ -24,24 +24,27 @@ Write a record before implementing:
 - a redesign of how conformance is established: the kernel library or how
   profiles compose over it, the replay protocol or shared observation record,
   or what a validation gate requires;
-- a public API addition or removal that every port must mirror, or a reshape of
-  one port's public API that changes how callers construct the cache or call
-  its operations, such as the Go redesign in #190;
-- a change that reverses a decision made in an earlier record or issue.
+- a public API addition, rename or removal that every port must mirror, or a
+  reshape of one port's public API that changes how callers construct the
+  cache or call its operations, such as the Go redesign in #190;
+- a new port: another language implementation;
+- a change that reverses a decision made in an earlier record, issue or pull
+  request.
 
 These need no record:
 
 - A bug fix that makes a port or a Quint model meet the existing contract,
   such as restoring an invariant that lost strength when a profile was composed
-  (#186). Its regression or challenge documents the fix. When Quint and an
-  implementation disagree and the contract text stays the same, the
+  (#186). Its regression or challenge documents the fix. When Quint and
+  TypeScript disagree and the contract text stays the same, the
   distinguishing regression and the decision comment that
   [AUTHORING.md](../formal/guides/AUTHORING.md) asks for are enough.
 - New invariants, regressions or challenges in an existing profile.
 - A change confined to one port that adds, renames or removes public names
   without changing how callers construct the cache or call its operations,
-  such as exporting an existing type or deleting an unused function. The
-  commit body carries the reasoning.
+  such as exporting an existing type or deleting an unused function. The pull
+  request description, which becomes the squash commit's body, carries the
+  reasoning.
 - Other documentation, refactoring, tooling and dependency changes.
 
 ## Find existing records
@@ -49,8 +52,10 @@ These need no record:
 Before changing a feature, search the records for its contract IDs, profile
 name and public API names, for example `grep -rl -e C41 -e recovery design/`,
 and read each match, newest first. Decisions made before records existed live
-in issues, including issues closed as not planned, so search those too, for
-example `gh search issues compression --repo lan17/DialCache`.
+in issues and pull request threads, including issues closed as not planned, so
+search those too, for example
+`gh search issues compression --repo lan17/DialCache --include-prs`. Note any
+open pull request that edits the same files; the record's Plan orders the two.
 
 A change that contradicts a confirmed decision in a record that is not yet
 `Implemented` changes that decision within the same record, as step 4 below
@@ -70,12 +75,17 @@ Quint drafts and anything that should not be public; the checked model lands
 under `formal/models/` in the implementing pull request.
 
 One record may cover several pull requests. An issue that already holds a
-design, such as #217, keeps its body; the record restates the decisions still
-in force and names the issue's design under Supersedes.
+design, such as #217, keeps its body; the record restates the issue's
+decisions that still apply, each `Open` until a maintainer confirms it, and
+names the issue's design under Supersedes.
 
 A record written after its work merged starts as `Implemented`. It lists the
 contract IDs that now state the behavior, and marks a decision `Confirmed` only
-where the issue or pull request shows a maintainer approving it.
+where the issue or pull request shows a maintainer approving it. An unmerged
+pull request opened before records existed, such as #219, gets its record the
+same way: `Accepted` when every decision is `Confirmed`, `Proposed` otherwise.
+Its implementation stays, and only its `Open` decisions stop at the design
+gate.
 
 ## Take a record from proposal to merge
 
@@ -91,9 +101,10 @@ where the issue or pull request shows a maintainer approving it.
    or review that an agent wrote is not an approval, even when it is posted
    from a maintainer's account. An agent writes every decision as `Open` and
    changes it to `Confirmed` only after a maintainer approves the choice,
-   recording the date and where the approval was given. When no decision is
-   `Open`, the record's status becomes `Accepted`. The implementing pull
-   request stays in draft until then.
+   recording the date and a link to the approval, or the maintainer's words
+   quoted when he approved in a session. When no decision is
+   `Open`, the record's status becomes `Accepted` and implementation starts.
+   Until then the pull request holds only the record and stays in draft.
 3. **Implement.** A change to a portable contract updates `CONTRACTS.md` and the
    Quint models as [AUTHORING.md](../formal/guides/AUTHORING.md#codifying-the-next-behavior)
    describes. The record lists the existing contract IDs it changes. The
@@ -103,8 +114,8 @@ where the issue or pull request shows a maintainer approving it.
 4. **Keep history visible.** A confirmed decision is never silently rewritten.
    A changed decision moves its earlier choice into Rejected, with the date and
    the reason, and returns to `Open`. Until a maintainer confirms the new
-   choice, the record returns to `Proposed` and the implementing pull request
-   returns to draft. When the new choice is an alternative rejected earlier,
+   choice, the record returns to `Proposed`, the implementing pull request
+   returns to draft and work that depends on the decision pauses. When the new choice is an alternative rejected earlier,
    its Choice keeps that rejection's reason and says why it no longer holds.
    A pull request whose behavior or public API departs from the record's
    Proposal or its Contract and model changes adds a Deviations entry in the

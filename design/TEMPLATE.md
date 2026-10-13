@@ -19,8 +19,9 @@ each status. -->
 
 {The observable behavior and the public API shape the decisions depend on: in
 TypeScript, the reference port, and in any port whose shape differs, or in the
-one port a single-port change touches. Keep it short: once merged,
-CONTRACTS.md, Quint and docs/ state the precise rule.}
+one port a single-port change touches. For a formal-infrastructure change,
+describe the protocol, record or check shape instead. Keep it short: once
+merged, CONTRACTS.md, Quint and docs/ state the precise rule.}
 
 ## Out of scope
 
@@ -30,7 +31,9 @@ that would reopen it. Write "None." if there are none.}
 ## Contract and model changes
 
 {Write "None." if the change leaves every portable contract, Quint model and
-conformance profile unchanged, and say why. Otherwise list the existing
+conformance profile unchanged, and say why. A change that restructures models
+or driver channels without changing a contract names them and says how their
+histories are shown to be unchanged. Otherwise list the existing
 contract IDs changed or removed in CONTRACTS.md, and each new obligation; the
 implementing pull request adds its ID once CONTRACTS.md assigns one. Name the
 Quint model or conformance profile extended or added, with its planned
@@ -46,9 +49,10 @@ detail, with the reason.}
 - **Rejected:**
   - {An alternative, and why it lost.}
 
-<!-- Only a maintainer's approval changes a status to
-"Confirmed YYYY-MM-DD, {where the approval was given}". A changed decision
-moves its earlier choice into Rejected with the date and reason. -->
+<!-- Only a maintainer's approval changes a status to "Confirmed YYYY-MM-DD,
+{a link to his comment or review, or "in session:" and his words quoted}". A
+changed decision moves its earlier choice into Rejected with the date and
+reason. -->
 
 ## Impact
 

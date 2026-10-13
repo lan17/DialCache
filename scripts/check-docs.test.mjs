@@ -83,7 +83,7 @@ test('decodes escaped link and anchor attributes exactly once', t => {
   assert.deepEqual(checkDocsLinks(root), { pages: 1 });
 });
 
-test('checks relative links in the formal guides and indexes and the repository and design READMEs', t => {
+test('checks relative links in the formal guides and indexes and the repository and design READMEs and AGENTS.md', t => {
   const root = mkdtempSync(join(tmpdir(), 'dialcache-formal-links-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, 'formal/guides'), { recursive: true });
@@ -107,4 +107,9 @@ test('checks relative links in the formal guides and indexes and the repository 
   assert.deepEqual(checkFormalLinks(root), { pages: 6 });
   writeFileSync(join(root, 'design/README.md'), '# Design records\n\n[SPEC](../formal/SPEC.md)\n');
   assert.throws(() => checkFormalLinks(root), /design\/README\.md: missing link target \.\.\/formal\/SPEC\.md/);
+  writeFileSync(join(root, 'design/README.md'), '# Design records\n\n[SPEC](../formal/guides/SPEC.md)\n');
+  writeFileSync(join(root, 'AGENTS.md'), '# AGENTS.md\n\n[records](design/README.md#find-existing-records)\n');
+  assert.deepEqual(checkFormalLinks(root), { pages: 7 });
+  writeFileSync(join(root, 'AGENTS.md'), '# AGENTS.md\n\n[audit](formal/guides/AUDIT.md)\n');
+  assert.throws(() => checkFormalLinks(root), /AGENTS\.md: missing link target formal\/guides\/AUDIT\.md/);
 });
