@@ -103,15 +103,25 @@ export function dispositionDigest(audit) {
 
 // A refreshed file's entries keep their dispositions by title: the k-th
 // occurrence of a title keeps what the k-th occurrence had, so a moved section
-// keeps its contracts and a renamed or new one starts empty.
+// keeps its contracts and a renamed or new one starts empty. A title that
+// repeats, before or after, with a different number of occurrences starts
+// every occurrence empty: position alone cannot say which section is which.
+// Dispositions that carried to no entry are returned as `dropped`, so the
+// report can show what the reviewer is about to lose.
 function carryDispositions(previous = [], entries) {
-  const seen = new Map();
-  return entries.map(entry => {
+  const count = list => list.reduce((map, entry) => map.set(entry?.title, (map.get(entry?.title) ?? 0) + 1), new Map());
+  const before = count(previous), after = count(entries);
+  const unstable = title => (before.get(title) > 1 || after.get(title) > 1) && before.get(title) !== after.get(title);
+  const seen = new Map(), used = new Set();
+  const carried = entries.map(entry => {
     const occurrence = seen.get(entry.title) ?? 0;
     seen.set(entry.title, occurrence + 1);
-    const match = previous.filter(candidate => candidate?.title === entry.title)[occurrence];
+    const match = unstable(entry.title) ? undefined : previous.filter(candidate => candidate?.title === entry.title)[occurrence];
+    if (match) used.add(match);
     return { ...entry, contracts: match?.contracts ?? [] };
   });
+  const dropped = previous.map((entry, index) => !used.has(entry) && entry?.contracts?.length ? `${entryLabel(previous, index)} ${JSON.stringify(entry.contracts)}` : undefined).filter(Boolean);
+  return { entries: carried, dropped };
 }
 
 // Re-key the named files after their review. For each: recompute its hash and
@@ -137,7 +147,7 @@ export function refreshSourceAudit(audit, paths, { directory = root } = {}) {
       continue;
     }
     const previous = index >= 0 ? rows[index] : undefined;
-    const entries = kind === 'sources' ? carryDispositions(previous?.entries, source.entries) : source.entries;
+    const { entries, dropped } = kind === 'sources' ? carryDispositions(previous?.entries, source.entries) : { entries: source.entries, dropped: [] };
     const row = previous ? { ...previous, sha256: source.sha256, entries } : { path, sha256: source.sha256, entries };
     const pending = entries.map((entry, index) => entry.contracts?.length === 0 ? entryLabel(entries, index) : undefined).filter(Boolean);
     if (previous && previous.sha256 === row.sha256 && equal(previous.entries, entries)) {
@@ -149,15 +159,16 @@ export function refreshSourceAudit(audit, paths, { directory = root } = {}) {
       const at = rows.findIndex(other => other?.path > path);
       rows.splice(at < 0 ? rows.length : at, 0, row);
     }
-    changes.push({ path, action: previous ? 'refreshed' : 'added', entries: entries.length, pending, review: kind !== 'reviewedGuides' || Boolean(row.review) });
+    changes.push({ path, action: previous ? 'refreshed' : 'added', entries: entries.length, pending, dropped, review: kind !== 'reviewedGuides' || Boolean(row.review) });
   }
   return { audit: result, changes };
 }
 
-export function describeChange({ path, action, entries, pending = [], review = true }) {
+export function describeChange({ path, action, entries, pending = [], dropped = [], review = true }) {
   if (action === 'removed') return `${path}: removed, no longer in the inventory`;
   const needs = [
     pending.length ? `${pending.length} without a contract disposition: ${pending.join(', ')}` : '',
+    dropped.length ? `dropped: ${dropped.join(', ')}` : '',
     review ? '' : 'its review record is missing',
   ].filter(Boolean);
   return `${path}: ${action}, ${entries} ${entries === 1 ? 'entry' : 'entries'}${needs.length ? `; ${needs.join('; ')}` : ''}`;
@@ -213,7 +224,14 @@ function main(argv) {
     process.exitCode = 2;
     return;
   }
-  const { audit, changes } = refreshSourceAudit(JSON.parse(read(auditPath)), argv.slice(1));
+  let refreshed;
+  try { refreshed = refreshSourceAudit(JSON.parse(read(auditPath)), argv.slice(1)); }
+  catch (error) {
+    console.error(`Nothing written: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  const { audit, changes } = refreshed;
   writeFileSync(resolve(root, auditPath), encodeAudit(audit));
   for (const change of changes) console.log(describeChange(change));
   try { console.log(checkSourceAudit(audit)); }

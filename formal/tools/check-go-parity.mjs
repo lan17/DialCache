@@ -247,7 +247,13 @@ function main(argv) {
     process.exitCode = 2;
     return;
   }
-  const ledger = refreshGoParityInputs(json(ledgerPath));
+  let ledger;
+  try { ledger = refreshGoParityInputs(json(ledgerPath)); }
+  catch (error) {
+    console.error(`Nothing written: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
   writeFileSync(root + ledgerPath, encodeLedger(ledger));
   console.log(`${ledgerPath}: input and vector artifact digests refreshed`);
   try { console.log(checkGoParity(ledger)); }

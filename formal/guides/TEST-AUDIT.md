@@ -37,7 +37,10 @@ For each named file the command recomputes the content hash and the heading or
 test inventory, carries every contract disposition to the entry with the same
 title (the second occurrence of a repeated title to the second), and leaves a
 new or renamed entry with an empty disposition, so the check keeps failing
-until a reviewer fills it. A named file that joined the inventory is added at
+until a reviewer fills it. A repeated title whose number of occurrences
+changed starts every occurrence empty, because position alone cannot say
+which section is which; the report names each disposition it dropped. A named
+file that joined the inventory is added at
 its position; one that left it is dropped. Files not named keep their rows. The
 command assigns no disposition and writes no review. Then re-pin the Go parity
 ledger, which binds to this audit's dispositions:
