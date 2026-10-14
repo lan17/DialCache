@@ -2,7 +2,8 @@
 
 Run validation from the repository root. The Make targets are shared by local
 work and GitHub Actions; [README.md](../README.md#generating-and-replaying-behavior)
-lists tool prerequisites and focused reproduction commands.
+lists tool prerequisites and focused reproduction commands. Past measurements,
+at the revisions they were made, are in [HISTORY.md](./HISTORY.md).
 
 ## Choosing a run
 
@@ -299,11 +300,3 @@ public-action regressions now anchor all of them:
 | policy / `remote-value:7`, `remote-value:8`, `remote-value:9` | [falsyRemoteValuesAreServedFromRemoteTest](../models/dialcache-policy-conformance.qnt) |
 | layers / `source-publication-probed-in-all-three-layers` | [untrackedSourcePublicationIsProbedInAllThreeLayersTest](../models/dialcache-layers-conformance.qnt) |
 | independent / `distinct-retained-recovery-values` | [independentRecoveriesServeDistinctAcquiredSnapshotsTest](../models/dialcache-independent-conformance.qnt) |
-
-## Historical results
-
-The merged baseline's detailed run logs remain in
-[the versioned record from PR #161](https://github.com/lan17/DialCache/blob/fa4ef77489fd124213b5877479f69e2086c1aa90/formal/guides/VALIDATION.md).
-Current results belong in PR summaries and uploaded artifacts. This guide
-explains how to produce and interpret evidence; it is not an accumulating log
-of previous executions or machine-specific temporary paths.

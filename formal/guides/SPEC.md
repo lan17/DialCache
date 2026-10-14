@@ -39,6 +39,7 @@ caller ownership and permitted acceptance for the named scope:
 | recovery | [Retained flight snapshot and recovery](../models/dialcache-recovery-connection.qnt) |
 | independent | [Per-caller snapshots and source deadlines](../models/dialcache-independent-connection.qnt) |
 | source-budgets | [Captured source origin, budget and follower ownership](../models/dialcache-source-connection.qnt) |
+| shadow-layers | [Admission facts read from the pre-state](../models/dialcache-shadow-layers-connection.qnt) |
 
 Properties have different roles. The boundary assertions in
 [dialcache-rule-checks.qnt](../models/dialcache-rule-checks.qnt) state inequalities

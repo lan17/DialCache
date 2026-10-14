@@ -6,7 +6,7 @@ acceptance criteria. Executable checks then challenge that written behavior.
 TypeScript is the executable reference these models formalize; Quint is the
 independently reviewed contract that TypeScript, Go, Rust and future ports are held
 to. When the two disagree, neither side is edited to match the other quietly:
-the change lands with a regression that distinguishes the two behaviors and a
+the change lands with a [regression](./GLOSSARY.md#corpus-history-regression-exported-run-and-public-only-run) that distinguishes the two behaviors and a
 comment recording the decision about which one is intended. The prose explains
 the contract; implementation tests must not become an independent, drifting
 definition of the same portable rule.
@@ -21,20 +21,22 @@ behavior.
 
 Start with the file's scope and assumptions. Each model deliberately covers a
 bounded part of DialCache. Begin with [cache-rules.qnt](../models/cache-rules.qnt) for
-shared age, expiry, deadline and fence judgments, and
+shared age, expiry, deadline and [fence](./GLOSSARY.md#fence-watermark-and-marker) [judgments](./GLOSSARY.md#judgment-judged-once-and-applied-from-a-judgment), and
 [cache-contract.qnt](../models/cache-contract.qnt) for acquired recovery and source
-ownership records. Verification models and conformance profiles consume these
-definitions. Connection models check selected profile histories against the
+ownership records. [Verification models](./GLOSSARY.md#verification-model) and [conformance profiles](./GLOSSARY.md#profile-conformance-profile) consume these
+definitions. [Connection models](./GLOSSARY.md#connection-model) check selected profile histories against the
 acquired contracts. Conformance profiles also expose external actions that a
-language driver can replay. The
+language [driver](./GLOSSARY.md#driver) can replay. The
 [model inventory](../README.md#models-and-composition-profiles) and [profile registry](../catalogs/profiles.json)
-identify the relevant starting point.
+identify the relevant starting point. The words the models and guides share
+(driver, profile, flight, source, judgment, variant, witness and the rest) are
+defined in [GLOSSARY.md](./GLOSSARY.md), each with the file that owns it.
 
 Read the types and state next. Distinguish three kinds of information:
 
 - **Environment inputs:** policy replies, cache bytes, clocks, source results,
   and the completion or failure of external work.
-- **DialCache ownership:** a live request scope, registered flight, retained
+- **DialCache ownership:** a live request scope, registered [flight](./GLOSSARY.md#flight), retained
   candidate, or pending publication.
 - **Recorded observations:** a value acquired earlier, the time a result was
   accepted, and the effects or outcomes already produced by the modeled call.
@@ -89,7 +91,7 @@ acceptance judgments belong in `cache-rules.qnt`; acquired snapshot and source
 ownership contracts belong in `cache-contract.qnt`. A profile supplies its
 normalized policy, clocks and environment; it must not restate those decisions.
 Where representations differ, add an executable projection/connection check
-that compares profile history with the contract. Give the projection an explicit
+that compares profile history with the contract. Give the [projection](./GLOSSARY.md#projection) an explicit
 scope and challenge mistakes in policy capture, event timing or ownership.
 
 `node formal/tools/lint-profiles.mjs <model.qnt> [--kernel=<module,...>] --witness=<regex>`
@@ -101,7 +103,7 @@ a state variable other than `input` and fails on any comparison, branch,
 arithmetic or collection operator over cache state, and on any non-library
 definition applied to cache state; library modules (those under `formal/models/kernel`)
 compute freely, a chosen `nondet` input carries no state, and the `input`
-assignment may branch on state. Witness isolation fails on any reference to a
+assignment may branch on state. [Witness](./GLOSSARY.md#witness-label-and-classifier) isolation fails on any reference to a
 variable matching the witness pattern from a cache guard or assignment, `init`
 or `step`, a `nondet` domain, the definition assigning the observation field
 (`o` unless `--observation` says otherwise) or an operator constant's body; a
@@ -112,12 +114,12 @@ composition-violation count: a composed profile reports zero and the other
 counts are the migration work list for issue #165. `node formal/tools/lint-profiles.mjs
 baseline --check` is a ratchet (library transitions and counts as recorded,
 none in a composed profile) and `--write` refreshes the record after a reviewed
-change; the check runs in `make differential` (the pull request lane) and
+change; the check runs in `make differential` (the pull request [lane](./GLOSSARY.md#lane)) and
 `make formal-check` (the full run), the lanes that have Quint. `make audit`
 runs without Quint and does not include it.
 
-The same lint checks state shapes separately from composition counts. Held
-reads beside held dumps require a lifecycle that accounts for both; shadow
+The same lint checks state [shapes](./GLOSSARY.md#shape) separately from composition counts. [Held](./GLOSSARY.md#held-versus-immediate-reply-and-effect)
+reads beside held dumps require a [lifecycle](./GLOSSARY.md#lifecycle-budgeted-held-atomic-diagnosed-metered) that accounts for both; shadow
 jobs beside a caller source budget require the dark-job lifecycle. A local
 fault switch must use the fault-aware transitions and cannot accompany the
 healthy held lifecycle. These checks follow record type aliases and fail even
@@ -127,7 +129,7 @@ assigned to it, so a valid transition on another state cannot satisfy its
 requirements, and mixing a valid lifecycle with an incompatible one still
 fails. Atomic-release profiles also schedule
 `atomicPathSeedsDecodableFrames`, because their reads and shadow comparisons
-have no decode-failure settlement.
+have no decode-failure [settlement](./GLOSSARY.md#settlement-and-settlement-receipt).
 
 The [kernel library](../models/kernel/README.md) holds the concern modules a composed
 profile assigns through; `formal/models/dialcache-layers-conformance.qnt` is the first.
@@ -139,7 +141,7 @@ the model's `differential.behaviorVersion` in the manifest instead. Trace bytes
 per state may grow at most 1.2 times over the reference; a composition that
 must carry more state declares its own bound as
 `differential.maxBytesPerStateRatio` beside `behaviorVersion`, with the reason
-recorded in the kernel README's record table. Compare the same recorded inputs
+recorded in [HISTORY.md](./HISTORY.md). Compare the same recorded inputs
 before attributing a change in observations to the rewrite. Reusing a random
 seed does not preserve an input history when a model's choice structure
 changes.
@@ -157,7 +159,7 @@ in [conformance-observations.qnt](../models/conformance-observations.qnt). Name 
 transition conditions locally, including the time or snapshot they inspect.
 Keep request lifetime, flight ownership, deadline acceptance, and publication
 policy in the model that explains them. A shared lifecycle must keep these
-differences explicit; a profile rewrite is admitted only by its corpus differential.
+differences explicit; a profile rewrite is admitted only by its corpus [differential](./GLOSSARY.md#differential).
 
 An assertion needs an independent way to detect a wrong transition. Do not
 rewrite both sides of a check to call the same newly extracted eligibility
@@ -207,7 +209,7 @@ own API and integration tests.
    stays inside the settlement receipt ([PORTING.md](./PORTING.md)) by
    extending the ledger's kinds and gate names in
    [replay/settlement.mjs](../replay/settlement.mjs), the `held` members of
-   `$defs/settlementReceipt`, each driver's held computation and the receipt
+   `$defs/settlementReceipt`, each driver's held computation and the [receipt](./GLOSSARY.md#settlement-and-settlement-receipt)
    table; a hold fault must precede every effect-starting command of its step.
    A new rule text belongs in the same module's exported violation pattern,
    which the TypeScript and Go mutation runners import.
@@ -273,7 +275,7 @@ is listed. Generation exports them under `regressions/<profile>/` alongside the
 sampled corpus. Quint's deterministic test export omits MBT action metadata.
 `replay-inputs.mjs` adds compatibility annotations derived only from the explicit
 input record to scheduled exports; it never infers commands from expected state.
-The coordinator also accepts raw regression exports directly. `input` remains
+The [coordinator](./GLOSSARY.md#coordinator) also accepts raw regression exports directly. `input` remains
 authoritative, and any optional MBT annotations must agree with it.
 
 Each implementation validates the input domain, performs the real public
@@ -367,7 +369,7 @@ source expression moves or changes; its failure must never count as detection.
 For a model refactor, run the scheduled model checks/regressions, generation,
 implementation replay, evidence validation, and relevant mutation gates using
 the [documented commands](../README.md#generating-and-replaying-behavior). Keep the
-committed smoke expectations unchanged. Compare pre/post generated action and
+committed [smoke](./GLOSSARY.md#smoke) expectations unchanged. Compare pre/post generated action and
 state histories when preserving a fixed seed and schedule is intended, and
 investigate differences rather than replacing expectations to obtain a pass.
 
@@ -419,7 +421,7 @@ whose cases reach the codecs through an exported artifact, or instrumentation
 such as a receipt that no driver observes. A run that is exported must be cited
 as an `exported-regression`; `scope` is rejected on that kind. Public inputs
 do not make every model expectation observable: a run may also check private
-retention or memo state. Keep its `nativeMutants` classification `model-only`
+[retention](./GLOSSARY.md#frame-stamp-retention-and-freshness) or memo state. Keep its `nativeMutants` classification `model-only`
 or `unobservable` when those checks have no native consequence; exporting the
 history alone does not establish a native fault mapping. `profiles` must
 include the challenged model's own profile id, or its path for a model without
@@ -427,7 +429,7 @@ a profile, and the cited run's profile. For a fault in a shared library, every
 profile that imports the changed source must appear in `profiles` or in
 `exclusions`. Profiles outside that import closure are excluded structurally;
 do not repeat those relationships as catalog prose. A fault in one model's own
-file needs no exclusions, because no other profile executes that text.
+file needs no [exclusions](./GLOSSARY.md#exclusion-structural-versus-measured), because no other profile executes that text.
 
 `check-model-properties.mjs` runs the cited history on the same copy of the
 sources as the invariant measurement, together with two probes it appends to
@@ -540,7 +542,7 @@ mutant while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
 complete evidence. Then run the full lanes, or let the weekly workflow run
 them.
 
-A mapped challenge also records which assertion detects its native mutant.
+A mapped challenge also records which assertion detects its [native mutant](./GLOSSARY.md#native-mutant).
 For an exported-regression reproducer, the runner derives a boundary from its
 history, the state index of its failure checkpoint (including initializer
 aliases and literal repetitions), and the public observation fields in that
