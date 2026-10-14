@@ -22,8 +22,8 @@ output lives in [../generated/](../generated/README.md), never here.
 
 ## Ledgers and baselines
 
-- [source-audit.json](./source-audit.json): the review ledger of documentation pages, ordinary tests and reviewed guides; `check-source-audit.mjs`; refreshed after a guide or docs edit ([../guides/TEST-AUDIT.md](../guides/TEST-AUDIT.md)).
-- [go-parity.json](./go-parity.json): the Go parity ledger over the catalogs, sources and audit; `check-go-parity.mjs`; refreshed with the audit.
+- [source-audit.json](./source-audit.json): the review ledger of documentation pages, ordinary tests and reviewed guides; `check-source-audit.mjs`; re-keyed per reviewed file with `check-source-audit.mjs --refresh <path>...` ([../guides/TEST-AUDIT.md](../guides/TEST-AUDIT.md)).
+- [go-parity.json](./go-parity.json): the Go parity ledger over the catalogs, sources and audit; `check-go-parity.mjs`; its catalog, audit-dispositions and vector artifact digests re-pinned with `check-go-parity.mjs --refresh-inputs`, its mapping hashes by hand with the review.
 - [profile-lint-baseline.json](./profile-lint-baseline.json): the composition lint ratchet per profile; `node formal/tools/lint-profiles.mjs baseline --check`; `--write` after a reviewed fall.
 - [witness-baseline.json](./witness-baseline.json): the recorded witness hit counts the exploration gate compares against; `witnesses.mjs`; `baseline --write`.
 
@@ -43,8 +43,9 @@ ledgers pin these files:
   (non-`formal-`) tests in `typescript/test/`.
 - `feature-coverage.json`: the TypeScript and Go test files it cites.
 - `go-parity.json`: `typescript/src/`, the bound Go files, the generated vector
-  artifacts and six catalogs: `semantic-cases`, `execution`, `source-audit`,
-  `feature-coverage`, `coverage-witnesses` and `profiles`.
+  artifacts, five catalogs (`semantic-cases`, `execution`, `feature-coverage`,
+  `coverage-witnesses` and `profiles`) and the source audit's dispositions, not
+  its bytes, so a prose-only edit never reaches it.
 - The fixtures lock (`formal/generated/generated-fixtures.lock.json`): the
   `.qnt` files, recipes and generators behind the committed fixtures, comments
   included.
@@ -73,20 +74,19 @@ feeds the next:
    driver-asserted channels change. Either bump makes `make differential` skip
    that profile instead of comparing it, so the pull request names each bump
    and its reason.
-3. **`source-audit.json`.** Update each changed file's `sha256`, its heading or
-   test entries and their contract dispositions; a changed line count moves
-   every later entry. `sourceSnapshot()` and `guideSnapshot()` in
-   `formal/tools/check-source-audit.mjs` print the current values, for example
-   `node --input-type=module -e 'const m = await import("./formal/tools/check-source-audit.mjs"); console.log(JSON.stringify(m.guideSnapshot()))'`.
-   Check with `node formal/tools/check-source-audit.mjs`.
-4. **`feature-coverage.json`.** Update a reviewed test's `sha256`, then run
-   `node formal/tools/check-feature-coverage.mjs`.
-5. **`go-parity.json`, last.** Update its input hashes, the `typescript/src/`
-   and bound Go file hashes after a binding review, the vector hashes and the
-   inventory counts. A new documentation page or ordinary test file needs a Go
-   applicability row, and a new `typescript/src/` file needs a source inventory
-   row with its reviewed Go bindings. Check with
-   `node formal/tools/check-go-parity.mjs`.
+3. **`source-audit.json`.** Re-key each reviewed file by name:
+   `node formal/tools/check-source-audit.mjs --refresh <path>...`. It recomputes
+   the hash and the heading or test inventory and carries each disposition to
+   the entry with the same title; a new or renamed entry stays empty until a
+   reviewer fills it ([TEST-AUDIT.md](../guides/TEST-AUDIT.md#keeping-the-audit-current)).
+4. **`feature-coverage.json`.** Update a reviewed test's `sha256` by hand, then
+   run `node formal/tools/check-feature-coverage.mjs`.
+5. **`go-parity.json`, last.** Run `node formal/tools/check-go-parity.mjs --refresh-inputs`
+   to re-pin the catalog digests, the audit dispositions and the vector
+   artifacts. The `typescript/src/` and bound Go file hashes are re-pinned by
+   hand with their mapping review; a new documentation page or ordinary test
+   file needs a Go applicability row, and a new `typescript/src/` file needs a
+   source inventory row ([GO-PARITY.md](../guides/GO-PARITY.md)).
 
 `make audit` runs every ledger check. On a rebase conflict in a ledger, take
 `main`'s copy and refresh again instead of merging the JSON by hand.

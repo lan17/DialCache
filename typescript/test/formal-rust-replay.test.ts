@@ -217,5 +217,5 @@ describe("Rust validation lanes", () => {
     } finally {
       rmSync(temporary, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 });

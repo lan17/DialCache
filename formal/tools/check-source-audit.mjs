@@ -1,15 +1,19 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { encodeJson } from './compact-json.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = (path, directory = root) => readFileSync(resolve(directory, path), 'utf8');
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-// Headings inside fenced examples are not documentation sections. A shorter
-// marker or a marker followed by text cannot close the surrounding code fence.
+// An entry is a heading or a test declaration, identified by its title and its
+// position among entries with the same title, never by a line number: prose
+// edits above a heading do not move it. Headings inside fenced examples are
+// not documentation sections. A shorter marker or a marker followed by text
+// cannot close the surrounding code fence.
 function markdownHeadings(text) {
   const entries = [];
   let fence;
@@ -25,7 +29,7 @@ function markdownHeadings(text) {
       continue;
     }
     const heading = /^ {0,3}#{1,6}[ \t]+(.*)$/.exec(line);
-    if (heading) entries.push({ line: i + 1, title: heading[1] });
+    if (heading) entries.push({ title: heading[1] });
   }
   return entries;
 }
@@ -41,8 +45,7 @@ function snapshot(paths, directory) {
           const title = node.arguments[0];
           const body = node.arguments.at(-1);
           if (title && body && (ts.isArrowFunction(body) || ts.isFunctionExpression(body))) {
-            entries.push({ line: ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1,
-              title: ts.isStringLiteralLike(title) ? title.text : title.getText(ast) });
+            entries.push({ title: ts.isStringLiteralLike(title) ? title.text : title.getText(ast) });
             return;
           }
         }
@@ -70,9 +73,110 @@ export function guideSnapshot(directory = root) {
   return snapshot(paths, directory);
 }
 
+export const auditPath = 'formal/catalogs/source-audit.json';
+// How a message names an entry: its title, with its position among entries of
+// the same title when the title repeats in the file ("Example" #2).
+export function entryLabel(entries, index) {
+  const title = entries[index]?.title;
+  const same = entries.filter(entry => entry?.title === title);
+  const position = entries.slice(0, index + 1).filter(entry => entry?.title === title).length;
+  return same.length > 1 ? `${JSON.stringify(title)} #${position}` : JSON.stringify(title);
+}
+// The audit as committed: pretty JSON with every heading or test entry on one line.
+export const encodeAudit = audit => encodeJson(audit, path => path.length >= 3 && path.at(-2) === 'entries' && typeof path.at(-1) === 'number');
+
+// What the Go parity ledger binds to: the audit's schema, each test source's
+// content hash, every disposition (path, title, contracts) and each reviewed
+// guide's path and review record. Not a documentation file's hash: prose that
+// keeps its headings and dispositions is this audit's business alone, so a
+// prose edit leaves the parity ledger untouched while a changed assertion, a
+// new section or a changed disposition reaches it.
+export function dispositionDigest(audit) {
+  const bound = {
+    schemaVersion: audit?.schemaVersion,
+    sources: (audit?.sources ?? []).map(source => ({ path: source?.path, sha256: source?.path?.endsWith('.ts') ? source.sha256 : undefined,
+      entries: (source?.entries ?? []).map(entry => ({ title: entry?.title, contracts: entry?.contracts })) })),
+    reviewedGuides: (audit?.reviewedGuides ?? []).map(guide => ({ path: guide?.path, review: guide?.review })),
+  };
+  return createHash('sha256').update(JSON.stringify(bound)).digest('hex');
+}
+
+// A refreshed file's entries keep their dispositions by title: the k-th
+// occurrence of a title keeps what the k-th occurrence had, so a moved section
+// keeps its contracts and a renamed or new one starts empty. A title that
+// repeats, before or after, with a different number of occurrences starts
+// every occurrence empty: position alone cannot say which section is which.
+// Dispositions that carried to no entry are returned as `dropped`, so the
+// report can show what the reviewer is about to lose.
+function carryDispositions(previous = [], entries) {
+  const count = list => list.reduce((map, entry) => map.set(entry?.title, (map.get(entry?.title) ?? 0) + 1), new Map());
+  const before = count(previous), after = count(entries);
+  const unstable = title => (before.get(title) > 1 || after.get(title) > 1) && before.get(title) !== after.get(title);
+  const seen = new Map(), used = new Set();
+  const carried = entries.map(entry => {
+    const occurrence = seen.get(entry.title) ?? 0;
+    seen.set(entry.title, occurrence + 1);
+    const match = unstable(entry.title) ? undefined : previous.filter(candidate => candidate?.title === entry.title)[occurrence];
+    if (match) used.add(match);
+    return { ...entry, contracts: match?.contracts ?? [] };
+  });
+  const dropped = previous.map((entry, index) => !used.has(entry) && entry?.contracts?.length ? `${entryLabel(previous, index)} ${JSON.stringify(entry.contracts)}` : undefined).filter(Boolean);
+  return { entries: carried, dropped };
+}
+
+// Re-key the named files after their review. For each: recompute its hash and
+// entry inventory, carry its contract dispositions by title and give a new
+// entry an empty disposition, so the check fails until a reviewer fills it. A
+// named file that joined the inventory is added at its sorted position, a
+// guide without its review record; one that left the inventory is dropped.
+// Files not named keep their rows as they are. Nothing here assigns a
+// disposition or writes a review.
+export function refreshSourceAudit(audit, paths, { directory = root } = {}) {
+  const snapshots = { sources: sourceSnapshot(directory), reviewedGuides: guideSnapshot(directory) };
+  const result = { ...audit, sources: [...(audit.sources ?? [])], reviewedGuides: [...(audit.reviewedGuides ?? [])] };
+  const changes = [];
+  for (const path of paths.map(given => given.replace(/^\.\//, ''))) {
+    const kind = ['sources', 'reviewedGuides'].find(name => snapshots[name].some(source => source.path === path) || result[name].some(row => row?.path === path));
+    if (!kind) throw new Error(`${path}: not an audited source or reviewed guide`);
+    const rows = result[kind];
+    const index = rows.findIndex(row => row?.path === path);
+    const source = snapshots[kind].find(candidate => candidate.path === path);
+    if (!source) {
+      rows.splice(index, 1);
+      changes.push({ path, action: 'removed' });
+      continue;
+    }
+    const previous = index >= 0 ? rows[index] : undefined;
+    const { entries, dropped } = kind === 'sources' ? carryDispositions(previous?.entries, source.entries) : { entries: source.entries, dropped: [] };
+    const row = previous ? { ...previous, sha256: source.sha256, entries } : { path, sha256: source.sha256, entries };
+    const pending = entries.map((entry, index) => entry.contracts?.length === 0 ? entryLabel(entries, index) : undefined).filter(Boolean);
+    if (previous && previous.sha256 === row.sha256 && equal(previous.entries, entries)) {
+      changes.push({ path, action: 'unchanged', entries: entries.length, pending });
+      continue;
+    }
+    if (previous) rows[index] = row;
+    else {
+      const at = rows.findIndex(other => other?.path > path);
+      rows.splice(at < 0 ? rows.length : at, 0, row);
+    }
+    changes.push({ path, action: previous ? 'refreshed' : 'added', entries: entries.length, pending, dropped, review: kind !== 'reviewedGuides' || Boolean(row.review) });
+  }
+  return { audit: result, changes };
+}
+
+export function describeChange({ path, action, entries, pending = [], dropped = [], review = true }) {
+  if (action === 'removed') return `${path}: removed, no longer in the inventory`;
+  const needs = [
+    pending.length ? `${pending.length} without a contract disposition: ${pending.join(', ')}` : '',
+    dropped.length ? `dropped: ${dropped.join(', ')}` : '',
+    review ? '' : 'its review record is missing',
+  ].filter(Boolean);
+  return `${path}: ${action}, ${entries} ${entries === 1 ? 'entry' : 'entries'}${needs.length ? `; ${needs.join('; ')}` : ''}`;
+}
+
 export function checkSourceAudit(audit, { directory = root } = {}) {
-  if (audit === undefined) audit = JSON.parse(read('formal/catalogs/source-audit.json', directory));
-  if (audit?.schemaVersion !== 1) throw new Error('Unsupported formal source audit version');
+  if (audit === undefined) audit = JSON.parse(read(auditPath, directory));
+  if (audit?.schemaVersion !== 2) throw new Error('Unsupported formal source audit version');
   const actual = sourceSnapshot(directory), guides = guideSnapshot(directory);
   const ids = new Set([...read('formal/guides/CONTRACTS.md', directory).matchAll(/^\| ([CWEBX]\d{2}) \|/gm)].map(m => m[1]));
   const failures = [];
@@ -83,15 +187,16 @@ export function checkSourceAudit(audit, { directory = root } = {}) {
   const validContracts = contracts => Array.isArray(contracts) && new Set(contracts).size === contracts.length && contracts.every(id => ids.has(id));
   const compareSnapshot = (source, saved, label) => {
     if (saved.sha256 !== source.sha256) failures.push(`${source.path}: contents changed; review assertions/prose and refresh its audit`);
-    if (!Array.isArray(saved.entries) || !equal(saved.entries.map(entry => ({ line: entry?.line, title: entry?.title })), source.entries)) failures.push(`${source.path}: ${label} inventory changed`);
+    if (!Array.isArray(saved.entries) || !equal(saved.entries.map(entry => ({ title: entry?.title })), source.entries)) failures.push(`${source.path}: ${label} inventory changed`);
   };
   for (const source of actual) {
     const saved = sources.find(s => s?.path === source.path);
     if (!saved) continue;
     compareSnapshot(source, saved, 'test/section');
-    for (const entry of Array.isArray(saved.entries) ? saved.entries : []) {
-      if (!validContracts(entry?.contracts) || entry.contracts.length === 0) failures.push(`${source.path}:${entry?.line}: missing, duplicate or unknown contract disposition`);
-    }
+    const entries = Array.isArray(saved.entries) ? saved.entries : [];
+    entries.forEach((entry, index) => {
+      if (!validContracts(entry?.contracts) || entry.contracts.length === 0) failures.push(`${source.path} ${entryLabel(entries, index)}: missing, duplicate or unknown contract disposition`);
+    });
   }
   const kinds = new Set(['contract-guide', 'tooling-guide', 'coverage-guide', 'historical-evidence']);
   for (const source of guides) {
@@ -112,4 +217,28 @@ export function checkSourceAudit(audit, { directory = root } = {}) {
     reviewedGuides: guides.length, guideSections: guides.reduce((n, s) => n + s.entries.length, 0) };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) console.log(checkSourceAudit());
+function main(argv) {
+  if (argv.length === 0) return console.log(checkSourceAudit());
+  if (argv[0] !== '--refresh' || argv.length < 2) {
+    console.error('Usage: node formal/tools/check-source-audit.mjs [--refresh <path>...]');
+    process.exitCode = 2;
+    return;
+  }
+  let refreshed;
+  try { refreshed = refreshSourceAudit(JSON.parse(read(auditPath)), argv.slice(1)); }
+  catch (error) {
+    console.error(`Nothing written: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  const { audit, changes } = refreshed;
+  writeFileSync(resolve(root, auditPath), encodeAudit(audit));
+  for (const change of changes) console.log(describeChange(change));
+  try { console.log(checkSourceAudit(audit)); }
+  catch (error) {
+    console.error(`\nThe audit still fails. Fill what is missing, then run the check again:\n${error.message}`);
+    process.exitCode = 1;
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main(process.argv.slice(2));

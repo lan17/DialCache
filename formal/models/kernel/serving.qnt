@@ -1,35 +1,27 @@
 module serving {
-  // The serving path: admit a caller, join or consult each enabled layer in
-  // order (request memo, local, remote), and otherwise start a source; then
-  // settle a source and publish its value to the layers that own it. Every
-  // portable rule about ownership, traversal order and publication authority
-  // is stated here once; profiles supply bounded state, inputs and layouts.
+  // The serving path, stated once for every profile: admit a caller, join or consult each enabled
+  // layer in order (request memo, local, remote) or start a source, then settle and publish it.
   //
-  // Admission and traversal are two transitions because the drivers can hold
-  // a policy reply: `admit` counts the policy call and holds the caller with
-  // its call, `release` traverses for it with the state current at release.
-  // `begin` is their composition for a profile whose replies are immediate.
-  //
-  // The traversal comes in three shapes over the same order (`decide`): the
-  // layered one (`admit`, `release`, `settle`) over every layer; the local
-  // projection (`admitLocal`, `releaseLocal`, `settleLocal`) for a profile
-  // without remote storage, whose source record carries the identity it
-  // serves and the local TTL it may warm local storage for; and the request-only
-  // projection (`admitRequest`,
-  // `releaseRequest`, `settleRequest`) for a profile whose only layer is the
-  // request memo, which carries no storage, no clock and a source record
-  // without publication payload. A projection exists only where the layered
-  // shape cannot meet a profile's bytes-per-state bound; it states no rule of
-  // its own.
-  //
-  // The layered release and settlement are each split into the judgment and
-  // the steps a held remote effect suspends between (`remote_io`): the release
-  // judged with the remote layer unobserved (`judgeRelease`; with the local
-  // read's fault as an argument, `judgeReleaseUnder`), its prologue up
-  // to the remote layer (`applyRelease`), the publication authority fixed
-  // when a remote read completes (`authority`), completion apart from the
-  // recorded outcome (`complete`, `finish`) and publication apart from
-  // completion (`publish`, `settle`). The atomic path composes the same steps.
+  // Rules
+  // - `decide` states the order once for every shape: join a pending flight, else serve the memo,
+  //   the local value, the remote value, else start a source (C05, C11 to C14).
+  // - `admit` holds a caller under its policy call and `release` traverses with the state current
+  //   at release, since the drivers can hold a reply; `begin` composes both for immediate replies.
+  // - Publication authority is fixed when a remote read completes and travels in the source
+  //   record, so each source publishes with its own reply's TTLs (`authority`; C18, C28, C31, C37).
+  // - The layered release and settlement split into the judgment and the steps a held remote
+  //   effect suspends between (`remote_io`); the atomic path composes the same steps.
+  // Shapes
+  // - Layout: identities and driver facts a profile supplies beside its bounded state and inputs.
+  // - Traversed[r, p]: what the order reads and writes over a source payload p.
+  // - Served[r], LocalServed[r], RequestServed[r]: the layered, local and request-only state.
+  // - LayeredPayload, LocalPayload: what a source captures to publish on the two storage shapes.
+  // - LayeredSource, LocalSource, RequestSource: a source record over each shape's payload.
+  // - Outcome, Decision: what `decide` returns for a caller and for the traversal.
+  // - LayeredRelease, RequestRelease: what a release judgment returns, applied by `releaseJudged`.
+  // Consumers: every composed profile; composed through most other kernel modules.
+  // Ports: typescript/src/dialcache.ts `getThroughSharedLayers`, `getThroughActiveLocal`,
+  //   `invalidateRemote`; go/cache.go `Invalidate`, `ErrNoRemote`.
   import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
@@ -41,17 +33,10 @@ module serving {
   import flights as Flights from "./flights"
   import policy_gate as Gate from "./policy-gate"
 
-  // How a profile lays out its bounded identities: keys per instance (local
-  // storage and process flights), keys per scope row (request memo), how many
-  // contexts are persistent scopes, keys per entity, and whether the drivers
-  // probe each source for the scope it started under (o.sourceScopes). TTLs
-  // are not layout: every release and settlement takes the `Ttls` the reply
-  // resolved to (a fixture's constant where replies carry none). Whether the
-  // fixture installs a policy provider is layout: the drivers count provider
-  // invocations as `o.policyCalls`, one per enabled admission where a provider
-  // exists; an instance that resolves policy from its key's default
-  // configuration (the local-clock drivers' default instances) makes none, and
-  // composes immediate replies, since no reply is held for it.
+  // How a profile lays out its bounded identities: keys per instance (local storage and process
+  // flights), keys per scope row (request memo), how many contexts are persistent scopes and keys
+  // per entity. Two driver facts travel with them: whether the drivers probe each source for the
+  // scope it started under (o.sourceScopes) and whether they install a policy provider.
   type Layout = {
     keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int, probeSourceScope: bool,
     policyProvider: bool
@@ -80,6 +65,16 @@ module serving {
     memoSlots: List[int],
     held: List[Gate::Held] | r
   }
+  // The traversal comes in three shapes over the same order (`decide`). The
+  // layered one (`admit`, `release`, `settle`) runs over every layer. The
+  // local projection (`admitLocal`, `releaseLocal`, `settleLocal`) serves a
+  // profile without remote storage; its source record carries the identity
+  // it serves and the local TTL it may warm local storage for. The
+  // request-only projection (`admitRequest`, `releaseRequest`,
+  // `settleRequest`) serves a profile whose only layer is the request memo;
+  // it carries no storage, no clock and a source record without publication
+  // payload. A projection exists only where the layered shape cannot meet a
+  // profile's bytes-per-state bound; it states no rule of its own.
   // The layered shape adds the clock with its wall skew (remote frames are
   // stamped on the wall clock and retained on the monotonic one), the
   // environment's remote availability and tracking, the local capacity, the
@@ -267,12 +262,22 @@ module serving {
   // A participating caller makes a policy call and waits for the reply; any
   // other caller (a closed scope, a disabled context, a call outside every
   // request) bypasses every layer and starts its own unshared source at once (C01).
+  // Admission and traversal are two transitions because the drivers can hold
+  // a policy reply: `admit` counts the policy call and holds the caller with
+  // its call, and `release` traverses for it with the state current at
+  // release. `begin` is their composition for a profile whose replies are
+  // immediate.
   // The gate holds the caller under the policy-call count, which advances only
   // where the layout has a policy provider: a composition that holds replies
   // across steps (`admit` and `release` as separate transitions) needs
   // `Layout.policyProvider`; without one the count stands still and every
   // held caller would share one key (`policy_gate::hold`), so a layout without
   // a provider composes immediate replies only (`beginLocal`, `callLocal`).
+  // Whether the fixture installs a policy provider is layout: the drivers
+  // count provider invocations as `o.policyCalls`, one per enabled admission
+  // where a provider exists. An instance that resolves policy from its key's
+  // default configuration (the local-clock drivers' default instances) makes
+  // none, and composes immediate replies, since no reply is held for it.
   pure def entered(state: Traversed[r, p], layout: Layout, open: bool): Traversed[r, p] = Flights::admitCaller({
     o: {
       calls: state.o.calls.append(CALL_PENDING),
@@ -367,7 +372,7 @@ module serving {
   pure def judgeRelease(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls, observed: bool): LayeredRelease =
     judgeReleaseUnder(state, layout, policyCall, resolved, ttls, observed, false)
   // The TTLs a release publishes for: the reply's, with no local TTL after a
-  // failed local read. Nothing is warmed from a faulted read: neither the
+  // failed local read (C27). Nothing is warmed from a faulted read: neither the
   // remote hit it serves (`applyRelease`) nor, through `authority`, the source
   // it starts, which captures `localMs` 0 and so publishes nothing locally
   // whatever the switch says when it settles.
@@ -375,10 +380,11 @@ module serving {
     if (judged.localFailed) { localMs: 0, ...ttls } else ttls
   pure def layeredRelease(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LayeredRelease =
     judgeRelease(state, layout, policyCall, resolved, ttls, true)
-  // The prologue every layered release shares: release the gate, attach the
-  // caller to the flight that completes it (or to none), and serve it from the
-  // layer the judgment chose. `Starts` attaches and leaves the start to the
-  // caller (an atomic release starts the source, a held one dispatches the read).
+  // The prologue every layered release shares, up to the remote layer:
+  // release the gate, attach the caller to the flight that completes it (or
+  // to none), and serve it from the layer the judgment chose. `Starts`
+  // attaches and leaves the start to the caller (an atomic release starts the
+  // source, a held one dispatches the read).
   pure def applyRelease(state: Served[r], layout: Layout, judged: LayeredRelease, policyCall: int, ttls: Ttls): Served[r] = {
     val caller = judged.caller
     val call = judged.call
@@ -502,7 +508,8 @@ module serving {
   // An immediate policy reply: admission and traversal in one step with the
   // resolution the profile supplies (`layer_policy::resolution` for the
   // drivers' layer policy codes) and the Ttls the reply resolved to (a
-  // fixture's constant where replies carry none).
+  // fixture's constant where replies carry none). TTLs are not layout: every
+  // release and settlement takes them beside the resolution.
   pure def begin(state: Served[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls): Served[r] = {
     val admitted = admit(state, layout, call)
     if (participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls) else admitted
@@ -558,7 +565,7 @@ module serving {
   // publication without completion; `settle` completes after it.
   // A refill may be written now: its authority captured a retention and the
   // fence it observed still allows the write; a caller's refill (`refills`)
-  // and a shadow job's fill (`shadow::fill`) judge it here.
+  // and a shadow job's fill (`shadow::fill`) judge it here (C34).
   pure def refillAllowed(state: Served[r], retentionMs: int, fence: int): bool =
     retentionMs > 0 and Remote::writeAllowed(state, fence)
   pure def refills(state: Served[r], source: LayeredSource, value: int): bool =
@@ -595,7 +602,7 @@ module serving {
   pure def closeScope(state: Traversed[r, p], layout: Layout, context: int): Traversed[r, p] =
     Flights::forgetScope(Memo::closeScope(state, context, layout.keysPerScope), context, layout.keysPerScope)
 
-  // Maintenance: invalidating an entity raises its watermark. The outcome is
+  // Maintenance: invalidating an entity raises its watermark (C29). The outcome is
   // one rule of the write-fault switch, as the drivers classify it
   // (the `invalidate` command of `typescript/test/formal/behavior-driver.ts` `apply` and
   // of `go/behavior_driver_test.go` `behaviorDriver.apply`): without remote

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { auditPath, dispositionDigest } from './check-source-audit.mjs';
 import { scheduleExecution } from './execution.mjs';
 import { readVectorArtifact } from './vector-artifacts.mjs';
 
@@ -45,6 +46,35 @@ function goSymbols(path) {
   return new Set([...read(path).matchAll(/^(?:func\s+(?:\([^\n]*?\)\s+)?|(?:type|const|var)\s+)([A-Za-z_]\w*)/gm)].map(match => match[1]));
 }
 
+export const ledgerPath = 'formal/catalogs/go-parity.json';
+// The catalogs whose file digests the ledger pins under `inputs`. The source
+// audit is pinned beside them by its dispositions, not its bytes
+// (check-source-audit.mjs dispositionDigest), under
+// `inputs.sourceAuditDispositionsSha256`.
+export const inputCatalogs = {
+  semanticCasesSha256: 'formal/catalogs/semantic-cases.json',
+  executionSha256: 'formal/catalogs/execution.json',
+  featureCoverageSha256: 'formal/catalogs/feature-coverage.json',
+  coverageWitnessesSha256: 'formal/catalogs/coverage-witnesses.json',
+  profilesSha256: 'formal/catalogs/profiles.json',
+};
+// The ledger as committed.
+export const encodeLedger = ledger => `${JSON.stringify(ledger, null, 2)}\n`;
+
+// Re-pin what the ledger fingerprints but does not review: the catalogs under
+// `inputs`, the audit's dispositions and each generated vector artifact. Those
+// change for reasons reviewed elsewhere (a catalog edit, a refreshed audit, a
+// regenerated artifact), so re-pinning them is the step that acknowledges the
+// change for this ledger. The TypeScript source and Go binding hashes stay: a
+// changed source needs its mapping re-reviewed, and the reviewer re-pins it
+// with the review.
+export function refreshGoParityInputs(ledger, { execution = scheduleExecution(json(inputCatalogs.executionSha256)), audit = json(auditPath) } = {}) {
+  const inputs = { ...ledger.inputs, ...Object.fromEntries(Object.entries(inputCatalogs).map(([field, path]) => [field, digest(path)])), sourceAuditDispositionsSha256: dispositionDigest(audit) };
+  const artifacts = new Map(execution.models.filter(model => model.vectorExport).map(model => [model.path, model.vectorExport.artifact]));
+  const vectorExports = (ledger.vectorExports ?? []).map(row => artifacts.has(row.model) ? { ...row, artifactSha256: digest(artifacts.get(row.model)) } : row);
+  return { ...ledger, inputs, vectorExports };
+}
+
 // Read-only accounting/freshness guard. Passing is not a parity or coverage proof.
 //
 // The ledger stores what a reviewer writes: per case its group, gaps and
@@ -56,12 +86,12 @@ function goSymbols(path) {
 // reviewed file's hash, entries and contracts; the profile schedule) is read
 // from them here and checked against execution.json and the repository, not
 // stored as a copy. `inputs` lets a test substitute one of those ledgers.
-export function checkGoParity(ledger = json('formal/catalogs/go-parity.json'), inputs = {}) {
-  const semantic = inputs.semantic ?? json('formal/catalogs/semantic-cases.json');
-  const execution = scheduleExecution(inputs.execution ?? json('formal/catalogs/execution.json'));
-  const profileManifest = inputs.profileManifest ?? json('formal/catalogs/profiles.json');
-  const witnessCatalog = inputs.witnessCatalog ?? json('formal/catalogs/coverage-witnesses.json');
-  const audit = inputs.audit ?? json('formal/catalogs/source-audit.json');
+export function checkGoParity(ledger = json(ledgerPath), inputs = {}) {
+  const semantic = inputs.semantic ?? json(inputCatalogs.semanticCasesSha256);
+  const execution = scheduleExecution(inputs.execution ?? json(inputCatalogs.executionSha256));
+  const profileManifest = inputs.profileManifest ?? json(inputCatalogs.profilesSha256);
+  const witnessCatalog = inputs.witnessCatalog ?? json(inputCatalogs.coverageWitnessesSha256);
+  const audit = inputs.audit ?? json(auditPath);
   const failures = [];
   const check = (condition, message) => { if (!condition) failures.push(message); };
   const pathExists = (path, context) => {
@@ -73,10 +103,11 @@ export function checkGoParity(ledger = json('formal/catalogs/go-parity.json'), i
     check(typeof path === 'string' && path.startsWith('go/') && path.endsWith('.go'), `${context}: expected a production/test Go source path, got ${path}`);
     return pathExists(path, context);
   };
-  check(ledger.schemaVersion === 2, 'Unsupported Go parity ledger version');
-  for (const [field, path] of Object.entries({ semanticCasesSha256: 'formal/catalogs/semantic-cases.json', executionSha256: 'formal/catalogs/execution.json', sourceAuditSha256: 'formal/catalogs/source-audit.json', featureCoverageSha256: 'formal/catalogs/feature-coverage.json', coverageWitnessesSha256: 'formal/catalogs/coverage-witnesses.json', profilesSha256: 'formal/catalogs/profiles.json' })) {
+  check(ledger.schemaVersion === 3, 'Unsupported Go parity ledger version');
+  for (const [field, path] of Object.entries(inputCatalogs)) {
     check(ledger.inputs?.[field] === digest(path), `${path}: ledger input hash is stale; review and refresh its snapshot`);
   }
+  check(ledger.inputs?.sourceAuditDispositionsSha256 === dispositionDigest(audit), `${auditPath}: reviewed dispositions, test hashes or guide reviews changed; review the Go applicability rows and refresh the inputs`);
   check(equal(ledger.cases?.map(row => row.id), semantic.cases.map(row => row.id)), 'Semantic case inventory/order differs from the reviewed ledger');
 
   // The profile schedule: execution.json and profiles.json must name the same
@@ -186,15 +217,18 @@ export function checkGoParity(ledger = json('formal/catalogs/go-parity.json'), i
   }
   check(ledger.inventory.sourceFiles === ledger.sourceInventory.length && ledger.inventory.sourceDeclarations === declarations, 'Source inventory counts are stale');
   // Each test or documentation file the source audit reviews has a Go
-  // applicability row; the file's hash, entries and contracts are the audit's.
+  // applicability row; the file's entries and contracts are the audit's. A
+  // test file's content is re-hashed here because a changed assertion can
+  // change what Go must mirror; a documentation file's prose is the source
+  // audit's business and only its dispositions reach this ledger.
   const reviewed = ledger.reviewedTestAndDocumentationAudit;
-  check(reviewed?.path === 'formal/catalogs/source-audit.json', 'Test/documentation applicability audit must review formal/catalogs/source-audit.json');
+  check(reviewed?.path === auditPath, `Test/documentation applicability audit must review ${auditPath}`);
   check(reviewed?.status === 'reviewed-applicability-not-execution', 'Test/documentation review must distinguish applicability from execution');
   check(equal(reviewed?.sources?.map(source => source.path), audit.sources.map(source => source.path)), 'Test/documentation applicability inventory changed');
   for (const source of reviewed?.sources ?? []) {
     const original = audit.sources.find(item => item.path === source.path);
     if (!original) continue;
-    if (pathExists(source.path, 'Test/documentation audit')) check(original.sha256 === digest(source.path), `${source.path}: reviewed test/documentation contents changed`);
+    if (pathExists(source.path, 'Test/documentation audit') && source.path.endsWith('.ts')) check(original.sha256 === digest(source.path), `${source.path}: reviewed test contents changed`);
     check(typeof source.rationale === 'string' && source.rationale.length > 60, `${source.path}: Go applicability rationale missing`);
     check(source.goFiles?.length > 0, `${source.path}: Go applicability references missing`);
     for (const path of source.goFiles ?? []) goFile(path, source.path);
@@ -206,4 +240,27 @@ export function checkGoParity(ledger = json('formal/catalogs/go-parity.json'), i
   return { kind: 'accounting-and-freshness', sourceFiles: ledger.sourceInventory.length, declarations, reviewedTestsAndDocs: audit.sources.length, semanticCases: ledger.cases.length, profiles: models.size, vectorModels: exportedModels.length, status: ledger.status, meaning: 'Fresh reviewed mappings and inventory snapshots; execution evidence remains separately assessed.' };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) console.log(checkGoParity());
+function main(argv) {
+  if (argv.length === 0) return console.log(checkGoParity());
+  if (argv[0] !== '--refresh-inputs' || argv.length > 1) {
+    console.error('Usage: node formal/tools/check-go-parity.mjs [--refresh-inputs]');
+    process.exitCode = 2;
+    return;
+  }
+  let ledger;
+  try { ledger = refreshGoParityInputs(json(ledgerPath)); }
+  catch (error) {
+    console.error(`Nothing written: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  writeFileSync(root + ledgerPath, encodeLedger(ledger));
+  console.log(`${ledgerPath}: input and vector artifact digests refreshed`);
+  try { console.log(checkGoParity(ledger)); }
+  catch (error) {
+    console.error(`\nThe ledger still fails. Review what changed, then run the check again:\n${error.message}`);
+    process.exitCode = 1;
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main(process.argv.slice(2));

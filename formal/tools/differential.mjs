@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { copySources, importClosure, isKernelSource, layoutOfDirectory, layoutOfListing, modelSchedule, root, scanDeclarationBodies, validateExecution } from './execution.mjs';
+import { copySources, executionManifest, importClosure, isKernelSource, isQuintSourcePath, modelSchedule, profilesManifest, root, scanDeclarationBodies, validateExecution } from './execution.mjs';
 import { parseWithSourceMap, scheduleHistories, spliceDeclarations } from './generated-fixtures.mjs';
 import { parseShard } from './mutation-reports.mjs';
 import { normalizeTraceFiles } from './replay-inputs.mjs';
@@ -68,16 +68,13 @@ export const replayDescriptors = { ...profiles, 'local-clock': localClockDescrip
 
 const gitShow = (revision, path, cwd) => execFileSync('git', ['show', `${revision}:${path}`], { cwd, encoding: 'utf8', maxBuffer: 1 << 26 });
 
-// The reference tree: every Quint source and the manifests at the revision,
+// The reference tree: every Quint source and the two manifests at the revision,
 // checked out into a scratch directory so relative imports resolve as in the
-// repo. The revision is read through its own layout (execution.mjs layouts): a
-// reference from before the layout move keeps its manifests and sources at the
-// old paths, and copySources and readManifests follow the same detection.
+// repo.
 export function exportRevision(revision, directory, { cwd = root } = {}) {
   const tree = execFileSync('git', ['ls-tree', '-r', '--name-only', revision, '--', 'formal'], { cwd, encoding: 'utf8' }).split('\n');
-  const layout = layoutOfListing(tree);
-  const listing = tree.filter(path => layout.manifests.includes(path) || layout.isSource(path));
-  if (!listing.includes(layout.manifests[0])) throw new Error(`Revision ${revision} has no ${layout.manifests[0]}`);
+  const listing = tree.filter(path => path === executionManifest || path === profilesManifest || isQuintSourcePath(path));
+  if (!listing.includes(executionManifest)) throw new Error(`Revision ${revision} has no ${executionManifest}`);
   for (const path of listing) {
     mkdirSync(resolve(directory, dirname(path)), { recursive: true });
     writeFileSync(resolve(directory, path), gitShow(revision, path, cwd));
@@ -96,9 +93,8 @@ export function resolveMergeBase(revision, { cwd = root } = {}) {
 // Quint text (formal/tools/execution.mjs modelSchedule) has them read from that
 // tree's text here.
 export function readManifests(directory) {
-  const layout = layoutOfDirectory(directory);
-  const execution = JSON.parse(readFileSync(resolve(directory, layout.manifests[0]), 'utf8'));
-  const registry = JSON.parse(readFileSync(resolve(directory, layout.manifests[1]), 'utf8'));
+  const execution = JSON.parse(readFileSync(resolve(directory, executionManifest), 'utf8'));
+  const registry = JSON.parse(readFileSync(resolve(directory, profilesManifest), 'utf8'));
   if (!Array.isArray(execution.models) || !execution.settings || !Array.isArray(registry.profiles)) throw new Error(`${directory}: unsupported manifests`);
   execution.models = execution.models.map(model => model.regressions !== undefined || typeof model.path !== 'string' ? model
     : { ...model, ...modelSchedule(model, scanDeclarationBodies(readFileSync(resolve(directory, model.path), 'utf8'))) });
@@ -361,7 +357,7 @@ export function prepare(reference, { cwd = root, output = defaultOutput } = {}) 
   // The working tree's manifest is validated as written (the validator refuses
   // a manifest that lists the schedule its Quint text states); the manifests
   // the run consumes carry that schedule read from the text.
-  validateExecution(JSON.parse(readFileSync(resolve(cwd, 'formal/catalogs/execution.json'), 'utf8')));
+  validateExecution(JSON.parse(readFileSync(resolve(cwd, executionManifest), 'utf8')));
   const candidateManifests = readManifests(cwd);
   const revision = resolveMergeBase(reference, { cwd });
   for (const stale of ['reference', 'candidate']) rmSync(resolve(cwd, output, stale), { recursive: true, force: true });

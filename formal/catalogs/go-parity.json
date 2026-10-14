@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "status": "finite-portable-contract-inventory",
   "target": "Go parity with the readable Quint behavioral contract and interoperable wire wrapper rules; exact native compressed bytes remain an explicit boundary",
   "authority": {
@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "f5f7ee357201b343eb00f8f9c783c92af0d722709137edc0f55e0a52b3cdec0a",
     "executionSha256": "29a412f87329347840f000ea44a6e95332464c0b01b92b4e41c615af3c9157cd",
-    "sourceAuditSha256": "f5232ffb7e6763c92144b58010a8c79f203d6c60eedd565742c7f4aed5e112bb",
+    "sourceAuditDispositionsSha256": "e05fcb0da204544920a87eeb98611cc697c7f2652fead527e409595010d09377",
     "featureCoverageSha256": "2d4e47ec18688c911ce4d6bda780edc8ee654069aa5704e15a39cbae35655ba7",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "9df8285820e4fff65f6a7753885bbb192c09f3f476eac8f9c98d130454ae1a28"
@@ -5207,14 +5207,14 @@
     {
       "id": "B03",
       "boundary": "Native value conventions",
-      "existingTreatment": "Shared object references, constructors/prototypes, JavaScript JSON coercion/lossiness, and default Node deep equality are not universal port requirements. Each binding documents its supported value domain and codec; W01\u2013W09 apply wherever it shares Redis.",
+      "existingTreatment": "Shared object references, constructors/prototypes, JavaScript JSON coercion/lossiness, and default Node deep equality are not universal port requirements. Each binding documents its supported value domain and codec; W01–W09 apply wherever it shares Redis.",
       "goStatus": "reviewed-native-binding",
       "goTreatment": "JSONCodec[any] supports the explicit portable JSON scalar-string domain plus Absent. JSONObject preserves insertion order when encoding; Go maps have no insertion order. Typed destinations impose Go field and numeric rules. Lone UTF-16 surrogate JSON escapes are rejected rather than silently replaced."
     },
     {
       "id": "X01",
       "boundary": "Optional observability integration",
-      "existingTreatment": "Backend metric names, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing precision are covered by implementation/integration tests. Current portable claims include C57\u2013C60 diagnostic semantics and failure isolation plus C11 process-coalescing snapshot semantics; exact exporter schemas, buckets, registry compatibility, timing precision, and logging resource limits remain separate.",
+      "existingTreatment": "Backend metric names, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing precision are covered by implementation/integration tests. Current portable claims include C57–C60 diagnostic semantics and failure isolation plus C11 process-coalescing snapshot semantics; exact exporter schemas, buckets, registry compatibility, timing precision, and logging resource limits remain separate.",
       "goStatus": "explicit-native-binding-adaptation",
       "goTreatment": "Portable diagnostics require shared generated histories. Native metric names, labels, buckets, units, counts and bounded logging have focused Go tests. NewPrometheusMetricsWithBindings reuses caller-owned individually registered CounterVec/HistogramVec objects after checking declared construction schema, public descriptors and registry identity; new collectors register atomically. Because client_golang exposes no bucket configuration for an empty histogram, accurate caller-supplied schema is an explicit binding precondition; construction must not race with collector registration/reconfiguration. No private-field inspection or temporary series is used.",
       "nativeTests": [
@@ -5229,7 +5229,7 @@
     {
       "id": "X02",
       "boundary": "Resource/algorithm implementation",
-      "existingTreatment": "Compression level tuning, native zstd availability/decoder quirks, huge payloads/512 MiB guard, decompression bombs, local allocation strategy, CPU/memory/throughput, connection lifecycle, retry APIs, and command queue limits remain implementation/integration tests. Envelope interoperability remains W06\u2013W08.",
+      "existingTreatment": "Compression level tuning, native zstd availability/decoder quirks, huge payloads/512 MiB guard, decompression bombs, local allocation strategy, CPU/memory/throughput, connection lifecycle, retry APIs, and command queue limits remain implementation/integration tests. Envelope interoperability remains W06–W08.",
       "goStatus": "reviewed-native-binding",
       "goTreatment": "Go uses native sparse maps and go-redis/zstd libraries with explicit decoder resource limits and caller-owned clients. Wire representation and round trips are shared-vector/integration checked; exact compressed bytes, allocation strategy, throughput and operating-system exhaustion are native boundaries. Quint computes envelope and size-selection behavior using native codec lengths that both test bindings independently verify. Different native lengths may cause compressed/not_smaller diagnostic differences at size boundaries; logical payload identity and wrapper rules remain shared."
     }

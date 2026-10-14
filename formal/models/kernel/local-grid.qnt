@@ -1,14 +1,25 @@
 module local_grid {
+  // Fractional local-clock traversal: raw environment instants are retained beside the ordinary
+  // local expiry, and lookup projects both onto the shared millisecond grid.
+  //
+  // Rules
+  // - Lookup projects the observed time and the insertion time onto the shared millisecond grid
+  //   and judges liveness through `cache_rules.localEntryLiveOnGrid` (C09).
+  // - The retained expiry stays authoritative: the duration it represents is derived from the
+  //   insertion grid, so an expiry edit stays observable instead of a second stored TTL hiding it.
+  // - Keeping both raw instants makes a precise-clock expiry error executable; an already rounded
+  //   insertion cannot expose it.
+  // - Admission, traversal, inline source settlement and publication use the same serving
+  //   lifecycle (`serving::callLocalObserved`); a publication records its insertion ticks.
+  // Shapes
+  // - State[r]: `serving::LocalServed` plus raw environment ticks and each slot's insertion ticks.
+  // Consumers: local-clock.
   import cache_rules.* from "../cache-rules"
   import encodings.* from "./encodings"
   import calls.* from "./calls"
   import layer_policy.* from "./layer-policy"
   import serving as Serving from "./serving"
 
-  // Raw environment instants are retained beside the ordinary local expiry.
-  // Lookup projects both the observed time and the insertion time onto the
-  // shared millisecond grid. Keeping both raw instants makes a precise-clock
-  // expiry error executable; an already rounded insertion cannot expose it.
   type State[r] = Serving::LocalServed[{ ticks: int, localInsertedTicks: List[int] | r }]
 
   pure def call(state: State[r], layout: Serving::Layout, who: Call, resolved: Resolution, ttls: Ttls, value: int, ticksPerMs: int): State[r] = {

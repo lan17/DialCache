@@ -1,63 +1,25 @@
 module remote_io {
-  // Remote effects the drivers hold and release by effect index (the position
-  // of the read or decode in the drivers' invocation order): the traversal
-  // splits again in time at the remote layer. `release` traverses with the
-  // remote layer unobserved (`serving::judgeRelease`) and, when the traversal
-  // reaches it, dispatches a read (counted then, its budget on the drivers'
-  // io channel) and registers the caller's flight, so a follower released
-  // while the read is pending joins it through the registries; a traversal
-  // that starts a source without the remote layer starts it at once, under
-  // the next loader ordinal. `settleRead` observes the frame with the state
-  // current at settlement (`remote_frames::observe`) and either holds a
-  // decode (counted then) or starts the flight's loader with the authority
-  // that read fixed (`serving::authority`: refill denied after a failed or
-  // expired read, the fence the read observed, `remote_frames::fenceFor`);
-  // `settleLoad` completes the flight from a decoded frame, warming local
-  // storage for the reply's local TTL, or starts a loader after a failed
-  // decode (the drivers' fault, or a payload whose bytes fail to decode,
-  // `payloads::decodeFails`); `settleLoader` settles a loader by the
-  // drivers' ordinal: an
-  // accepted value publishes and completes, a failure completes the flight
-  // with its error unless the flight retained a snapshot the recovery rules
-  // accept (`recovery`), in which case a recovery decode is held and the
-  // flight stays pending and joinable.
+  // Remote effects the drivers hold and release by effect index, the position of the read or
+  // decode in the drivers' order: the traversal splits again in time at the remote layer.
   //
-  // A flight is one `sources` record from its start (a read dispatch, or a
-  // source started at admission or at a release without the remote layer) to
-  // its completion; `loaders` maps the drivers' loader ordinal (`o.loaders`)
-  // to the flight it runs for, so `sources.length()` counts flights and
-  // `loaders.length() == o.loaders`: a source that starts as a new flight
-  // takes the next ordinal (`mapLoader`), a loader started later for a held
-  // read's flight maps itself (`startLoader`), and a flight whose decode
-  // failed restarts a loader under a new ordinal. Held reads and decodes are
-  // pending-only records: a settled one leaves nothing behind. A read whose
-  // deadline was delivered owns nothing (`flight` NO_OWNER) and stays until
-  // its late reply drains. The adapter's read fault is per release
-  // (`failed`): a held read takes its fault as an argument when it settles
-  // (a read settled in the step that dispatched it is the budgeted variant's,
-  // `deadlines::settleDispatched`, which passes the shape's `readFailed`
-  // switch, as the atomic path does); a visible frame whose payload fails the
-  // read (`payloads::readFails`) fails it the same way, judged once in
-  // `remote_frames::observe`. A held decode holds the frame's payload code
-  // and decodes it when it settles (`payloads::valueOf`), as does a recovery
-  // decode its snapshot's candidate.
-  //
-  // `begin` is admission and the held release in one step for a profile
-  // whose replies are immediate, like `serving::begin`; `latestRead`,
-  // `latestLoad` and `latestOrdinal` name the most recently held read and
-  // decode and the newest loader ordinal, for profiles whose drivers name
-  // the latest effect rather than an index (a wrapper guards on the list
-  // being non-empty, as it does on `holdsRead`). `settleObserved` is the
-  // read settlement applied from a judgment already made, the seam a variant
-  // that substitutes what a read observed composes; `settleRead` judges the
-  // frames and applies it.
-  //
-  // The io channel (BEHAVIOR.md, `readIO`) is a mandatory field written by
-  // the transitions that have each fact in hand: `budgets` one row per
-  // dispatched read, `aborted` the expired reads in delivery order,
-  // `sourceErrors` one row per caller, 0 at admission and the one-based
-  // ordinal of the loader whose ordinary error the caller returned when it
-  // completes with SOURCE_ERROR.
+  // Rules
+  // - A release reaching the remote layer dispatches a read and registers the caller's flight, so a
+  //   follower released meanwhile joins it (C11); without the remote layer a source starts at once.
+  // - A read settles with the state then current: a fresh frame holds a decode, else the flight's
+  //   loader starts under the authority the read fixed: no refill after a failed read (C28, C34).
+  // - A decoded frame completes the flight, warming local storage for the reply's local TTL (C31);
+  //   a failed decode starts the loader with refill allowed and no fence (C27).
+  // - A loader settles by the drivers' ordinal: an accepted value publishes and completes; a failed
+  //   one completes with its error, or holds a recovery decode over a retained snapshot (C41, C43).
+  // - An expired read owns nothing; its late reply drains (C28, C56).
+  // Shapes
+  // - HeldRead: a pending read: its effect index, its flight and the reply's effective TTLs.
+  // - HeldLoad: a pending decode: index, flight, TTLs, the payload code and whether it recovers.
+  // - IO: the drivers' io channel: read budgets, aborted reads, per-caller source-error identities.
+  // - Held[r]: the layered shape plus held reads and decodes, the loader map, `io` and snapshots.
+  // Consumers: admission, dark-layers, effects, independent, recovery, recovery-read, shadow,
+  //   shadow-read-deadlines; composed through `deadlines`, `shadow`, `compression`, `diagnostics`,
+  //   `metrics`, `adapter_replies`, `shadow_reads`.
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import calls.* from "./calls"
@@ -68,19 +30,39 @@ module remote_io {
   import recovery as Recovery from "./recovery"
   import payloads as Payloads from "./payloads"
 
-  // A held read: the drivers' effect index, the flight registered for it at
-  // dispatch (NO_OWNER once its deadline was delivered) and the effective TTLs
-  // the reply resolved to (`layer_policy::effectiveTtls`: the local TTL a hit
-  // warms with, the freshness the frame is judged by, the retention a refill
-  // is written with and the recovery maximum).
+  // A held read: the drivers' effect index, the flight registered for it at dispatch (NO_OWNER
+  // once its deadline was delivered) and the effective TTLs the reply resolved to
+  // (`layer_policy::effectiveTtls`: the local TTL a hit warms with, the freshness the frame is
+  // judged by, the retention a refill is written with and the recovery maximum).
   type HeldRead = { read: int, flight: int, ttls: Ttls }
   // A held decode: the drivers' index, its flight, the TTLs in force (a
   // recovery decode carries none, `NO_TTLS`: it warms nothing and its maximum
   // is the snapshot's), the bytes (the frame's payload code, decoded when the
-  // load settles) and whether it is a recovery decode.
+  // load settles) and whether it is a recovery decode. A held decode holds the
+  // frame's payload code and decodes it when it settles (`Payloads::valueOf`),
+  // as does a recovery decode its snapshot's candidate.
   type HeldLoad = { load: int, flight: int, ttls: Ttls, value: int, recovery: bool }
+  // The io channel (`s.io` in BEHAVIOR.md, projected by `readIO` in
+  // formal/replay/features.mjs) is a mandatory field written by the
+  // transitions that have each fact in hand. `budgets` holds one row per
+  // dispatched read and `aborted` the expired reads in delivery order.
+  // `sourceErrors` holds one row per caller: 0 at admission, and the
+  // one-based ordinal of the loader whose ordinary error the caller returned
+  // when it completes with SOURCE_ERROR.
   type IO = { budgets: List[int], aborted: List[int], sourceErrors: List[int] }
   pure val NO_IO: IO = { budgets: List(), aborted: List(), sourceErrors: List() }
+  // The layered shape with the held effects beside it, each held and released
+  // by its effect index, the position of the read or decode in the drivers'
+  // invocation order. A flight is one `sources` record from its start (a read
+  // dispatch, or a source started at admission or at a release without the
+  // remote layer) to its completion. `loaders` maps the drivers' loader
+  // ordinal (`o.loaders`) to the flight it runs for, so the length of
+  // `sources` counts flights and the length of `loaders` is the drivers'
+  // loader count. A source that starts as a new flight takes the next ordinal
+  // (`mapLoader`), a loader started later for a held read's flight maps itself
+  // (`startLoader`), and a flight whose decode failed restarts a loader under
+  // a new ordinal. Held reads and decodes are pending-only records: a settled
+  // one leaves nothing behind.
   type Held[r] = Serving::Served[{ reads: List[HeldRead], loads: List[HeldLoad], loaders: List[int], io: IO, retained: List[Recovery::Snapshot] | r }]
 
   pure def holdsRead(state: Held[r], read: int): bool = state.reads.select(held => held.read == read).length() > 0
@@ -89,6 +71,9 @@ module remote_io {
   pure def heldLoad(state: Held[r], load: int): HeldLoad = state.loads.select(held => held.load == load).nth(0)
   // The most recently held read and decode (the held lists are in dispatch
   // order) and the newest loader ordinal (NO_OWNER before any loader ran).
+  // Profiles whose drivers name the latest effect rather than an index use
+  // these; a wrapper guards on the list being non-empty, as it does on
+  // `holdsRead`.
   pure def latestRead(state: Held[r]): HeldRead = state.reads.nth(state.reads.length() - 1)
   pure def latestLoad(state: Held[r]): HeldLoad = state.loads.nth(state.loads.length() - 1)
   pure def latestOrdinal(state: Held[r]): int = state.loaders.length() - 1
@@ -115,12 +100,8 @@ module remote_io {
 
   // -- Release: the traversal up to the remote layer -----------------------------
 
-  // A read is dispatched for the caller: counted, budgeted on the io channel,
-  // and its flight registered (shared when the reply coalesces over a shared
-  // layer) so a follower released while it is pending joins it. The flight's
-  // publication authority is fixed when the read settles.
-  // A read held over a flight: counted, budgeted on the io channel (one row
-  // per dispatched read), the record under the drivers' next read index. A
+  // A read held over a flight: counted then, budgeted on the io channel (one
+  // row per dispatched read), the record under the drivers' next read index. A
   // caller's read is dispatched here at release; a job's confirmation read is
   // held the same way (`shadow`).
   pure def holdRead(state: Held[r], flight: int, ttls: Ttls, budget: int): Held[r] = {
@@ -129,6 +110,11 @@ module remote_io {
     o: { reads: state.o.reads + 1, ...state.o },
     ...state
   }
+  // A read is dispatched for the caller: counted, budgeted on the io channel,
+  // and its flight registered (shared when the reply coalesces over a shared
+  // layer) so a follower released while it is pending joins it through the
+  // registries. The flight's publication authority is fixed when the read
+  // settles.
   pure def dispatchRead(state: Held[r], layout: Serving::Layout, judged: Serving::LayeredRelease, ttls: Ttls, budget: int): Held[r] = {
     val call = judged.call
     val registered = Flights::registerSource(state,
@@ -161,7 +147,8 @@ module remote_io {
   }
   pure def release(state: Held[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls, budget: int): Held[r] =
     releaseJudged(state, layout, Serving::judgeRelease(state, layout, policyCall, resolved, ttls, false), policyCall, ttls, budget)
-  // An immediate policy reply: admission and the held release in one step.
+  // An immediate policy reply: admission and the held release in one step, like
+  // `Serving::begin`.
   pure def begin(state: Held[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int): Held[r] = {
     val admitted = admit(state, layout, call)
     if (Serving::participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls, budget) else admitted
@@ -169,8 +156,10 @@ module remote_io {
 
   // -- Loaders and decodes ---------------------------------------------------------
 
-  // A loader starts for a flight with the authority its read fixed: counted
-  // against the profile and mapped from the drivers' next ordinal.
+  // A loader starts for a flight with the authority its read fixed
+  // (`Serving::authority`: refill denied after a failed or expired read, and
+  // the fence the read observed): counted against the profile and mapped from
+  // the drivers' next ordinal.
   // `startLoaderFenced` takes the fence the refill carries as an argument (a
   // queued adapter reply supplies its own, effects); `startLoader` reads it
   // from the frames the read observed (`Remote::fenceFor`).
@@ -185,6 +174,8 @@ module remote_io {
   }
   pure def startLoader(state: Held[r], layout: Serving::Layout, flight: int, ttls: Ttls, readOk: bool, visible: bool): Held[r] =
     startLoaderFenced(state, layout, flight, ttls, readOk, Remote::fenceFor(state, state.sources.nth(flight).key, layout.operationsPerEntity, visible))
+  // A decode held over a flight: counted then, under the drivers' next decode
+  // index.
   pure def holdLoad(state: Held[r], flight: int, ttls: Ttls, value: int, recovery: bool): Held[r] = {
     loads: state.loads.append({ load: state.o.loads, flight: flight, ttls: ttls, value: value, recovery: recovery }),
     o: { loads: state.o.loads + 1, ...state.o },
@@ -217,6 +208,13 @@ module remote_io {
       startLoaderFenced(retained, layout, held.flight, held.ttls, not(judged.failed), fence)
     }
   }
+  // The adapter's read fault is per release, the `failed` argument: a held
+  // read takes its fault as an argument when it settles. A read settled in
+  // the step that dispatched it is the budgeted variant's
+  // (`deadlines::settleDispatched`), which passes the shape's `readFailed`
+  // switch, as the atomic path does. A visible frame whose payload fails the
+  // read (`Payloads::readFails`) fails it the same way, judged once in
+  // `Remote::observe`.
   pure def settleRead(state: Held[r], layout: Serving::Layout, read: int, failed: bool, classifier: int): Held[r] = {
     val held = heldRead(state, read)
     if (not(owning(held))) settleObserved(state, layout, read, Remote::UNOBSERVED, NO_FENCE, classifier)
@@ -275,13 +273,14 @@ module remote_io {
     if (accepted(value)) finish(Serving::publish(state, layout, flight, value), layout, flight, value)
     else failed(state, layout, flight, value, timeout)
   }
-  // A held decode settles: a fresh decode completes the flight with the value
-  // its payload decodes to (warming local storage for the reply's local TTL)
-  // or, failed (the drivers' fault or a payload whose bytes fail to decode),
-  // starts the flight's loader with refill allowed and no fence (the frame it
-  // decoded was visible); a recovery decode rechecks the candidate's age and
-  // completes the flight with the value the candidate decodes to or, when it
-  // does not serve (a failed decode among the reasons), with the outcome the
+  // A held decode settles. A fresh decode completes the flight with the value
+  // its payload decodes to (`Payloads::valueOf`), warming local storage for
+  // the reply's local TTL. Failed (the drivers' fault or a payload whose bytes
+  // fail to decode, `Payloads::decodeFails`), it starts the flight's loader
+  // under a new ordinal with refill allowed and no fence (the frame it decoded
+  // was visible). A recovery decode rechecks the candidate's age and completes
+  // the flight with the value the candidate decodes to. When it does not serve
+  // (a failed decode among the reasons), it completes with the outcome the
   // flight's source recorded (its loader's own error), never publishing.
   pure def settleLoad(state: Held[r], layout: Serving::Layout, load: int, failed: bool): Held[r] = {
     val held = heldLoad(state, load)
