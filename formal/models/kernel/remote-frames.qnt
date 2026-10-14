@@ -10,7 +10,7 @@ module remote_frames {
   // - An invalidation never lowers a watermark: it raises it to the wall clock plus the future
   //   buffer only when that is ahead. Only a marker's expiry lowers one, to zero (C38).
   // - A refill's fence is the watermark a read observed when it found no visible frame; a
-  //   visible frame the traversal declined carries none (C58; `fenceFor`).
+  //   visible frame the traversal declined carries none (C34; `fenceFor`).
   // - A fenced refill is written only while the frame it would stamp now still clears that
   //   fence; an unfenced refill is always written (C34; `writeAllowed`).
   // - A tracked write's physical retention is capped at one hour; the logical maximum a
@@ -126,7 +126,7 @@ module remote_frames {
   pure def missFence(state: Frames[r], key: int, operationsPerEntity: int): int =
     if (state.tracked) state.watermark.nth(entityOf(key, operationsPerEntity)) else NO_FENCE
   // The fence a refill carries: the watermark a tracked read observed when it
-  // found no visible frame (C58). A visible frame the traversal declined (stale,
+  // found no visible frame (C34). A visible frame the traversal declined (stale,
   // or stamped in the future) carries none, as the implementations refill
   // unfenced after a reply that carried a frame which itself cleared the
   // watermark.

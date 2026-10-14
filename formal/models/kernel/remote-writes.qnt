@@ -5,9 +5,9 @@ module remote_writes {
   //
   // Rules
   // - A refill serializes when its source settles accepted, judged then by `serving::refills` with
-  //   the retention the source captured and the fence its read observed (C18, C58).
+  //   the retention the source captured and the fence its read observed (C18, C34).
   // - A released dump dispatches the write when the wall clock still clears that fence; the frame
-  //   is stamped at that release, after serialization (C33); an uncleared fence stops the write.
+  //   is stamped at that release, after serialization (C34); an uncleared fence stops the write.
   // - The write released stores the frame with the captured stamp, warms local storage for the
   //   source's local TTL and completes every owner: publication completes with the write.
   // - Dump and write faults are each release's `failed` argument: a failed dump dispatches no
@@ -113,7 +113,7 @@ module remote_writes {
 
   // A refill starts with its serialization: the dump is counted and held with
   // the retention the source captured and the fence its read observed, as
-  // `serving::refills` judged them (C18/C58); the flight stays pending. A
+  // `serving::refills` judged them (C18, C34); the flight stays pending. A
   // caller's refill carries its source's fence, a job's fill the one its own
   // C0 read observed (`shadow`). `sampled` is the wall clock the
   // pre-serialization fence check sampled (the port's `sampleWriteTimestamp`
@@ -140,7 +140,7 @@ module remote_writes {
   // The dump released: when the wall clock still clears the fence the dump
   // was held with, the write is dispatched with the dump's retention
   // (`serving::dispatchWrite`) and stamped now (the stamp after serialization,
-  // C33). A fence it does not clear stops the write, and the flight completes
+  // C34). A fence it does not clear stops the write (C33), and the flight completes
   // without one (`releaseDump`). Whether a write was dispatched is read from
   // the count.
   pure def dispatch(state: Writing[r], dump: int): Writing[r] = {

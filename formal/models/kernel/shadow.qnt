@@ -5,7 +5,7 @@ module shadow {
   // - Admission needs the hook and the ramp (C47), not a bypass reply (C01); `busy` drops (C54).
   // - A served hit admits a served job over a detached source, its C0 the payload served (C48);
   //   a miss with the remote layer left off admits a dark job over the caller's own source (C49).
-  // - A job captures its reply's TTLs (C18) and the fence its C0 read observed (C58); only a dark
+  // - A job captures its reply's TTLs (C18) and the fence its C0 read observed (C53); only a dark
   //   job with no C0 fills, under that authority, the fence judged again at dispatch (C52, C53).
   // - A C0 is decoded on its own and compared; an unequal comparison needs one confirmation read
   //   of the frame's bytes (C50, C51); verdict ages and mismatch warnings follow C57 and C60.
@@ -72,7 +72,7 @@ module shadow {
   // own source for a dark job, a detached one for a served job), whether it is
   // dark, the payload its C0 found fresh (NO_VALUE when none) and that
   // frame's stamp (the age a verdict samples), the fence its C0 read observed
-  // when it found no visible frame (C58), the TTLs its reply resolved to
+  // when it found no visible frame (C53), the TTLs its reply resolved to
   // (C18), its phase, whether its budget expired and the mismatch logging it
   // captured. The captured TTLs are the freshness its C0 read judges by and
   // the retention its fill is written with, whatever the policy says later.
@@ -252,7 +252,7 @@ module shadow {
   // source and report its timeout as the job's), any other failure
   // `source_error`.
   pure def sourceOutcome(result: int): str = if (result == DEADLINE_ERROR) "timeout" else "source_error"
-  // A dark fill: the authority the job captured (C18, C58), judged before
+  // A dark fill: the authority the job captured (C18, C53), judged before
   // serializing; a fence the wall does not clear ends the job with no dump.
   // The authority is `serving::authority` at the fill: the retention capped
   // for a tracked write, fenced by the watermark the C0 read observed when it

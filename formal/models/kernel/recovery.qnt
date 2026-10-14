@@ -17,7 +17,8 @@ module recovery {
   // Shapes
   // - Snapshot: the candidate code, its stamp, its maximum and the classifier; one per flight.
   // - Recovering[r]: `remote_frames::Frames` with the retained snapshots; what the judgments read.
-  // - Failure[r], Recovered: what `failure` and `recovered` return, each saying whether it serves.
+  // - Failure[r]: what `failure` returns: the state and whether a recovery decode was held.
+  // - Recovered: what `recovered` returns: the state and whether the candidate served.
   // Consumers: admission, dark-layers, effects, independent, recovery, recovery-read, shadow,
   //   shadow-layers, shadow-read-deadlines; composed through `remote_io`, `remote_writes` and
   //   `diagnostics`.

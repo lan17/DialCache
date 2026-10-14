@@ -8,7 +8,7 @@ module adapter_replies {
   // - A miss reply is read by its discriminator: a known cause survives, an unknown reason or
   //   shape is `unclassified`, and `watermark_fenced` is kept only beside a valid fence (C55).
   // - A fence survives only on a tracked key and only as a valid timestamp, whatever the cause;
-  //   it is the refill fence of the source the miss starts (C55, C58; `fenceOf`).
+  //   it is the refill fence of the source the miss starts (C34, C55; `fenceOf`).
   // - A frame-shaped reply with stray miss metadata is a frame, stamped at the reply's wall
   //   clock and judged for freshness like a stored frame's stamp (C55; `observed`).
   // - No reply is ever stored: the frames are untouched.
@@ -68,7 +68,7 @@ module adapter_replies {
     tracked and Set(UNKNOWN_REASON_WITH_FENCE, ABSENT_WITH_FENCE, FENCED_WITH_FENCE).contains(code)
   // The fence a queued reply carries: the watermark it observed, the reply's
   // wall clock plus the drivers' buffer (`bufferMs`), or none; it is the refill
-  // fence of the source the miss starts (C58).
+  // fence of the source the miss starts (C34, C55).
   pure def fenceOf(state: Queued[r], bufferMs: int): int =
     if (carriesFence(state.tracked, state.reply)) state.replyAt + bufferMs else NO_FENCE
   // The miss reason a miss reply normalizes to: a known cause survives

@@ -13,10 +13,12 @@ module serving {
   //   effect suspends between (`remote_io`); the atomic path composes the same steps.
   // Shapes
   // - Layout: identities and driver facts a profile supplies beside its bounded state and inputs.
-  // - Traversed[r, p]: what the order reads and writes over a source payload p; Served[r],
-  //   LocalServed[r] and RequestServed[r] add the layered, local and request-only state.
-  // - LayeredPayload, LocalPayload and their Source aliases: what a source captures to publish;
-  //   Outcome, Decision, LayeredRelease and RequestRelease: what `decide` and a judgment return.
+  // - Traversed[r, p]: what the order reads and writes over a source payload p.
+  // - Served[r], LocalServed[r], RequestServed[r]: the layered, local and request-only state.
+  // - LayeredPayload, LocalPayload: what a source captures to publish on the two storage shapes.
+  // - LayeredSource, LocalSource, RequestSource: a source record over each shape's payload.
+  // - Outcome, Decision: what `decide` returns for a caller and for the traversal.
+  // - LayeredRelease, RequestRelease: what a release judgment returns, applied by `releaseJudged`.
   // Consumers: every composed profile; composed through most other kernel modules.
   // Ports: typescript/src/dialcache.ts `getThroughSharedLayers`, `getThroughActiveLocal`,
   //   `invalidateRemote`; go/cache.go `Invalidate`, `ErrNoRemote`.
