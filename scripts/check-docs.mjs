@@ -116,14 +116,14 @@ export function checkDocsLinks(directory = root) {
 }
 
 // Relative links inside the formal guides and indexes, and in the repository
-// and design READMEs and AGENTS.md that point into formal/, resolve to existing
-// files. The site check above walks only the built docs/ pages and skips
-// external links, so these links were unchecked before the formal/ layout move
-// (#221). Anchors are not checked; a target that is a directory counts as
-// existing.
+// and design READMEs, AGENTS.md and DEVELOPMENT_PROCESS.md that point into
+// formal/, resolve to existing files. The site check above walks only the built
+// docs/ pages and skips external links, so these links were unchecked before
+// the formal/ layout move (#221). Anchors are not checked; a target that is a
+// directory counts as existing.
 export function checkFormalLinks(directory = root) {
   const pages = [...files(resolve(directory, 'formal'), '.md'),
-    ...['README.md', 'AGENTS.md', 'design/README.md', 'typescript/README.md', 'go/README.md', 'rust/README.md', 'python/README.md'].map(path => resolve(directory, path)).filter(path => existsSync(path))];
+    ...['README.md', 'AGENTS.md', 'DEVELOPMENT_PROCESS.md', 'design/README.md', 'typescript/README.md', 'go/README.md', 'rust/README.md', 'python/README.md'].map(path => resolve(directory, path)).filter(path => existsSync(path))];
   const failures = [];
   for (const page of pages) {
     const text = readFileSync(page, 'utf8').replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');

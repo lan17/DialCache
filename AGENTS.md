@@ -271,6 +271,8 @@ The PR leaves draft only when all of these hold; the maintainer then reviews and
   paths and exports independent of the repository's `typescript/` prefix.
 - Start formal work at `formal/README.md`; `formal/guides/WALKTHROUGH.md` follows one contract
   through every replay. Read the model and profile bindings before opening large generated JSON.
+- `DEVELOPMENT_PROCESS.md` explains this process to human readers. A change to "Make a change"
+  updates it in the same PR.
 
 ## Run validation
 
