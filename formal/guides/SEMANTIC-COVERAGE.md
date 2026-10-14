@@ -153,7 +153,7 @@ Negative harness tests and inventory checks are excluded from detection cohorts:
 ### Recorded measurements
 
 Per-run reports retain cohort sizes, assertion failures and survivors. The
-[historical baseline](./VALIDATION.md#historical-results) preserves PR #161's
+[historical baseline](./HISTORY.md#historical-validation-results) preserves PR #161's
 results; fresh measurements belong with their exact source and corpus artifacts.
 
 ## Reproduction and CI

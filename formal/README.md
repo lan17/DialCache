@@ -2,10 +2,10 @@
 
 Quint defines the portable contracts that TypeScript, Go, Rust and future ports
 must preserve. TypeScript is the executable reference those contracts formalize; a
-disagreement between the two is settled by a distinguishing regression and a
-recorded decision, not by editing the easier side. Native drivers execute
+disagreement between the two is settled by a distinguishing [regression](./guides/GLOSSARY.md#corpus-history-regression-exported-run-and-public-only-run) and a
+recorded decision, not by editing the easier side. Native [drivers](./guides/GLOSSARY.md#driver) execute
 external commands against the real libraries; generated expectations stay in
-the test coordinator.
+the test [coordinator](./guides/GLOSSARY.md#coordinator).
 
 ## Start with your task
 
@@ -17,6 +17,7 @@ the test coordinator.
 | Implement another language | [PORTING.md](./guides/PORTING.md) and [PROTOCOL.md](./guides/PROTOCOL.md) |
 | Locate or reproduce a failing check | [TEST-MAP.md](./guides/TEST-MAP.md) and the commands below |
 | Interpret validation results | [VALIDATION.md](./guides/VALIDATION.md) |
+| Look up a term | [GLOSSARY.md](./guides/GLOSSARY.md) |
 
 Start with readable Quint and a named regression. The JSON catalogs are indexes
 and generated artifacts; a reader should not need to open them to learn a rule.
@@ -38,7 +39,7 @@ and generated artifacts; a reader should not need to open them to learn a rule.
 
 Canonical Quint rules define shared acceptance conditions. Focused models
 compose those rules with ownership, policy capture and environment transitions.
-Independent properties check the resulting histories; conformance profiles
+Independent properties check the resulting histories; [conformance profiles](./guides/GLOSSARY.md#profile-conformance-profile)
 expose commands that the native implementations can execute.
 
 The shared replay boundary separates three responsibilities:
@@ -50,7 +51,7 @@ The shared replay boundary separates three responsibilities:
   actual results and effects without consulting expectations.
 
 The important links are executable. Shared helpers prevent repeated transition
-judgments from drifting; profile connection checks establish selected
+[judgments](./guides/GLOSSARY.md#judgment-judged-once-and-applied-from-a-judgment) from drifting; profile connection checks establish selected
 correspondences with the contract. Independent assertions deliberately avoid
 calling the helper they are meant to challenge.
 
@@ -63,7 +64,7 @@ maps them to the four checked profile connections.
 [dialcache-rule-checks.qnt](./models/dialcache-rule-checks.qnt) supplies the finite
 symbolic boundary checks.
 
-The verification models emphasize individual ownership or safety boundaries:
+The [verification models](./guides/GLOSSARY.md#verification-model) emphasize individual ownership or safety boundaries:
 
 | Model | Starting point |
 | --- | --- |
@@ -98,13 +99,13 @@ Conformance profiles expose external commands that every language driver replays
 These profiles deliberately bound callers, keys, contexts, capacities, payloads
 and time. Their introduction does not imply that every product of those domains
 is explored. [profiles.json](./catalogs/profiles.json) records profile versions, input
-encodings, smoke traces and implementation declarations.
+encodings, [smoke](./guides/GLOSSARY.md#smoke) traces and implementation declarations.
 
 The [kernel library](./models/kernel/README.md) states shared portable rules as pure
 transitions; a composed profile assigns state only through them. Every profile
-except core composes this library. The corpus differential checks that changes
+except core composes this library. The corpus [differential](./guides/GLOSSARY.md#differential) checks that changes
 preserve existing profiles' observable behavior; a new profile establishes its
-behavior through independent properties, consequential witnesses and replay in
+behavior through independent properties, consequential [witnesses](./guides/GLOSSARY.md#witness-label-and-classifier) and replay in
 every supported implementation.
 
 ## Generating and replaying behavior
@@ -148,9 +149,9 @@ make explore       # Fresh recorded seed in an isolated source snapshot.
 make ci NODE22_BIN=/absolute/path/to/node22/bin/node
 ```
 
-`make formal-check` is the Quint evidence lane: it typechecks and runs every
+`make formal-check` is the Quint evidence [lane](./guides/GLOSSARY.md#lane): it typechecks and runs every
 scheduled model with the Rust evaluator, the public regressions and the model
-mutation challenges. Its first command, `node formal/tools/run-models.mjs check`,
+mutation [challenges](./guides/GLOSSARY.md#challenge-fault-mutant-and-reproducer). Its first command, `node formal/tools/run-models.mjs check`,
 runs only the unmodified model checks and regressions; the next step runs the
 complete pinned fault campaign. `make formal` and `make ci` require both steps.
 `make explore` retains the model checks, generation and all port replays but
@@ -184,7 +185,7 @@ from the Quint source and export every public-only run of a profile model.
 Do not maintain a separate regression list in the manifest. Private state-patch
 checks stay model-only unless rewritten as public actions.
 
-The replay protocol schema types every observation, fixture sentinel and the
+The replay protocol schema types every observation, fixture [sentinel](./guides/GLOSSARY.md#encodings-and-sentinels) and the
 wall epoch, and the coordinator rejects a malformed observation as an
 infrastructure error before any comparison; see the
 [observation contract](./guides/PORTING.md#observation-contract).
@@ -212,8 +213,8 @@ in all three languages, including Rust's feature-history selectors.
 ## Shared verification and replay rules
 
 The verification models and portable profiles share transition judgments for
-local expiry, coalescing defaults, remote retention, tracked publication,
-recovery acquisition and watermark reads. Their primary invariants remain
+local expiry, coalescing defaults, remote [retention](./guides/GLOSSARY.md#frame-stamp-retention-and-freshness), tracked publication,
+recovery acquisition and [watermark](./guides/GLOSSARY.md#fence-watermark-and-marker) reads. Their primary invariants remain
 independently stated. Each mapped fault must violate its original property,
 fail the declared expectation in a deterministic Quint run, and reach the same
 public assertion in completed TypeScript and Go recordings.

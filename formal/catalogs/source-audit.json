@@ -1084,7 +1084,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "7ad4d77aa162e93e8def416fb545c29586532138ffd2d2c68c6213a1bab7a23f",
+      "sha256": "bc318ab21ccd8d5589584f280ef09fdd49404596c8ce0dfedd147aa41b0f2d6e",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1102,7 +1102,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "8e23cd5252a5d7eb8a8e42cab301345f0c6ffa055994566076c45c979da5c8f0",
+      "sha256": "69027f189baf629315c53fefce79f6368ecdb277956297a7d724a713864a0b96",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},
@@ -1369,6 +1369,65 @@
       }
     },
     {
+      "path": "formal/guides/GLOSSARY.md",
+      "sha256": "2e1ae3a35f4b2c525a144e9cd7f079994bd3ebffb3a737c5dd770bd7f5e39fe8",
+      "entries": [
+        {"title":"Glossary"},
+        {"title":"Specification and replay"},
+        {"title":"Driver"},
+        {"title":"Coordinator"},
+        {"title":"Profile (conformance profile)"},
+        {"title":"Verification model"},
+        {"title":"Connection model"},
+        {"title":"Smoke"},
+        {"title":"Lane"},
+        {"title":"Corpus, history, regression, exported run and public-only run"},
+        {"title":"Differential"},
+        {"title":"Bytes per state"},
+        {"title":"Kernel library and composition"},
+        {"title":"Kernel library"},
+        {"title":"Shape"},
+        {"title":"Projection"},
+        {"title":"Variant"},
+        {"title":"Judgment, \"judged once\" and \"applied from a judgment\""},
+        {"title":"Seam"},
+        {"title":"Receipt"},
+        {"title":"Consulted record"},
+        {"title":"Pending-only record"},
+        {"title":"Opt-in record"},
+        {"title":"Layout"},
+        {"title":"Encodings and sentinels"},
+        {"title":"Behavior vocabulary"},
+        {"title":"Held versus immediate reply and effect"},
+        {"title":"Atomic path versus held path"},
+        {"title":"Lifecycle (budgeted, held, atomic, diagnosed, metered)"},
+        {"title":"Flight"},
+        {"title":"Source, loader and ordinal"},
+        {"title":"Effect index"},
+        {"title":"C0 and C1"},
+        {"title":"Dark job versus served job"},
+        {"title":"Settlement and settlement receipt"},
+        {"title":"Fence, watermark and marker"},
+        {"title":"Frame, stamp, retention and freshness"},
+        {"title":"Resolution, reply, TTLs, effective TTLs and gated layers"},
+        {"title":"Participating and bypass"},
+        {"title":"Scope, context, persistent context and memo slot"},
+        {"title":"Identity and slot"},
+        {"title":"Evidence"},
+        {"title":"Witness, label and classifier"},
+        {"title":"Fidelity"},
+        {"title":"Challenge, fault, mutant and reproducer"},
+        {"title":"Native mutant"},
+        {"title":"Exclusion (structural versus measured)"},
+        {"title":"Evidence"},
+        {"title":"Ledger"}
+      ],
+      "review": {
+        "kind": "tooling-guide",
+        "scope": "Definitions of the terms the guides, models and replay tools share, each naming the file that owns the concept and saying where a word carries two senses. A lookup aid: it states no behavior of its own and claims no coverage; the owning file stays authoritative."
+      }
+    },
+    {
       "path": "formal/guides/GO-PARITY.md",
       "sha256": "1af6d885ef3490badfe7bc05f215bc20c3fad84bd9a2786ac4b62c00ce35e8c7",
       "entries": [
@@ -1381,6 +1440,37 @@
       "review": {
         "kind": "tooling-guide",
         "scope": "Go acceptance and native adaptations, with current source/corpus-bound completion requirements. Fast PR checks do not enforce the full pre-merge validation policy; historical results remain linked by original identity."
+      }
+    },
+    {
+      "path": "formal/guides/HISTORY.md",
+      "sha256": "9e945737009c1839fca0db07e16c3e9041ae15381f49d38eb454d55b9117ab91",
+      "entries": [
+        {"title":"Composition records"},
+        {"title":"Record of the layers rewrite"},
+        {"title":"Record of the recovery-read rewrite"},
+        {"title":"Record of the shadow-layers rewrite"},
+        {"title":"Record of the dark-layers interaction profile"},
+        {"title":"Separate shadow read deadlines"},
+        {"title":"Historical validation results"}
+      ],
+      "review": {
+        "kind": "historical-evidence",
+        "scope": "The composition records of each profile rewrite over the kernel library (layers, recovery-read, shadow-layers, the one-row table of later rewrites, dark-layers, shadow read deadlines) and the pointer to the PR #161 validation baseline, measured at the named revisions. Describes past runs; a bound or count it explains may since have changed.",
+        "revisions": [
+          "bf3c7e8dac1ce4c81d885ef50e432808dd388c74",
+          "0a47889be92cd70be0d502c0de79ac8b33dc76b7",
+          "68eafb3a691301730640a999a06a4dcd42f1ff97",
+          "ea008a785729f478aadfc82dd6e4bafc4a55de3c",
+          "206e8784b8ffbffc8c006c5e60fa29db68f19892",
+          "16bb2c6fd6e59e9654d8f2ec296539ffd285d497",
+          "2add082a87eaa3b3c1f2934e9df238422c63349f",
+          "75d709e2eac1fe405193292ec40e96bdc1296a65",
+          "56bb2bbb38dd4dd659cc1c04a58e0b31ea9e3952",
+          "943f13990d0278f037595ec458dcdf0f521bbfe5",
+          "cf03e05749ebf61337c71220295505dacbae5504",
+          "fa4ef77489fd124213b5877479f69e2086c1aa90"
+        ]
       }
     },
     {
@@ -1444,21 +1534,22 @@
     },
     {
       "path": "formal/guides/README.md",
-      "sha256": "23b6f55ceb3b9ba09c84f7fdc39405cd9baffaaa04a3af0e852c26b4b872b0a7",
+      "sha256": "2fb4e87fab1388f3c4bdce6ea41d865db52bb7edcade425630038013dca65b6a",
       "entries": [
         {"title":"Guides"},
         {"title":"Contract guides: what a port must preserve"},
         {"title":"Tooling guides: how to do the work"},
-        {"title":"Coverage guides: what the evidence establishes"}
+        {"title":"Coverage guides: what the evidence establishes"},
+        {"title":"Historical evidence: what was measured, and when"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Index of the reviewed guides by the ledger's review kinds (contract, tooling, coverage), one line per page. Navigation only; it states no rule and claims no evidence."
+        "scope": "Index of the reviewed guides by the ledger's review kinds (contract, tooling, coverage, historical evidence), one line per page. Navigation only; it states no rule and claims no evidence."
       }
     },
     {
       "path": "formal/guides/SEMANTIC-COVERAGE.md",
-      "sha256": "fda0d8e33d65d56129a9d38f828500843f01038d03772cba0ec7f9fe33a8bd0c",
+      "sha256": "2834da3082acbcb70afffb4b4c18e5547209c47129f1ba681a598ac614d41539",
       "entries": [
         {"title":"Measuring semantic coverage"},
         {"title":"Evidence inventory"},
@@ -1476,7 +1567,7 @@
     },
     {
       "path": "formal/guides/SPEC.md",
-      "sha256": "869de9ced5a70b4bd966c8c0e94ead1b3df0b06a54ca7773e0307e4aa3e7cda4",
+      "sha256": "e1efa3b41827ba46de5701d7c08b599dd3c6d89b302fa5c17b9a091dfe3ace14",
       "entries": [
         {"title":"DialCache behavioral specification"},
         {"title":"Definition ownership and executable connections"},
@@ -1567,7 +1658,7 @@
     },
     {
       "path": "formal/guides/TEST-AUDIT.md",
-      "sha256": "f1c14f5dc1c8bca325eda5846e80a241d5d1392e38ee7ce6e9a3dcf70a327351",
+      "sha256": "45119716a5aac48ac3e10eb72bbcbfacb70ff3036d825614319b56aa8ba18977",
       "entries": [
         {"title":"Docs and test behavior audit"},
         {"title":"Keeping the audit current"},
@@ -1597,15 +1688,14 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "70dcafee96aea5a927e7acc99021ddeec3818e176497c95d7f783ca8ca442cb6",
+      "sha256": "20132bd3ea23510eef25022fec91482fd09bf24f0a285f72aa018d69a69bd154",
       "entries": [
         {"title":"Validation and evidence"},
         {"title":"Choosing a run"},
         {"title":"Reading a completion report"},
         {"title":"Mutation evidence"},
         {"title":"Exploratory runs"},
-        {"title":"A retained sampling regression"},
-        {"title":"Historical results"}
+        {"title":"A retained sampling regression"}
       ],
       "review": {
         "kind": "tooling-guide",

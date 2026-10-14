@@ -21,6 +21,7 @@ by-task view; this index is the by-kind view it lacks. Read
 - [PORTING.md](./PORTING.md): what a new language port supplies; driver, transport, observation contract and completion gates.
 - [VALIDATION.md](./VALIDATION.md): choosing a run, reading a completion report, mutation evidence and exploratory runs.
 - [GO-PARITY.md](./GO-PARITY.md): the Go parity acceptance ledger and how to update it.
+- [GLOSSARY.md](./GLOSSARY.md): the terms the guides and models use, one paragraph each, with the file that owns the concept.
 
 ## Coverage guides: what the evidence establishes
 
@@ -28,6 +29,10 @@ by-task view; this index is the by-kind view it lacks. Read
 - [FEATURE-COVERAGE.md](./FEATURE-COVERAGE.md): the feature map of behavioral corners and how a corner earns evidence.
 - [TEST-MAP.md](./TEST-MAP.md): the map from contracts to implementation evidence.
 - [TEST-AUDIT.md](./TEST-AUDIT.md): keeping the docs and test audit ledger current.
+
+## Historical evidence: what was measured, and when
+
+- [HISTORY.md](./HISTORY.md): the composition records of each profile's rewrite over the kernel library, and the PR #161 validation baseline, at the revisions they were measured.
 
 Every page here, this index, [../README.md](../README.md) and the Go README
 are in the reviewed-guide ledger, [../catalogs/source-audit.json](../catalogs/source-audit.json):

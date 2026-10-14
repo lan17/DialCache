@@ -29,8 +29,9 @@ and source executions. A snapshot records its owner, modeled payload/value ident
 timestamp and captured maximum age. A source records its owner, start and budget.
 Later environment changes do not rewrite either acquired record.
 
-The connection models execute the actual conformance profile and project its
-events into these records. They check retained snapshot identity, source timing,
+The connection models execute the actual conformance profile and check its
+history against these records, by projecting its events into them or by reading
+the pre-state of each step. They check retained snapshot identity, source timing,
 caller ownership and permitted acceptance for the named scope:
 
 | Profile | Checked connection |
@@ -39,6 +40,7 @@ caller ownership and permitted acceptance for the named scope:
 | recovery | [Retained flight snapshot and recovery](../models/dialcache-recovery-connection.qnt) |
 | independent | [Per-caller snapshots and source deadlines](../models/dialcache-independent-connection.qnt) |
 | source-budgets | [Captured source origin, budget and follower ownership](../models/dialcache-source-connection.qnt) |
+| shadow-layers | [Admission facts read from the pre-state](../models/dialcache-shadow-layers-connection.qnt) |
 
 Properties have different roles. The boundary assertions in
 [dialcache-rule-checks.qnt](../models/dialcache-rule-checks.qnt) state inequalities
