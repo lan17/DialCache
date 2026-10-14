@@ -1,14 +1,23 @@
 module policy_gate {
-  // Callers whose policy reply is held by the environment. A participating
-  // caller is held, with the call it asked for, under the index of its policy
-  // call at admission and released by that index (the drivers' `release policy
-  // <index>`); the traversal then serves it with the state current at release.
-  // The gate holds only callers still waiting, so a profile that never holds a
-  // reply carries an empty list.
+  // Callers whose policy reply is held by the environment, each under the index of
+  // its policy call, until the drivers release that index.
+  //
+  // Rules
+  // - A participating caller is held with the call it asked for under the index of its policy
+  //   call at admission, and released by that index, the drivers' `release policy <index>` (C18).
+  // - The traversal then serves the released caller with the state current at release.
+  // - The gate holds only callers still waiting, so a profile that never holds a reply carries
+  //   an empty list.
+  // Shapes
+  // - Held: one waiting caller: its policy call index, the caller and the call it asked for.
+  // - Gated[r]: the held list a composition holds into and releases from.
+  // Consumers: every composed profile; composed through `serving` and `diagnostics`.
   import encodings.* from "./encodings"
   import calls.* from "./calls"
 
   type Held = { policyCall: int, caller: int, call: Call }
+  // Only callers still waiting: a profile that never holds a reply carries an
+  // empty list.
   type Gated[r] = { held: List[Held] | r }
 
   // The key is the policy-call count at admission (`serving::entered`), which

@@ -1,15 +1,22 @@
 module receipts {
-  // The receipt of the latest release: the caller it served, its key, the
-  // layer that served it (or that it started a source, or joined a flight),
-  // and the local slot of its key as the release found it. The one-step
-  // expiry and freshness properties of a profile with TTLs read it beside the
-  // storage that served the caller: the frames and clocks do not move during
-  // a release, so the frame it read is the post-state's, while the local slot
-  // may have been warmed by the release and is kept here as read. A
-  // receipted variant of the layered release: the release is judged once
-  // (`serving::layeredRelease`) on the pre-release state, the slot is read
-  // from that same state, and that one judgment is applied beside them
-  // (`serving::releaseJudged`); the traversal never reads the receipt.
+  // The receipt of the latest release: who was served, by which layer, and the local slot of its
+  // key as the release found it.
+  //
+  // Rules
+  // - A receipt names the caller, its key, the layer that served it (or that it started a source
+  //   or joined a flight) and the local slot of its key as the release found it.
+  // - The one-step expiry and freshness properties of a profile with TTLs read it beside the
+  //   storage that served the caller.
+  // - Frames and clocks do not move during a release, so the frame it read is the post-state's;
+  //   the local slot may have been warmed by the release and is kept here as read.
+  // - `release` judges the layered release once (`serving::layeredRelease`) on the pre-release
+  //   state, reads the slot from that state and applies the judgment (`serving::releaseJudged`).
+  // - The traversal never reads the receipt.
+  // Shapes
+  // - Receipt: caller, key, layer code (`NOT_SERVED` to `STARTED`), local value and expiry as read.
+  // - Receipted[r]: the latest receipt beside a profile's state; what `release` writes.
+  // - ReceiptedServed[r]: `serving::Served` with the receipt; what `release` takes and returns.
+  // Consumers: policy.
   import encodings.* from "./encodings"
   import layer_policy.* from "./layer-policy"
   import serving as Serving from "./serving"

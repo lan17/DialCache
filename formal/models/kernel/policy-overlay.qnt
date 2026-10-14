@@ -1,19 +1,25 @@
 module policy_overlay {
-  // How a runtime policy overlay (the policy drivers' codes 0 to 25,
-  // formal/replay/features.mjs policyOverlays) resolves against a fixture whose
-  // local and remote layers both serve with configured TTLs (C13, C17, C20 to
-  // C22): each layer's TTL, the retention a refill is written with, whether
-  // the call coalesces, and whether the reply failed (a provider fault or an
-  // invalid read budget: reported once as a config_resolution error and served
-  // with every layer off). Codes are the drivers' contract; do not renumber:
-  // 10..19 repeat 0..9 with coalescing disabled, 20..25 are the invalid
-  // overlays. The overlay decides the TTLs; the reply's layer set is the
-  // shape's (local, and remote where remote storage exists), and the traversal
-  // gates each layer on its TTL at release (`layer_policy::gated`): a positive
-  // reply TTL enables the layer, a zero one turns it off.
+  // How a runtime policy overlay resolves against a fixture whose local and remote layers both
+  // serve with configured TTLs: each layer's TTL, the refill retention, coalescing and failure.
+  //
+  // Rules
+  // - A failed reply, a provider fault or an invalid read budget, is reported once as a
+  //   config_resolution error and served with every layer off (C20).
+  // - An invalid TTL or ramp leaf disables only its layer; an invalid or negative recovery age
+  //   retains for the fresh TTL; codes 10 to 19 disable coalescing (C13, C17, C21, C22).
+  // - The overlay decides the TTLs; the reply's layer set is the shape's, and the traversal gates
+  //   each layer on its TTL at release (`layer_policy::gated`): positive enables, zero turns off.
+  // - Codes 0 to 25 are the policy drivers' contract (formal/replay/features.mjs
+  //   `policyOverlays`); do not renumber.
+  // Shapes
+  // - Overlaid[r]: the overlay in force, a provider failure flag and whether remote storage exists.
+  // Consumers: policy.
   import cache_rules.* from "../cache-rules"
   import layer_policy.* from "./layer-policy"
 
+  // The policy drivers' overlay codes (formal/replay/features.mjs
+  // `policyOverlays`), the drivers' contract; do not renumber. Codes 10 to 19
+  // repeat 0 to 9 with coalescing disabled, 20 to 25 are the invalid overlays.
   pure val INHERIT = 0
   pure val LOCAL_TTL_TWO_SECONDS = 1
   pure val REMOTE_TTL_TWO_SECONDS = 2

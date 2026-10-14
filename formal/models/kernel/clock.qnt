@@ -1,10 +1,23 @@
 module clock {
+  // Elapsed time on the monotonic clock, and the wall clock as that clock plus a skew.
+  //
+  // Rules
+  // - Profiles advance time by whole milliseconds (`advance`); local entries, retention and
+  //   deadlines read it.
+  // - The wall clock is the monotonic clock plus a skew (`wallOf`), so one transition moves both
+  //   and only the skew can be shifted (`shiftWall`, a rollback, C22).
+  // - A profile without wall-clock divergence holds the skew at 0.
+  // - The environment's fractional time advances in ticks beside the clock the layers read; the
+  //   monotonic clock is that time on the whole-millisecond grid (`advanceTicks`, C09).
+  // Shapes
+  // - Timed[r]: the monotonic clock alone; what `advance` moves.
+  // - Skewed[r]: the clock with its wall skew; what `wallOf` reads and `shiftWall` moves.
+  // - Ticked[r]: the clock beside the drivers' ticks; what `advanceTicks` moves.
+  // Consumers: dark-layers, effects, independent, layers, local-clock, policy, recovery,
+  //   recovery-read, shadow, shadow-layers; composed through `remote_frames`, `deadlines`,
+  //   `markers`, `metrics`, `recovery`, `remote_writes`, `shadow`, `adapter_replies` and
+  //   `diagnostics`.
   import cache_rules.* from "../cache-rules"
-  // Elapsed time. Profiles advance it by whole milliseconds; local entries,
-  // retention and deadlines read it. The wall clock is the monotonic clock
-  // plus a skew, so one transition moves both and only the skew can be
-  // shifted (a rollback, C22): a profile without wall-clock divergence holds
-  // the skew at 0.
   type Timed[r] = { now: int | r }
   type Skewed[r] = { now: int, skew: int | r }
   // The environment's fractional time beside the clock the layers read: the

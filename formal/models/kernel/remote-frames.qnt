@@ -1,39 +1,29 @@
 module remote_frames {
-  // Remote frames with wall-clock creation stamps, physical retention and
-  // per-entity watermarks. A frame is written with the wall clock's stamp and
-  // retained until an instant on the monotonic clock; it serves while retained
-  // (`cache_rules.deadlinePendingAt`), logically fresh for the freshness the
-  // reply resolved to (`cache_rules.freshAgeAllowed` on the wall clock, which
-  // rejects a stamp from after a rollback) and, for a tracked reader, when its
-  // stamp clears the entity's watermark (`cache_rules.fenceAllows`); an
-  // untracked reader ignores watermarks. An invalidation never lowers a
-  // watermark: it raises it to the wall clock plus the invalidator's future
-  // buffer only when that is ahead, as the implementation's invalidation
-  // script keeps the larger of the current and the proposed watermark; only
-  // a marker's expiry lowers one, to
-  // the zero baseline (`markers`). A frame stamped at a wall clock of zero or
-  // below is never served to a tracked reader (`fenceAllows` is strict against
-  // the zero watermark), as the implementation treats a zero createdAt.
+  // Remote frames stamped on the wall clock, retained until a monotonic instant and fenced by
+  // per-entity watermarks, and what one remote read observes, judged once for both remote paths.
   //
-  // A frame is visible when it is present, retained and (tracked) fence-cleared,
-  // whatever its age: what the adapter returned a frame for. It serves when it
-  // is also fresh. A refill's fence is the watermark the read observed only
-  // when it found no visible frame (`fenceFor`, C58): a visible frame the
-  // traversal declined (stale, or stamped in the future) carries none, as the
-  // implementations refill unfenced after a reply that carried a frame which
-  // itself cleared the watermark. `storeFrame` is the write with an explicit
-  // stamp (a held write stores the stamp captured when its dump was released;
-  // an aged seed stamps the wall clock minus its age); `seedFrame` stamps the
-  // wall clock now.
-  //
-  // A frame stores a payload code (`payloads`): the drivers' value codes
-  // decode to themselves, an enveloped class from 100 up says what its bytes
-  // do. `observe` judges the class once for both remote paths: a visible
-  // frame whose code fails the read (`Payloads::readFails`) fails the read
-  // like an adapter fault, and the value a fresh frame serves is what its
-  // code decodes to (`Payloads::valueOf`). A tracked write's physical
-  // retention is capped at one hour (`physicalRetention`); the logical
-  // maximum a recovery snapshot carries is not.
+  // Rules
+  // - A frame is visible while present, retained and, for a tracked reader, fence-cleared,
+  //   whatever its age; it serves only while also fresh for the reply's freshness (C22).
+  // - A tracked reader serves a stamp only when it strictly clears the entity's watermark; an
+  //   untracked reader ignores watermarks (C32, C33, C35; `fenceCleared`).
+  // - An invalidation never lowers a watermark: it raises it to the wall clock plus the future
+  //   buffer only when that is ahead. Only a marker's expiry lowers one, to zero (C38).
+  // - A refill's fence is the watermark a read observed when it found no visible frame; a
+  //   visible frame the traversal declined carries none (C34; `fenceFor`).
+  // - A fenced refill is written only while the frame it would stamp now still clears that
+  //   fence; an unfenced refill is always written (C34; `writeAllowed`).
+  // - A tracked write's physical retention is capped at one hour; the logical maximum a
+  //   recovery snapshot carries is not (C37; `physicalRetention`).
+  // Shapes
+  // - Frames[r]: values, stamps, expiries and watermarks beside the tracking flag and clocks;
+  //   `serving::Served` is one, and `markers` and `recovery` take it too.
+  // - Observed: what one read observed (visible, failed, payload, value); `observe` builds it.
+  // Consumers: admission, dark-layers, effects, independent, layers, local-failure, policy,
+  //   recovery, recovery-read, shadow, shadow-layers, shadow-read-deadlines; composed through
+  //   `serving`, `remote_io`, `remote_writes`, `recovery`, `deadlines`, `markers`, `metrics`,
+  //   `adapter_replies`, `shadow`.
+  // Ports: typescript/src/internal/redis-payload.ts `decodeTrackedRedisReadResult`.
   import cache_rules.* from "../cache-rules"
   import encodings.* from "./encodings"
   import clock as Clock from "./clock"
@@ -54,7 +44,10 @@ module remote_frames {
     if (state.tracked and retentionMs > TRACKED_RETENTION_CAP_MS) TRACKED_RETENTION_CAP_MS else retentionMs
 
   pure def entityOf(key: int, operationsPerEntity: int): int = key / operationsPerEntity
-  // A write is stored with the stamp its writer captured and retained for its TTL.
+  // A write is stored with the stamp its writer captured and retained for its
+  // TTL, until an instant on the monotonic clock. This is the write with an
+  // explicit stamp: a held write stores the stamp captured when its dump was
+  // released, and an aged seed stamps the wall clock minus its age.
   pure def storeFrame(state: Frames[r], key: int, value: int, stamp: int, retentionMs: int): Frames[r] = {
     remoteValues: state.remoteValues.replaceAt(key, value),
     created: state.created.replaceAt(key, stamp),
@@ -70,7 +63,9 @@ module remote_frames {
   // An invalidation raises the watermark to the wall clock plus the
   // invalidator's future buffer (`futureBufferMs`, application-owned: the
   // window in which a stale write may still become visible) only when that
-  // is ahead of the current watermark.
+  // is ahead of the current watermark. It never lowers one, as the
+  // implementation's invalidation script keeps the larger of the current and
+  // the proposed watermark (C38).
   pure def raiseWatermark(state: Frames[r], entity: int, bufferMs: int): Frames[r] = {
     val current = state.watermark.nth(entity)
     val proposed = Clock::wallOf(state) + bufferMs
@@ -78,15 +73,27 @@ module remote_frames {
   }
   // The zero baseline of an entity's watermark, the one a profile's init
   // starts from and the one NO_FENCE and an unfenced `writeAllowed` refer to:
-  // where a marker's expiry (`markers::expire`) returns the entity.
+  // where a marker's expiry (`markers::expire`) returns the entity. Only a
+  // marker's expiry lowers a watermark.
   pure def clearWatermark(state: Frames[r], entity: int): Frames[r] =
     { watermark: state.watermark.replaceAt(entity, 0), ...state }
+  // A frame is retained until its expiry, an instant on the monotonic clock
+  // (`cache_rules.deadlinePendingAt`).
   pure def retained(state: Frames[r], key: int): bool = deadlinePendingAt(state.now, state.expires.nth(key))
+  // A frame is fresh for the freshness the reply resolved to, measured on the
+  // wall clock (`cache_rules.freshAgeAllowed`, which rejects a stamp from after
+  // a rollback).
   pure def fresh(state: Frames[r], key: int, freshMs: int): bool =
     freshAgeAllowed(state.created.nth(key), Clock::wallOf(state), freshMs)
+  // A tracked reader serves a stamp only when it clears the entity's watermark
+  // (`cache_rules.readFenceAllows` over the strict `fenceAllows`); an untracked
+  // reader ignores watermarks. A frame stamped at a wall clock of zero or below
+  // is never served to a tracked reader, as `fenceAllows` is strict against the
+  // zero watermark and the implementation treats a zero createdAt as a miss.
   pure def fenceCleared(state: Frames[r], key: int, operationsPerEntity: int): bool =
     readFenceAllows(state.tracked, state.created.nth(key), state.watermark.nth(entityOf(key, operationsPerEntity)))
-  // A frame the adapter returns: present, retained and (tracked) fence-cleared, whatever its age.
+  // A frame the adapter returns: present, retained and (tracked) fence-cleared,
+  // whatever its age. It serves when it is also fresh.
   pure def visible(state: Frames[r], key: int, operationsPerEntity: int): bool =
     state.remoteValues.nth(key) > NO_VALUE and retained(state, key) and fenceCleared(state, key, operationsPerEntity)
   // What one remote read observes, judged once for the atomic release and the
@@ -98,6 +105,12 @@ module remote_frames {
   type Observed = { visible: bool, failed: bool, payload: int, value: int }
   // What a read not made observes: nothing.
   pure val UNOBSERVED: Observed = { visible: false, failed: true, payload: NO_VALUE, value: NO_VALUE }
+  // A frame stores a payload code (`payloads`): the drivers' value codes decode
+  // to themselves, an enveloped class from 100 up says what its bytes do.
+  // `observe` judges the class once for both remote paths: a visible frame
+  // whose code fails the read (`Payloads::readFails`) fails the read like an
+  // adapter fault. The value a fresh frame serves is what its code decodes to
+  // (`Payloads::valueOf`).
   pure def observe(state: Frames[r], key: int, operationsPerEntity: int, freshMs: int, failed: bool): Observed = {
     val present = not(failed) and visible(state, key, operationsPerEntity)
     val code = if (present) state.remoteValues.nth(key) else NO_VALUE
@@ -113,7 +126,10 @@ module remote_frames {
   pure def missFence(state: Frames[r], key: int, operationsPerEntity: int): int =
     if (state.tracked) state.watermark.nth(entityOf(key, operationsPerEntity)) else NO_FENCE
   // The fence a refill carries: the watermark a tracked read observed when it
-  // found no visible frame; a visible frame the traversal declined carries none.
+  // found no visible frame (C34). A visible frame the traversal declined (stale,
+  // or stamped in the future) carries none, as the implementations refill
+  // unfenced after a reply that carried a frame which itself cleared the
+  // watermark.
   pure def fenceFor(state: Frames[r], key: int, operationsPerEntity: int, visible: bool): int =
     if (visible) NO_FENCE else missFence(state, key, operationsPerEntity)
   // An unfenced refill is always written: an untracked miss, or a tracked miss

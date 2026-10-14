@@ -1,53 +1,29 @@
 module metrics {
-  // The observer's metric events over the remote layer (C30, C57 to C59):
-  // the ordered trail the implementations report to their metrics callback
-  // (`typescript/src/internal/redis-cache.ts` `getWithResolvedConfig`,
-  // `startRawPayloadRead`, `putWithLayer`, `deserializePayload`;
-  // `typescript/src/dialcache.ts` the `disabled`, `coalesced`, `fallback` and
-  // `invalidation` metrics; `go/engine.go` the same) and the effects drivers
-  // compare as `events`, one record per event: its name, the layer or scope
-  // it names, its detail (a reason, an error category or an operation) and
-  // its amount (milliseconds for a duration or an offset, bytes for a size,
-  // the dispatch index of a write, 0 otherwise).
+  // The observer's metric events over the remote layer (C30, C57 to C59): the ordered trail the
+  // ports report to their metrics callback and the effects drivers compare as `events`.
   //
-  // Stated here once, as metered variants of the held remote lifecycle with
-  // held refills (`remote_writes::HeldWriting`) and the diagnosed channel
-  // (`diagnostics::DiagnosedHeld`): a participating caller's admission reports
-  // each shared layer its reply leaves off as disabled by policy
-  // (`policy_disabled`: no effective TTL; local before remote), then the read
-  // it dispatched (`request`) or the singleflight it joined (`coalesced`, the
-  // scope `diagnostics` recorded); a read reports its deadline error
-  // (`cache_read_timeout`, when its deadline is delivered or found reached at
-  // its late reply), its fault (`cache_read`) or its miss with the reason
-  // (`value_absent` when no frame is present, `watermark_fenced` when the
-  // watermark hides one, `unclassified` for a visible frame declined as
-  // future-dated, after a `futureOffset` of the stamp's lead over the wall
-  // clock, `expired` for one declined as stale, the frame being the stored one
-  // or a queued frame reply; a queued miss reply's normalized reason,
-  // `adapter_replies`), and its duration (`get`) measured
-  // from its dispatch to its settlement, or to the settlement of the fresh
-  // decode it held (C59: the decode is inside the read's duration), when the
-  // decode reports its own duration (`serialization` `load`) after its fault
-  // (`serialization_load`, then an `unclassified` miss); a loader whose
-  // flight's outcome the step records reports its failure (`error` against
-  // the layer `diagnostics` attributed it to, detail `fallback`) and its
-  // duration (`fallback`) from its start to that settlement, whether the
-  // result arrived or the deadline was delivered, and a late result that only
-  // drains reports nothing (C58: late sources do not repeat failures); a dump
-  // released reports its fault (`serialization_dump`) or its duration
-  // (`serialization` `dump`) from its hold, then the serialized and stored
-  // sizes and, when the second fence check lets the write go, the write's
-  // dispatch with its index (`writeDispatch`); a write released reports its
-  // fault (`cache_write`); an invalidation that is counted is reported
-  // (`invalidation`). The instants the durations are measured from are
-  // recorded by the transitions that start each effect: per flight the
-  // dispatch of its read, per decode its hold, per loader ordinal its start,
-  // per dump its hold.
-  //
-  // Outside this module's consumers, and not stated: a bypass caller's
-  // `context` reason, a payload class that fails the read (the fault reported
-  // here is the drivers'), a recovery decode's events, compression events.
-  // One consumer today, effects.
+  // Rules
+  // - Admission reports the layers policy left off (`disabled`), then `request` or `coalesced`; a
+  //   read reports `cache_read_timeout`, `cache_read` or a `miss` with its reason (`missReason`).
+  // - A read's `get` duration runs from its dispatch to its settlement or to the fresh decode it
+  //   held, which reports its own `serialization` `load` duration after its fault (C59).
+  // - A visible frame declined as future-dated reports a `futureOffset` of its stamp's lead over
+  //   the wall clock, then an `unclassified` miss (C57).
+  // - A loader reports its failure and `fallback` duration once, when the step records its
+  //   flight's outcome; a late result that only drains reports nothing (C58).
+  // - A released dump reports `serialization_dump` or its `serialization` `dump` duration, then
+  //   `size`, `storedSize` and, when the second fence check lets the write go, `writeDispatch`.
+  // - A write fault reports `cache_write`; a counted invalidation reports `invalidation`.
+  // - Not stated here: a bypass caller's `context` reason, a payload class that fails the read, a
+  //   recovery decode's events and compression events.
+  // Shapes
+  // - Event: one record per event: name, the layer or scope it names, detail and amount.
+  // - Metered[r, q]: diagnosed held lifecycle plus held refills, queued reply, events, instants.
+  // - FrameReadReceipt: raw acquisition facts for a profile's diagnostic property.
+  // Consumers: effects.
+  // Ports: typescript/src/internal/redis-cache.ts `getWithResolvedConfig`, `putWithLayer`,
+  //   `startRawPayloadRead`, `deserializePayload`; typescript/src/dialcache.ts `disabled`,
+  //   `coalesced`, `fallback`, `invalidation`; go/engine.go `event`, `errorEvent`, `duration`.
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import calls.* from "./calls"
@@ -66,7 +42,10 @@ module metrics {
   // A flight that dispatched no read measures no read duration.
   pure val NO_INSTANT = -1
   // The metered shape: the diagnosed held lifecycle with held refills and the
-  // queued reply, the events channel and the instants.
+  // queued reply, the events channel and the instants. The rules are stated
+  // here once, as metered variants of the held remote lifecycle with held
+  // refills (`remote_writes::HeldWriting`) and the diagnosed channel
+  // (`diagnostics::DiagnosedHeld`).
   type Metered[r, q] = Diagnostics::DiagnosedHeld[{
     events: List[Event],
     readStarted: List[int], decodeStarted: List[int], sourceStarted: List[int], dumpStarted: List[int],
@@ -95,6 +74,11 @@ module metrics {
     }
   }
 
+  // One event appended to the trail; every emitter below goes through it. The
+  // record holds the event's name, the layer or scope it names, its detail and
+  // its amount. The detail is a reason, an error category or an operation; the
+  // amount is milliseconds for a duration or an offset, bytes for a size, the
+  // dispatch index of a write, 0 otherwise.
   pure def event(state: Metered[r, q], name: str, location: str, detail: str, amount: int): Metered[r, q] =
     { events: state.events.append({ event: name, location: location, detail: detail, amount: amount }), ...state }
   pure def remote(state: Metered[r, q], name: str, detail: str, amount: int): Metered[r, q] =
@@ -105,7 +89,10 @@ module metrics {
 
   // The instants a step's new effects started at: a flight the step created
   // (its read's dispatch when the step dispatched one), a decode it held, a
-  // loader it started and a dump it held, each at the clock of the step.
+  // loader it started and a dump it held, each at the clock of the step. Every
+  // duration is measured from one of these instants: per flight the dispatch
+  // of its read, per decode its hold, per loader ordinal its start, per dump
+  // its hold.
   pure def stamped(before: Metered[r, q], after: Metered[r, q]): Metered[r, q] = {
     val flights = if (after.sources.length() > before.sources.length())
       { readStarted: after.readStarted.append(if (after.o.reads > before.o.reads) after.now else NO_INSTANT), ...after } else after
@@ -119,6 +106,11 @@ module metrics {
 
   // -- Admission -----------------------------------------------------------------
 
+  // A participating caller's admission reports each shared layer its reply
+  // leaves off as disabled by policy (`policy_disabled`: no effective TTL;
+  // local before remote). It then reports the read it dispatched (`request`)
+  // or the singleflight it joined (`coalesced`, the scope `diagnostics`
+  // recorded).
   pure def begin(state: Metered[r, q], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int): Metered[r, q] = {
     val released = stamped(state, Diagnostics::begin(state, layout, call, resolved, ttls, budget))
     val effective = effectiveTtls(resolved, ttls)
@@ -150,8 +142,10 @@ module metrics {
   pure def declinedFrameReason(stamp: int, wall: int): str =
     if (stamp > wall) "unclassified" else "expired"
   // The reason a read that served nothing reports: a queued miss reply's
-  // normalized reason, a queued frame reply declined by its stamp, or the
-  // frames': absent, hidden by the watermark, or declined by the stored stamp.
+  // normalized reason (`adapter_replies`), or a queued frame reply declined by
+  // its stamp. Else the frames' reason: absent (`value_absent`, no frame is
+  // present), hidden by the watermark (`watermark_fenced`), or declined by the
+  // stored stamp (`declinedFrameReason`).
   pure def missReason(state: Metered[r, q], layout: Serving::Layout, key: int): str =
     if (Replies::queued(state))
       (if (Replies::isFrame(state.reply)) declinedFrameReason(state.replyAt, Clock::wallOf(state))
@@ -159,6 +153,14 @@ module metrics {
     else if (not(state.remoteValues.nth(key) > NO_VALUE and Remote::retained(state, key))) "value_absent"
     else if (not(Remote::fenceCleared(state, key, layout.operationsPerEntity))) "watermark_fenced"
     else declinedFrameReason(state.created.nth(key), Clock::wallOf(state))
+  // The read settles: it reports its deadline error (`cache_read_timeout`, when
+  // its deadline is delivered or found reached at its late reply), its fault
+  // (`cache_read`) or its miss with the reason. A visible frame declined as
+  // future-dated first reports a `futureOffset`, the stamp's lead over the wall
+  // clock. The duration (`get`) is measured from the read's dispatch to this
+  // settlement, or to the settlement of the fresh decode it held (`settleLoad`).
+  // `failed` is the drivers' fault; a payload class that fails the read is not
+  // stated here.
   pure def settleRead(state: Metered[r, q], layout: Serving::Layout, read: int, failed: bool, classifier: int, bufferMs: int): Metered[r, q] = {
     val held = RemoteIO::heldRead(state, read)
     val settled = stamped(state, Replies::settleRead(state, layout, read, failed, classifier, bufferMs))
@@ -173,6 +175,11 @@ module metrics {
       readDone(miss(offset, missReason(state, layout, key)), held.flight)
     }
   }
+  // The fresh decode the read held settles: the decode reports its own
+  // duration (`serialization` `load`) after its fault (`serialization_load`,
+  // then an `unclassified` miss), and the read's `get` duration ends here
+  // (C59: the decode is inside the read's duration). A recovery decode's
+  // events are not stated.
   pure def settleLoad(state: Metered[r, q], layout: Serving::Layout, load: int, failed: bool): Metered[r, q] = {
     val held = RemoteIO::heldLoad(state, load)
     val settled = stamped(state, Diagnostics::settleLoad(state, layout, load, failed))
@@ -185,8 +192,11 @@ module metrics {
 
   // -- The source ------------------------------------------------------------------
 
-  // A loader whose flight's outcome the step recorded: its failure against the
-  // layer `diagnostics` attributed it to, then its duration from its start.
+  // A loader whose flight's outcome the step recorded: its failure (`error`
+  // against the layer `diagnostics` attributed it to, detail `fallback`), then
+  // its duration (`fallback`) from its start to that settlement, whether the
+  // result arrived or the deadline was delivered. A late result that only
+  // drains reports nothing (C58: late sources do not repeat failures).
   pure def sourceDone(before: Metered[r, q], after: Metered[r, q], ordinal: int, flight: int): Metered[r, q] =
     if (after.sources.nth(flight).result == before.sources.nth(flight).result) after
     else {
@@ -209,8 +219,12 @@ module metrics {
 
   // -- The refill -------------------------------------------------------------------
 
-  // `bytes` is the serialized size of the value the source recorded (a
-  // profile's constant for its fixture value).
+  // A dump released reports its fault (`serialization_dump`) or its duration
+  // (`serialization` `dump`) from its hold, then the serialized and stored
+  // sizes (`size`, `storedSize`) and, when the second fence check lets the
+  // write go, the write's dispatch with its index (`writeDispatch`). `bytes` is
+  // the serialized size of the value the source recorded (a profile's constant
+  // for its fixture value).
   pure def releaseDump(state: Metered[r, q], layout: Serving::Layout, dump: int, failed: bool, bytes: int): Metered[r, q] = {
     val released = stamped(state, Writes::releaseDump(state, layout, dump, failed))
     val serialized = remote(if (failed) error(released, "serialization_dump") else released, "serialization", "dump", released.now - state.dumpStarted.nth(dump))
@@ -220,6 +234,7 @@ module metrics {
       if (released.o.writes > state.o.writes) remote(sized, "writeDispatch", NO_DETAIL, state.o.writes) else sized
     }
   }
+  // A write released reports its fault (`cache_write`).
   pure def releaseWrite(state: Metered[r, q], layout: Serving::Layout, write: int, failed: bool): Metered[r, q] = {
     val released = Writes::releaseWrite(state, layout, write, failed)
     if (failed) error(released, "cache_write") else released
@@ -227,6 +242,7 @@ module metrics {
 
   // -- Maintenance --------------------------------------------------------------------
 
+  // An invalidation that is counted is reported (`invalidation`).
   pure def invalidate(state: Metered[r, q], entity: int, bufferMs: int): Metered[r, q] = {
     val done = Serving::invalidate(state, entity, bufferMs)
     if (done.o.invalidations > state.o.invalidations) remote(done, "invalidation", NO_DETAIL, 0) else done

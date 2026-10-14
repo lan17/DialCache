@@ -80,6 +80,18 @@ and `z`. Comments should explain ownership, ordering, assumptions, or a boundary
 case, rather than narrate the syntax. Quint 0.32.0 has no CLI formatting command;
 these are reviewed authoring conventions.
 
+A kernel module under `formal/models/kernel/` opens with one header of at most
+25 comment lines, each within 100 columns, in a fixed shape: one sentence of
+purpose; `Rules`, one bullet of at most two lines per rule, naming the contract
+IDs where the rule is one; `Shapes`, one line per type alias, where the module
+declares any; `Consumers:`, the profiles that compose the module directly or
+the kernel modules it is composed through; and `Ports:`, where the header
+points into TypeScript or Go source, each pointer written as the file path
+followed by the symbol in a code span. Rule prose the cap does not fit goes on
+the definition that implements the rule, as a comment block directly above it:
+comment the definition, not the module. A comment never quotes a whole code
+expression, because the challenge catalog anchors on unique source snippets.
+
 Give phase, outcome, policy, and fixture codes names. Verification models can
 use sum types. Conformance profiles retain their published integer encodings
 and use named constants, so a readability edit does not silently change the

@@ -1,23 +1,33 @@
 module flights {
-  // Source executions, their registries and the callers they own. A shared
-  // source is registered under its process identity (the process registry)
-  // and, when the caller memoizes and coalesces, under its request memo slot
-  // (the request registry, which a scope's closure forgets); a caller's owner
-  // is the source that will complete it (NO_OWNER for a caller served from a
-  // layer). Settling a source clears every registry slot that named it, so a
-  // finished flight never coalesces a later caller.
+  // Source executions, the process and request registries that coalesce callers into them, and
+  // per caller the owner that will complete it.
   //
-  // A source record carries what the registries read (its outcome and whether
-  // it is process-shared); the traversal that starts it adds the payload it
-  // needs to publish (`serving::LayeredSource`) or nothing (`serving::RequestSource`).
-  //
-  // A record a profile composes only when a property of its own needs it:
-  // the identity each caller asked for (recordIdentity, the layers ownership
-  // property).
+  // Rules
+  // - A shared source is registered under its process identity and, when the caller memoizes
+  //   and coalesces, under its request memo slot, which a scope's closure forgets (C03, C11, C12).
+  // - A caller's owner is the source that will complete it; a caller served from a layer has
+  //   none, and no source completes a caller for another instance or key (C11).
+  // - Settling a source records its outcome and clears every registry slot that named it, so a
+  //   finished flight never coalesces a later caller (C15; `recordResult`, `forgetSource`).
+  // - A detached source is registered nowhere and completes no caller; the identity record is
+  //   composed only by a profile whose property needs it (`registerDetached`, `recordIdentity`).
+  // - Process snapshots report registered process work only: live leaders, process followers and
+  //   the oldest leader's monotonic age (C11; `inspectProcess`).
+  // Shapes
+  // - Source[p]: outcome and process sharing, plus whatever the starting traversal must publish.
+  // - Registry[r, p]: the sources, per-caller owners and memo slots, and the two registries.
+  // - Identified[r]: each admitted caller's instance and key; layers and dark-layers record it.
+  // - Inspection: one public process-coalescing snapshot.
+  // - Inspected[r, p, q]: the registry with admission receipts and the `d.inspections` channel.
+  // Consumers: dark-layers, effects, layers, local-failure, recovery, runtime-boundaries, scope,
+  //   shadow-layers; composed through `serving`, `remote_io`, `remote_writes`, `local_faults`.
 
   import encodings.* from "./encodings"
   import calls.* from "./calls"
 
+  // A source record carries what the registries read (its outcome and whether
+  // it is process-shared); the traversal that starts it adds the payload it
+  // needs to publish (`serving::LayeredSource`) or nothing (`serving::RequestSource`).
   type Source[p] = { result: int, shared: bool | p }
   // Per caller, parallel to the callers' outcomes: the owner that will
   // complete it and the memo slot it fills.

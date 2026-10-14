@@ -1,61 +1,29 @@
 module deadlines {
-  // Deadlines (C23 to C27, C56): a source starts with the budget its start
-  // resolved. A source started at admission belongs to a caller that made no
-  // policy call: it is bounded only when its key failed to construct (C27); a
-  // disabled context and a call outside every request run theirs unbounded
-  // (C01). A source started at release, or a loader started for a flight
-  // whose held read settled or expired, belongs to a caller that was enabled
-  // when admitted, whether or not its scope has closed since, and is always
-  // bounded. A held remote read is bounded by the read budget in force when
-  // it was dispatched; a read settled in its dispatching step registers no
-  // read deadline under an unbounded budget, and a finite budget is reached
-  // at once only when zero. A deadline is measured from its work's own start;
-  // equality belongs to the timeout (`dueAt`).
+  // Deadlines: which work is bounded, by what budget, and when a pending deadline is delivered.
   //
-  // A pending deadline (`Due`) names its work (a remote read, a source loader
-  // or a shadow job), the index of that work in the drivers' order for its kind, and
-  // the instant it is due. It is registered when the work starts and forgotten
-  // when the work settles or the deadline is delivered; unbounded work
-  // registers none, so bounded is encoded by presence. The list is in
-  // registration order, which is the delivery order at equal instants across
-  // kinds. Delivery is instant-ordered (`deliver`): an advance moves both
-  // clocks to each due instant inside it in turn and delivers every deadline
-  // due there, so work a delivery starts (a read expiry starts a loader) is
-  // delivered at its own instant inside the same advance, and every judgment
-  // a delivery makes (a recovery age, a caller's outcome) reads the clocks at
-  // that instant. A deadline the clock passed without delivery (a bare clock
-  // move) is delivered at the first instant the next advance visits, not at
-  // the current instant before moving, as the implementations' timers fire
-  // when the clock next runs; a deadline registered at or before the current
-  // instant during a round (a zero budget started by a delivery) is likewise
-  // delivered at the next visited instant. A zero budget registered at a
-  // settlement step outside a round is also delivered at the next instant the
-  // following advance visits, where the implementations fire a 0 ms timer
-  // before the clock moves: an open design point for a budgeted recovery
-  // composition, unreachable in every scheduled profile today (independent's
-  // source budget is 10 ms; the local shape makes no clock judgment at
-  // expiry). The current zero-budget delivery is pinned by held-remote.qnt's
-  // `zeroBudgetLoaderStartedByExpiryDeliversInTheSameAdvanceTest` and
-  // budgeted-local.qnt's `zeroBudgetSourceSettlesAsDeadlineErrorTest`.
-  // An expired source completes every
-  // caller it owns with DEADLINE_ERROR; a result arriving after its deadline
-  // is a deadline error (`arrival`); work whose deadline already completed
-  // its callers drains once, when the result arrives. `drained` is per loader
-  // ordinal: the source list itself in the local projection, `remote_io`'s
-  // `loaders` in the held shape.
-  //
-  // A profile whose drivers bound sources composes the budgeted variants of
-  // the local lifecycle; one whose drivers hold and bound remote reads and
-  // loaders composes the held variants. A module that bounds work of its own
-  // kind composes `Scheduled` alone, the clock and the pending deadlines
-  // (`shadow`'s job registry): its profile's callers run no source
-  // deadline, so that shape has no `sourceBudget` and no source registers
-  // one. The fold's expiry is passed only from inside the kernel, by the two
-  // instantiations here and by such a module's own expiry; a profile never
-  // passes an operator to the library (the composition lint reports an
-  // argument in a parameter position a kernel definition declares with an
-  // operator type, `expire` here, unless it names a kernel definition,
-  // following aliases and let-bound names).
+  // Rules
+  // - A source starts with the budget its start resolved, measured from its own start; a deadline
+  //   is reached at or after its instant, equality belonging to the timeout (C23 to C26, `dueAt`).
+  // - A source started at admission is bounded only when its key failed to construct (C27); a
+  //   disabled context and a call outside every request run theirs unbounded (C01).
+  // - A source started at release, or a loader started for a held read's flight, is always bounded:
+  //   its caller was enabled when admitted, whether or not its scope has closed since (C04).
+  // - A held read is bounded by the read budget in force when it was dispatched (C23, C56); a read
+  //   settled as it is dispatched registers none under an unbounded budget (`settleDispatched`).
+  // - Bounded is presence: a deadline is registered when its work starts and forgotten when it
+  //   settles or is delivered; delivery is instant-ordered inside an advance (`deliver`).
+  // - An expired source completes its owned callers with DEADLINE_ERROR (C25); a late result is a
+  //   deadline error (`arrival`); work whose deadline already completed its callers drains once.
+  // Shapes
+  // - Due: one pending deadline: the work's kind (`READ`, `SOURCE`, `JOB`), index and due instant.
+  // - Scheduled[r]: clock and pending deadlines; a module bounding its own kind composes it alone.
+  // - Budgeted[r]: adds the configured source budget and the per-ordinal drained flags.
+  // - BudgetedLocal[r]: the local lifecycle, deadlines and history, for a profile bounding sources.
+  // - BudgetedHeld[r]: the held lifecycle and deadlines, for a profile bounding reads and loaders.
+  // - Recorded[r]: the per-source history the local shape stamps: start, budget and settlement.
+  // Consumers: admission, dark-layers, effects, independent, recovery, shadow, shadow-layers,
+  //   shadow-read-deadlines, source-budgets; composed through `shadow`, `remote_writes`,
+  //   `diagnostics`, `metrics`, `adapter_replies`, `shadow_reads`.
   import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
@@ -73,14 +41,25 @@ module deadlines {
   pure val SOURCE = 1
   pure val JOB = 2
 
+  // A pending deadline names its work (a remote read, a source loader or a
+  // shadow job), the index of that work in the drivers' order for its kind,
+  // and the instant it is due. It is registered when the work starts and
+  // forgotten when the work settles or the deadline is delivered; unbounded
+  // work registers none, so bounded is encoded by presence. The list is in
+  // registration order, which is the delivery order at equal instants across
+  // kinds.
   type Due = { kind: int, index: int, at: int }
   // The pending deadlines beside the clock: what registration, forgetting and
   // instant-ordered delivery read. A module that bounds work of its own kind
-  // composes this shape alone.
+  // composes this shape alone, the clock and the pending deadlines (`shadow`'s
+  // job registry): its profile's callers run no source deadline, so that
+  // shape has no `sourceBudget` and no source registers one.
   type Scheduled[r] = { now: int, deadlines: List[Due] | r }
   // The budgeted shape adds the configured source budget and, per loader
   // ordinal, whether its external work has been delivered (a loader its
-  // deadline completed still has work to drain).
+  // deadline completed still has work to drain). `drained` is per loader
+  // ordinal: the source list itself in the local projection, `remote_io`'s
+  // `loaders` in the held shape.
   type Budgeted[r] = Scheduled[{ sourceBudget: int, drained: List[bool] | r }]
   // The budgeted local lifecycle: the local projection of the traversal with
   // the deadlines beside its source list, and per source the history its
@@ -93,11 +72,13 @@ module deadlines {
   // beside its reads and loaders.
   type BudgetedHeld[r] = RemoteIO::Held[{ sourceBudget: int, deadlines: List[Due], drained: List[bool] | r }]
 
-  // The budget of a source started at admission: the configured budget when
-  // the key failed to construct (C27), none for any other bypass (C01).
+  // A source started at admission belongs to a caller that made no policy
+  // call. Its budget is the configured one when the key failed to construct
+  // (C27), none for any other bypass, a disabled context or a call outside
+  // every request (C01).
   pure def admissionBudget(state: Budgeted[r], call: Call): int = if (call.keyFailed) state.sourceBudget else UNBOUNDED
-  // Work that just started registers its deadline; unbounded work none
-  // (a finite zero is due at once).
+  // Work that just started registers its deadline, measured from its own
+  // start; unbounded work none (a finite zero is due at once).
   pure def due(state: Scheduled[r], kind: int, index: int, budget: int): Scheduled[r] =
     if (budget < 0) state else { deadlines: state.deadlines.append({ kind: kind, index: index, at: state.now + budget }), ...state }
   pure def deadlinesOf(state: Scheduled[r], kind: int, index: int): List[Due] =
@@ -126,8 +107,10 @@ module deadlines {
 
   // -- Instant-ordered delivery ------------------------------------------------
 
-  // The earliest instant after now, at or before the target, at which a
-  // pending deadline is due; the target when none is.
+  // The earliest instant strictly after now, at or before the target, at
+  // which a pending deadline is due; the target when none is. A deadline at
+  // or before now is therefore delivered at the next visited instant, not at
+  // the current instant before moving.
   pure def earliestDue(state: Scheduled[r], target: int): int =
     state.deadlines.foldl(target, (best, d) => if (d.at > state.now and d.at < best) d.at else best)
   // Time passes to the target, delivering each due instant in turn with the
@@ -137,6 +120,33 @@ module deadlines {
   // deadline until the target is reached, and a delivery registers at most
   // one deadline (a read expiry starts a bounded loader), so the rounds are
   // bounded by twice the pending deadlines plus the final move.
+  //
+  // Work a delivery starts (a read expiry starts a loader) is thus delivered
+  // at its own instant inside the same advance, and every judgment a
+  // delivery makes (a recovery age, a caller's outcome) reads the clocks at
+  // that instant. A deadline the clock passed without delivery (a bare clock
+  // move) is delivered at the first instant the next advance visits, not at
+  // the current instant before moving, as the implementations' timers fire
+  // when the clock next runs. A deadline registered at or before the current
+  // instant during a round (a zero budget started by a delivery) is likewise
+  // delivered at the next visited instant. A zero budget registered at a
+  // settlement step outside a round is also delivered at the next instant
+  // the following advance visits, where the implementations fire a 0 ms
+  // timer before the clock moves. That is an open design point for a
+  // budgeted recovery composition, unreachable in every scheduled profile
+  // today (independent's source budget is 10 ms; the local shape makes no
+  // clock judgment at expiry). The current zero-budget delivery is pinned by
+  // fixtures/kernel/held-remote.qnt's
+  // `zeroBudgetLoaderStartedByExpiryDeliversInTheSameAdvanceTest` and
+  // fixtures/kernel/budgeted-local.qnt's `zeroBudgetSourceSettlesAsDeadlineErrorTest`.
+  //
+  // The expiry is passed only from inside the kernel, by the two
+  // instantiations here (`advanceLocal`, `advance`) and by a module's own
+  // expiry for work of its own kind (`shadow`); a profile never passes an
+  // operator to the library. The composition lint reports an argument in a
+  // parameter position a kernel definition declares with an operator type
+  // (`expire` here) unless it names a kernel definition, following aliases
+  // and let-bound names.
   pure def deliver(state: Scheduled[r], ms: int, expire: (Scheduled[r], Due) => Scheduled[r]): Scheduled[r] = {
     val target = state.now + ms
     1.to(2 * state.deadlines.length() + 1).fold(state, (current, _) => {
@@ -217,7 +227,8 @@ module deadlines {
   // A read settled in the step that dispatched it: its deadline, if the
   // budget registered one, is forgotten by the settlement (an unbounded
   // budget registers none and is the truthful one for a read that never
-  // waits), and the loader the settlement starts is bounded from now.
+  // waits), and the loader the settlement starts is bounded from now. A
+  // finite budget is reached at once only when zero (`expiredIfReached`).
   pure def settleDispatched(before: BudgetedHeld[r], after: BudgetedHeld[r], layout: Serving::Layout, classifier: int): BudgetedHeld[r] =
     if (after.o.reads > before.o.reads) settleRead(after, layout, before.o.reads, after.readFailed, classifier) else after
   pure def beginRead(state: BudgetedHeld[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int, classifier: int): BudgetedHeld[r] =

@@ -1,13 +1,27 @@
 module runtime_policy {
-  // How a runtime policy reply resolves against an instance's configured
-  // baseline (C06/C13/C16/C19): which layers serve this call and whether it
-  // coalesces. Policy codes are the runtime-boundaries drivers' contract
-  // (formal/replay/profiles/runtime-boundaries.mjs); do not renumber. Codes
-  // 0..11 are a serving-cohort relation (cohort_boundaries) times three plus
-  // a sharing leaf; the rest are named replies.
+  // How a runtime policy reply resolves against an instance's configured baseline
+  // (C06, C13, C16, C19): which layers serve this call and whether it coalesces.
+  //
+  // Rules
+  // - An invalid or explicit-null boolean leaf, or the kill switch, is the bypass reply (C16, C20);
+  //   otherwise each layer serves when configured and its cohort sample is admitted (`resolve`).
+  // - A runtime TTL configures an unconfigured layer at the default full ramp (C16); a disabled
+  //   baseline stays disabled until a runtime ramp overrides it; remote also needs a client.
+  // - Coalescing is the explicit sharing leaf, else the operation default (C13); the request layer
+  //   serves unless the baseline lacks it or the reply disables it (C19).
+  // - Policy codes are the runtime-boundaries drivers' contract; do not renumber them.
+  // Shapes
+  // - Baseline: an instance's configured layers, coalescing default and whether every ramp is zero.
+  // - Samples: the W03 cohort numerators the fixture binds to its key.
+  // - Configured[r]: the baseline, whether a remote client exists and the policy reply to resolve.
+  // Consumers: runtime-boundaries.
   import cohort_boundaries.* from "../cohort-boundaries"
   import layer_policy.* from "./layer-policy"
 
+  // Policy codes are the runtime-boundaries drivers' contract
+  // (formal/replay/profiles/runtime-boundaries.mjs); do not renumber. Codes
+  // 0..11 are a serving-cohort relation (cohort_boundaries) times three plus
+  // a sharing leaf; the rest are named replies.
   pure val INHERIT_SHARING = 0
   pure val DISABLE_SHARING = 1
   pure val ENABLE_SHARING = 2
