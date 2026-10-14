@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-type Entry = { line: number; title: string };
+type Entry = { title: string };
 type Snapshot = { path: string; sha256: string; entries: Entry[] };
 type Review = { kind: string; scope: string; contracts?: string[]; revisions?: string[] };
 type Guide = Snapshot & { review?: Review };
@@ -12,8 +12,8 @@ type Audit = {
   sources: Array<Omit<Snapshot, "entries"> & { entries: Array<Entry & { contracts: string[] }> }>;
   reviewedGuides: Guide[];
 };
-type Change = { path: string; action: string; entries?: number; pending?: string[]; review?: boolean };
-const { sourceSnapshot, guideSnapshot, checkSourceAudit, refreshSourceAudit, describeChange, encodeAudit } = await import(
+type Change = { path: string; action: string; entries?: number; pending?: string[]; dropped?: string[]; review?: boolean };
+const { sourceSnapshot, guideSnapshot, checkSourceAudit, refreshSourceAudit, describeChange, encodeAudit, dispositionDigest } = await import(
   new URL("../../formal/tools/check-source-audit.mjs", import.meta.url).href,
 ) as {
   sourceSnapshot(directory: string): Snapshot[];
@@ -22,6 +22,7 @@ const { sourceSnapshot, guideSnapshot, checkSourceAudit, refreshSourceAudit, des
   refreshSourceAudit(audit: Audit, paths: string[], options?: { directory: string }): { audit: Audit; changes: Change[] };
   describeChange(change: Change): string;
   encodeAudit(audit: unknown): string;
+  dispositionDigest(audit: unknown): string;
 };
 
 describe("reviewed documentation freshness", () => {
@@ -44,7 +45,7 @@ describe("reviewed documentation freshness", () => {
     put("formal/README.md", "# Formal model\n\nStart here.\n");
     put("go/README.md", "# Go port\n\nThe native API uses explicit contexts.\n");
     audit = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       sources: sourceSnapshot(directory).map(source => ({ ...source,
         entries: source.entries.map(entry => ({ ...entry, contracts: ["C01"] })),
       })),
@@ -166,7 +167,7 @@ describe("reviewed documentation freshness", () => {
       "~~~text", "# Hidden too", "~~~", "### End"].join("\r\n");
     put("formal/guides/PORTING.md", text);
     put("docs/usage.md", text);
-    const expected = [{ line: 1, title: "Porting" }, { line: 11, title: "After" }, { line: 15, title: "End" }];
+    const expected = [{ title: "Porting" }, { title: "After" }, { title: "End" }];
     expect(guideSnapshot(directory).find(entry => entry.path === "formal/guides/PORTING.md")!.entries).toEqual(expected);
     expect(sourceSnapshot(directory).find(entry => entry.path === "docs/usage.md")!.entries).toEqual(expected);
   });
@@ -181,10 +182,10 @@ describe("reviewed documentation freshness", () => {
     put(path, "# Porting\n\nMore words first.\n\n## Native driver\n\nReview the real observations.\n\n## Reports\n");
     expect(() => check()).toThrow(/PORTING.md: contents changed/);
     const { audit: refreshed, changes } = refreshSourceAudit(audit, [path], { directory });
-    expect(changes).toEqual([{ path, action: "refreshed", entries: 3, pending: [], review: true }]);
+    expect(changes).toEqual([{ path, action: "refreshed", entries: 3, pending: [], dropped: [], review: true }]);
     expect(refreshed.reviewedGuides.find(entry => entry.path === path)).toEqual({
       path, sha256: guideSnapshot(directory).find(entry => entry.path === path)!.sha256,
-      entries: [{ line: 1, title: "Porting" }, { line: 5, title: "Native driver" }, { line: 9, title: "Reports" }],
+      entries: [{ title: "Porting" }, { title: "Native driver" }, { title: "Reports" }],
       review: guide(path).review,
     });
     expect(guide(path).entries).toHaveLength(2);
@@ -195,25 +196,42 @@ describe("reviewed documentation freshness", () => {
     const path = "docs/usage.md";
     put(path, "# Public usage\n\nReviewed behavior, reworded.\n\n## Limits\n\nNew prose.\n");
     const { audit: refreshed, changes } = refreshSourceAudit(audit, [path], { directory });
-    expect(changes).toEqual([{ path, action: "refreshed", entries: 2, pending: ['5 "Limits"'], review: true }]);
-    expect(describeChange(changes[0]!)).toBe('docs/usage.md: refreshed, 2 entries; 1 without a contract disposition: 5 "Limits"');
+    expect(changes).toEqual([{ path, action: "refreshed", entries: 2, pending: ['"Limits"'], dropped: [], review: true }]);
+    expect(describeChange(changes[0]!)).toBe('docs/usage.md: refreshed, 2 entries; 1 without a contract disposition: "Limits"');
     const entries = refreshed.sources.find(source => source.path === path)!.entries;
-    expect(entries).toEqual([{ line: 1, title: "Public usage", contracts: ["C01"] }, { line: 5, title: "Limits", contracts: [] }]);
-    expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/docs\/usage.md:5: missing, duplicate or unknown contract disposition/);
+    expect(entries).toEqual([{ title: "Public usage", contracts: ["C01"] }, { title: "Limits", contracts: [] }]);
+    expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/docs\/usage.md "Limits": missing, duplicate or unknown contract disposition/);
     entries[1]!.contracts = ["B01"];
     expect(checkSourceAudit(refreshed, { directory })).toMatchObject({ sections: 4 });
   });
 
-  it("matches repeated titles by occurrence and starts a renamed title empty", () => {
+  it("matches repeated titles by occurrence and reports a renamed title's dropped disposition", () => {
     const path = "docs/usage.md";
     audit.sources.find(source => source.path === path)!.entries = [
-      { line: 1, title: "Public usage", contracts: ["C01"] }, { line: 3, title: "Example", contracts: ["C01"] },
-      { line: 5, title: "Example", contracts: ["B01"] }, { line: 7, title: "Errors", contracts: ["C01"] }];
+      { title: "Public usage", contracts: ["C01"] }, { title: "Example", contracts: ["C01"] },
+      { title: "Example", contracts: ["B01"] }, { title: "Errors", contracts: ["C01"] }];
     put(path, "# Public usage\n\nInserted paragraph.\n\n## Example\n\n## Example\n\n## Failures\n");
-    const { audit: refreshed } = refreshSourceAudit(audit, [path], { directory });
+    const { audit: refreshed, changes } = refreshSourceAudit(audit, [path], { directory });
     expect(refreshed.sources.find(source => source.path === path)!.entries).toEqual([
-      { line: 1, title: "Public usage", contracts: ["C01"] }, { line: 5, title: "Example", contracts: ["C01"] },
-      { line: 7, title: "Example", contracts: ["B01"] }, { line: 9, title: "Failures", contracts: [] }]);
+      { title: "Public usage", contracts: ["C01"] }, { title: "Example", contracts: ["C01"] },
+      { title: "Example", contracts: ["B01"] }, { title: "Failures", contracts: [] }]);
+    expect(changes).toEqual([{ path, action: "refreshed", entries: 4, pending: ['"Failures"'], dropped: ['"Errors" ["C01"]'], review: true }]);
+    expect(describeChange(changes[0]!)).toBe('docs/usage.md: refreshed, 4 entries; 1 without a contract disposition: "Failures"; dropped: "Errors" ["C01"]');
+  });
+
+  it("starts every occurrence of a repeated title empty when its count changed, naming repeats by position", () => {
+    const path = "docs/usage.md";
+    audit.sources.find(source => source.path === path)!.entries = [
+      { title: "Public usage", contracts: ["C01"] }, { title: "Example", contracts: ["C01"] }, { title: "Example", contracts: ["B01"] }];
+    put(path, "# Public usage\n\n## Example\n\nNew first example.\n\n## Example\n\n## Example\n");
+    const { audit: refreshed, changes } = refreshSourceAudit(audit, [path], { directory });
+    expect(refreshed.sources.find(source => source.path === path)!.entries).toEqual([
+      { title: "Public usage", contracts: ["C01"] }, { title: "Example", contracts: [] }, { title: "Example", contracts: [] }, { title: "Example", contracts: [] }]);
+    expect(changes[0]!.pending).toEqual(['"Example" #1', '"Example" #2', '"Example" #3']);
+    expect(changes[0]!.dropped).toEqual(['"Example" #1 ["C01"]', '"Example" #2 ["B01"]']);
+    expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/docs\/usage.md "Example" #3: missing, duplicate or unknown contract disposition/);
+    put(path, "# Public usage\n\n## Example\n\n## Example\n");
+    expect(refreshSourceAudit(audit, [path], { directory }).audit.sources.find(source => source.path === path)!.entries.map(entry => entry.contracts)).toEqual([["C01"], ["C01"], ["B01"]]);
   });
 
   it("adds a named new file at its inventory position and drops a named removed one", () => {
@@ -222,21 +240,21 @@ describe("reviewed documentation freshness", () => {
     expect(() => check()).toThrow(/Source file inventory changed/);
     const { audit: refreshed, changes } = refreshSourceAudit(audit, ["docs/limits.md", "typescript/test/cache.test.ts"], { directory });
     expect(changes).toEqual([
-      { path: "docs/limits.md", action: "added", entries: 1, pending: ['1 "Limits"'], review: true },
+      { path: "docs/limits.md", action: "added", entries: 1, pending: ['"Limits"'], dropped: [], review: true },
       { path: "typescript/test/cache.test.ts", action: "removed" }]);
     expect(describeChange(changes[1]!)).toBe("typescript/test/cache.test.ts: removed, no longer in the inventory");
     expect(refreshed.sources.map(source => source.path)).toEqual(["README.md", "docs/limits.md", "docs/usage.md", "typescript/README.md"]);
-    expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/^docs\/limits.md:1: missing, duplicate or unknown contract disposition$/m);
+    expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/^docs\/limits.md "Limits": missing, duplicate or unknown contract disposition$/m);
   });
 
   it("adds a named new guide without a review record and leaves unnamed files alone", () => {
     put("formal/guides/NEW.md", "# New guide\n\n## Steps\n");
     put("docs/usage.md", "# Public usage\n\nChanged but not named.\n");
     const { audit: refreshed, changes } = refreshSourceAudit(audit, ["formal/guides/NEW.md"], { directory });
-    expect(changes).toEqual([{ path: "formal/guides/NEW.md", action: "added", entries: 2, pending: [], review: false }]);
+    expect(changes).toEqual([{ path: "formal/guides/NEW.md", action: "added", entries: 2, pending: [], dropped: [], review: false }]);
     expect(describeChange(changes[0]!)).toBe("formal/guides/NEW.md: added, 2 entries; its review record is missing");
     expect(refreshed.reviewedGuides.map(entry => entry.path)).toEqual(["formal/README.md", "formal/guides/CONTRACTS.md", "formal/guides/NEW.md", "formal/guides/PORTING.md", "formal/guides/VALIDATION.md", "go/README.md"]);
-    expect(refreshed.reviewedGuides[2]).toEqual({ path: "formal/guides/NEW.md", sha256: expect.stringMatching(/^[a-f\d]{64}$/), entries: [{ line: 1, title: "New guide" }, { line: 3, title: "Steps" }] });
+    expect(refreshed.reviewedGuides[2]).toEqual({ path: "formal/guides/NEW.md", sha256: expect.stringMatching(/^[a-f\d]{64}$/), entries: [{ title: "New guide" }, { title: "Steps" }] });
     expect(refreshed.sources.find(source => source.path === "docs/usage.md")).toBe(audit.sources.find(source => source.path === "docs/usage.md"));
     expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/NEW.md: missing or invalid guide review kind/);
     expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/docs\/usage.md: contents changed/);
@@ -253,5 +271,33 @@ describe("reviewed documentation freshness", () => {
   it("encodes the audit as it is committed", () => {
     const committed = readFileSync(new URL("../../formal/catalogs/source-audit.json", import.meta.url), "utf8");
     expect(encodeAudit(JSON.parse(committed))).toBe(committed);
+  });
+
+  it("keys entries by title, so prose above a heading changes only the file hash", () => {
+    const path = "formal/guides/PORTING.md";
+    const before = guide(path);
+    put(path, "# Porting\n\nA new paragraph before the first section.\n\nAnd another.\n\n## Native driver\n\nReview the real observations.\n");
+    expect(guideSnapshot(directory).find(entry => entry.path === path)!.entries).toEqual(before.entries);
+    expect(() => check()).toThrow(/^formal\/guides\/PORTING.md: contents changed[^\n]*$/m);
+    expect(() => check()).not.toThrow(/inventory changed/);
+    const { audit: refreshed, changes } = refreshSourceAudit(audit, [path], { directory });
+    expect(changes).toEqual([{ path, action: "refreshed", entries: 2, pending: [], dropped: [], review: true }]);
+    const after = refreshed.reviewedGuides.find(entry => entry.path === path)!;
+    expect({ ...after, sha256: before.sha256 }).toEqual(before);
+    put(path, "# Porting\n\nReview the real observations.\n\n## Native driver\n\n# Porting\n");
+    expect(() => check()).toThrow(/guide section inventory changed/);
+  });
+
+  it("binds the Go parity ledger to dispositions, test hashes and guide reviews, not to documentation bytes", () => {
+    const base = dispositionDigest(audit);
+    const vary = (mutate: (copy: Audit) => void) => { const copy = structuredClone(audit); mutate(copy); return dispositionDigest(copy); };
+    expect(vary(copy => { copy.sources.find(source => source.path === "docs/usage.md")!.sha256 = "0".repeat(64); })).toBe(base);
+    expect(vary(copy => { copy.reviewedGuides[0]!.sha256 = "0".repeat(64); })).toBe(base);
+    expect(vary(copy => { copy.sources.find(source => source.path === "typescript/test/cache.test.ts")!.sha256 = "0".repeat(64); })).not.toBe(base);
+    expect(vary(copy => { copy.sources.find(source => source.path === "docs/usage.md")!.entries[0]!.contracts = ["B01"]; })).not.toBe(base);
+    expect(vary(copy => { copy.sources.find(source => source.path === "docs/usage.md")!.entries[0]!.title = "Renamed"; })).not.toBe(base);
+    expect(vary(copy => { copy.sources.find(source => source.path === "docs/usage.md")!.entries.push({ title: "Limits", contracts: ["C01"] }); })).not.toBe(base);
+    expect(vary(copy => { copy.reviewedGuides[0]!.review!.scope = "Reworded review scope."; })).not.toBe(base);
+    expect(vary(copy => { copy.schemaVersion = 3; })).not.toBe(base);
   });
 });

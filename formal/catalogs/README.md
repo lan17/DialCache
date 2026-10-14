@@ -23,7 +23,7 @@ output lives in [../generated/](../generated/README.md), never here.
 ## Ledgers and baselines
 
 - [source-audit.json](./source-audit.json): the review ledger of documentation pages, ordinary tests and reviewed guides; `check-source-audit.mjs`; re-keyed per reviewed file with `check-source-audit.mjs --refresh <path>...` ([../guides/TEST-AUDIT.md](../guides/TEST-AUDIT.md)).
-- [go-parity.json](./go-parity.json): the Go parity ledger over the catalogs, sources and audit; `check-go-parity.mjs`; its catalog and vector artifact digests re-pinned with `check-go-parity.mjs --refresh-inputs`, its mapping hashes by hand with the review.
+- [go-parity.json](./go-parity.json): the Go parity ledger over the catalogs, sources and audit; `check-go-parity.mjs`; its catalog, audit-dispositions and vector artifact digests re-pinned with `check-go-parity.mjs --refresh-inputs`, its mapping hashes by hand with the review.
 - [profile-lint-baseline.json](./profile-lint-baseline.json): the composition lint ratchet per profile; `node formal/tools/lint-profiles.mjs baseline --check`; `--write` after a reviewed fall.
 - [witness-baseline.json](./witness-baseline.json): the recorded witness hit counts the exploration gate compares against; `witnesses.mjs`; `baseline --write`.
 

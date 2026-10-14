@@ -1,6 +1,6 @@
 # Docs and test behavior audit
 
-[`source-audit.json`](../catalogs/source-audit.json) records reviewed ordinary test declarations and documentation sections. Each entry names its source location and the obligations or boundaries in [`CONTRACTS.md`](./CONTRACTS.md). Parameterized declarations and loops count once here; Vitest expands them into more executions. Get current inventory counts from `node formal/tools/check-source-audit.mjs`; they are not a behavioral coverage percentage.
+[`source-audit.json`](../catalogs/source-audit.json) records reviewed ordinary test declarations and documentation sections. Each entry names its heading or test title and the obligations or boundaries in [`CONTRACTS.md`](./CONTRACTS.md); a repeated title is told apart by its position, never by a line number, so prose above a heading does not move it. Parameterized declarations and loops count once here; Vitest expands them into more executions. Get current inventory counts from `node formal/tools/check-source-audit.mjs`; they are not a behavioral coverage percentage.
 
 The audit separates three questions:
 
@@ -18,7 +18,7 @@ Run:
 node formal/tools/check-source-audit.mjs
 ```
 
-Normal TypeScript tests run the check too, without Quint. It fails when a source file is added/removed, its contents change, a typescript/test/section is added or moved, or an entry lacks a known contract disposition. SHA-256 fingerprints include inline fixture and assertion changes, not just test titles. Shared helper changes must still be reviewed with their consuming tests; helpers are not independently fingerprinted. This prevents a green *stale inventory* from silently being reused after source drift; it cannot judge whether a mapping is correct.
+Normal TypeScript tests run the check too, without Quint. It fails when a source file is added/removed, its contents change, a test or section is added, removed or reordered, or an entry lacks a known contract disposition. SHA-256 fingerprints include inline fixture and assertion changes, not just test titles. Shared helper changes must still be reviewed with their consuming tests; helpers are not independently fingerprinted. This prevents a green *stale inventory* from silently being reused after source drift; it cannot judge whether a mapping is correct.
 
 For a changed file, read the changed assertions/prose and any affected fixtures, then:
 
@@ -37,19 +37,24 @@ For each named file the command recomputes the content hash and the heading or
 test inventory, carries every contract disposition to the entry with the same
 title (the second occurrence of a repeated title to the second), and leaves a
 new or renamed entry with an empty disposition, so the check keeps failing
-until a reviewer fills it. A named file that joined the inventory is added at
+until a reviewer fills it. A repeated title whose number of occurrences
+changed starts every occurrence empty, because position alone cannot say
+which section is which; the report names each disposition it dropped. A named
+file that joined the inventory is added at
 its position; one that left it is dropped. Files not named keep their rows. The
-command assigns no disposition and writes no review. Then re-pin the audit in
-the Go parity ledger, which fingerprints it:
+command assigns no disposition and writes no review. Then re-pin the Go parity
+ledger, which binds to this audit's dispositions:
 
 ```bash
 node formal/tools/check-go-parity.mjs --refresh-inputs
 ```
 
-That command re-pins the six catalog digests under `inputs` and each generated
-vector artifact's digest, nothing else. The TypeScript source and Go binding
-hashes in that ledger are re-pinned by hand with their mapping review
-([GO-PARITY.md](./GO-PARITY.md)). `make audit` runs both checks.
+That command re-pins the five catalog digests under `inputs`, the audit's
+dispositions digest (`sourceAuditDispositionsSha256`, described below) and
+each generated vector artifact's digest, nothing else. After a prose-only edit
+it changes no line. The TypeScript source and Go binding hashes in that ledger
+are re-pinned by hand with their mapping review ([GO-PARITY.md](./GO-PARITY.md)).
+`make audit` runs both checks.
 
 The `sources` inventory covers `README.md`, authored Markdown pages under `docs/`
 (including native language guides), and ordinary `typescript/test/*.test.ts` files,
@@ -82,8 +87,15 @@ review record; the reviewer writes it.
 Guide review is file-level freshness and scope accounting, separate from the
 public section-to-contract mappings. Neither mechanism proves every prose clause
 or infers that a model change still agrees with an unchanged guide. Go's
-applicability ledger retains the public `sources` mappings; its audit hash also
-binds these guide reviews without counting them as additional Go tests.
+applicability ledger binds to this audit through one digest
+(`inputs.sourceAuditDispositionsSha256`) over the schema, every test source's
+content hash, every disposition and every guide review record, and not over a
+documentation file's bytes: a prose edit that keeps its headings and
+dispositions leaves that ledger untouched, while a changed assertion, a new
+section in an audited page or a changed disposition reaches it. A guide's
+headings are not dispositions; a new guide section is rejected by this audit
+until the guide is re-keyed, and reaches the parity ledger only through the
+guide's review record.
 
 ## Claim boundary
 

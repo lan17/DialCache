@@ -151,9 +151,12 @@ navigation, not stored rows, and a mapping is a review record, not an
 equivalence claim. `reviewedTestAndDocumentationAudit` gives each test and
 documentation file in [source-audit.json](../catalogs/source-audit.json) an explicit
 Go-applicability review (native files, adaptations and rationale); the file
-hashes, entry counts and contract sets are the source audit's own. Native
-adaptations retain their rationale and evidence rather than being counted as
-identical language APIs.
+hashes, entry counts and contract sets are the source audit's own. The ledger
+binds to that audit by `inputs.sourceAuditDispositionsSha256`, a digest over
+its dispositions, test-source hashes and guide review records, and re-hashes
+each reviewed test file itself; a documentation file's prose never reaches
+this ledger. Native adaptations retain their rationale and evidence rather
+than being counted as identical language APIs.
 
 `boundaries` carries explicit abstraction and language-binding decisions.
 An exclusion in an older bounded profile must be reconsidered for the full

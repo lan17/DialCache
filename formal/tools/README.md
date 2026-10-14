@@ -18,7 +18,7 @@ which scripts a target runs.
 - [check-source-audit.mjs](./check-source-audit.mjs): the docs and test review ledger against the current files; `--refresh <path>...` re-keys the named files after their review.
 - [check-semantic-coverage.mjs](./check-semantic-coverage.mjs): every semantic case cites scheduled checks, scenarios, vectors and witnesses.
 - [check-feature-coverage.mjs](./check-feature-coverage.mjs): the native feature inventory and its evidence references.
-- [check-go-parity.mjs](./check-go-parity.mjs): the Go parity ledger against the catalogs and both source trees; `--refresh-inputs` re-pins its catalog and vector artifact digests.
+- [check-go-parity.mjs](./check-go-parity.mjs): the Go parity ledger against the catalogs and both source trees; `--refresh-inputs` re-pins its catalog, audit-dispositions and vector artifact digests.
 - [check-model-properties.mjs](./check-model-properties.mjs): the model-fault challenge catalog; `--only=<id>` measures one.
 - [check-kernel-fixtures.mjs](./check-kernel-fixtures.mjs): typechecks and runs the kernel fixtures (`make kernel-fixtures`).
 - [check-symbolic-models.mjs](./check-symbolic-models.mjs): the finite symbolic checks with Apalache (`make model-check`).

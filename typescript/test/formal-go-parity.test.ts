@@ -21,12 +21,14 @@ type Ledger = {
 };
 type SemanticCases = { cases: Array<{ id: string; models: string[]; quintReplays?: string[]; generatedVectors?: Array<{ artifact: string; group?: string; name: string }> }> };
 type Profiles = { profiles: Array<{ id: string; model: string; smoke: string }> };
-type Inputs = { semantic?: SemanticCases; profileManifest?: Profiles };
+type Audit = { sources: Array<{ path: string; sha256: string; entries: Array<{ title: string; contracts: string[] }> }> };
+type Inputs = { semantic?: SemanticCases; profileManifest?: Profiles; audit?: Audit };
 
 const formal = (name: string) => JSON.parse(readFileSync(new URL(`../../formal/catalogs/${name}`, import.meta.url), "utf8"));
 const ledger = () => formal("go-parity.json") as Ledger;
 const semantic = () => formal("semantic-cases.json") as SemanticCases;
 const profiles = () => formal("profiles.json") as Profiles;
+const audit = () => formal("source-audit.json") as Audit;
 const checker = new URL("../../formal/tools/check-go-parity.mjs", import.meta.url).href;
 // Keep the ledger in-process: these assertions test the exported accounting
 // checker, so a subprocess adds no behavioral coverage.
@@ -147,7 +149,7 @@ describe("Go parity ledger freshness", () => {
     expect(() => validate(input)).toThrow(/Required\/referenced witness inventory is stale/);
   });
 
-  it("re-pins the catalog and vector artifact digests and nothing else", () => {
+  it("re-pins the catalog, dispositions and vector artifact digests and nothing else", () => {
     const stale = ledger();
     for (const field of Object.keys(stale.inputs)) stale.inputs[field] = "0".repeat(64);
     stale.vectorExports[0]!.artifactSha256 = "0".repeat(64);
@@ -166,5 +168,23 @@ describe("Go parity ledger freshness", () => {
   it("encodes the ledger as it is committed", () => {
     const committed = readFileSync(new URL("../../formal/catalogs/go-parity.json", import.meta.url), "utf8");
     expect(encodeLedger(JSON.parse(committed))).toBe(committed);
+  });
+
+  it("stays clean on a prose-only documentation edit", () => {
+    const prose = audit();
+    for (const source of prose.sources.filter(source => source.path.endsWith(".md"))) source.sha256 = "0".repeat(64);
+    expect(validate(ledger(), { audit: prose })).toMatchObject({ kind: "accounting-and-freshness" });
+  });
+
+  it("still fails on a changed test assertion or a changed disposition", () => {
+    const assertion = audit();
+    assertion.sources.find(source => source.path.endsWith(".test.ts"))!.sha256 = "0".repeat(64);
+    expect(() => validate(ledger(), { audit: assertion })).toThrow(/source-audit.json: reviewed dispositions, test hashes or guide reviews changed/);
+    expect(() => validate(ledger(), { audit: assertion })).toThrow(/\.test\.ts: reviewed test contents changed/);
+    const disposition = audit();
+    const entry = disposition.sources.find(source => source.path.endsWith(".md"))!.entries[0]!;
+    entry.contracts = [...entry.contracts, "C99"];
+    expect(() => validate(ledger(), { audit: disposition })).toThrow(/reviewed dispositions, test hashes or guide reviews changed/);
+    expect(() => validate(ledger(), { audit: disposition })).not.toThrow(/contents changed/);
   });
 });
