@@ -62,7 +62,7 @@ flowchart TD
   G -->|record Accepted| I["Implement the type's steps"]
   N -->|no| I
   I --> P["Push to a draft PR"]
-  P --> V["Validate the head commit<br/>PR CI, plus a full run<br/>when the type needs one"]
+  P --> V["Validate the head commit<br/>PR CI, plus the formal tier<br/>the type needs"]
   V --> F{"Ready for<br/>review?"}
   F -->|no| I
   F -->|yes| RD["Mark the PR ready"]
@@ -79,23 +79,35 @@ then it stays a draft.
 
 ## How much validation a change needs
 
+Validation comes in tiers. Each tier adds to the one before it, and a change runs the tier its
+type needs once, on the final candidate.
+
 - **PR CI** runs on every push to a pull request and takes minutes. It runs each language's native
   tests and real Redis, Valkey and Cluster integrations, cross-language wire tests, the committed
   smoke histories (a small fixed sample of generated histories), the ledger audit and the
   documentation build. When a Quint file or a build input changes, it also regenerates the
   committed Quint artifacts and runs differential checks against `main`.
-- **Full** adds the `Full formal verification` workflow on the same commit: Quint model checks,
-  replay of the complete corpus (every history generated from the fixed seeds) in every port, and
-  mutation campaigns that plant known bugs and require the tests to catch them. It takes about two
-  and a half hours and runs when dispatched, or weekly on `main`.
-- **Full with exploration** is the same workflow with its exploration option on, as in the weekly
-  run. It also generates histories from a fresh random seed in an isolated copy of the source,
-  which catches problems the fixed seeds miss.
+- **Replay** adds the formal workflow in `replay` mode. It generates the corpus (every history the
+  Quint models produce from fixed seeds) and replays it in every port, in about 15 minutes. The
+  corpus is restored from a cache when the models and their tooling are unchanged, so most runs
+  skip generation. This is the tier for behavior and API changes in the ports, and for new Quint
+  regressions, whose histories join the corpus.
+- **Mutations** adds the TypeScript, Go and Rust mutation campaigns, which plant known bugs in a
+  port and require its tests to catch them, in about 50 minutes. A change that edits code a
+  catalogued mutant targets needs it.
+- **Full** adds the Quint model checks and the model-fault campaign, which plants bugs in the
+  models themselves and requires an invariant to catch each one, in about two and a half hours.
+  The campaign reads only the models, the challenge catalog and the Quint toolchain, so only
+  changes to those need it.
+- The weekly run on `main` is Full with **exploration**: it also generates histories from a fresh
+  random seed in an isolated copy of the source, which catches problems the fixed seeds miss.
 
-A result counts only for the commit it ran on, so any later push, a rebase included, needs new runs.
-GitHub requires only the `test` check and one approval, and the maintainer merges through an admin
-bypass, so nothing on GitHub blocks a merge with a red check. The process does: a pull request stays
-in draft until the validation its type requires has passed on its head commit.
+A result counts only for the commit it ran on. A green run still covers a later commit when PR CI
+passes there and the difference is only prose, design records or ledger pins; any other push, a
+rebase included, needs a new run. GitHub requires only the `test` check and one approval, and the
+maintainer merges through an admin bypass, so nothing on GitHub blocks a merge with a red check.
+The process does: a pull request stays in draft until the tier its type requires has passed on
+its head commit.
 
 **Ledgers** in `formal/catalogs/` record the hash at which each reviewed file was last read: every
 docs page, the formal guides, several READMEs and selected tests and sources. Editing a pinned file
@@ -108,23 +120,23 @@ happened.
 | Type | Example | Design record | Least validation |
 | --- | --- | --- | --- |
 | Portable behavior | A new cache operation that every port offers | Required | Full |
-| Bug fix | Go serves a value the contract says is stale | Only when it reverses a decision | Full |
+| Bug fix | Go serves a value the contract says is stale | Only when it reverses a decision | Replay |
 | Public API | Exporting an existing type from one port | When every port mirrors it, or it changes how callers construct the cache or call its operations | PR CI |
 | Docs | Correcting a default in a guide | None | PR CI |
 | Refactor or move | Splitting a module without changing behavior | None | PR CI |
-| Formal infrastructure | Changing the replay protocol | When it changes how conformance is established | Full with exploration |
+| Formal infrastructure | Changing the replay protocol | When it changes how conformance is established | Full |
 | Tooling | Upgrading a dependency | None | PR CI |
-| New port | A fifth language | Required | Full with exploration |
+| New port | A fifth language | Required | Full |
 | Release | Publishing a version | None | Maintainer only |
 
 A change that spans types follows every matching path and the strictest validation, and a doubtful
 case takes the stricter type. Any change that reverses an earlier decision needs a record, whether
 that decision lives in a record, an issue or a pull request.
 
-Some changes need more than the table's minimum. Touching replay code, or source text that a
-mutation campaign rewrites, needs Full. Upgrading a Quint or language toolchain needs Full. A move,
-or a new conformance profile (a new group of histories that every port replays), needs Full with
-exploration. AGENTS.md states the exact conditions and the steps for each type.
+Some changes need more than the table's minimum. Touching port source or the replay code that
+drives it needs Replay. Editing code a catalogued mutant targets needs Mutations. Changing a Quint
+transition or invariant, a toolchain pin or the repository layout needs Full. AGENTS.md states the
+exact conditions and the steps for each type.
 
 ## Design records
 
@@ -198,8 +210,8 @@ sequenceDiagram
   Note over A: Contract, Quint model and regressions
   Note over A: TypeScript, then Go, Rust and Python
   Note over A: Docs, evidence catalogs and ledgers
-  A->>G: Push, then dispatch the full run
-  G-->>A: PR CI and full run green on the head
+  A->>G: Push, then dispatch the formal tier
+  G-->>A: PR CI and the tier green on the head
   A->>G: Mark the PR ready
   M->>G: Review and merge
 ```
@@ -208,8 +220,8 @@ sequenceDiagram
 
 Semantic Release computes each version from the Conventional Commit types, such as `feat` and `fix`,
 in the titles of pull requests merged since the last release tag. No one picks a version number by
-hand. The maintainer dispatches the `Release` workflow from the current `main` commit after a full
-run has passed on it; the workflow rejects any other commit but does not check the full run. It
+hand. The maintainer dispatches the `Release` workflow from the current `main` commit after a Full
+run has passed on it; the workflow rejects any other commit but does not check the run. It
 opens a `release:` pull request. Merging that pull request publishes to npm, crates.io and PyPI,
 creates the GitHub release and tags the Go module. The steps are in
 [docs/maintainers.md](docs/maintainers.md#releasing).

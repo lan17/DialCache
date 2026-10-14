@@ -14,14 +14,14 @@ Classify before editing, because the type sets the design record, the steps and 
 
 | Type | Covers | Record ([design/README.md](design/README.md)) | Validation before leaving draft |
 | --- | --- | --- | --- |
-| Portable behavior | A `CONTRACTS.md` obligation added, changed or removed; a new conformance profile with its replay descriptor and witness classifier | Required | Full; Full with exploration for a new profile |
-| Bug fix | A port or Quint model missing a contract whose text stays; new invariants, regressions or challenges | None, unless it reverses a recorded decision | Full |
-| Public API | Public names added, renamed, exported or removed | When every port must mirror it, or it reshapes how one port's callers construct the cache or call its operations | PR CI; Full if the mutant rule fires or a replay driver changes |
+| Portable behavior | A `CONTRACTS.md` obligation added, changed or removed; a new conformance profile with its replay descriptor and witness classifier | Required | Full |
+| Bug fix | A port or Quint model missing a contract whose text stays; new invariants, regressions or challenges | None, unless it reverses a recorded decision | Replay; Mutations if the mutant rule fires; Full if a Quint transition or invariant changes |
+| Public API | Public names added, renamed, exported or removed | When every port must mirror it, or it reshapes how one port's callers construct the cache or call its operations | PR CI; Replay if port source or a replay driver changes; Mutations if the mutant rule fires |
 | Docs | Guides, READMEs, examples, doc comments | None | PR CI |
-| Refactor or move | Structure changes; behavior, public API and the driver contract (action names, choice encodings, observation fields) unchanged | None | PR CI; Full if the mutant rule fires or a `.qnt` file or replay driver changes; Full with exploration for a move |
-| Formal infrastructure | `formal/tools/`, shared `formal/replay/` code, the kernel library, the replay protocol and observation records, catalog schemas, gates | When it changes how conformance is established | Full with exploration |
+| Refactor or move | Structure changes; behavior, public API and the driver contract (action names, choice encodings, observation fields) unchanged | None | PR CI; Replay if port source, a `.qnt` file or a replay driver changes; Mutations if the mutant rule fires; Full for a move |
+| Formal infrastructure | `formal/tools/`, shared `formal/replay/` code, the kernel library, the replay protocol and observation records, catalog schemas, gates | When it changes how conformance is established | Full |
 | Tooling | Dependencies, workflows, `Makefile`, `scripts/`, toolchain pins | None | PR CI; Full if a Quint or language toolchain pin changes |
-| New port | Another language implementation | Required | Full with exploration |
+| New port | Another language implementation | Required | Full |
 | Release | Versions and publication | None | Maintainer only |
 
 - A change spanning types follows every matching path and the strictest validation; when unsure
@@ -33,13 +33,22 @@ Classify before editing, because the type sets the design record, the steps and 
   requires only the `test` check and one approval, and the maintainer merges through an admin
   bypass, so `quint`, `differential (1)` to `(4)`, `Build documentation` and `Validate PR title`
   can be red at merge.
-- **Full:** PR CI plus a green `Full formal verification` run on the same commit. Start it with
-  `gh workflow run formal-full.yaml --ref <branch> [-f exploration=true]` and read it with
-  `gh run list --workflow formal-full.yaml --branch <branch> --json databaseId,headSha,status,conclusion`;
+- **Replay:** PR CI plus a green run of `formal-full.yaml` in `replay` mode on the same commit:
+  `gh workflow run formal-full.yaml --ref <branch> -f mode=replay`. It generates the corpus from
+  the branch's Quint files, or restores it from a cache when every generation input is unchanged,
+  and replays it in all four ports; about 15 minutes. New Quint regressions join the corpus, so
+  the ports must pass them. Read a run with
+  `gh run list --workflow formal-full.yaml --branch <branch> --json databaseId,displayTitle,headSha,status,conclusion`;
   `gh pr checks` omits it.
-- **Mutant rule:** it fires when a change renames, moves or rewrites text quoted by a `before` or
-  `after` edit in `formal/catalogs/mutations.json` or `rust-mutations.json`. PR CI matches only the
-  `before` anchors; only the full mutation lanes compile each mutant.
+- **Mutations:** Replay plus the TypeScript, Go and Rust mutation campaigns (`-f mode=mutations`);
+  about 50 minutes.
+- **Full:** Mutations plus the Quint model checks and the model-fault campaign (`-f mode=full`);
+  about two and a half hours. The campaign reads only the models, the challenge catalog and the
+  Quint toolchain, so only changes to those need it. The weekly run on `main` is Full with
+  exploration.
+- **Mutant rule:** it fires when a change edits a file that an entry in
+  `formal/catalogs/mutations.json` or `rust-mutations.json` names, or edits those catalogs. PR CI
+  matches only the `before` anchors; only the mutation lanes compile and measure each mutant.
 - **Replay driver:** code that replays generated histories: `typescript/test/formal/`, the Go
   `*_driver_test.go` and `*_replay_test.go` files, `rust/tests/formal/` and `python/tests/formal/`.
 
@@ -184,8 +193,8 @@ the one the ruleset requires.
 
 Classify the PR with the table, then check its head commit against every step of each matching
 path, Critical behavior and the Finish list. A conflict with `main` needs a rebase, and the rebased
-head needs new runs. Report findings in the session; post them on GitHub, as a comment review, only
-when asked.
+head needs the tier's run again unless an earlier green run covers it. Report findings in the
+session; post them on GitHub, as a comment review, only when asked.
 
 ### Refresh pinned ledgers
 
@@ -200,14 +209,17 @@ of them is edited by hand.
 
 ### Validate the head commit
 
-- A result counts only for its commit. When the type needs Full, dispatch the full run, about two
-  and a half hours, on the final head; any later push, rebase included, needs new runs. If it is
-  still running when the turn ends, leave the PR in draft and give the run ID, its commit and its
-  state in the final message.
+- A result counts only for its commit. Dispatch the tier the type needs once, on the final
+  candidate: after review comments are addressed and PR CI is green. Before that, iterate with
+  PR CI and local lanes (`make formal-<port>`, `make mutations-<port> MUTATION_ONLY=<ids>`), which
+  never replace it. A green run on an earlier commit still covers the head when PR CI passes on
+  the head and the diff between them touches only prose, design records or ledger pins; any other
+  push, a rebase included, needs a new run. If a run is still in progress when the turn ends,
+  leave the PR in draft and give the run ID, its commit and its state in the final message.
 - Run each check as its own command and read its exit status, since `| tail` or `|| true` hides
   failures. Never chain a commit or push behind a check.
 - Before calling a failure a flake, compare the lane's latest `main` run. Report a red `main`
-  lane.
+  lane, and file an issue for it when none exists.
 - Give a slow new test an explicit timeout, since Vitest's 5-second default fails on hosted
   runners.
 - Lint Python changes with `python/.venv/bin/python -m ruff check python`, after
@@ -232,8 +244,9 @@ The PR leaves draft only when all of these hold; the maintainer then reviews and
 - [ ] Each step of every matching path is done, or the description says why not.
 - [ ] A required record lists this PR, has each departure under its Deviations, and is `Accepted`,
       or `Implemented` when this PR completes its work.
-- [ ] The type's validation passed on the current head. The description, re-read against the
-      final diff, lists each run with its commit and each required lane not run.
+- [ ] The type's tier passed on the current head, or a green run on an earlier commit covers it.
+      The description, re-read against the final diff, lists each run with its commit and each
+      required lane not run.
 - [ ] The description's Open questions section is gone.
 - [ ] The final message gives the PR link and state, open decisions, validation and follow-ups.
 

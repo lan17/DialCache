@@ -43,12 +43,16 @@ for setup, reports and single-history reproduction.
 
 Pull requests run fast native/smoke checks and real integrations. Changes to
 model or generator inputs also trigger fresh Quint artifact recomputation.
-Complete exploration and mutation measurement run through the manual and
-weekly full-validation workflow, using the same Make targets as local runs.
-Run full validation for changes to behavior, models or replay tooling before
-merge, and before release or accepting another port. A scheduled result applies
-to its recorded revision; it does not validate a later PR head. A smoke pass
-does not establish full conformance.
+Complete replay, mutation measurement and exploration run through the manual
+and weekly formal workflow, using the same Make targets as local runs. Its
+`mode` input selects `replay` (the generated corpus in every port, about 15
+minutes), `mutations` (plus the port mutation campaigns, about 50 minutes) or
+`full` (plus the model checks and the model-fault campaign, about two and a
+half hours). Before merge, run `replay` or `mutations` for changes to port
+behavior or replay tooling and `full` for changes to the models, the kernel
+library or the Quint toolchain; run `full` before a release or before accepting
+another port. A scheduled result applies to its recorded revision; it does not
+validate a later PR head. A smoke pass does not establish full conformance.
 
 CI uses Node.js 24 for development and integration, then validates the packed
 package and zstd at the exact 22.x consumer floor, Node.js 22.15.0. The published

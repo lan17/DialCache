@@ -616,6 +616,46 @@ describe("full formal workflow shape", () => {
     expect(summary.path).toContain("formal-summary/model-check/model-properties/report.json");
   });
 
+  it("tiers the lanes by the mode input, restores the corpus from a cache keyed on every generation input, and gates each mode on the lanes it selects", async () => {
+    const yamlPath = createRequire(createRequire(import.meta.url).resolve("vitest/package.json")).resolve("yaml");
+    const { parse } = await import(pathToFileURL(yamlPath).href) as { parse(text: string): Record<string, unknown> };
+    const workflow = parse(readFileSync(new URL("../../.github/workflows/formal-full.yaml", import.meta.url), "utf8")) as {
+      "run-name": string; on: { workflow_dispatch: { inputs: { mode: { type: string; options: string[]; default: string } } } };
+    };
+    // Each mode adds to the previous one; the schedule has no inputs and must behave as full.
+    expect(workflow.on.workflow_dispatch.inputs.mode).toMatchObject({ type: "choice", options: ["replay", "mutations", "full"], default: "full" });
+    expect(workflow["run-name"]).toBe("Formal $" + "{{ inputs.mode || 'full' }} on $" + "{{ github.ref_name }}");
+    expect(jobs["check-models"]!.if).toBe("(github.event_name != 'schedule' || github.ref == 'refs/heads/main') && inputs.mode != 'replay' && inputs.mode != 'mutations'");
+    for (const lane of ["typescript-mutations", "go-mutations", "rust-mutations"]) expect(jobs[lane]!.if, lane).toBe("inputs.mode != 'replay'");
+    for (const lane of ["typescript-parity", "go-parity", "rust-parity", "python-parity", "symbolic", "generate"]) expect(jobs[lane]!.if ?? "", lane).not.toMatch(/inputs\.mode/);
+    // The cache key must name every input generation reads and only an exact key may restore,
+    // so a corpus from different models can never stand in for a regenerated one.
+    const steps = jobs.generate!.steps;
+    const restore = steps.find(step => step.uses?.startsWith("actions/cache/restore@"))!;
+    const save = steps.find(step => step.uses?.startsWith("actions/cache/save@"))!;
+    expect(restore.with).toMatchObject({ path: ".formal-traces" });
+    expect(restore.with).not.toHaveProperty("restore-keys");
+    const key = String(restore.with!.key);
+    for (const input of ["formal/models/**", "formal/replay/**", "formal/tools/**", "formal/generated/**", "formal/catalogs/**", "typescript/test/fixtures/**", ".github/actions/setup-quint/**", "Makefile", "pnpm-lock.yaml"]) expect(key, input).toContain(`'${input}'`);
+    for (const ledger of ["source-audit", "go-parity", "feature-coverage"]) expect(key, ledger).toContain(`'!formal/catalogs/${ledger}.json'`);
+    const generate = steps.find(step => step.run === "make formal-generate")!;
+    expect(generate.if).toBe("steps.corpus.outputs.cache-hit != 'true'");
+    expect(save.if).toBe("steps.corpus.outputs.cache-hit != 'true'");
+    expect(save.with).toMatchObject({ path: ".formal-traces", key: "$" + "{{ steps.corpus.outputs.cache-primary-key }}" });
+    expect(steps.indexOf(restore)).toBeLessThan(steps.indexOf(generate));
+    expect(steps.indexOf(generate)).toBeLessThan(steps.indexOf(save));
+    // Every mode requires the corpus and the four replays; a lane a mode does not select must
+    // report skipped, so a dispatch cannot pass as a stronger mode than it ran.
+    const gate = jobs["formal-full"]!.steps.find(step => step.run?.includes("_RESULT"))!;
+    expect(gate.env).toMatchObject({ MODE: "$" + "{{ inputs.mode || 'full' }}" });
+    const branch = (mode: string) => gate.run!.slice(gate.run!.indexOf(`${mode})`), gate.run!.indexOf(";;", gate.run!.indexOf(`${mode})`)));
+    for (const mode of ["full", "mutations", "replay"]) for (const lane of ["CHECK_MODELS", "TYPESCRIPT_MUTATIONS_MERGE", "GO_MUTATIONS_MERGE", "RUST_MUTATIONS_MERGE"]) {
+      const expected = mode === "full" || (mode === "mutations" && lane !== "CHECK_MODELS") ? "success" : "skipped";
+      expect(branch(mode), `${mode}: ${lane}`).toMatch(new RegExp(`test "\\$${lane}_RESULT" = ${expected}`));
+    }
+    for (const lane of ["GENERATE", "TYPESCRIPT", "GO", "RUST", "PYTHON", "SYMBOLIC"]) expect(gate.run!.slice(0, gate.run!.indexOf("case "))).toMatch(new RegExp(`test "\\$${lane}_RESULT" = success`));
+  });
+
   it("runs the differential on pull requests only, against the base branch, with the replay logs preserved", async () => {
     const yamlPath = createRequire(createRequire(import.meta.url).resolve("vitest/package.json")).resolve("yaml");
     const { parse } = await import(pathToFileURL(yamlPath).href) as { parse(text: string): { jobs: Record<string, Job> } };

@@ -217,21 +217,21 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "836a026530b6773e06aa461a29891fe8c6d2578360f5678702e8d7374d2deb09",
+      "sha256": "21fa658dd78a49dd840183443708d95b8c2db08d567a39bb2d39be22e4d01983",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
-        {"line":64,"title":"Maintaining the reference","contracts":["E05","B01"]},
-        {"line":110,"title":"Run the documentation site","contracts":["B01"]},
-        {"line":137,"title":"Publish to GitHub Pages","contracts":["B01"]},
-        {"line":153,"title":"Cache-path benchmark","contracts":["X02"]},
-        {"line":175,"title":"Redis write benchmark","contracts":["X02"]},
-        {"line":198,"title":"Stale-on-error benchmark","contracts":["X02"]},
-        {"line":226,"title":"Releasing","contracts":["B01","E05"]},
-        {"line":308,"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
-        {"line":336,"title":"Retry a Rust publication","contracts":["B01","E05"]},
-        {"line":350,"title":"Set up PyPI publishing once","contracts":["B01","E05"]},
-        {"line":371,"title":"Retry a Python publication","contracts":["B01","E05"]}
+        {"line":68,"title":"Maintaining the reference","contracts":["E05","B01"]},
+        {"line":114,"title":"Run the documentation site","contracts":["B01"]},
+        {"line":141,"title":"Publish to GitHub Pages","contracts":["B01"]},
+        {"line":157,"title":"Cache-path benchmark","contracts":["X02"]},
+        {"line":179,"title":"Redis write benchmark","contracts":["X02"]},
+        {"line":202,"title":"Stale-on-error benchmark","contracts":["X02"]},
+        {"line":230,"title":"Releasing","contracts":["B01","E05"]},
+        {"line":312,"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
+        {"line":340,"title":"Retry a Rust publication","contracts":["B01","E05"]},
+        {"line":354,"title":"Set up PyPI publishing once","contracts":["B01","E05"]},
+        {"line":375,"title":"Retry a Python publication","contracts":["B01","E05"]}
       ]
     },
     {
@@ -1597,15 +1597,15 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "70dcafee96aea5a927e7acc99021ddeec3818e176497c95d7f783ca8ca442cb6",
+      "sha256": "c9ed44c82472820692190c26e65e261ff1af9bc2ab49b8abef9f9ac79104f304",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
-        {"line":77,"title":"Reading a completion report"},
-        {"line":96,"title":"Mutation evidence"},
-        {"line":210,"title":"Exploratory runs"},
-        {"line":266,"title":"A retained sampling regression"},
-        {"line":303,"title":"Historical results"}
+        {"line":91,"title":"Reading a completion report"},
+        {"line":110,"title":"Mutation evidence"},
+        {"line":224,"title":"Exploratory runs"},
+        {"line":280,"title":"A retained sampling regression"},
+        {"line":317,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",
