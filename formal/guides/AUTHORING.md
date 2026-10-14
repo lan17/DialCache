@@ -91,7 +91,7 @@ acceptance judgments belong in `cache-rules.qnt`; acquired snapshot and source
 ownership contracts belong in `cache-contract.qnt`. A profile supplies its
 normalized policy, clocks and environment; it must not restate those decisions.
 Where representations differ, add an executable projection/connection check
-that compares profile history with the contract. Give the [projection](./GLOSSARY.md#projection) an explicit
+that compares profile history with the contract. Give the projection an explicit
 scope and challenge mistakes in policy capture, event timing or ownership.
 
 `node formal/tools/lint-profiles.mjs <model.qnt> [--kernel=<module,...>] --witness=<regex>`

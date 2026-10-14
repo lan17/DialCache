@@ -29,7 +29,7 @@ A sum-typed, model-checked Quint model that isolates one ownership or safety bou
 
 ### Connection model
 
-A Quint model that imports one conformance profile as its only executing machine, projects the profile's external events into the acquired records of cache-contract.qnt (recovery snapshots, source executions) and checks captured identity, timing and ownership against them at every step. It is a bounded checked connection, not a refinement proof. Owner: [cache-contract.qnt](../models/cache-contract.qnt), [SPEC.md](./SPEC.md)
+A Quint model that imports one conformance profile as its only executing machine and checks the profile's history, step by step, against facts the profile does not carry. Three (recovery-read, independent, source-budgets) project the profile's events into the acquired records of cache-contract.qnt (recovery snapshots, source executions); recovery and shadow-layers state their clauses over the pre-state of each step instead. It is a bounded checked connection, not a refinement proof. Owner: [cache-contract.qnt](../models/cache-contract.qnt), [SPEC.md](./SPEC.md)
 
 ### Smoke
 
@@ -37,7 +37,7 @@ One committed named history per conformance profile, `formal/generated/<profile>
 
 ### Lane
 
-One validation pipeline run as its own make target and hosted CI job: the Quint evidence lane (`formal-check`), generation (`formal-generate`), the per-port parity lanes (`formal-ts`, `formal-go`, `formal-rust`), the mutation lanes, and the differential, symbolic, exploration, smoke, audit and integration lanes. Parity and mutation lanes depend only on the generated corpus and witness evidence, so they run in parallel; the aggregate requires every lane. Owner: [VALIDATION.md](./VALIDATION.md)
+One validation pipeline run as its own make target and hosted CI job: the Quint evidence lane (`formal-check`), generation (`formal-generate`), the per-port parity lanes (`formal-ts`, `formal-go`, `formal-rust`, `formal-python`), the mutation lanes, and the differential, symbolic, exploration, smoke, audit and integration lanes. Parity and mutation lanes depend only on the generated corpus and witness evidence, so they run in parallel; the aggregate requires every lane. Owner: [VALIDATION.md](./VALIDATION.md)
 
 ### Corpus, history, regression, exported run and public-only run
 
@@ -49,7 +49,7 @@ The corpus differential (`make differential`, differential.mjs). For each compos
 
 ### Bytes per state
 
-The trace-size signal the differential bounds: the ITF bytes of a profile's sampled corpus divided by its states. A rewrite may grow it at most 1.2 times over the reference unless the model declares `differential.maxBytesPerStateRatio`, with the reason recorded in [HISTORY.md](./HISTORY.md). A new profile records its absolute value and stays below the admission reference (4731); a projection exists only where the layered shape cannot meet this bound. Owner: [differential.mjs](../tools/differential.mjs), [kernel/README.md](../models/kernel/README.md)
+The trace-size signal the differential bounds: the ITF bytes of a profile's sampled corpus divided by its states. A rewrite may grow it at most 1.2 times over the reference unless the model declares `differential.maxBytesPerStateRatio`, with the reason recorded in [HISTORY.md](./HISTORY.md). A new profile also records its absolute value and keeps it below the admission reference (4731), or states why its shape must exceed it; a projection exists only where the layered shape cannot meet the ratio bound. Owner: [differential.mjs](../tools/differential.mjs) (the ratio), [kernel/README.md](../models/kernel/README.md) (the absolute reference)
 
 ## Kernel library and composition
 
@@ -71,7 +71,7 @@ A library transition over a wider shape that records beside the transition it wr
 
 ### Judgment, "judged once" and "applied from a judgment"
 
-A judgment is the pure record of what a release or read decides on the pre-state (`LayeredRelease`, `RequestRelease`, `remote_frames::Observed`), computed once by `judgeRelease`, `layeredRelease` or `observe`. A transition "applied from a judgment" takes that record as an argument (`releaseJudged`, `settleObserved`) instead of recomputing it, so a variant recording beside the step judges once and applies the same judgment, however many records compose around the traversal. Owner: [serving.qnt](../models/kernel/serving.qnt)
+A judgment is the pure record of what a release or read decides on the pre-state (`LayeredRelease`, `RequestRelease`, `remote_frames::Observed`), computed once by `judgeRelease`, `layeredRelease`, `requestRelease` or `observe`. A transition "applied from a judgment" takes that record as an argument (`releaseJudged`, `settleObserved`) instead of recomputing it, so a variant recording beside the step judges once and applies the same judgment, however many records compose around the traversal. The shared predicates of cache-rules.qnt (age, expiry, deadline and fence) are also called judgments: the judgment layer every model consumes. Owner: [serving.qnt](../models/kernel/serving.qnt), [cache-rules.qnt](../models/cache-rules.qnt)
 
 ### Seam
 
@@ -79,7 +79,7 @@ In the kernel, the one point where a composing module takes over a step already 
 
 ### Receipt
 
-In the kernel, the `receipts` module's record of the latest release: caller, key, serving layer and the local slot as the release found it. One-step expiry and freshness properties read it; the traversal never does. It is a receipted variant of the layered release. Not the replay protocol's settlement receipt. `HeldDump.sampled` is the pre-serialization receipt, and AUTHORING.md asks for receipt-style invariants that record acquired facts independently of the helper they guard. Owner: [receipts.qnt](../models/kernel/receipts.qnt)
+In the kernel, the `receipts` module's record of the latest release: caller, key, serving layer and the local slot as the release found it. One-step expiry and freshness properties read it; the traversal never does. It is a receipted variant of the layered release. Not the replay protocol's settlement receipt. `HeldDump.sampled` is the pre-serialization receipt, `metrics::FrameReadReceipt` records a frame read's facts without judging them, and AUTHORING.md asks for receipt-style invariants that record acquired facts independently of the helper they guard. Owner: [receipts.qnt](../models/kernel/receipts.qnt)
 
 ### Consulted record
 
@@ -117,7 +117,7 @@ The transitions that carry one flight from admission to completion over a given 
 
 ### Flight
 
-A registered source execution and the callers it owns: one `sources` record from its start to its completion. It starts at a read dispatch, or at admission or at a release without the remote layer. It is registered under its process identity and, when the caller memoizes and coalesces, under its request memo slot. Followers join a pending flight; settling clears every registry slot, so a finished flight never coalesces a later caller. Owner: [flights.qnt](../models/kernel/flights.qnt)
+A registered source execution and the callers it owns: one `sources` record from its start to its completion. It starts at a read dispatch, or at admission or at a release without the remote layer. A shared source is registered under its process identity and, when the caller memoizes and coalesces, under its request memo slot; a detached or unshared one is registered nowhere. Followers join a pending flight; settling clears every registry slot, so a finished flight never coalesces a later caller. Owner: [flights.qnt](../models/kernel/flights.qnt)
 
 ### Source, loader and ordinal
 
@@ -153,7 +153,7 @@ A reply is what the policy provider returns; its resolution is what the kernel u
 
 ### Participating and bypass
 
-A caller participates when it is enabled, its key constructed and its scope open: it makes a policy call and traverses the layers its reply resolves to. Any other caller (disabled context, outside call, failed key, scope closed since admission) bypasses every layer and registry with the `BYPASS` reply and starts its own unshared source. Only the failed-key bypass keeps the configured source deadline (C27); the others run unbounded (C01). Owner: [serving.qnt](../models/kernel/serving.qnt), [calls.qnt](../models/kernel/calls.qnt)
+A caller participates when it is enabled, its key constructed and its scope open: it makes a policy call and traverses the layers its reply resolves to. Any other caller (disabled context, outside call, failed key, scope closed since admission) bypasses every layer and registry with the `BYPASS` reply and starts its own unshared source. A source bypassed at admission runs unbounded (C01) unless the key failed, the one admission bypass that keeps the configured source deadline (C27); a caller whose scope closed since admission bypasses at release, and a release-started source is always bounded. Owner: [serving.qnt](../models/kernel/serving.qnt), [calls.qnt](../models/kernel/calls.qnt)
 
 ### Scope, context, persistent context and memo slot
 
@@ -167,7 +167,7 @@ Kernel identity is the process identity a call serves, `instance * keysPerInstan
 
 ### Witness, label and classifier
 
-A witness is a required boundary, outcome or race the generated corpus must reach, named per profile in coverage-witnesses.json. A label is the string a classifier credits to a history at a checkpoint step (`action:x`, `fixture:n`, `outcome:y` or a named rule); a witness is a required label. A classifier is the per-profile module under replay/witnesses that reads only recorded inputs and public observations; driver observations never enter it. Owner: [witnesses/index.mjs](../replay/witnesses/index.mjs), [coverage-witnesses.json](../catalogs/coverage-witnesses.json)
+A witness is a required boundary, outcome or race the generated corpus must reach, named per profile in coverage-witnesses.json. A label is the string a classifier credits to a history at a checkpoint step (`action:x`, `fixture:n`, `outcome:y` or a named rule); a witness is a required label. A classifier is the per-profile module under replay/witnesses; the rule is that it reads only recorded inputs and public observations, and `layers.mjs` and parts of `runtime.mjs` still owe that migration. Driver observations never enter it. Owner: [witnesses/index.mjs](../replay/witnesses/index.mjs), [coverage-witnesses.json](../catalogs/coverage-witnesses.json)
 
 ### Fidelity
 
@@ -183,11 +183,11 @@ An entry of mutations.json (Rust: rust-mutations.json): one described fault with
 
 ### Exclusion (structural versus measured)
 
-For a fault in a shared library, every profile is partitioned by its imports. A non-importing profile is excluded structurally, derived from the imports with no catalog entry. An importing profile is either listed in `reproducer.profiles` and must detect the mutant, or named in `exclusions` with a reason (a reaching exclusion); the checker measures that exclusion by requiring every run and scheduled invariant to keep passing (`holds`). Owner: [check-model-properties.mjs](../tools/check-model-properties.mjs), [AUTHORING.md](./AUTHORING.md)
+For a fault in a shared library, every profile is partitioned by its imports. A non-importing profile is excluded structurally, derived from the imports with no catalog entry. An importing profile is either listed in `reproducer.profiles` and must detect the mutant, or named in `exclusions` with a reason (a reaching exclusion); the checker measures that exclusion by requiring the profile's runs to keep passing under the mutant (`holds`), and its scheduled invariants too when one challenge is measured alone. Owner: [check-model-properties.mjs](../tools/check-model-properties.mjs), [AUTHORING.md](./AUTHORING.md)
 
 ### Evidence
 
-What an executable check establishes, recorded so a reviewer can re-derive it: model properties, generated witnesses, exported regressions, vector replays, fixed scenarios and native tests are distinct, overlapping categories. Concretely it names the evidence catalogs under `catalogs/`, the per-profile witness evidence files that `witnesses.mjs evaluate` writes with corpus and input hashes, and the completion and mutation reports under `.formal-traces/`. Passing a finite corpus is evidence for a claim, not proof. Owner: [SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md), [VALIDATION.md](./VALIDATION.md)
+What an executable check establishes, recorded so a reviewer can re-derive it. The semantic coverage checker counts six overlapping categories: model (a scheduled invariant or run), portable (fixed scenarios, witnesses, exported regressions or wire vectors), generated witness, Quint regression replay, Quint vector replay and Quint-driven, the union of the last three. Concretely it names the evidence catalogs under `catalogs/`, the per-profile witness evidence files that `witnesses.mjs evaluate` writes with corpus and input hashes, and the completion and mutation reports under `.formal-traces/`. Passing a finite corpus is evidence for a claim, not proof. Owner: [SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md), [VALIDATION.md](./VALIDATION.md)
 
 ### Ledger
 

@@ -31,8 +31,8 @@ codes are omitted; the module header lists them.
 | `local_storage` | Per-instance local storage with LRU eviction and strict insertion expiry; zero capacity stores nothing and never fails; an expired entry keeps its slot until replaced or evicted. | `localValue`, `promote`, `putLocal` |
 | `local_grid` | The local projection with the raw environment instants kept beside the ordinary expiry, so a precise-clock expiry error is executable instead of hidden by rounding (C09). | `call` |
 | `payloads` | Payload validity classes: what a frame's stored code says about the bytes the adapter returned, which classes decode safely on the atomic path and which fail at read or decode. | `classOf`, `valueOf`, `bytesOf`, `atomicSafe`, `decodeOutcome`, `readFails`, `decodeFails` |
-| `remote_frames` | Remote frames with wall-clock stamps, physical retention and per-entity watermarks: a frame serves while retained, fresh for its reply's freshness, and only when stamped after the watermark. | `storeFrame`, `seedFrame`, `seedAged`, `observe`, `visible`, `raiseWatermark`, `clearWatermark`, `fenceFor`, `writeAllowed`, `retained`, `fresh`, `physicalRetention` |
-| `flights` | Source executions, their process and request registries, and the callers each owns; a scope's closure forgets its request slots; the inspection record the layers drivers compare. | `registerSource`, `registerDetached`, `admitCaller`, `attachCaller`, `joinRequestFlight`, `recordResult`, `forgetSource`, `forgetScope`, `ownedBy`, `latest`, `recordIdentity`, `recordInspectionAdmission`, `inspectProcess` |
+| `remote_frames` | Remote frames with wall-clock stamps, physical retention and per-entity watermarks: a frame serves while retained, fresh for its reply's freshness, and, to a tracked reader, only when stamped after the watermark. | `storeFrame`, `seedFrame`, `seedAged`, `observe`, `visible`, `raiseWatermark`, `clearWatermark`, `fenceFor`, `writeAllowed`, `retained`, `fresh`, `physicalRetention` |
+| `flights` | Source executions, their process and request registries, and the callers each owns; a scope's closure forgets its request slots; the inspection record the dark-layers drivers compare. | `registerSource`, `registerDetached`, `admitCaller`, `attachCaller`, `joinRequestFlight`, `recordResult`, `forgetSource`, `forgetScope`, `ownedBy`, `latest`, `recordIdentity`, `recordInspectionAdmission`, `inspectProcess` |
 | `policy_gate` | Callers whose policy reply the environment holds, each under the index of its policy call at admission and released by that index; empty in a profile with immediate replies. | `hold`, `release`, `holding`, `holds`, `latest`, `entry` |
 | `serving` | The serving path, stated once: admit a caller, join or consult each enabled layer in order (memo, local, remote) or start a source; settle a source and publish to the layers that own it. Three shapes: layered, local, request-only. | `admit`, `release`, `begin`, `settle`, `closeScope`, `invalidate`; `admitLocal`, `releaseLocal`, `settleLocal`, `callLocal`; `admitRequest`, `releaseRequest`, `settleRequest`; `layeredRelease`, `releaseJudged`, `startDetachedSource`, `maintains`, `refillAllowed` |
 | `receipts` | The receipt of the latest release: the caller it served, its key, the layer that served it (or that it started a source or joined a flight) and the local slot as the release found it. | `release` |
@@ -57,12 +57,12 @@ at `serving` and read outward, which is how a rule is usually traced.
 
 | Layer | Modules | What they hold |
 | --- | --- | --- |
-| 0 | `encodings`, `calls`, `clock`, `layer_policy`, `config_errors`, `instances` | Vocabulary: sentinels, the call record, time, the immediate policy reply and the two environment records. No rule reads another kernel module here. |
+| 0 | `encodings`, `calls`, `clock`, `layer_policy`, `config_errors`, `instances` | Vocabulary: sentinels, the call record, time, the immediate policy reply, the policy-error record and which instances exist. No rule reads another kernel module here. |
 | 1 | `request_memo`, `local_storage`, `payloads`, `policy_gate`, `flights`, `policy_overlay`, `runtime_policy` | The storage and registries each serving layer owns, the payload classes, the held-reply gate and the two runtime reply decoders. |
 | 2 | `remote_frames` | The remote layer's storage: frames with stamps, retention and watermarks. |
-| 3 | `serving`, `recovery` | The traversal and publication rules, and the stale-on-error judgments the held lifecycle consults. Start here to trace a rule. |
+| 3 | `serving`, `recovery` | The traversal and publication rules, and the stale-on-error judgments the held and atomic lifecycles consult. Start here to trace a rule. |
 | 4 | `remote_io`, `receipts`, `local_faults`, `local_grid`, `markers` | Lifecycles and variants over the traversal: held remote effects, the release receipt, the local fault switch, the fractional local grid, marker lifetimes. |
-| 5 | `deadlines`, `compression` | Over the held remote lifecycle: budgets and expiry, and the decode outcome channel. |
+| 5 | `deadlines`, `compression` | Budgets and expiry over the local and the held lifecycles, and the decode outcome channel over the held one. |
 | 6 | `remote_writes`, `adapter_replies`, `diagnostics` | The atomic lifecycle with held writes, the queued adapter reply, and the diagnostics channel over both lifecycles. |
 | 7 | `shadow`, `metrics` | Shadow jobs and the metric event trail, each composing the lifecycles below. |
 | 8 | `shadow_reads` | The separate shadow read deadline over the held dark lifecycle. |
@@ -171,6 +171,9 @@ The composed profiles are, in order:
     over `Shadow::DiagnosedShadowed`: held dark effects composed with
     request/local traversal and source deadlines, so every shadow job uses its
     caller-owned source.
+16. `formal/models/dialcache-shadow-read-deadlines-conformance.qnt` is the
+    sixteenth, over `shadow_reads`: the held dark lifecycle with each shadow
+    read's bounded result and raw completion kept apart from the job deadline.
 
 Each composed profile keeps its constants, its flat `State`, `var s` and
 `var input`, its `nondet` input choices, its guards, its invariants and its
