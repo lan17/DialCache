@@ -28,7 +28,7 @@ Delete this section once none remain, because the description becomes the squash
 
 Head: `{commit}`
 
-- {command or workflow run ID} at `{commit}`: {result}
+- {command, or workflow run ID and its mode} at `{commit}`: {result}
 
 Not run: {each required lane not run and why, or "none"}
 

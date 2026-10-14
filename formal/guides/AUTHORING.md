@@ -219,7 +219,8 @@ Every supported implementation replays the registered profiles. Each port's
 completion gate requires every scheduled history, fixed case, protocol case and
 witness gate to finish successfully. Passing TypeScript replay alone does not
 establish another port's conformance. Behavior, model and replay changes require
-[full validation](./VALIDATION.md#choosing-a-run) before merge.
+hosted validation before merge at the tier
+[VALIDATION.md](./VALIDATION.md#choosing-a-run) assigns.
 
 Fault-detection evidence is specific to each port. Rust uses
 [its own mutation catalog](./SEMANTIC-COVERAGE.md#reproduction-and-ci); the

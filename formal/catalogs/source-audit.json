@@ -217,21 +217,21 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "21fa658dd78a49dd840183443708d95b8c2db08d567a39bb2d39be22e4d01983",
+      "sha256": "23c819b75f1ef6399e60e0918daa67b78986117b51139cff484a4121a60fad17",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
-        {"line":68,"title":"Maintaining the reference","contracts":["E05","B01"]},
-        {"line":114,"title":"Run the documentation site","contracts":["B01"]},
-        {"line":141,"title":"Publish to GitHub Pages","contracts":["B01"]},
-        {"line":157,"title":"Cache-path benchmark","contracts":["X02"]},
-        {"line":179,"title":"Redis write benchmark","contracts":["X02"]},
-        {"line":202,"title":"Stale-on-error benchmark","contracts":["X02"]},
-        {"line":230,"title":"Releasing","contracts":["B01","E05"]},
-        {"line":312,"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
-        {"line":340,"title":"Retry a Rust publication","contracts":["B01","E05"]},
-        {"line":354,"title":"Set up PyPI publishing once","contracts":["B01","E05"]},
-        {"line":375,"title":"Retry a Python publication","contracts":["B01","E05"]}
+        {"line":70,"title":"Maintaining the reference","contracts":["E05","B01"]},
+        {"line":116,"title":"Run the documentation site","contracts":["B01"]},
+        {"line":143,"title":"Publish to GitHub Pages","contracts":["B01"]},
+        {"line":159,"title":"Cache-path benchmark","contracts":["X02"]},
+        {"line":181,"title":"Redis write benchmark","contracts":["X02"]},
+        {"line":204,"title":"Stale-on-error benchmark","contracts":["X02"]},
+        {"line":232,"title":"Releasing","contracts":["B01","E05"]},
+        {"line":314,"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
+        {"line":342,"title":"Retry a Rust publication","contracts":["B01","E05"]},
+        {"line":356,"title":"Set up PyPI publishing once","contracts":["B01","E05"]},
+        {"line":377,"title":"Retry a Python publication","contracts":["B01","E05"]}
       ]
     },
     {
@@ -1102,20 +1102,20 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "8e23cd5252a5d7eb8a8e42cab301345f0c6ffa055994566076c45c979da5c8f0",
+      "sha256": "dd038422dbca646a4357655d1f9d0bfd02627af635e2bbe3c2a13821d4c18788",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":20,"title":"Reading a model"},
         {"line":61,"title":"Writing conventions"},
         {"line":172,"title":"Codifying the next behavior"},
-        {"line":234,"title":"Give reviewers focused context"},
-        {"line":249,"title":"Exporting a deterministic regression"},
-        {"line":287,"title":"Maintaining case and witness evidence"},
-        {"line":340,"title":"Reproducible committed fixtures"},
-        {"line":350,"title":"Refactoring and execution"},
-        {"line":378,"title":"Challenging every model"},
-        {"line":459,"title":"Mapping every challenge to native mutants"},
-        {"line":590,"title":"Exported runs are exactly the public-only runs"}
+        {"line":235,"title":"Give reviewers focused context"},
+        {"line":250,"title":"Exporting a deterministic regression"},
+        {"line":288,"title":"Maintaining case and witness evidence"},
+        {"line":341,"title":"Reproducible committed fixtures"},
+        {"line":351,"title":"Refactoring and execution"},
+        {"line":379,"title":"Challenging every model"},
+        {"line":460,"title":"Mapping every challenge to native mutants"},
+        {"line":591,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1597,15 +1597,15 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "c9ed44c82472820692190c26e65e261ff1af9bc2ab49b8abef9f9ac79104f304",
+      "sha256": "da1f37d14c8064335cd6c893a38ee7abdbcbfe91ae379724be17ba27b3e4adfc",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
-        {"line":91,"title":"Reading a completion report"},
-        {"line":110,"title":"Mutation evidence"},
-        {"line":224,"title":"Exploratory runs"},
-        {"line":280,"title":"A retained sampling regression"},
-        {"line":317,"title":"Historical results"}
+        {"line":94,"title":"Reading a completion report"},
+        {"line":113,"title":"Mutation evidence"},
+        {"line":227,"title":"Exploratory runs"},
+        {"line":283,"title":"A retained sampling regression"},
+        {"line":320,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

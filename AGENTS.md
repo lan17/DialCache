@@ -12,13 +12,13 @@ Agents open pull requests (PRs) from his account, so design decisions and merges
 
 Classify before editing, because the type sets the design record, the steps and the validation.
 
-| Type | Covers | Record ([design/README.md](design/README.md)) | Validation before leaving draft |
+| Type | Covers | Record ([design/README.md](design/README.md)) | Validation tier before leaving draft |
 | --- | --- | --- | --- |
 | Portable behavior | A `CONTRACTS.md` obligation added, changed or removed; a new conformance profile with its replay descriptor and witness classifier | Required | Full |
-| Bug fix | A port or Quint model missing a contract whose text stays; new invariants, regressions or challenges | None, unless it reverses a recorded decision | Replay; Mutations if the mutant rule fires; Full if a Quint transition or invariant changes |
-| Public API | Public names added, renamed, exported or removed | When every port must mirror it, or it reshapes how one port's callers construct the cache or call its operations | PR CI; Replay if port source or a replay driver changes; Mutations if the mutant rule fires |
+| Bug fix | A port or Quint model missing a contract whose text stays; new invariants, regressions or challenges | None, unless it reverses a recorded decision | Replay; Mutations if the mutant rule fires; Full if a Quint transition, invariant or challenge changes |
+| Public API | Public names added, renamed, exported or removed | When every port must mirror it, or it reshapes how one port's callers construct the cache or call its operations | Replay; Mutations if the mutant rule fires |
 | Docs | Guides, READMEs, examples, doc comments | None | PR CI |
-| Refactor or move | Structure changes; behavior, public API and the driver contract (action names, choice encodings, observation fields) unchanged | None | PR CI; Replay if port source, a `.qnt` file or a replay driver changes; Mutations if the mutant rule fires; Full for a move |
+| Refactor or move | Structure changes; behavior, public API and the driver contract (action names, choice encodings, observation fields) unchanged | None | PR CI; Replay if port source, a `.qnt` file or a replay driver changes; Mutations if the mutant rule fires; Full with exploration for a move |
 | Formal infrastructure | `formal/tools/`, shared `formal/replay/` code, the kernel library, the replay protocol and observation records, catalog schemas, gates | When it changes how conformance is established | Full |
 | Tooling | Dependencies, workflows, `Makefile`, `scripts/`, toolchain pins | None | PR CI; Full if a Quint or language toolchain pin changes |
 | New port | Another language implementation | Required | Full |
@@ -34,18 +34,21 @@ Classify before editing, because the type sets the design record, the steps and 
   bypass, so `quint`, `differential (1)` to `(4)`, `Build documentation` and `Validate PR title`
   can be red at merge.
 - **Replay:** PR CI plus a green run of `formal-full.yaml` in `replay` mode on the same commit:
-  `gh workflow run formal-full.yaml --ref <branch> -f mode=replay`. It generates the corpus from
-  the branch's Quint files, or restores it from a cache when every generation input is unchanged,
-  and replays it in all four ports; about 15 minutes. New Quint regressions join the corpus, so
-  the ports must pass them. Read a run with
+  `gh workflow run formal-full.yaml --ref <branch> -f mode=replay`. It generates the corpus, every
+  history the models produce from their fixed seeds, or restores the corpus an earlier run on the
+  same branch or on `main` saved from identical generation inputs, and replays it in all four
+  ports; about 15 minutes. Exported Quint regressions join the corpus, so the ports must pass
+  them; a challenge, or a regression generation does not export, runs only in Full. Read a run with
   `gh run list --workflow formal-full.yaml --branch <branch> --json databaseId,displayTitle,headSha,status,conclusion`;
   `gh pr checks` omits it.
-- **Mutations:** Replay plus the TypeScript, Go and Rust mutation campaigns (`-f mode=mutations`);
-  about 50 minutes.
-- **Full:** Mutations plus the Quint model checks and the model-fault campaign (`-f mode=full`);
-  about two and a half hours. The campaign reads only the models, the challenge catalog and the
-  Quint toolchain, so only changes to those need it. The weekly run on `main` is Full with
-  exploration.
+- **Mutations:** Replay plus the TypeScript, Go and Rust mutation campaigns (`-f mode=mutations`),
+  which plant catalogued bugs in a port and require its tests to catch them; about 50 minutes.
+- **Full:** Mutations plus the Quint model checks and the model-fault campaign (`-f mode=full`),
+  which plants bugs in the models and requires an invariant to catch each one; about two and a
+  half hours. The campaign reads only the models, the challenge catalog and the Quint toolchain,
+  so a change confined to the ports or their replay drivers never needs it. `-f exploration=true`
+  adds a fresh-seed generation and replay in an isolated copy of the source; a move needs it, and
+  the weekly run on `main` includes it.
 - **Mutant rule:** it fires when a change edits a file that an entry in
   `formal/catalogs/mutations.json` or `rust-mutations.json` names, or edits those catalogs. PR CI
   matches only the `before` anchors; only the mutation lanes compile and measure each mutant.
@@ -185,7 +188,7 @@ the one the ruleset requires.
   `vX.Y.Z` tag ([Releasing](docs/maintainers.md#releasing)), so agents never edit version files or
   use the `release` title type. When asked for a release, report the version that
   `git log --format=%s <tag>..origin/main` implies, any mismatch with the version requested, and
-  whether current `main` has a green full run ([Validation](docs/maintainers.md#validation)), then
+  whether current `main` has a green Full run ([Validation](docs/maintainers.md#validation)), then
   stop. Dispatching `Release` and merging the `release:` PR it opens are separate irreversible
   actions.
 
@@ -193,8 +196,8 @@ the one the ruleset requires.
 
 Classify the PR with the table, then check its head commit against every step of each matching
 path, Critical behavior and the Finish list. A conflict with `main` needs a rebase, and the rebased
-head needs the tier's run again unless an earlier green run covers it. Report findings in the
-session; post them on GitHub, as a comment review, only when asked.
+head needs the tier's run again. Report findings in the session; post them on GitHub, as a comment
+review, only when asked.
 
 ### Refresh pinned ledgers
 
@@ -209,13 +212,14 @@ of them is edited by hand.
 
 ### Validate the head commit
 
-- A result counts only for its commit. Dispatch the tier the type needs once, on the final
-  candidate: after review comments are addressed and PR CI is green. Before that, iterate with
-  PR CI and local lanes (`make formal-<port>`, `make mutations-<port> MUTATION_ONLY=<ids>`), which
-  never replace it. A green run on an earlier commit still covers the head when PR CI passes on
-  the head and the diff between them touches only prose, design records or ledger pins; any other
-  push, a rebase included, needs a new run. If a run is still in progress when the turn ends,
-  leave the PR in draft and give the run ID, its commit and its state in the final message.
+- A result counts for its commit. Dispatch the tier the type needs once, on the final candidate:
+  after review comments are addressed and PR CI is green. Before that, iterate with PR CI and
+  local lanes (`make formal-<port>`, `make mutations-<port> MUTATION_ONLY=<ids>`), which never
+  replace it. A green run on an earlier commit also covers the head when PR CI passes on the head
+  and the diff between them touches only Markdown files, design records included, or ledger pins.
+  Any other push, a rebase included, needs a new run; a comment edit in port source is source. If
+  a run is still in progress when the turn ends, leave the PR in draft and give the run ID, its
+  commit and its state in the final message.
 - Run each check as its own command and read its exit status, since `| tail` or `|| true` hides
   failures. Never chain a commit or push behind a check.
 - Before calling a failure a flake, compare the lane's latest `main` run. Report a red `main`

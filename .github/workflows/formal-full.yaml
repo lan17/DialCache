@@ -26,8 +26,10 @@ on:
 permissions:
   contents: read
 
+# One run per branch and mode: a replay dispatched beside a running full run
+# starts at once instead of waiting hours; same-mode dispatches still queue.
 concurrency:
-  group: formal-full-${{ github.ref }}
+  group: formal-full-${{ github.ref }}-${{ inputs.mode || 'full' }}
   cancel-in-progress: false
 
 jobs:
@@ -109,18 +111,25 @@ jobs:
         with:
           quint: "true"
       # The corpus is a deterministic function of these inputs (pinned seed,
-      # one Quint thread), so a hit restores exactly what generation would
-      # write. Only an exact key matches: a stale corpus must never stand in
-      # for a regenerated one. The review ledgers are left out of the key
-      # because generation never reads them.
+      # one Quint thread), so a hit restores a corpus identical in content to
+      # what generation would write; only Quint's #meta timestamps differ, and
+      # every digest downstream is taken from the restored files. Only an
+      # exact key matches: a stale corpus must never stand in for a
+      # regenerated one. The review ledgers are left out because generation
+      # never reads them; formal/guides/CONTRACTS.md is left out because
+      # generation reads it only to validate challenge contract IDs, which
+      # every port lane's conformance.mjs prepare re-validates.
       - name: Restore the corpus generated from identical inputs
         id: corpus
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .formal-traces
           key: formal-traces-${{ hashFiles('formal/models/**', 'formal/replay/**', 'formal/tools/**', 'formal/generated/**', 'formal/catalogs/**', '!formal/catalogs/source-audit.json', '!formal/catalogs/go-parity.json', '!formal/catalogs/feature-coverage.json', 'typescript/test/fixtures/**', '.github/actions/setup-quint/**', 'Makefile', 'package.json', 'pnpm-lock.yaml') }}
+      # The weekly run regenerates even on a hit, so a freshly installed
+      # toolchain re-exports the committed fixtures and vectors once a week;
+      # the save below stays skipped when the entry already exists.
       - name: Regenerate artifacts and evaluate shared witness evidence
-        if: steps.corpus.outputs.cache-hit != 'true'
+        if: steps.corpus.outputs.cache-hit != 'true' || github.event_name == 'schedule'
         run: make formal-generate
       - name: Save the corpus for later runs on the same inputs
         if: steps.corpus.outputs.cache-hit != 'true'

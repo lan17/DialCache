@@ -74,8 +74,8 @@ asks in its session if he is present. Otherwise it pushes its work as a draft pu
 the open questions in the description and stops.
 
 A pull request is ready for review when every step of its type is done, any design record is
-current, the required validation has passed on the head commit and no questions remain open. Until
-then it stays a draft.
+current, the required validation has passed on the head commit or on an earlier commit that covers
+it, and no questions remain open. Until then it stays a draft.
 
 ## How much validation a change needs
 
@@ -93,21 +93,22 @@ type needs once, on the final candidate.
   skip generation. This is the tier for behavior and API changes in the ports, and for new Quint
   regressions, whose histories join the corpus.
 - **Mutations** adds the TypeScript, Go and Rust mutation campaigns, which plant known bugs in a
-  port and require its tests to catch them, in about 50 minutes. A change that edits code a
-  catalogued mutant targets needs it.
+  port and require its tests to catch them, in about 50 minutes. A change that edits a file a
+  catalogued mutant rewrites, or a mutant catalog itself, needs it.
 - **Full** adds the Quint model checks and the model-fault campaign, which plants bugs in the
   models themselves and requires an invariant to catch each one, in about two and a half hours.
-  The campaign reads only the models, the challenge catalog and the Quint toolchain, so only
-  changes to those need it.
-- The weekly run on `main` is Full with **exploration**: it also generates histories from a fresh
-  random seed in an isolated copy of the source, which catches problems the fixed seeds miss.
+  The campaign reads only the models, the challenge catalog and the Quint toolchain, so a change
+  confined to the ports or their replay drivers never needs it.
+- **Full with exploration** also generates histories from a fresh random seed in an isolated copy
+  of the source, which catches problems the fixed seeds miss. A layout move needs it, and the
+  weekly run on `main` uses it.
 
-A result counts only for the commit it ran on. A green run still covers a later commit when PR CI
-passes there and the difference is only prose, design records or ledger pins; any other push, a
-rebase included, needs a new run. GitHub requires only the `test` check and one approval, and the
-maintainer merges through an admin bypass, so nothing on GitHub blocks a merge with a red check.
-The process does: a pull request stays in draft until the tier its type requires has passed on
-its head commit.
+A result counts for the commit it ran on. A green run also covers a later commit when PR CI passes
+there and the difference is only Markdown files, design records included, or ledger pins; any
+other push, a rebase included, needs a new run. GitHub requires only the `test` check and one
+approval, and the maintainer merges through an admin bypass, so nothing on GitHub blocks a merge
+with a red check. The process does: a pull request stays in draft until the tier its type requires
+has passed on its head commit or on an earlier commit that covers it.
 
 **Ledgers** in `formal/catalogs/` record the hash at which each reviewed file was last read: every
 docs page, the formal guides, several READMEs and selected tests and sources. Editing a pinned file
@@ -121,9 +122,9 @@ happened.
 | --- | --- | --- | --- |
 | Portable behavior | A new cache operation that every port offers | Required | Full |
 | Bug fix | Go serves a value the contract says is stale | Only when it reverses a decision | Replay |
-| Public API | Exporting an existing type from one port | When every port mirrors it, or it changes how callers construct the cache or call its operations | PR CI |
+| Public API | Exporting an existing type from one port | When every port mirrors it, or it changes how callers construct the cache or call its operations | Replay |
 | Docs | Correcting a default in a guide | None | PR CI |
-| Refactor or move | Splitting a module without changing behavior | None | PR CI |
+| Refactor or move | Reorganizing the documentation tooling | None | PR CI |
 | Formal infrastructure | Changing the replay protocol | When it changes how conformance is established | Full |
 | Tooling | Upgrading a dependency | None | PR CI |
 | New port | A fifth language | Required | Full |
@@ -134,9 +135,10 @@ case takes the stricter type. Any change that reverses an earlier decision needs
 that decision lives in a record, an issue or a pull request.
 
 Some changes need more than the table's minimum. Touching port source or the replay code that
-drives it needs Replay. Editing code a catalogued mutant targets needs Mutations. Changing a Quint
-transition or invariant, a toolchain pin or the repository layout needs Full. AGENTS.md states the
-exact conditions and the steps for each type.
+drives it needs Replay. Editing a file a catalogued mutant rewrites, or a mutant catalog, needs
+Mutations. Changing a Quint transition, invariant or challenge, or a toolchain pin, needs Full; a
+layout move needs Full with exploration. AGENTS.md states the exact conditions and the steps for
+each type.
 
 ## Design records
 

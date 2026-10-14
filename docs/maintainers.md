@@ -48,11 +48,13 @@ and weekly formal workflow, using the same Make targets as local runs. Its
 `mode` input selects `replay` (the generated corpus in every port, about 15
 minutes), `mutations` (plus the port mutation campaigns, about 50 minutes) or
 `full` (plus the model checks and the model-fault campaign, about two and a
-half hours). Before merge, run `replay` or `mutations` for changes to port
-behavior or replay tooling and `full` for changes to the models, the kernel
-library or the Quint toolchain; run `full` before a release or before accepting
-another port. A scheduled result applies to its recorded revision; it does not
-validate a later PR head. A smoke pass does not establish full conformance.
+half hours). Before merge, run `replay` for changes to port behavior or a
+replay driver, and `mutations` when the change also edits a file a catalogued
+mutant rewrites. Run `full` for changes to a model's transitions, invariants
+or challenges, the kernel library, `formal/tools/` or the Quint toolchain, and
+before a release or before accepting another port. A scheduled result applies
+to its recorded revision; it does not validate a later PR head. A smoke pass
+does not establish full conformance.
 
 CI uses Node.js 24 for development and integration, then validates the packed
 package and zstd at the exact 22.x consumer floor, Node.js 22.15.0. The published

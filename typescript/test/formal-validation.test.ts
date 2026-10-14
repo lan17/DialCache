@@ -473,7 +473,7 @@ else {
 });
 
 describe("full formal workflow shape", () => {
-  type Step = { name?: string; run?: string; uses?: string; if?: string; env?: Record<string, string>; with?: Record<string, string | boolean> };
+  type Step = { name?: string; id?: string; run?: string; uses?: string; if?: string; env?: Record<string, string>; with?: Record<string, string | boolean> };
   type Job = { needs?: string | string[]; if?: string; env?: Record<string, string>; strategy?: { "fail-fast"?: boolean; matrix?: Record<string, unknown[]> }; "timeout-minutes"?: number; steps: Step[] };
   const lanes = ["typescript-parity", "go-parity", "rust-parity", "python-parity", "typescript-mutations", "go-mutations", "rust-mutations"];
   const needsOf = (job: Job) => (job.needs === undefined ? [] : [job.needs].flat());
@@ -628,32 +628,37 @@ describe("full formal workflow shape", () => {
     expect(jobs["check-models"]!.if).toBe("(github.event_name != 'schedule' || github.ref == 'refs/heads/main') && inputs.mode != 'replay' && inputs.mode != 'mutations'");
     for (const lane of ["typescript-mutations", "go-mutations", "rust-mutations"]) expect(jobs[lane]!.if, lane).toBe("inputs.mode != 'replay'");
     for (const lane of ["typescript-parity", "go-parity", "rust-parity", "python-parity", "symbolic", "generate"]) expect(jobs[lane]!.if ?? "", lane).not.toMatch(/inputs\.mode/);
-    // The cache key must name every input generation reads and only an exact key may restore,
-    // so a corpus from different models can never stand in for a regenerated one.
+    // The cache key is pinned whole: an added exclusion or a non-hashFiles component would let
+    // a stale corpus restore or stop the cache hitting, and both must be a deliberate edit here.
     const steps = jobs.generate!.steps;
     const restore = steps.find(step => step.uses?.startsWith("actions/cache/restore@"))!;
     const save = steps.find(step => step.uses?.startsWith("actions/cache/save@"))!;
-    expect(restore.with).toMatchObject({ path: ".formal-traces" });
-    expect(restore.with).not.toHaveProperty("restore-keys");
-    const key = String(restore.with!.key);
-    for (const input of ["formal/models/**", "formal/replay/**", "formal/tools/**", "formal/generated/**", "formal/catalogs/**", "typescript/test/fixtures/**", ".github/actions/setup-quint/**", "Makefile", "pnpm-lock.yaml"]) expect(key, input).toContain(`'${input}'`);
-    for (const ledger of ["source-audit", "go-parity", "feature-coverage"]) expect(key, ledger).toContain(`'!formal/catalogs/${ledger}.json'`);
+    expect(restore.id).toBe("corpus");
+    expect(restore.with).toEqual({ path: ".formal-traces", key: "formal-traces-$" + "{{ hashFiles('formal/models/**', 'formal/replay/**', 'formal/tools/**', 'formal/generated/**', 'formal/catalogs/**', '!formal/catalogs/source-audit.json', '!formal/catalogs/go-parity.json', '!formal/catalogs/feature-coverage.json', 'typescript/test/fixtures/**', '.github/actions/setup-quint/**', 'Makefile', 'package.json', 'pnpm-lock.yaml') }}" });
     const generate = steps.find(step => step.run === "make formal-generate")!;
-    expect(generate.if).toBe("steps.corpus.outputs.cache-hit != 'true'");
+    // The weekly run regenerates on a hit so a fresh toolchain re-exports the committed artifacts.
+    expect(generate.if).toBe("steps.corpus.outputs.cache-hit != 'true' || github.event_name == 'schedule'");
     expect(save.if).toBe("steps.corpus.outputs.cache-hit != 'true'");
     expect(save.with).toMatchObject({ path: ".formal-traces", key: "$" + "{{ steps.corpus.outputs.cache-primary-key }}" });
     expect(steps.indexOf(restore)).toBeLessThan(steps.indexOf(generate));
     expect(steps.indexOf(generate)).toBeLessThan(steps.indexOf(save));
     // Every mode requires the corpus and the four replays; a lane a mode does not select must
-    // report skipped, so a dispatch cannot pass as a stronger mode than it ran.
+    // report skipped, so a dispatch cannot pass as a stronger mode than it ran. The gate is
+    // pinned line for line, so a loosened test (an alternation, `|| true`) fails here as a
+    // flipped one does.
     const gate = jobs["formal-full"]!.steps.find(step => step.run?.includes("_RESULT"))!;
     expect(gate.env).toMatchObject({ MODE: "$" + "{{ inputs.mode || 'full' }}" });
-    const branch = (mode: string) => gate.run!.slice(gate.run!.indexOf(`${mode})`), gate.run!.indexOf(";;", gate.run!.indexOf(`${mode})`)));
-    for (const mode of ["full", "mutations", "replay"]) for (const lane of ["CHECK_MODELS", "TYPESCRIPT_MUTATIONS_MERGE", "GO_MUTATIONS_MERGE", "RUST_MUTATIONS_MERGE"]) {
-      const expected = mode === "full" || (mode === "mutations" && lane !== "CHECK_MODELS") ? "success" : "skipped";
-      expect(branch(mode), `${mode}: ${lane}`).toMatch(new RegExp(`test "\\$${lane}_RESULT" = ${expected}`));
-    }
-    for (const lane of ["GENERATE", "TYPESCRIPT", "GO", "RUST", "PYTHON", "SYMBOLIC"]) expect(gate.run!.slice(0, gate.run!.indexOf("case "))).toMatch(new RegExp(`test "\\$${lane}_RESULT" = success`));
+    const selected = ["CHECK_MODELS", "TYPESCRIPT_MUTATIONS_MERGE", "GO_MUTATIONS_MERGE", "RUST_MUTATIONS_MERGE"];
+    const arm = (mode: string, results: string[], skipped: string) => [`${mode})`, ...selected.map((lane, i) => `test "$${lane}_RESULT" = ${results[i]}`), `skipped="${skipped}" ;;`];
+    const lines = gate.run!.split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#"));
+    expect(lines.slice(0, lines.indexOf("esac") + 1)).toEqual([
+      ...["GENERATE", "TYPESCRIPT", "GO", "RUST", "PYTHON", "SYMBOLIC"].map(lane => `test "$${lane}_RESULT" = success`),
+      'case "$MODE" in',
+      ...arm("full", ["success", "success", "success", "success"], "none"),
+      ...arm("mutations", ["skipped", "success", "success", "success"], "model checks and the model-fault campaign"),
+      ...arm("replay", ["skipped", "skipped", "skipped", "skipped"], "model checks, the model-fault campaign and the port mutation campaigns"),
+      "*)", 'echo "Unknown mode: $MODE" >&2', "exit 1 ;;", "esac",
+    ]);
   });
 
   it("runs the differential on pull requests only, against the base branch, with the replay logs preserved", async () => {
