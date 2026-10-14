@@ -64,9 +64,10 @@ export const encodeLedger = ledger => `${JSON.stringify(ledger, null, 2)}\n`;
 // Re-pin what the ledger fingerprints but does not review: the catalogs under
 // `inputs`, the audit's dispositions and each generated vector artifact. Those
 // change for reasons reviewed elsewhere (a catalog edit, a refreshed audit, a
-// regenerated artifact), so re-pinning them is bookkeeping. The TypeScript
-// source and Go binding hashes stay: a changed source needs its mapping
-// re-reviewed, and the reviewer re-pins it with the review.
+// regenerated artifact), so re-pinning them is the step that acknowledges the
+// change for this ledger. The TypeScript source and Go binding hashes stay: a
+// changed source needs its mapping re-reviewed, and the reviewer re-pins it
+// with the review.
 export function refreshGoParityInputs(ledger, { execution = scheduleExecution(json(inputCatalogs.executionSha256)), audit = json(auditPath) } = {}) {
   const inputs = { ...ledger.inputs, ...Object.fromEntries(Object.entries(inputCatalogs).map(([field, path]) => [field, digest(path)])), sourceAuditDispositionsSha256: dispositionDigest(audit) };
   const artifacts = new Map(execution.models.filter(model => model.vectorExport).map(model => [model.path, model.vectorExport.artifact]));

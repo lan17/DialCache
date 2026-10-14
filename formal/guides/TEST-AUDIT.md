@@ -39,17 +39,19 @@ title (the second occurrence of a repeated title to the second), and leaves a
 new or renamed entry with an empty disposition, so the check keeps failing
 until a reviewer fills it. A named file that joined the inventory is added at
 its position; one that left it is dropped. Files not named keep their rows. The
-command assigns no disposition and writes no review. Then re-pin the audit in
-the Go parity ledger, which fingerprints it:
+command assigns no disposition and writes no review. Then re-pin the Go parity
+ledger, which binds to this audit's dispositions:
 
 ```bash
 node formal/tools/check-go-parity.mjs --refresh-inputs
 ```
 
-That command re-pins the six catalog digests under `inputs` and each generated
-vector artifact's digest, nothing else. The TypeScript source and Go binding
-hashes in that ledger are re-pinned by hand with their mapping review
-([GO-PARITY.md](./GO-PARITY.md)). `make audit` runs both checks.
+That command re-pins the five catalog digests under `inputs`, the audit's
+dispositions digest (`sourceAuditDispositionsSha256`, described below) and
+each generated vector artifact's digest, nothing else. After a prose-only edit
+it changes no line. The TypeScript source and Go binding hashes in that ledger
+are re-pinned by hand with their mapping review ([GO-PARITY.md](./GO-PARITY.md)).
+`make audit` runs both checks.
 
 The `sources` inventory covers `README.md`, authored Markdown pages under `docs/`
 (including native language guides), and ordinary `typescript/test/*.test.ts` files,
@@ -87,7 +89,10 @@ applicability ledger binds to this audit through one digest
 content hash, every disposition and every guide review record, and not over a
 documentation file's bytes: a prose edit that keeps its headings and
 dispositions leaves that ledger untouched, while a changed assertion, a new
-section or a changed disposition reaches it.
+section in an audited page or a changed disposition reaches it. A guide's
+headings are not dispositions; a new guide section is rejected by this audit
+until the guide is re-keyed, and reaches the parity ledger only through the
+guide's review record.
 
 ## Claim boundary
 

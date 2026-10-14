@@ -205,16 +205,18 @@ describe("reviewed documentation freshness", () => {
     expect(checkSourceAudit(refreshed, { directory })).toMatchObject({ sections: 4 });
   });
 
-  it("matches repeated titles by occurrence and starts a renamed title empty", () => {
+  it("matches repeated titles by occurrence, starts a renamed title empty and names repeats by position", () => {
     const path = "docs/usage.md";
     audit.sources.find(source => source.path === path)!.entries = [
       { title: "Public usage", contracts: ["C01"] }, { title: "Example", contracts: ["C01"] },
       { title: "Example", contracts: ["B01"] }, { title: "Errors", contracts: ["C01"] }];
-    put(path, "# Public usage\n\nInserted paragraph.\n\n## Example\n\n## Example\n\n## Failures\n");
-    const { audit: refreshed } = refreshSourceAudit(audit, [path], { directory });
+    put(path, "# Public usage\n\nInserted paragraph.\n\n## Example\n\n## Example\n\n## Failures\n\n## Example\n");
+    const { audit: refreshed, changes } = refreshSourceAudit(audit, [path], { directory });
     expect(refreshed.sources.find(source => source.path === path)!.entries).toEqual([
       { title: "Public usage", contracts: ["C01"] }, { title: "Example", contracts: ["C01"] },
-      { title: "Example", contracts: ["B01"] }, { title: "Failures", contracts: [] }]);
+      { title: "Example", contracts: ["B01"] }, { title: "Failures", contracts: [] }, { title: "Example", contracts: [] }]);
+    expect(changes[0]!.pending).toEqual(['"Failures"', '"Example" #3']);
+    expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/docs\/usage.md "Example" #3: missing, duplicate or unknown contract disposition/);
   });
 
   it("adds a named new file at its inventory position and drops a named removed one", () => {

@@ -74,6 +74,14 @@ export function guideSnapshot(directory = root) {
 }
 
 export const auditPath = 'formal/catalogs/source-audit.json';
+// How a message names an entry: its title, with its position among entries of
+// the same title when the title repeats in the file ("Example" #2).
+export function entryLabel(entries, index) {
+  const title = entries[index]?.title;
+  const same = entries.filter(entry => entry?.title === title);
+  const position = entries.slice(0, index + 1).filter(entry => entry?.title === title).length;
+  return same.length > 1 ? `${JSON.stringify(title)} #${position}` : JSON.stringify(title);
+}
 // The audit as committed: pretty JSON with every heading or test entry on one line.
 export const encodeAudit = audit => encodeJson(audit, path => path.length >= 3 && path.at(-2) === 'entries' && typeof path.at(-1) === 'number');
 
@@ -131,7 +139,7 @@ export function refreshSourceAudit(audit, paths, { directory = root } = {}) {
     const previous = index >= 0 ? rows[index] : undefined;
     const entries = kind === 'sources' ? carryDispositions(previous?.entries, source.entries) : source.entries;
     const row = previous ? { ...previous, sha256: source.sha256, entries } : { path, sha256: source.sha256, entries };
-    const pending = entries.filter(entry => entry.contracts?.length === 0).map(entry => JSON.stringify(entry.title));
+    const pending = entries.map((entry, index) => entry.contracts?.length === 0 ? entryLabel(entries, index) : undefined).filter(Boolean);
     if (previous && previous.sha256 === row.sha256 && equal(previous.entries, entries)) {
       changes.push({ path, action: 'unchanged', entries: entries.length, pending });
       continue;
@@ -174,9 +182,10 @@ export function checkSourceAudit(audit, { directory = root } = {}) {
     const saved = sources.find(s => s?.path === source.path);
     if (!saved) continue;
     compareSnapshot(source, saved, 'test/section');
-    for (const entry of Array.isArray(saved.entries) ? saved.entries : []) {
-      if (!validContracts(entry?.contracts) || entry.contracts.length === 0) failures.push(`${source.path} ${JSON.stringify(entry?.title)}: missing, duplicate or unknown contract disposition`);
-    }
+    const entries = Array.isArray(saved.entries) ? saved.entries : [];
+    entries.forEach((entry, index) => {
+      if (!validContracts(entry?.contracts) || entry.contracts.length === 0) failures.push(`${source.path} ${entryLabel(entries, index)}: missing, duplicate or unknown contract disposition`);
+    });
   }
   const kinds = new Set(['contract-guide', 'tooling-guide', 'coverage-guide', 'historical-evidence']);
   for (const source of guides) {

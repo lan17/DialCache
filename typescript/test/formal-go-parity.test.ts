@@ -149,7 +149,7 @@ describe("Go parity ledger freshness", () => {
     expect(() => validate(input)).toThrow(/Required\/referenced witness inventory is stale/);
   });
 
-  it("re-pins the catalog and vector artifact digests and nothing else", () => {
+  it("re-pins the catalog, dispositions and vector artifact digests and nothing else", () => {
     const stale = ledger();
     for (const field of Object.keys(stale.inputs)) stale.inputs[field] = "0".repeat(64);
     stale.vectorExports[0]!.artifactSha256 = "0".repeat(64);
