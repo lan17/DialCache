@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { scheduleExecution } from './execution.mjs';
@@ -45,6 +45,32 @@ function goSymbols(path) {
   return new Set([...read(path).matchAll(/^(?:func\s+(?:\([^\n]*?\)\s+)?|(?:type|const|var)\s+)([A-Za-z_]\w*)/gm)].map(match => match[1]));
 }
 
+export const ledgerPath = 'formal/catalogs/go-parity.json';
+// The catalogs whose digests the ledger pins under `inputs`.
+export const inputCatalogs = {
+  semanticCasesSha256: 'formal/catalogs/semantic-cases.json',
+  executionSha256: 'formal/catalogs/execution.json',
+  sourceAuditSha256: 'formal/catalogs/source-audit.json',
+  featureCoverageSha256: 'formal/catalogs/feature-coverage.json',
+  coverageWitnessesSha256: 'formal/catalogs/coverage-witnesses.json',
+  profilesSha256: 'formal/catalogs/profiles.json',
+};
+// The ledger as committed.
+export const encodeLedger = ledger => `${JSON.stringify(ledger, null, 2)}\n`;
+
+// Re-pin what the ledger fingerprints but does not review: the six catalogs
+// under `inputs` and each generated vector artifact. Those files change for
+// reasons reviewed elsewhere (a catalog edit, a regenerated artifact), so
+// re-pinning them is bookkeeping. The TypeScript source and Go binding hashes
+// stay: a changed source needs its mapping re-reviewed, and the reviewer
+// re-pins it with the review.
+export function refreshGoParityInputs(ledger, { execution = scheduleExecution(json(inputCatalogs.executionSha256)) } = {}) {
+  const inputs = { ...ledger.inputs, ...Object.fromEntries(Object.entries(inputCatalogs).map(([field, path]) => [field, digest(path)])) };
+  const artifacts = new Map(execution.models.filter(model => model.vectorExport).map(model => [model.path, model.vectorExport.artifact]));
+  const vectorExports = (ledger.vectorExports ?? []).map(row => artifacts.has(row.model) ? { ...row, artifactSha256: digest(artifacts.get(row.model)) } : row);
+  return { ...ledger, inputs, vectorExports };
+}
+
 // Read-only accounting/freshness guard. Passing is not a parity or coverage proof.
 //
 // The ledger stores what a reviewer writes: per case its group, gaps and
@@ -56,12 +82,12 @@ function goSymbols(path) {
 // reviewed file's hash, entries and contracts; the profile schedule) is read
 // from them here and checked against execution.json and the repository, not
 // stored as a copy. `inputs` lets a test substitute one of those ledgers.
-export function checkGoParity(ledger = json('formal/catalogs/go-parity.json'), inputs = {}) {
-  const semantic = inputs.semantic ?? json('formal/catalogs/semantic-cases.json');
-  const execution = scheduleExecution(inputs.execution ?? json('formal/catalogs/execution.json'));
-  const profileManifest = inputs.profileManifest ?? json('formal/catalogs/profiles.json');
-  const witnessCatalog = inputs.witnessCatalog ?? json('formal/catalogs/coverage-witnesses.json');
-  const audit = inputs.audit ?? json('formal/catalogs/source-audit.json');
+export function checkGoParity(ledger = json(ledgerPath), inputs = {}) {
+  const semantic = inputs.semantic ?? json(inputCatalogs.semanticCasesSha256);
+  const execution = scheduleExecution(inputs.execution ?? json(inputCatalogs.executionSha256));
+  const profileManifest = inputs.profileManifest ?? json(inputCatalogs.profilesSha256);
+  const witnessCatalog = inputs.witnessCatalog ?? json(inputCatalogs.coverageWitnessesSha256);
+  const audit = inputs.audit ?? json(inputCatalogs.sourceAuditSha256);
   const failures = [];
   const check = (condition, message) => { if (!condition) failures.push(message); };
   const pathExists = (path, context) => {
@@ -74,7 +100,7 @@ export function checkGoParity(ledger = json('formal/catalogs/go-parity.json'), i
     return pathExists(path, context);
   };
   check(ledger.schemaVersion === 2, 'Unsupported Go parity ledger version');
-  for (const [field, path] of Object.entries({ semanticCasesSha256: 'formal/catalogs/semantic-cases.json', executionSha256: 'formal/catalogs/execution.json', sourceAuditSha256: 'formal/catalogs/source-audit.json', featureCoverageSha256: 'formal/catalogs/feature-coverage.json', coverageWitnessesSha256: 'formal/catalogs/coverage-witnesses.json', profilesSha256: 'formal/catalogs/profiles.json' })) {
+  for (const [field, path] of Object.entries(inputCatalogs)) {
     check(ledger.inputs?.[field] === digest(path), `${path}: ledger input hash is stale; review and refresh its snapshot`);
   }
   check(equal(ledger.cases?.map(row => row.id), semantic.cases.map(row => row.id)), 'Semantic case inventory/order differs from the reviewed ledger');
@@ -206,4 +232,21 @@ export function checkGoParity(ledger = json('formal/catalogs/go-parity.json'), i
   return { kind: 'accounting-and-freshness', sourceFiles: ledger.sourceInventory.length, declarations, reviewedTestsAndDocs: audit.sources.length, semanticCases: ledger.cases.length, profiles: models.size, vectorModels: exportedModels.length, status: ledger.status, meaning: 'Fresh reviewed mappings and inventory snapshots; execution evidence remains separately assessed.' };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) console.log(checkGoParity());
+function main(argv) {
+  if (argv.length === 0) return console.log(checkGoParity());
+  if (argv[0] !== '--refresh-inputs' || argv.length > 1) {
+    console.error('Usage: node formal/tools/check-go-parity.mjs [--refresh-inputs]');
+    process.exitCode = 2;
+    return;
+  }
+  const ledger = refreshGoParityInputs(json(ledgerPath));
+  writeFileSync(root + ledgerPath, encodeLedger(ledger));
+  console.log(`${ledgerPath}: input and vector artifact digests refreshed`);
+  try { console.log(checkGoParity(ledger)); }
+  catch (error) {
+    console.error(`\nThe ledger still fails. Review what changed, then run the check again:\n${error.message}`);
+    process.exitCode = 1;
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main(process.argv.slice(2));

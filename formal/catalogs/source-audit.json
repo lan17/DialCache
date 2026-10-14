@@ -1370,13 +1370,13 @@
     },
     {
       "path": "formal/guides/GO-PARITY.md",
-      "sha256": "8b6102a9e205231f2641dbdb3639431ce443c95cd10718cfbb1058927bd1ae43",
+      "sha256": "099cfaf82cf9f144eff9a4519b68163c11ca63c538e63437fb1b4a6220cc3c6c",
       "entries": [
         {"line":1,"title":"Go parity acceptance"},
         {"line":52,"title":"Required evidence"},
         {"line":111,"title":"Reading and updating the ledger"},
-        {"line":163,"title":"Native clock precision"},
-        {"line":196,"title":"Current configuration and observability bindings"}
+        {"line":165,"title":"Native clock precision"},
+        {"line":198,"title":"Current configuration and observability bindings"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1567,12 +1567,12 @@
     },
     {
       "path": "formal/guides/TEST-AUDIT.md",
-      "sha256": "40bfa79ffe73d35813ead894c92b0e776ba97e02b003f85d992df1a5c87bdd6a",
+      "sha256": "cfa34551e67250ca8eb38b145cca2222e05802b1002c82cb54fb5207fec0f988",
       "entries": [
         {"line":1,"title":"Docs and test behavior audit"},
         {"line":13,"title":"Keeping the audit current"},
-        {"line":41,"title":"Formal and Go guide review"},
-        {"line":64,"title":"Claim boundary"}
+        {"line":65,"title":"Formal and Go guide review"},
+        {"line":88,"title":"Claim boundary"}
       ],
       "review": {
         "kind": "coverage-guide",
