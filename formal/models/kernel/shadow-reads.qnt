@@ -1,9 +1,20 @@
 module shadow_reads {
-  // A shadow Redis read has two completions (C54/C56): its bounded result
-  // ends at the read deadline, but the raw adapter operation retains the
-  // shadow slot until it settles. The whole-job deadline is independent.
-  // This variant composes the ordinary held dark lifecycle; profiles whose
-  // bounds never reach a shadow read deadline retain that simpler projection.
+  // Shadow Redis reads with a deadline of their own, over the held dark lifecycle of `shadow`.
+  //
+  // Rules
+  // - A shadow read has two completions (C54, C56): its bounded result ends at the read deadline,
+  //   but the raw adapter operation retains the shadow slot until it settles.
+  // - The whole-job deadline is independent; a job that already timed out reports no second
+  //   verdict when its bounded read fails (`finishReadResult`).
+  // - A read deadline captures its budget at dispatch, independently of policy (`registerRead`).
+  // - A raw reply after its bounded result failed is cleanup only: it cannot acquire a frame,
+  //   decode, fill or emit a verdict (`releaseRead`).
+  // - This variant composes the ordinary held dark lifecycle; profiles whose bounds never reach a
+  //   shadow read deadline retain that simpler projection.
+  // Shapes
+  // - ReadBudget: the read budget a job captured at admission, keyed by its source.
+  // - Bounded[r, q]: `shadow::DiagnosedShadowed` plus expired reads and captured read budgets.
+  // Consumers: shadow-read-deadlines.
   import conformance_observations.* from "../conformance-observations"
   import calls.* from "./calls"
   import layer_policy.* from "./layer-policy"

@@ -1,23 +1,24 @@
 module adapter_replies {
-  // The queued adapter reply (C55): what the remote adapter returns in place
-  // of the stored frame, interpreted once at the trust boundary
-  // (`typescript/src/internal/redis-cache.ts` `validateReadResult` and `frameAge`,
-  // `typescript/src/internal/redis-payload.ts` `decodeTrackedRedisReadResult`,
-  // `go/engine.go` the same). The drivers queue one reply by its class
-  // (BEHAVIOR.md, the effects `adapterReply` choices 1 to 16, below); the
-  // next successful raw completion consumes it whether or not DialCache still
-  // owns that read (an abandoned read's completion consumes it too), and an
-  // adapter failure leaves it queued. A miss reply is interpreted by its
-  // discriminator: a reason that names a known cause survives (`value_absent`,
-  // `expired`), an unknown reason or shape is `unclassified`, and
-  // `watermark_fenced` is kept only beside a valid fence. A fence survives only
-  // on a tracked key and only as a valid timestamp (a negative, fractional or
-  // unsafe one is discarded), independently of the cause: the observed
-  // watermark the reply carried is the refill fence of the source the miss
-  // starts (C58). A frame-shaped reply with stray miss metadata is a frame,
-  // stamped at the reply's wall clock and judged for freshness like a stored
-  // frame's stamp (a future-dated one is declined as an unclassified miss and
-  // carries no fence). No reply is ever stored: the frames are untouched.
+  // The queued adapter reply: what the remote adapter returns in place of the stored frame,
+  // interpreted once at the trust boundary as the ports do.
+  //
+  // Rules
+  // - The drivers queue one reply by its class; the next successful raw completion consumes it,
+  //   owning or abandoned, and an adapter failure leaves it queued (C55; `settleRead`).
+  // - A miss reply is read by its discriminator: a known cause survives, an unknown reason or
+  //   shape is `unclassified`, and `watermark_fenced` is kept only beside a valid fence (C55).
+  // - A fence survives only on a tracked key and only as a valid timestamp, whatever the cause;
+  //   it is the refill fence of the source the miss starts (C55, C58; `fenceOf`).
+  // - A frame-shaped reply with stray miss metadata is a frame, stamped at the reply's wall
+  //   clock and judged for freshness like a stored frame's stamp (C55; `observed`).
+  // - No reply is ever stored: the frames are untouched.
+  // Shapes
+  // - Queued[r]: the queued reply and the wall clock it was queued at, beside the tracking flag.
+  // - QueuedHeld[r]: `deadlines::BudgetedHeld` with the queue; the effects profile passes it.
+  // Consumers: effects; composed through `metrics`.
+  // Ports: typescript/src/internal/redis-cache.ts `validateReadResult`, `frameAge`;
+  //   typescript/src/internal/redis-payload.ts `decodeTrackedRedisReadResult`;
+  //   go/protocol.go `NormalizeReadResult`; go/engine.go `frameAge`.
   import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
@@ -28,6 +29,8 @@ module adapter_replies {
   import clock as Clock from "./clock"
 
   pure val NO_REPLY = 0
+  // The drivers queue one reply by its class (BEHAVIOR.md, the effects
+  // `adapterReply` choices 1 to 16, below).
   // The drivers' reply classes: 1 null, 2 primitive, 3 legacy watermark
   // shape, 4 kindless metadata, 5 missing miss reason, 6 unknown reason,
   // 7 unknown reason with a valid future fence, 8 fenced reason without a
@@ -58,17 +61,20 @@ module adapter_replies {
   pure def queue(state: Queued[r], code: int): Queued[r] = { reply: code, replyAt: Clock::wallOf(state), ...state }
   pure def consume(state: Queued[r]): Queued[r] = { reply: NO_REPLY, ...state }
   pure def isFrame(code: int): bool = code == FRAME_WITH_MISS_FIELDS
-  // A fence survives only on a tracked key and only as a valid timestamp,
-  // whatever the cause beside it.
+  // A fence survives only on a tracked key and only as a valid timestamp (a
+  // negative, fractional or unsafe one is discarded), whatever the cause
+  // beside it.
   pure def carriesFence(tracked: bool, code: int): bool =
     tracked and Set(UNKNOWN_REASON_WITH_FENCE, ABSENT_WITH_FENCE, FENCED_WITH_FENCE).contains(code)
   // The fence a queued reply carries: the watermark it observed, the reply's
-  // wall clock plus the drivers' buffer (`bufferMs`), or none.
+  // wall clock plus the drivers' buffer (`bufferMs`), or none; it is the refill
+  // fence of the source the miss starts (C58).
   pure def fenceOf(state: Queued[r], bufferMs: int): int =
     if (carriesFence(state.tracked, state.reply)) state.replyAt + bufferMs else NO_FENCE
-  // The miss reason a miss reply normalizes to: a known cause survives, a
-  // fenced claim needs its fence, everything else is unclassified. The frame
-  // class is not a miss: `observed` judges it by its stamp like a stored frame.
+  // The miss reason a miss reply normalizes to: a known cause survives
+  // (`value_absent`, `expired`), a fenced claim needs its fence, everything
+  // else is unclassified. The frame class is not a miss: `observed` judges it
+  // by its stamp like a stored frame.
   pure def reason(tracked: bool, code: int): str =
     if (Set(FRACTIONAL_FENCE, UNSAFE_FENCE, ABSENT_WITH_FENCE, MISS_WITH_FRAME_FIELDS).contains(code)) "value_absent"
     else if (code == EXPIRED_ZERO_FENCE) "expired"
@@ -77,7 +83,8 @@ module adapter_replies {
   // What a read observes through the reply: the frame class is a visible frame
   // carrying the drivers' value, stamped at the reply's wall clock and served
   // while fresh for the reply's freshness (`cache_rules.freshAgeAllowed`, which
-  // declines a future-dated stamp); every miss class observes nothing.
+  // declines a future-dated stamp, an unclassified miss carrying no fence);
+  // every miss class observes nothing.
   pure def observed(state: Queued[r], freshMs: int): Remote::Observed =
     if (isFrame(state.reply)) {
       visible: true, failed: false, payload: FRAME_VALUE,

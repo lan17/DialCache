@@ -1,16 +1,29 @@
 module diagnostics {
-  // The diagnostics channel (`d`) of the request-only traversal: which
-  // singleflight a caller coalesced into and the layer a failed source is
-  // attributed to; and, over the budgeted held lifecycle, the singleflight a
-  // follower coalesced into, the layer a failed remote-reading flight is
-  // attributed to and the recovery age. The labels are the metric labels of
-  // the implementations:
-  // the coalesced scope is "request_local", the only registry this shape
-  // consults; fallback errors name the layer the call was serving (the
-  // request memo "request_local" when it memoizes, the shared layers'
-  // fallback "local" when it does not, "noop" once the scope closed). A
-  // profile whose drivers compare `d` composes the diagnosed variants below;
-  // the traversal itself never reads `d`.
+  // The diagnostics channel (`d`): the singleflight a caller coalesced into, the layer a failed
+  // source is attributed to and the recovery age, as diagnosed variants of the request-only
+  // traversal and of the budgeted held lifecycle.
+  //
+  // Rules
+  // - The labels are the metric labels of the implementations: a coalesced scope is
+  //   "request_local" or "process"; a fallback error names the layer the call was serving (C58).
+  // - A failed source is attributed to the request memo "request_local" when the call memoizes,
+  //   to the shared layers' fallback "local" otherwise, and to "noop" once the scope closed.
+  // - A held flight that dispatched a read is attributed to the remote layer, whatever it
+  //   observed; a late result that only drains records no fallback error (C58).
+  // - The recovery age is sampled when a recovery decode serves; shadow records its ages,
+  //   future offsets, config errors and warnings as each fact is known (C57, C60).
+  // - A profile whose drivers compare `d` composes the diagnosed variants; the traversal itself
+  //   never reads `d`, and the request-only shape consults only the request registry.
+  // Shapes
+  // - Channel[q]: the four fields every descriptor parses; a profile adds the fields it compares.
+  // - FutureOffset: the layer that observed a frame stamped after the wall clock, and the offset.
+  // - ShadowChannel[q]: the channel plus the config errors and future offsets shadow compares.
+  // - Diagnosed[r, q]: the channel and, per source, the layer it is attributed to.
+  // - DiagnosedRequest[r, q]: `serving::RequestServed` with the channel (request-only traversal).
+  // - DiagnosedHeld[r, q]: `deadlines::BudgetedHeld` with the channel, for the held profiles.
+  // Consumers: dark-layers, effects, recovery, scope, shadow, shadow-read-deadlines; composed
+  //   through `metrics` and `shadow`.
+  // Ports: typescript/src/metrics.ts `REQUEST_LOCAL_CACHE_LAYER`, `NO_CACHE_LAYER`.
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import calls.* from "./calls"

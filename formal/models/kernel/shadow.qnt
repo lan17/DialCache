@@ -1,128 +1,26 @@
 module shadow {
-  // Shadow jobs (C47 to C54, C57, C60): the diagnostic work a served remote
-  // hit or a ramped-down miss admits beside the caller, in one per-instance
-  // registry of bounded capacity shared by both kinds. A job is admitted
-  // beside the layered release judged once (`serving::layeredRelease`): a
-  // served hit admits a served job whose C0 is the payload the hit served and
-  // whose source is a detached one (`serving::startDetachedSource`: no caller
-  // owns it, it publishes nothing); a miss whose reply left the remote layer
-  // off admits a dark job over the caller's own source, reading its C0 from
-  // the remote layer itself (the read counted; the payload when the frame is
-  // fresh for the reply's freshness, `acquired`, nothing otherwise); a dark C0
-  // read that fails under the adapter's read fault ends `redis_error` at once
-  // (the read counted, no job registered, nothing filled, as the
-  // implementations return from the failed read before awaiting the source);
-  // an ordinary serving miss, a request or local hit, a key whose cohort the
-  // ramp does not select, an instance without the outcome hook (C47), or a
-  // caller whose scope closed before its release (the bypass reply, C01)
-  // admits nothing; a live job for the same instance and key, or a full
-  // instance, drops the job (C47, `busy`, `dropped`). A job captures the TTLs
-  // its reply resolved to (C18): the freshness its C0 read judges by and the
-  // retention its fill is written with, whatever the policy says later
-  // (`serving::authority` at the fill, capped for a tracked write, fenced by
-  // the watermark the C0 read observed when it found no visible frame, C58).
-  // The registry is pending-only, keyed by the job's source (a source has at
-  // most one job: a dark job takes the caller's just-started source, a served
-  // job a detached one registered for it): a finished job leaves no record,
-  // as a settled held read or dump does.
+  // Shadow jobs: diagnostic work a served remote hit or ramped-down miss admits beside the caller.
   //
-  // When the job's source settles: a failed source ends the job
-  // (`sourceOutcome`: `source_error`, or `timeout` when the caller's deadline
-  // failed it, the implementations reporting the caller's timeout as the
-  // job's); with no C0 the job fills the remote layer through the
-  // held refill when its captured authority still allows the write
-  // (`serving::refillAllowed`, judged before serializing as the
-  // implementations check the fence before encoding: a fence the wall does
-  // not clear ends the job `fill_fenced` at settlement with no dump;
-  // `remote_writes::holdDump`, the write stamped at dump release, where the
-  // fence is judged again, and stored at write release, `filled`), never
-  // publishing to request or local storage; with a C0 the job decodes it
-  // (counted) and compares its value with the source's (`valuesMatch`, the
-  // decoded value, `payloads::valueOf`): equal is a `match`, else a
-  // confirmation read (counted, under the adapter's read fault: a failed one
-  // ends `confirmation_error`) of the frame as it is now says whether the C0
-  // bytes are still current (`mismatch`: the same bytes, `payloads::bytesOf`,
-  // so a text and a binary spelling of one payload confirm each other, C51)
-  // or were replaced meanwhile (`superseded`). A served job always has a C0,
-  // so it never fills (C54). Every job has the budget its admission resolved,
-  // kept by `deadlines` (kind `JOB`, keyed by the job's source): at expiry the
-  // job is timed out and says so once; a dark job still waiting for its
-  // source leaves the registry, releasing its slot while the caller's source
-  // runs on; a served job keeps its detached source and its slot until that
-  // source settles; a job holding a read, a decode or a fill keeps its record
-  // until the held work drains, a dump released after the budget dispatching
-  // no write while a write released after it still stores (C53). No later
-  // label follows a timeout. A fill whose dump or write fails (the `failed`
-  // argument of the two releases, as `remote_writes` takes it) ends
-  // `fill_error`, nothing written.
-  //
-  // Two lifecycles compose the one registry. The atomic lifecycle (`Shadowed`,
-  // over `remote_writes::Writing`) judges the hit and the policy in the same
-  // step, at release (`admitJobs` reads the whole `Shadowing`), and makes the
-  // dark C0 read, the decode and the confirmation read at once. The held
-  // lifecycle (`HeldJobs`, over `remote_io::Held`) holds them as `remote_io`
-  // holds a caller's read and decode, in the same lists under the drivers'
-  // effect indices, budgeted on the io channel like every held read and never
-  // deadline-registered (the job's budget bounds all its work): a held read or
-  // decode over a source whose job is reading or decoding belongs to that job
-  // (`holdsRead`, `holdsLoad`; a caller's flight never has one then). Its
-  // rules are stated once, over `remote_io`: the source settled holds the
-  // decode (`settleJobHeld`), the decode settled says `match` or holds the
-  // confirmation read (`settleJobLoad`: `deserialization_error` when the
-  // decode fails, the drivers' fault or a payload whose bytes fail to decode;
-  // through the comparator the drivers install, `Comparison`: ordinary value
-  // equality, or a callback that reports equal, unequal, or throws,
-  // `comparison_error`, and consumes elapsed time first: a budget the
-  // comparison exhausts ends `timeout` before any verdict, C54; the callback
-  // is counted when installed, `o.comparisons`), the read settled says the
-  // verdict or acquires the C0 (`settleJobRead`). A timed-out job ends
-  // silently at whichever step finds it so, keeping its slot until then (C54:
-  // a served job's capacity is owned through its pending source, decode and
-  // confirmation). The two profiles that compose it each take one arm of the
-  // held admission. Served jobs (`HeldShadowed`, the admission profile, whose
-  // replies all enable the remote layer): the caller's read is dispatched
-  // before the frame is judged, so the cohort selection is captured for the
-  // flight when the read is dispatched (`selected`, a pending-only list of
-  // flights, the kernel's consulted-record idiom as `recovery`'s snapshot) and
-  // consulted when the hit is judged, at the decode's settlement for a frame
-  // held for decoding, where a served hit admits the job under the instance's
-  // limits read then (`settleLoad`), or at the read's settlement otherwise,
-  // where no hit can follow and nothing is admitted (`settleRead`); `beginHeld`
-  // and `releaseHeld` are the held release with the capture. Dark jobs
-  // (`DiagnosedShadowed`, the shadow profile, whose replies all leave it off):
-  // over the diagnosed budgeted held lifecycle (`deadlines`, `diagnostics`:
-  // the caller's source deadline, the layer its failure is attributed to and
-  // the channel the shadow drivers compare), admission (`beginDark`) registers
-  // the job with its budget before the source's synchronous work moves the
-  // clock (BEHAVIOR.md `sourceWorkMs`: the job's deadline and the caller's
-  // source deadline are measured from the call), then dispatches the C0 read,
-  // or times the job out with no read when the work already exhausted the
-  // budget (C54, `dispatchC0`); the C0 read settles with the state then
-  // current (`settleJobRead`: the frame acquired when fresh for the captured
-  // freshness, the fence observed, a failed read `redis_error`; a job whose
-  // source already settled continues at once). The channel facts are recorded
-  // beside the settlements (`releaseRead`, `releaseLoad`, C57, C60): a `match`
-  // or a confirmed `mismatch` samples the C0 frame's age at the verdict's
-  // wall clock, clamped to zero after a rollback, and a confirmed mismatch
-  // warns exactly when the admission's mismatch-logging policy was on
-  // (captured, `Shadowing.logging`); a shadow read of a frame stamped after
-  // the wall clock reports the offset on the `remote_shadow` layer whatever
-  // the job does next; a shadow policy that fails to resolve is one
-  // configuration error per call (`Malformed`: an invalid ramp always; an
-  // invalid logging value only where the hook and the ramp would otherwise
-  // admit the job). The caller's source deadline delivered ends the job
-  // waiting on that source `timeout` at once, its slot released
-  // (`expireHeld`, through `settleJobHeld`); a job still holding its C0 read
-  // then ends the same way when the read settles; a job budget due in the
-  // same round finds the job gone and says nothing more.
-  // `held-dark-shadow.qnt` pins a source deadline below its job budget with
-  // `sourceDeadlineAloneEndsTheJobTest`. That arm is fixture-only: both native
-  // drivers derive both budgets from the call's fallback timeout; replaying
-  // separate budgets would require a per-call sourceTimeoutMs input.
-  //
-  // Cohort selection is the drivers' ramp decoded by the profile through
-  // `cohort_boundaries` (strict against the key's numerator); the module reads
-  // the decoded selection.
+  // Rules
+  // - Admission needs the hook and the ramp (C47), not a bypass reply (C01); `busy` drops (C54).
+  // - A served hit admits a served job over a detached source, its C0 the payload served (C48);
+  //   a miss with the remote layer left off admits a dark job over the caller's own source (C49).
+  // - A job captures its reply's TTLs (C18) and the fence its C0 read observed (C58); only a dark
+  //   job with no C0 fills, under that authority, the fence judged again at dispatch (C52, C53).
+  // - A C0 is decoded on its own and compared; an unequal comparison needs one confirmation read
+  //   of the frame's bytes (C50, C51); verdict ages and mismatch warnings follow C57 and C60.
+  // Shapes
+  // - Comparison: the comparator the drivers install and the elapsed time it consumes.
+  // - Shadowing: the shadow policy in force for a call, passed at admission.
+  // - Malformed: whether the ramp or the logging value failed to resolve, passed to `beginDark`.
+  // - Job: one job's record, kept while it is pending.
+  // - Jobs[r]: the per-instance registry of bounded capacity both kinds share, over the clock.
+  // - Shadowed[r]: the atomic lifecycle over `remote_writes::Writing`, shadow-layers' shape.
+  // - HeldJobs[r]: the held lifecycle over `remote_io::Held`, with the held fills.
+  // - HeldShadowed[r]: the served arm (admission profile), the selection captured per flight.
+  // - DiagnosedShadowed[r, q]: the dark arm (shadow profile) over `diagnostics::DiagnosedHeld`.
+  // Consumers: admission, dark-layers, shadow, shadow-layers, shadow-read-deadlines; also
+  //   composed through `shadow_reads`.
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import calls.* from "./calls"
@@ -159,9 +57,14 @@ module shadow {
   // The shadow policy in force for a call: whether the outcome hook is
   // installed (C47), whether the key's cohort is selected, the per-instance
   // capacity, the job budget and whether a confirmed mismatch is logged (C60,
-  // captured by the job at admission).
+  // captured by the job at admission). Cohort selection is the drivers' ramp
+  // decoded by the profile through `cohort_boundaries` (strict against the
+  // key's numerator); the module reads the decoded selection.
   type Shadowing = { hook: bool, selected: bool, capacity: int, budgetMs: int, logging: bool }
-  // Whether the policy failed to resolve: the ramp, or the logging value.
+  // Whether the policy failed to resolve: the ramp, or the logging value. A
+  // shadow policy that fails to resolve is one configuration error per call:
+  // an invalid ramp always; an invalid logging value only where the hook and
+  // the ramp would otherwise admit the job (`beginDark`).
   type Malformed = { ramp: bool, logging: bool }
   pure val WELL_FORMED: Malformed = { ramp: false, logging: false }
 
@@ -171,21 +74,46 @@ module shadow {
   // frame's stamp (the age a verdict samples), the fence its C0 read observed
   // when it found no visible frame (C58), the TTLs its reply resolved to
   // (C18), its phase, whether its budget expired and the mismatch logging it
-  // captured.
+  // captured. The captured TTLs are the freshness its C0 read judges by and
+  // the retention its fill is written with, whatever the policy says later.
   type Job = { source: int, dark: bool, cached: int, stamp: int, fence: int, ttls: Ttls, phase: int, timedOut: bool, logging: bool }
   // The registry beside the clock and its pending budgets, over the sources
-  // the jobs run for: what every lifecycle composes.
+  // the jobs run for: what every lifecycle composes. The registry is
+  // pending-only, keyed by the job's source: a finished job leaves no record,
+  // as a settled held read or dump does. A source has at most one job: a dark
+  // job takes the caller's just-started source, a served job a detached one
+  // registered for it.
   type Jobs[r] = Deadlines::Scheduled[{ o: Observation, jobs: List[Job], sources: List[Serving::LayeredSource] | r }]
+  // The atomic lifecycle's shape, over `remote_writes::Writing`: it judges
+  // the hit and the policy in the same step, at release (`admitJobs` reads
+  // the whole `Shadowing`), and makes the dark C0 read, the decode and the
+  // confirmation read at once. Two lifecycles compose the one registry.
   type Shadowed[r] = Writes::Writing[{ jobs: List[Job], deadlines: List[Deadlines::Due] | r }]
   // The held lifecycle's shape: the held remote traversal with the held fills
-  // (a dark job's dumps and writes) and the registry.
+  // (a dark job's dumps and writes) and the registry. It holds a job's reads
+  // and decodes as `remote_io` holds a caller's read and decode, in the same
+  // lists under the drivers' effect indices. They are budgeted on the io
+  // channel like every held read and never deadline-registered: the job's
+  // budget bounds all its work. Its rules are stated once, over `remote_io`:
+  // the source settled holds the decode (`settleJobHeld`), the decode settled
+  // says `match` or holds the confirmation read (`settleJobLoad`), the read
+  // settled says the verdict or acquires the C0 (`settleJobRead`). The two
+  // profiles that compose it each take one arm of the held admission.
   type HeldJobs[r] = RemoteIO::Held[{ dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite], jobs: List[Job], deadlines: List[Deadlines::Due] | r }]
-  // Served jobs: the selection captured per pending flight beside it.
+  // Served jobs, the admission profile's arm, whose replies all enable the
+  // remote layer: the selection captured per pending flight beside the
+  // registry. The caller's read is dispatched before the frame is judged, so
+  // the cohort selection is captured for the flight when the read is
+  // dispatched (`selected`, a pending-only list of flights, the kernel's
+  // consulted-record idiom as `recovery`'s snapshot). It is consulted when
+  // the hit is judged (`settleLoad`, `settleRead`).
   type HeldShadowed[r] = HeldJobs[{ selected: List[int] | r }]
-  // Dark jobs: the diagnosed budgeted held remote lifecycle (the caller's
-  // source deadline, the coalesced scope, the failed layer) with the held
-  // fills, the jobs and the two channel fields the shadow drivers compare
-  // beside the four every descriptor parses.
+  // Dark jobs, the shadow profile's arm, whose replies all leave the remote
+  // layer off. The shape is the diagnosed budgeted held remote lifecycle
+  // (`deadlines`, `diagnostics`: the caller's source deadline, the coalesced
+  // scope, the layer a failure is attributed to) with the held fills and the
+  // jobs. Beside the four channel fields every descriptor parses, it carries
+  // the two the shadow drivers compare.
   type DiagnosedShadowed[r, q] = Diagnostics::DiagnosedHeld[
     { dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite], jobs: List[Job] | r },
     { configErrors: int, futureOffsets: List[Diagnostics::FutureOffset] | q }
@@ -209,6 +137,7 @@ module shadow {
   pure def confirming(state: Jobs[r]): bool = state.jobs.select(job => job.phase == CONFIRMING).length() > 0
   // The held effects a job holds, by the drivers' ordinal: a held read over a
   // source whose job is reading, a held decode over one whose job is decoding.
+  // A caller's flight never has one then.
   pure def holdsRead(state: HeldJobs[r], read: int): bool =
     state.reads.select(held => held.read == read and jobHolds(state, held.flight, Set(READING_C0, CONFIRMING))).length() > 0
   pure def readerOf(state: HeldJobs[r], read: int): Job = jobOf(state, RemoteIO::heldRead(state, read).flight)
@@ -231,7 +160,9 @@ module shadow {
     { o: { shadow: state.o.shadow.append("dropped"), ...state.o }, ...state }
   pure def newJob(source: int, dark: bool, cached: int, stamp: int, fence: int, ttls: Ttls, phase: int, logging: bool): Job =
     { source: source, dark: dark, cached: cached, stamp: stamp, fence: fence, ttls: ttls, phase: phase, timedOut: false, logging: logging }
-  // A job registered over its source, its budget due from now.
+  // A job registered over its source, its budget due from now: every job has
+  // the budget its admission resolved, kept by `deadlines` (kind `JOB`, keyed
+  // by the job's source).
   pure def admit(state: Jobs[r], job: Job, budgetMs: int): Jobs[r] =
     Deadlines::due({ jobs: state.jobs.append(job), ...state }, Deadlines::JOB, job.source, budgetMs)
   pure def update(state: Jobs[r], job: Job): Jobs[r] =
@@ -243,15 +174,23 @@ module shadow {
   // hook is installed and the reply selected the cohort; `dropped` for a live
   // job of the same identity or a full instance (C47); else a served job over
   // a detached source with the payload the hit served as its C0, the frame's
-  // stamp as the hit is judged, the reply's TTLs and no fence.
+  // stamp as the hit is judged, the reply's TTLs and no fence. The detached
+  // source is `serving::startDetachedSource`: no caller owns it, it publishes
+  // nothing. A served job always has a C0, so it never fills (C52).
   pure def admitServed(state: Serving::Served[{ jobs: List[Job], deadlines: List[Deadlines::Due] | r }], layout: Serving::Layout,
       who: { instance: int, key: int | q }, cached: int, ttls: Ttls, shadowing: Shadowing): Serving::Served[{ jobs: List[Job], deadlines: List[Deadlines::Due] | r }] =
     if (not(admits(shadowing))) state
     else if (busy(state, who.instance, who.key, shadowing.capacity)) dropped(state)
     else admit(Serving::startDetachedSource(state, layout, who),
       newJob(state.sources.length(), false, cached, state.created.nth(who.key), NO_FENCE, ttls, WAITING_SOURCE, shadowing.logging), shadowing.budgetMs)
-  // Admission beside the release judged once, on the released state: the
-  // atomic lifecycle, where a dark job's C0 read is made here.
+  // Admission beside the release judged once (`serving::layeredRelease`), on
+  // the released state: the atomic lifecycle, where a dark job's C0 read is
+  // made here. A served hit admits a served job (`admitServed`); a miss whose
+  // reply left the remote layer off admits a dark job over the caller's own
+  // source, reading its C0 from the remote layer itself. An ordinary serving
+  // miss, a request or local hit, a key whose cohort the ramp does not select,
+  // an instance without the outcome hook (C47) or a bypass reply (C01) admits
+  // nothing.
   pure def admitJobs(state: Shadowed[r], layout: Serving::Layout, judged: Serving::LayeredRelease, ttls: Ttls, shadowing: Shadowing): Shadowed[r] = {
     val call = judged.call
     if (not(admits(shadowing))) state
@@ -264,8 +203,11 @@ module shadow {
         else {
           // The dark C0 read: the frame as the reply's freshness judges it now,
           // under the adapter's read fault; the job reads the remote layer on
-          // its own account. A failed read is the label alone: the read
-          // counted, no job, nothing filled.
+          // its own account (the read counted; the payload when fresh,
+          // `acquired`, nothing otherwise). A failed read ends `redis_error` at
+          // once and is the label alone: the read counted, no job registered,
+          // nothing filled, as the implementations return from the failed read
+          // before awaiting the source.
           val c0 = Remote::observe(state, call.key, layout.operationsPerEntity, ttls.freshMs, state.readFailed)
           val read = { o: { reads: state.o.reads + 1, ...state.o }, ...state }
           if (c0.failed) { o: { shadow: read.o.shadow.append("redis_error"), ...read.o }, ...read }
@@ -294,7 +236,10 @@ module shadow {
   pure def retireJob(state: Jobs[r], source: int): Jobs[r] =
     Deadlines::forget({ jobs: state.jobs.select(other => other.source != source), ...state }, Deadlines::JOB, source)
   // A job ends with its outcome, its record and deadline gone; a timed-out
-  // job said so already and adds nothing.
+  // job said so already and adds nothing. A timed-out job ends silently at
+  // whichever step finds it so, keeping its slot until then (C54: a served
+  // job's capacity is owned through its pending source, decode and
+  // confirmation). No later label follows a timeout.
   pure def finishJob(state: Jobs[r], source: int, outcome: str): Jobs[r] = {
     val job = jobOf(state, source)
     retireJob({
@@ -309,6 +254,15 @@ module shadow {
   pure def sourceOutcome(result: int): str = if (result == DEADLINE_ERROR) "timeout" else "source_error"
   // A dark fill: the authority the job captured (C18, C58), judged before
   // serializing; a fence the wall does not clear ends the job with no dump.
+  // The authority is `serving::authority` at the fill: the retention capped
+  // for a tracked write, fenced by the watermark the C0 read observed when it
+  // found no visible frame. The job fills the remote layer through the held
+  // refill when `serving::refillAllowed` still allows the write, judged
+  // before serializing as the implementations check the fence before
+  // encoding (`fill_fenced` at settlement otherwise). The dump is
+  // `remote_writes::holdDump`; the write is stamped at dump release, where
+  // the fence is judged again, and stored at write release (`filled`). A fill
+  // never publishes to request or local storage.
   pure def fill(state: Shadowed[r], layout: Serving::Layout, job: Job): Shadowed[r] = {
     val authority = Serving::authority(state, sourceOf(state, job), job.ttls, true, true, job.fence)
     if (not(Serving::refillAllowed(state, authority.retentionMs, authority.fence))) finishJob(state, job.source, "fill_fenced")
@@ -319,13 +273,22 @@ module shadow {
   pure def valuesMatch(cached: int, result: int): bool = Payloads::valueOf(cached) == result
   pure def matches(comparison: Comparison, cached: int, result: int): bool =
     comparison.comparator == COMPARE_EQUAL or (comparison.comparator == COMPARE_VALUES and valuesMatch(cached, result))
-  // The confirmation read judged: a failed read, the same bytes, or replaced bytes.
+  // The confirmation read judged: a failed read (`confirmation_error`), the
+  // same bytes or replaced bytes. The read of the frame as it is now says
+  // whether the C0 bytes are still current (`mismatch`: the same bytes,
+  // `payloads::bytesOf`, so a text and a binary spelling of one payload
+  // confirm each other, C51) or replaced (`superseded`).
   pure def confirmation(observed: Remote::Observed, cached: int): str =
     if (observed.failed) "confirmation_error"
     else if (Payloads::bytesOf(observed.payload) == Payloads::bytesOf(cached)) "mismatch"
     else "superseded"
   // The job's source has settled, the atomic lifecycle: the decode and the
-  // confirmation read are made here.
+  // confirmation read are made here. A failed source ends the job
+  // (`sourceOutcome`); with no C0 the job fills. With a C0 the job decodes it
+  // (counted) and compares its value with the source's (`valuesMatch`, the
+  // decoded value, `payloads::valueOf`). Equal is a `match`; else a
+  // confirmation read (counted, under the adapter's read fault) of the frame
+  // as it is now gives the verdict (`confirmation`).
   pure def settleJob(state: Shadowed[r], layout: Serving::Layout, source: int): Shadowed[r] = {
     val job = jobOf(state, source)
     val result = sourceOf(state, job).result
@@ -356,6 +319,9 @@ module shadow {
   // release, stopped the write (`fill_fenced`: a wall rollback since
   // settlement). A source carries a caller's refill or a job's fill, never
   // both: a dark job is admitted only under a reply with the remote layer off.
+  // The adapter's dump and write faults are the `failed` argument of the two
+  // releases, as `remote_writes` takes them: a fill whose dump or write fails
+  // ends `fill_error`, nothing written.
   pure def releaseDump(state: Shadowed[r], layout: Serving::Layout, dump: int, failed: bool): Shadowed[r] = {
     val source = Writes::heldDump(state, dump).source
     if (not(holdsJob(state, source))) Writes::releaseDump(state, layout, dump, failed)
@@ -370,7 +336,8 @@ module shadow {
   }
   // A write released: a caller's refill stores and completes; a job's fill
   // stores (`filled`; `fill_error` when the write failed and nothing is
-  // stored) and completes nobody.
+  // stored) and completes nobody. A write released after the job's budget
+  // still stores (C53), where a dump released after it dispatches no write.
   pure def releaseWrite(state: Shadowed[r], layout: Serving::Layout, write: int, failed: bool): Shadowed[r] = {
     val source = Writes::heldWrite(state, write).source
     if (not(holdsJob(state, source))) Writes::releaseWrite(state, layout, write, failed)
@@ -381,6 +348,10 @@ module shadow {
 
   // A job's budget delivered: `timeout` said once; a dark job still waiting
   // leaves the registry, any other keeps its record until its held work drains.
+  // The dark job releases its slot while the caller's source runs on; a served
+  // job keeps its detached source and its slot until that source settles. A
+  // job holding a read, a decode or a fill keeps its record until the held
+  // work drains (C53, C54).
   pure def expireJob(state: Jobs[r], due: Deadlines::Due): Jobs[r] = {
     val job = jobOf(state, due.index)
     val expired = { o: { shadow: state.o.shadow.append("timeout"), ...state.o }, ...state }
@@ -405,11 +376,14 @@ module shadow {
     else update(RemoteIO::holdLoad(state, source, NO_TTLS, job.cached, false), { phase: DECODING, ...job })
   }
   // A job's held decode settles: a timed-out job drains silently; a failed
-  // decode ends `deserialization_error`; else the comparison runs, its
-  // elapsed time moving the clock without delivering timers, and a budget it
-  // reached ends `timeout`, a throwing callback `comparison_error`, equality
-  // a `match`, and inequality holds the confirmation read (counted, under the
-  // read budget in force on the io channel).
+  // decode ends `deserialization_error` (the drivers' fault or a payload whose
+  // bytes fail to decode). Else the comparison runs through the comparator
+  // the drivers install (`Comparison`), its elapsed time moving the clock
+  // without delivering timers. A budget it reached ends `timeout` before any
+  // verdict (C54), a throwing callback `comparison_error`, equality a
+  // `match`, and inequality holds the confirmation read (counted, under the
+  // read budget in force on the io channel). The callback is counted when
+  // installed (`o.comparisons`).
   pure def settleJobLoad(state: HeldJobs[r], layout: Serving::Layout, load: int, failed: bool, comparison: Comparison, budget: int): HeldJobs[r] = {
     val job = decoderOf(state, load)
     val source = job.source
@@ -529,7 +503,10 @@ module shadow {
   // source budget, or its read dispatched under `budget`), the configuration
   // error a malformed shadow policy reports, the job registered, the source's
   // synchronous work (`workMs`, moving the clock without delivering timers),
-  // and the C0 read dispatched or the job timed out.
+  // and the C0 read dispatched or the job timed out. The job is registered
+  // with its budget before the work moves the clock (BEHAVIOR.md
+  // `sourceWorkMs`: the job's deadline and the caller's source deadline are
+  // measured from the call).
   pure def beginDark(state: DiagnosedShadowed[r, q], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int,
       shadowing: Shadowing, malformed: Malformed, workMs: int): DiagnosedShadowed[r, q] = {
     val admitted = Diagnostics::admit(state, layout, call)
@@ -558,7 +535,8 @@ module shadow {
   // reported for the job: a `match` or a confirmed `mismatch` samples the C0
   // frame's age at the verdict, clamped to zero after a wall rollback (C57),
   // and a confirmed mismatch warns under the logging policy the job captured
-  // (C60). A timed-out job reports no label and so no verdict.
+  // (C60). It warns exactly when the admission's mismatch-logging policy was
+  // on (`Shadowing.logging`). A timed-out job reports no label and so no verdict.
   pure def recordVerdict(before: DiagnosedShadowed[r, q], after: DiagnosedShadowed[r, q], job: Job): DiagnosedShadowed[r, q] = {
     val labels = after.o.shadow
     val outcome = if (labels.length() > before.o.shadow.length()) labels.nth(labels.length() - 1) else ""
@@ -587,7 +565,14 @@ module shadow {
   // Delivery from inside the kernel, by kind: a job budget (nothing for a job
   // a source deadline of the same round already ended), a read deadline, or a
   // source deadline through the diagnosed expiry, then the job waiting on the
-  // flight it completed (`settleJobHeld`: `timeout`, the slot released).
+  // flight it completed (`settleJobHeld`: `timeout`, the slot released). A
+  // job still holding its C0 read then ends the same way when the read
+  // settles (`settleJobRead`); a job budget due in the same round finds the
+  // job gone and says nothing more. `held-dark-shadow.qnt` pins a source
+  // deadline below its job budget with `sourceDeadlineAloneEndsTheJobTest`.
+  // That arm is fixture-only: both native drivers derive both budgets from
+  // the call's fallback timeout; replaying separate budgets would require a
+  // per-call sourceTimeoutMs input.
   pure def expireHeld(state: DiagnosedShadowed[r, q], layout: Serving::Layout, due: Deadlines::Due): DiagnosedShadowed[r, q] =
     if (due.kind == Deadlines::JOB) (if (holdsJob(state, due.index)) expireJob(state, due) else state)
     else if (due.kind == Deadlines::READ) Deadlines::expireRead(state, layout, due.index)

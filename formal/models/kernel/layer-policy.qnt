@@ -1,7 +1,19 @@
 module layer_policy {
-  // Which serving layers a call may use, from the policy code the conformance
-  // drivers share (formal/replay/features.mjs layerPolicies) and the presence
-  // of remote storage. Codes are part of the driver contract; do not renumber.
+  // Which serving layers a call may use, from the drivers' layer policy code and the presence of
+  // remote storage, with the TTLs a reply resolves to and the layers those TTLs leave on.
+  //
+  // Rules
+  // - Codes 0 to 5 are the policy codes the conformance drivers share (formal/replay/features.mjs
+  //   `layerPolicies`) and part of the driver contract; do not renumber.
+  // - A reply resolves to its layers and whether it coalesces (C13); `BYPASS` is the reply of a
+  //   call in a closed scope (C01) or, with runtime replies, an invalid leaf.
+  // - A layer whose TTL is 0 is off (`gated`); a source refills the remote layer iff it captured
+  //   a positive retention; sharing exists only where a shared layer participates.
+  // Shapes
+  // - Layers: the request, local and remote flags of one reply.
+  // - Resolution: a reply's layers and coalescing, passed to every release.
+  // - Ttls: local insertion TTL, remote freshness and retention, passed beside the resolution.
+  // Consumers: every composed profile.
   pure val ALL_LAYERS = 0
   pure val NO_REQUEST_LAYER = 1
   pure val NO_LOCAL_LAYER = 2
