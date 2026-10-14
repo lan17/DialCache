@@ -1,6 +1,6 @@
 # Docs and test behavior audit
 
-[`source-audit.json`](../catalogs/source-audit.json) records reviewed ordinary test declarations and documentation sections. Each entry names its source location and the obligations or boundaries in [`CONTRACTS.md`](./CONTRACTS.md). Parameterized declarations and loops count once here; Vitest expands them into more executions. Get current inventory counts from `node formal/tools/check-source-audit.mjs`; they are not a behavioral coverage percentage.
+[`source-audit.json`](../catalogs/source-audit.json) records reviewed ordinary test declarations and documentation sections. Each entry names its heading or test title and the obligations or boundaries in [`CONTRACTS.md`](./CONTRACTS.md); a repeated title is told apart by its position, never by a line number, so prose above a heading does not move it. Parameterized declarations and loops count once here; Vitest expands them into more executions. Get current inventory counts from `node formal/tools/check-source-audit.mjs`; they are not a behavioral coverage percentage.
 
 The audit separates three questions:
 
@@ -18,7 +18,7 @@ Run:
 node formal/tools/check-source-audit.mjs
 ```
 
-Normal TypeScript tests run the check too, without Quint. It fails when a source file is added/removed, its contents change, a typescript/test/section is added or moved, or an entry lacks a known contract disposition. SHA-256 fingerprints include inline fixture and assertion changes, not just test titles. Shared helper changes must still be reviewed with their consuming tests; helpers are not independently fingerprinted. This prevents a green *stale inventory* from silently being reused after source drift; it cannot judge whether a mapping is correct.
+Normal TypeScript tests run the check too, without Quint. It fails when a source file is added/removed, its contents change, a test or section is added, removed or reordered, or an entry lacks a known contract disposition. SHA-256 fingerprints include inline fixture and assertion changes, not just test titles. Shared helper changes must still be reviewed with their consuming tests; helpers are not independently fingerprinted. This prevents a green *stale inventory* from silently being reused after source drift; it cannot judge whether a mapping is correct.
 
 For a changed file, read the changed assertions/prose and any affected fixtures, then:
 
@@ -82,8 +82,12 @@ review record; the reviewer writes it.
 Guide review is file-level freshness and scope accounting, separate from the
 public section-to-contract mappings. Neither mechanism proves every prose clause
 or infers that a model change still agrees with an unchanged guide. Go's
-applicability ledger retains the public `sources` mappings; its audit hash also
-binds these guide reviews without counting them as additional Go tests.
+applicability ledger binds to this audit through one digest
+(`inputs.sourceAuditDispositionsSha256`) over the schema, every test source's
+content hash, every disposition and every guide review record, and not over a
+documentation file's bytes: a prose edit that keeps its headings and
+dispositions leaves that ledger untouched, while a changed assertion, a new
+section or a changed disposition reaches it.
 
 ## Claim boundary
 
