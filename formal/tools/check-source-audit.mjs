@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { encodeJson } from './compact-json.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = (path, directory = root) => readFileSync(resolve(directory, path), 'utf8');
@@ -70,8 +71,74 @@ export function guideSnapshot(directory = root) {
   return snapshot(paths, directory);
 }
 
+export const auditPath = 'formal/catalogs/source-audit.json';
+// The audit as committed: pretty JSON with every heading or test entry on one line.
+export const encodeAudit = audit => encodeJson(audit, path => path.length >= 3 && path.at(-2) === 'entries' && typeof path.at(-1) === 'number');
+
+// A refreshed file's entries keep their dispositions by title: the k-th
+// occurrence of a title keeps what the k-th occurrence had, so a moved section
+// keeps its contracts and a renamed or new one starts empty.
+function carryDispositions(previous = [], entries) {
+  const seen = new Map();
+  return entries.map(entry => {
+    const occurrence = seen.get(entry.title) ?? 0;
+    seen.set(entry.title, occurrence + 1);
+    const match = previous.filter(candidate => candidate?.title === entry.title)[occurrence];
+    return { ...entry, contracts: match?.contracts ?? [] };
+  });
+}
+
+// Re-key the named files after their review. For each: recompute its hash and
+// entry inventory, carry its contract dispositions by title and give a new
+// entry an empty disposition, so the check fails until a reviewer fills it. A
+// named file that joined the inventory is added at its sorted position, a
+// guide without its review record; one that left the inventory is dropped.
+// Files not named keep their rows as they are. Nothing here assigns a
+// disposition or writes a review.
+export function refreshSourceAudit(audit, paths, { directory = root } = {}) {
+  const snapshots = { sources: sourceSnapshot(directory), reviewedGuides: guideSnapshot(directory) };
+  const result = { ...audit, sources: [...(audit.sources ?? [])], reviewedGuides: [...(audit.reviewedGuides ?? [])] };
+  const changes = [];
+  for (const path of paths.map(given => given.replace(/^\.\//, ''))) {
+    const kind = ['sources', 'reviewedGuides'].find(name => snapshots[name].some(source => source.path === path) || result[name].some(row => row?.path === path));
+    if (!kind) throw new Error(`${path}: not an audited source or reviewed guide`);
+    const rows = result[kind];
+    const index = rows.findIndex(row => row?.path === path);
+    const source = snapshots[kind].find(candidate => candidate.path === path);
+    if (!source) {
+      rows.splice(index, 1);
+      changes.push({ path, action: 'removed' });
+      continue;
+    }
+    const previous = index >= 0 ? rows[index] : undefined;
+    const entries = kind === 'sources' ? carryDispositions(previous?.entries, source.entries) : source.entries;
+    const row = previous ? { ...previous, sha256: source.sha256, entries } : { path, sha256: source.sha256, entries };
+    const pending = entries.filter(entry => entry.contracts?.length === 0).map(entry => `${entry.line} ${JSON.stringify(entry.title)}`);
+    if (previous && previous.sha256 === row.sha256 && equal(previous.entries, entries)) {
+      changes.push({ path, action: 'unchanged', entries: entries.length, pending });
+      continue;
+    }
+    if (previous) rows[index] = row;
+    else {
+      const at = rows.findIndex(other => other?.path > path);
+      rows.splice(at < 0 ? rows.length : at, 0, row);
+    }
+    changes.push({ path, action: previous ? 'refreshed' : 'added', entries: entries.length, pending, review: kind !== 'reviewedGuides' || Boolean(row.review) });
+  }
+  return { audit: result, changes };
+}
+
+export function describeChange({ path, action, entries, pending = [], review = true }) {
+  if (action === 'removed') return `${path}: removed, no longer in the inventory`;
+  const needs = [
+    pending.length ? `${pending.length} without a contract disposition: ${pending.join(', ')}` : '',
+    review ? '' : 'its review record is missing',
+  ].filter(Boolean);
+  return `${path}: ${action}, ${entries} ${entries === 1 ? 'entry' : 'entries'}${needs.length ? `; ${needs.join('; ')}` : ''}`;
+}
+
 export function checkSourceAudit(audit, { directory = root } = {}) {
-  if (audit === undefined) audit = JSON.parse(read('formal/catalogs/source-audit.json', directory));
+  if (audit === undefined) audit = JSON.parse(read(auditPath, directory));
   if (audit?.schemaVersion !== 1) throw new Error('Unsupported formal source audit version');
   const actual = sourceSnapshot(directory), guides = guideSnapshot(directory);
   const ids = new Set([...read('formal/guides/CONTRACTS.md', directory).matchAll(/^\| ([CWEBX]\d{2}) \|/gm)].map(m => m[1]));
@@ -112,4 +179,21 @@ export function checkSourceAudit(audit, { directory = root } = {}) {
     reviewedGuides: guides.length, guideSections: guides.reduce((n, s) => n + s.entries.length, 0) };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) console.log(checkSourceAudit());
+function main(argv) {
+  if (argv.length === 0) return console.log(checkSourceAudit());
+  if (argv[0] !== '--refresh' || argv.length < 2) {
+    console.error('Usage: node formal/tools/check-source-audit.mjs [--refresh <path>...]');
+    process.exitCode = 2;
+    return;
+  }
+  const { audit, changes } = refreshSourceAudit(JSON.parse(read(auditPath)), argv.slice(1));
+  writeFileSync(resolve(root, auditPath), encodeAudit(audit));
+  for (const change of changes) console.log(describeChange(change));
+  try { console.log(checkSourceAudit(audit)); }
+  catch (error) {
+    console.error(`\nThe audit still fails. Fill what is missing, then run the check again:\n${error.message}`);
+    process.exitCode = 1;
+  }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main(process.argv.slice(2));

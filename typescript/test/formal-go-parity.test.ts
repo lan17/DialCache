@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 type Ledger = {
   status: string;
+  inputs: Record<string, string>;
   inventory: { sourceDeclarations: number; requiredWitnesses: number; casesWithQuintRegressionReplay: number };
   sourceInventory: Array<{
     path: string;
@@ -29,8 +30,10 @@ const profiles = () => formal("profiles.json") as Profiles;
 const checker = new URL("../../formal/tools/check-go-parity.mjs", import.meta.url).href;
 // Keep the ledger in-process: these assertions test the exported accounting
 // checker, so a subprocess adds no behavioral coverage.
-const { checkGoParity: validate } = await import(checker) as {
+const { checkGoParity: validate, refreshGoParityInputs, encodeLedger } = await import(checker) as {
   checkGoParity(input: Ledger, inputs?: Inputs): unknown;
+  refreshGoParityInputs(input: Ledger): Ledger;
+  encodeLedger(input: unknown): string;
 };
 
 describe("Go parity ledger freshness", () => {
@@ -142,5 +145,26 @@ describe("Go parity ledger freshness", () => {
   it("distinguishes referenced witnesses from the complete required gate", () => {
     const input = ledger(); input.inventory.requiredWitnesses--;
     expect(() => validate(input)).toThrow(/Required\/referenced witness inventory is stale/);
+  });
+
+  it("re-pins the catalog and vector artifact digests and nothing else", () => {
+    const stale = ledger();
+    for (const field of Object.keys(stale.inputs)) stale.inputs[field] = "0".repeat(64);
+    stale.vectorExports[0]!.artifactSha256 = "0".repeat(64);
+    stale.sourceInventory[0]!.sha256 = "0".repeat(64);
+    expect(() => validate(stale)).toThrow(/ledger input hash is stale/);
+    const refreshed = refreshGoParityInputs(stale);
+    expect(refreshed.inputs).toEqual(ledger().inputs);
+    expect(refreshed.vectorExports).toEqual(ledger().vectorExports);
+    expect(refreshed.sourceInventory[0]!.sha256).toBe("0".repeat(64));
+    expect(() => validate(refreshed)).toThrow(/source hash changed/);
+    refreshed.sourceInventory[0]!.sha256 = ledger().sourceInventory[0]!.sha256;
+    expect(validate(refreshed)).toMatchObject({ kind: "accounting-and-freshness" });
+    expect(Object.keys(refreshed)).toEqual(Object.keys(ledger()));
+  });
+
+  it("encodes the ledger as it is committed", () => {
+    const committed = readFileSync(new URL("../../formal/catalogs/go-parity.json", import.meta.url), "utf8");
+    expect(encodeLedger(JSON.parse(committed))).toBe(committed);
   });
 });

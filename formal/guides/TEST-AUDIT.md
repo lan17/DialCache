@@ -24,8 +24,32 @@ For a changed file, read the changed assertions/prose and any affected fixtures,
 
 - Reuse an existing obligation when it already captures the rule. Verify its named executable evidence, including negative/boundary consequences.
 - Add a scenario/vector/model and update the inventory when a portable consequence is missing. Record a specific binding/assumption/optional-profile disposition otherwise.
-- Update that source's entries and fingerprint only after the review. Do not refresh fingerprints merely to satisfy the check. `sourceSnapshot()` in the checker extracts current locations and hashes; it never assigns contract dispositions.
+- Re-key that source only after the review. Do not refresh fingerprints merely to satisfy the check.
 - Run the focused implementation and formal checks. A mapping is evidence bookkeeping, not a substitute for those checks.
+
+Re-key the reviewed files by name:
+
+```bash
+node formal/tools/check-source-audit.mjs --refresh docs/usage.md typescript/test/cache.test.ts
+```
+
+For each named file the command recomputes the content hash and the heading or
+test inventory, carries every contract disposition to the entry with the same
+title (the second occurrence of a repeated title to the second), and leaves a
+new or renamed entry with an empty disposition, so the check keeps failing
+until a reviewer fills it. A named file that joined the inventory is added at
+its position; one that left it is dropped. Files not named keep their rows. The
+command assigns no disposition and writes no review. Then re-pin the audit in
+the Go parity ledger, which fingerprints it:
+
+```bash
+node formal/tools/check-go-parity.mjs --refresh-inputs
+```
+
+That command re-pins the six catalog digests under `inputs` and each generated
+vector artifact's digest, nothing else. The TypeScript source and Go binding
+hashes in that ledger are re-pinned by hand with their mapping review
+([GO-PARITY.md](./GO-PARITY.md)). `make audit` runs both checks.
 
 The `sources` inventory covers `README.md`, authored Markdown pages under `docs/`
 (including native language guides), and ordinary `typescript/test/*.test.ts` files,
@@ -50,10 +74,10 @@ remain attached to the executions they describe.
 
 The same checker rejects an added, removed or edited guide, changed headings,
 missing review scope, invalid contract IDs, and historical evidence without
-revision identities. `guideSnapshot()` extracts current content hashes and
-headings; it does not supply review metadata. After reading a changed guide,
-review its claims against the relevant model, source, manifest or historical
-report before updating the snapshot and its explanation.
+revision identities. After reading a changed guide, review its claims against
+the relevant model, source, manifest or historical report, then re-key it with
+the same `--refresh` command. A guide new to the inventory is added without a
+review record; the reviewer writes it.
 
 Guide review is file-level freshness and scope accounting, separate from the
 public section-to-contract mappings. Neither mechanism proves every prose clause
