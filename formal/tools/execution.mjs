@@ -13,24 +13,14 @@ export const isKernelSource = path => path.startsWith(`${kernelDirectory}/`);
 // The fixtures under formal/models/fixtures/ are checked on their own and are
 // not sources a model may import.
 export const isQuintSourcePath = path => /^formal\/models\/(kernel\/)?[\w-]+\.qnt$/.test(path);
-// Transitional (lan17/DialCache#221): a revision from before the layout move
-// keeps its Quint sources at the top of formal/ and in its kernel/ subdirectory
-// and its manifests beside them. The differential exports such a revision as its
-// reference and reads it through the layout its own listing shows. Delete the
-// legacy layout once the merge base with main carries the current one.
-export const layouts = {
-  current: { manifests: ['formal/catalogs/execution.json', 'formal/catalogs/profiles.json'], sourceDirectories: ['formal/models', kernelDirectory], isSource: isQuintSourcePath },
-  legacy: { manifests: ['formal/execution.json', 'formal/profiles.json'], sourceDirectories: ['formal', 'formal/kernel'], isSource: path => /^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path) }, // layout-legacy: pre-move paths, kept verbatim
-};
-export const layoutOfListing = paths =>
-  paths.includes(layouts.legacy.manifests[0]) && !paths.includes(layouts.current.manifests[0]) ? layouts.legacy : layouts.current;
-export const layoutOfDirectory = directory =>
-  existsSync(resolve(directory, layouts.legacy.manifests[0])) && !existsSync(resolve(directory, layouts.current.manifests[0])) ? layouts.legacy : layouts.current;
+// The two manifests: the execution schedule and the profile registry.
+export const executionManifest = 'formal/catalogs/execution.json';
+export const profilesManifest = 'formal/catalogs/profiles.json';
 // Every Quint source a model may import: the scheduled models and helper
 // libraries at formal/models/ and the kernel library modules at formal/models/kernel/.
 export function quintSources(directory = root) {
   const files = [];
-  for (const relative of layoutOfDirectory(directory).sourceDirectories) {
+  for (const relative of ['formal/models', kernelDirectory]) {
     const absolute = resolve(directory, relative);
     if (!existsSync(absolute)) continue;
     for (const name of readdirSync(absolute)) if (name.endsWith('.qnt')) files.push(`${relative}/${name}`);
@@ -67,7 +57,7 @@ export function copySources(from, to) {
   return files;
 }
 const read = path => readFileSync(root + path, 'utf8');
-export const readExecution = () => JSON.parse(read('formal/catalogs/execution.json'));
+export const readExecution = () => JSON.parse(read(executionManifest));
 
 // A scoped declaration scanner, not a Quint parser or typechecker. Ignore
 // comments, keep each string literal as one opaque token, and only inventory
@@ -718,7 +708,7 @@ export function validateExecution(manifest = readExecution(), {
   scanSource = scanDeclarationBodies,
   catalog = readMutantCatalog(),
   files = quintSources(),
-  profiles = JSON.parse(read('formal/catalogs/profiles.json')).profiles,
+  profiles = JSON.parse(read(profilesManifest)).profiles,
   contracts = contractIds(read('formal/guides/CONTRACTS.md')),
 } = {}) {
   if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.models) || !manifest.models.length) throw new Error('Unsupported model execution manifest');
