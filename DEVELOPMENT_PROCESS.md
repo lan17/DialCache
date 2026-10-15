@@ -235,6 +235,7 @@ creates the GitHub release and tags the Go module. The steps are in
 | Follow the exact steps and commands | [AGENTS.md](AGENTS.md) |
 | Write or find a design record | [design/README.md](design/README.md) |
 | Understand the specification | [formal/README.md](formal/README.md) and [SPEC.md](formal/guides/SPEC.md) |
+| See where one contract is stated, tested, challenged and mapped | `node formal/tools/where.mjs C45` |
 | Change a contract or a Quint model | [AUTHORING.md](formal/guides/AUTHORING.md) |
 | Write user documentation | [docs/authoring.md](docs/authoring.md) |
 | Choose a validation run and read its report | [VALIDATION.md](formal/guides/VALIDATION.md) |

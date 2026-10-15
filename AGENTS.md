@@ -112,8 +112,9 @@ the one the ruleset requires.
 
 #### Bug fix
 
-1. Search records, issues and pull requests for the contract IDs. A fix that reverses a recorded
-   decision needs a record, so stop at the design gate.
+1. Search records, issues and pull requests for the contract IDs, and run
+   `node formal/tools/where.mjs <ID>` for each. A fix that reverses a recorded decision needs a
+   record, so stop at the design gate.
 2. Write a regression that fails before the fix. When a `CONTRACTS.md` obligation covers the
    behavior, export a Quint regression even if only one port has the fault
    ([Exporting a deterministic regression](formal/guides/AUTHORING.md#exporting-a-deterministic-regression));
@@ -287,7 +288,9 @@ The PR leaves draft only when all of these hold; the maintainer then reviews and
 - Use `corepack pnpm`, and run `make` and pnpm commands from the repository root. Keep npm package
   paths and exports independent of the repository's `typescript/` prefix.
 - Start formal work at `formal/README.md`; `formal/guides/WALKTHROUGH.md` follows one contract
-  through every replay. Read the model and profile bindings before opening large generated JSON.
+  through every replay, and `node formal/tools/where.mjs C45` prints where one contract is stated,
+  tested, challenged and mapped. Read the model and profile bindings before opening large
+  generated JSON.
 - `DEVELOPMENT_PROCESS.md` explains this process to human readers. A change to "Make a change"
   updates it in the same PR.
 
