@@ -260,8 +260,9 @@ work in issue #165 does not need to precede unrelated feature or port developmen
 
 For a human or LLM review, search the stable contract and case IDs first, then
 extract the matching catalog entries; `node formal/tools/where.mjs C45` (or a
-case ID) prints them in one place, with `--json` for an agent. Provide a small
-context packet:
+case ID) prints the catalog entries and model citations in one place, with
+`--json` for an agent; the validation evidence and port mappings below come
+from the reports and the replay descriptors. Provide a small context packet:
 
 - Contract/case IDs, the observable rule or change, and its documentation link.
 - Model file, exact regression/property symbols, and their execution-manifest entries.

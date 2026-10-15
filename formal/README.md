@@ -16,7 +16,7 @@ the test [coordinator](./guides/GLOSSARY.md#coordinator).
 | Change a behavior or extend coverage | [AUTHORING.md](./guides/AUTHORING.md) |
 | Implement another language | [PORTING.md](./guides/PORTING.md) and [PROTOCOL.md](./guides/PROTOCOL.md) |
 | Locate or reproduce a failing check | [TEST-MAP.md](./guides/TEST-MAP.md) and the commands below |
-| See where one contract is stated, tested, challenged and mapped | `node formal/tools/where.mjs C45` (or a case, `C45.recheck-after-decode`) |
+| See where one contract is stated, tested, challenged and mapped | `node formal/tools/where.mjs C45` (or a case, `C45.recheck-after-decode` or `B01.registration-and-policy-snapshot`) |
 | Interpret validation results | [VALIDATION.md](./guides/VALIDATION.md) |
 | Look up a term | [GLOSSARY.md](./guides/GLOSSARY.md) |
 
