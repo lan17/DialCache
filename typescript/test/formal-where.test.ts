@@ -82,6 +82,21 @@ describe("contract lookup", () => {
     expect(render(lookup("C45.maximum-age-exclusive"))).toMatch(/^C45\.maximum-age-exclusive: After asynchronous decoding/);
   });
 
+  it("prints a challenge or a mutant in full on demand", () => {
+    const challenge = lookup("recovery-inclusive-maximum") as unknown as { kind: string; contract: string; mutantCase?: string; reproducer?: { run?: string } };
+    expect(challenge).toMatchObject({ kind: "challenge", contract: "C45", mutantCase: "C45.maximum-age-exclusive" });
+    const text = render(challenge);
+    for (const part of ["Edit", "before:", "after:", "Native mutant: mapped M01", "Reproducer", "Excluded ("]) expect(text).toContain(part);
+    const mutant = lookup("M01") as unknown as { kind: string; case: string; challenges: string[]; rust?: unknown };
+    expect(mutant).toMatchObject({ kind: "mutant", case: "C45.maximum-age-exclusive" });
+    expect(mutant.challenges).toContain("recovery-inclusive-maximum");
+    expect(mutant.rust).toBeDefined();
+    const rendered = render(mutant);
+    for (const part of ["Rationale", "TypeScript: required detections", "Go: required detections", "Rust: required detections", "Challenges mapped to it: "]) expect(rendered).toContain(part);
+    expect(() => lookup("not-a-thing")).toThrow(/not a challenge/);
+    expect(() => lookup("M99")).toThrow(/not a mutant/);
+  });
+
   it("rejects an unknown contract, a malformed query, an unknown case and bad arguments", () => {
     expect(() => lookup("C99")).toThrow(/not a contract in formal\/guides\/CONTRACTS.md/);
     expect(() => lookup("recovery")).toThrow(/expected a contract ID/);

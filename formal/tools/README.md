@@ -13,7 +13,7 @@ which scripts a target runs.
 
 - [validation.mjs](./validation.mjs): the target dispatcher; composes every `make` target from the scripts below and checks prerequisites.
 - [execution.mjs](./execution.mjs): reads and validates the execution manifest; `node formal/tools/execution.mjs` prints the inventory.
-- [where.mjs](./where.mjs): `node formal/tools/where.mjs C45` prints where one contract, semantic case or native case is stated, tested, challenged and mapped, from the catalogs and the model comments; `--json` for agents.
+- [where.mjs](./where.mjs): `node formal/tools/where.mjs C45` prints where one contract, semantic case or native case is stated, tested, challenged and mapped, from the catalogs and the model comments; a challenge or mutant ID prints that entry in full; `--json` for agents.
 
 ## Checks
 
@@ -38,7 +38,7 @@ generated-fixture verification; `validation.mjs` is the list of record.
 - [generate-artifacts.mjs](./generate-artifacts.mjs): regenerates every committed artifact (`--write`) or verifies it (`--check`).
 - [generated-fixtures.mjs](./generated-fixtures.mjs): the smoke traces, witness fixtures and the lock from `fixture-recipes.json`.
 - [generate-key-vectors.mjs](./generate-key-vectors.mjs), [generate-frame-vectors.mjs](./generate-frame-vectors.mjs), [generate-envelope-vectors.mjs](./generate-envelope-vectors.mjs), [generate-invalidation-vectors.mjs](./generate-invalidation-vectors.mjs): one generated vector file each.
-- [generate-catalog-docs.mjs](./generate-catalog-docs.mjs): the generated read views under `formal/generated/` (`PROFILES.md`) from the replay descriptors and the catalogs; `--check` runs in the `audit` lane.
+- [generate-catalog-docs.mjs](./generate-catalog-docs.mjs): the generated read views under `formal/generated/` (`PROFILES.md`, and the `CHALLENGES.md` and `MUTANTS.md` indexes) from the replay descriptors and the catalogs; `--check` runs in the `audit` lane.
 - [witnesses.mjs](./witnesses.mjs): language-neutral witness evaluation over the generated corpus and its baseline.
 - [replay-inputs.mjs](./replay-inputs.mjs): adds replay annotations to exported regressions from their explicit input record.
 - [explore.mjs](./explore.mjs): a fresh-seed exploration in an isolated source snapshot (`make explore`); `--replay` reproduces a saved run.
