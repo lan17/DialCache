@@ -36,39 +36,32 @@ and generated artifacts; a reader should not need to open them to learn a rule.
 ## The setup, top to bottom
 
 Six stages turn a rule into evidence. Each stage below names its directory, its
-tool, what it produces and where to read more; the diagram summarizes the same
-flow.
+tool, what it produces and where to read more. The diagram summarizes the same
+flow: yellow boxes are written by hand, blue boxes are the tools, green boxes
+are what they produce, and the numbers are the stages below.
 
 ```mermaid
 flowchart LR
-  subgraph written ["Written by hand"]
-    M["Quint models<br/>models/"]
-    X["Manifests and catalogs<br/>catalogs/"]
-    D["Native drivers<br/>typescript/ go/ rust/ python/"]
-  end
-  subgraph pipeline ["tools/ and replay/"]
-    RM["2. Check<br/>run-models.mjs"]
-    GA["3. Generate<br/>generate-artifacts.mjs, witnesses.mjs"]
-    CO["4. Replay<br/>replay/coordinator.mjs"]
-    CK["5. Account, 6. Gate<br/>measure-*.mjs, check-*.mjs"]
-  end
-  subgraph produced ["Produced"]
-    CP["Corpus and regressions<br/>.formal-traces/"]
-    GF["Committed artifacts<br/>generated/"]
-    RP["Completion, witness<br/>and mutation reports"]
-  end
-  M --> RM
+  M["Quint models<br/>models/"]:::hand
+  X["Manifests and catalogs<br/>catalogs/"]:::hand
+  D["Native drivers<br/>typescript/ go/ rust/ python/"]:::hand
+  RM["2. Check<br/>run-models.mjs"]:::tool
+  GA["3. Generate<br/>generate-artifacts.mjs, witnesses.mjs"]:::tool
+  CO["4. Replay<br/>replay/coordinator.mjs"]:::tool
+  CK["5. Account, 6. Gate<br/>measure-*.mjs, check-*.mjs"]:::tool
+  CP["Corpus and regressions<br/>.formal-traces/"]:::out
+  GF["Committed artifacts<br/>generated/"]:::out
+  RP["Completion, witness<br/>and mutation reports"]:::out
+  M --> RM --> CP --> CO
+  M --> GA --> GF --> CO
   X --> RM
-  RM --> CP
-  M --> GA
   X --> GA
-  GA --> GF
-  CP --> CO
-  GF --> CO
   CO <--> D
-  CO --> RP
-  RP --> CK
+  CO --> RP --> CK
   X --> CK
+  classDef hand fill:#fff7d6,stroke:#b59b00,color:#1f2328
+  classDef tool fill:#e3f0ff,stroke:#2b6cb0,color:#1f2328
+  classDef out fill:#e8f7ea,stroke:#2f855a,color:#1f2328
 ```
 
 ### 1. State the rule in Quint
@@ -236,24 +229,19 @@ current, [GO-PARITY.md](./guides/GO-PARITY.md),
 
 ## Pipelines
 
-Three GitHub Actions workflows run the same Make targets as local work.
+Three GitHub Actions workflows run the same Make targets as local work. The
+diagram is the full workflow's job graph; the pull request lanes, which have no
+dependencies between their jobs, are listed below it.
 
 ```mermaid
-flowchart TB
-  subgraph pr ["Every push and pull request"]
-    CI["CI<br/>typescript, go, rust, python, wire, then the test aggregate"]
-    SM["Formal smoke<br/>make audit smoke; make fixtures-check when a Quint input changed"]
-    DF["differential 1 to 4, pull requests only<br/>make differential over the composed profiles"]
-  end
-  subgraph full ["Full formal verification: weekly on main, or dispatched for a branch"]
-    CM["check-models<br/>make formal-check"]
-    GE["generate<br/>make formal-generate"]
-    SY["symbolic<br/>make model-check"]
-    EX["exploration<br/>make explore"]
-    GE --> TP["typescript-parity"] & GP["go-parity"] & RP["rust-parity"] & PP["python-parity"]
-    GE --> TM["typescript-mutations, 6 shards"] & GM["go-mutations, 10 shards"] & RMU["rust-mutations, 3 shards"]
-    CM & SY & EX & TP & GP & RP & PP & TM & GM & RMU --> AG["formal-full aggregate"]
-  end
+flowchart LR
+  CM["check-models<br/>make formal-check"]
+  GE["generate<br/>make formal-generate"]
+  SY["symbolic<br/>make model-check"]
+  EX["exploration<br/>make explore"]
+  GE --> TP["typescript-parity"] & GP["go-parity"] & RP["rust-parity"] & PP["python-parity"]
+  GE --> TM["typescript-mutations, 6 shards"] & GM["go-mutations, 10 shards"] & RMU["rust-mutations, 3 shards"]
+  CM & SY & EX & TP & GP & RP & PP & TM & GM & RMU --> AG["formal-full aggregate"]
 ```
 
 - **CI** ([ci.yaml](../.github/workflows/ci.yaml)) runs each language's native
