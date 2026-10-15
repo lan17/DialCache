@@ -85,7 +85,7 @@ histories against those records.
 | Exported boundary regressions | The exact public command sequence is checked in Quint and against both implementations |
 
 `make model-check` runs the symbolic checks declared in `execution.json` through
-checksummed standalone Apalache; see the [tool prerequisites](../README.md#generating-and-replaying-behavior).
+checksummed standalone Apalache; see the [tool prerequisites](./VALIDATION.md#prerequisites).
 This lane is separate from `make formal` and included in `make ci`.
 The model-property challenge catalog is the `challenges` array of
 [execution.json](../catalogs/execution.json). It runs once at the end of the scheduled
@@ -158,7 +158,7 @@ results; fresh measurements belong with their exact source and corpus artifacts.
 
 ## Reproduction and CI
 
-Use the [shared Make targets and pinned prerequisites](../README.md#generating-and-replaying-behavior):
+Use the [shared Make targets and pinned prerequisites](../README.md#run-it):
 
 ```sh
 make formal        # Regenerate and complete prepared TS, Go and Rust replay.

@@ -42,7 +42,7 @@ profile for the behavior you care about;
 - [dialcache-local-failure-conformance.qnt](./dialcache-local-failure-conformance.qnt): local-failure; local storage faults and preserved source outcomes.
 - [dialcache-runtime-boundaries-conformance.qnt](./dialcache-runtime-boundaries-conformance.qnt): runtime-boundaries; omitted and invalid policy leaves, defaults, exact cohorts.
 - [dialcache-shadow-layers-conformance.qnt](./dialcache-shadow-layers-conformance.qnt): shadow-layers; dark fills with local and request reuse, mixed capacity.
-- [dialcache-local-clock-conformance.qnt](./dialcache-local-clock-conformance.qnt): local-clock; fractional time on the whole-millisecond expiry grid.
+- [dialcache-local-clock-conformance.qnt](./dialcache-local-clock-conformance.qnt): local-clock; fractional time on the whole-millisecond expiry grid, keeping the raw insertion instant beside the expiry so a history tells a precise-clock TTL from the required whole-millisecond TTL and still detects a hit that renews expiry.
 - [dialcache-source-budgets-conformance.qnt](./dialcache-source-budgets-conformance.qnt): source-budgets; default, unbounded and finite source deadlines, held policy.
 - [dialcache-dark-layers-conformance.qnt](./dialcache-dark-layers-conformance.qnt): dark-layers; held dark work across request and local reuse, fences, clock rollback.
 - [dialcache-shadow-read-deadlines-conformance.qnt](./dialcache-shadow-read-deadlines-conformance.qnt): shadow-read-deadlines; separate C0 and C1 read deadlines, raw capacity ownership.

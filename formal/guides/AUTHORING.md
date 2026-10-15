@@ -27,7 +27,7 @@ ownership records. [Verification models](./GLOSSARY.md#verification-model) and [
 definitions. [Connection models](./GLOSSARY.md#connection-model) check selected profile histories against the
 acquired contracts. Conformance profiles also expose external actions that a
 language [driver](./GLOSSARY.md#driver) can replay. The
-[model inventory](../README.md#models-and-composition-profiles) and [profile registry](../catalogs/profiles.json)
+[model inventory](../models/README.md) and [profile registry](../catalogs/profiles.json)
 identify the relevant starting point. The words the models and guides share
 (driver, profile, flight, source, judgment, variant, witness and the rest) are
 defined in [GLOSSARY.md](./GLOSSARY.md), each with the file that owns it.
@@ -394,7 +394,7 @@ source expression moves or changes; its failure must never count as detection.
 
 For a model refactor, run the scheduled model checks/regressions, generation,
 implementation replay, evidence validation, and relevant mutation gates using
-the [documented commands](../README.md#generating-and-replaying-behavior). Keep the
+the [documented commands](../README.md#run-it). Keep the
 committed [smoke](./GLOSSARY.md#smoke) expectations unchanged. Compare pre/post generated action and
 state histories when preserving a fixed seed and schedule is intended, and
 investigate differences rather than replacing expectations to obtain a pass.

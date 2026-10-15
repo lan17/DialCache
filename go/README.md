@@ -200,7 +200,7 @@ Apalache; integration needs Docker. Go conformance tests use the shared Node
 replay coordinator for command mappings and assertions. The cache library itself
 has no Node dependency.
 Follow the
-[shared prerequisite guide](../formal/README.md#generating-and-replaying-behavior)
+[shared prerequisite guide](../formal/guides/VALIDATION.md#prerequisites)
 once, then:
 
 ```sh
