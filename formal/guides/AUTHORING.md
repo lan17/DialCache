@@ -403,6 +403,14 @@ Formatting and deduplication improve reviewability; they do not increase the
 number of behavioral cases or justify a broader conformance claim. Changes to
 behavior, bounds, or claims should be reviewed separately from cleanup.
 
+The read views under `formal/generated/` ([PROFILES.md](../generated/PROFILES.md))
+are rendered from the replay descriptors and the catalogs; after a descriptor,
+`profiles.json`, `execution.json`, `coverage-witnesses.json` or a model's public runs
+(its replayed regressions) change, run
+`node formal/tools/generate-catalog-docs.mjs --write` and commit the result.
+`make audit` runs the `--check` form and fails on a stale view. Edit the
+descriptor or the catalog, never the view.
+
 ### Challenging every model
 
 `execution.json` also carries the model-property challenge catalog in its

@@ -16,7 +16,7 @@ module dialcache_recovery_conformance {
   // One registered tracked remote flight, with coalesced callers in two optional
   // request lifetimes. Selected aspects of C40-C46 cover retained recovery;
   // C03/C43 cover request publication; C57/C58 cover age and error observations.
-  // See BEHAVIOR.md: "Generated feature profiles" and its recovery input table.
+  // See formal/generated/PROFILES.md (recovery) for the input table and BEHAVIOR.md "Generated profiles".
   // Reads and publication settle at action boundaries; decoding and sources may
   // wait. No local storage, independent same-key flights or shadow work
   // participates. Every rule is a kernel transition (formal/models/kernel): the held

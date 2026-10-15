@@ -20,7 +20,7 @@ module dialcache_effects_conformance {
   // One registered remote-only execution, plus up to eight callers and late
   // external sources/reads. Selected aspects of C23-C28 cover budgets and
   // accepted publication; C33-C36 cover fences/snapshots; C55-C59 cover effects.
-  // See BEHAVIOR.md: "Generated pending-effect profile" for the driver mapping.
+  // See formal/generated/PROFILES.md (effects) for the driver mapping and BEHAVIOR.md "Generated profiles".
   // No local storage, recovery, shadow work, or physical expiry participates.
   // Every rule is a kernel transition (formal/models/kernel): the held remote
   // traversal (remote_io) under the budgeted held lifecycle (deadlines) with
