@@ -26,7 +26,7 @@ output lives in [../generated/](../generated/README.md), never here.
 - [go-parity.json](./go-parity.json): the Go parity ledger over the catalogs, sources and audit; `check-go-parity.mjs`; its catalog, audit-dispositions and vector artifact digests re-pinned with `check-go-parity.mjs --refresh-inputs`, its mapping hashes by hand with the review.
 - [profile-lint-baseline.json](./profile-lint-baseline.json): the composition lint ratchet per profile; `node formal/tools/lint-profiles.mjs baseline --check`; `--write` after a reviewed fall.
 - [witness-baseline.json](./witness-baseline.json): the recorded witness hit counts the exploration gate compares against; `witnesses.mjs`; `baseline --write`.
-- [style-allowlist.json](./style-allowlist.json): the Quint files exempt from a style cap (line length, header length) because they broke it when the cap landed; `check-style.mjs`; shrinks only, by deleting a file's entry once it is clean.
+- [style-allowlist.json](./style-allowlist.json): the Quint files exempt from a style cap (line length, header length) because they broke it when the cap landed; `check-style.mjs`; a stale entry fails, so the list shrinks by deleting a file's entry once it is clean, and grows only as a reviewed exception.
 
 ## Fixed vector corpora
 

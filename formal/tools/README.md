@@ -13,18 +13,21 @@ which scripts a target runs.
 - [validation.mjs](./validation.mjs): the target dispatcher; composes every `make` target from the scripts below and checks prerequisites.
 - [execution.mjs](./execution.mjs): reads and validates the execution manifest; `node formal/tools/execution.mjs` prints the inventory.
 
-## Checks (the `audit` lane runs `execution.mjs` and the first four)
+## Checks
+
+The `audit` lane runs `execution.mjs`, the first five checks below and the
+generated-fixture verification; `validation.mjs` is the list of record.
 
 - [check-source-audit.mjs](./check-source-audit.mjs): the docs and test review ledger against the current files; `--refresh <path>...` re-keys the named files after their review.
 - [check-semantic-coverage.mjs](./check-semantic-coverage.mjs): every semantic case cites scheduled checks, scenarios, vectors and witnesses.
 - [check-feature-coverage.mjs](./check-feature-coverage.mjs): the native feature inventory and its evidence references.
 - [check-go-parity.mjs](./check-go-parity.mjs): the Go parity ledger against the catalogs and both source trees; `--refresh-inputs` re-pins its catalog, audit-dispositions and vector artifact digests.
+- [check-style.mjs](./check-style.mjs): the two Quint style caps (lines at most 120 characters, module headers at most 25 comment lines) over files not in the style allowlist; `--report` prints the readability measurements.
 - [check-model-properties.mjs](./check-model-properties.mjs): the model-fault challenge catalog; `--only=<id>` measures one.
 - [check-kernel-fixtures.mjs](./check-kernel-fixtures.mjs): typechecks and runs the kernel fixtures (`make kernel-fixtures`).
 - [check-symbolic-models.mjs](./check-symbolic-models.mjs): the finite symbolic checks with Apalache (`make model-check`).
 - [check-go-replay.mjs](./check-go-replay.mjs), [check-rust-replay.mjs](./check-rust-replay.mjs), [check-python-replay.mjs](./check-python-replay.mjs): each port's completion report against the required inventory.
 - [lint-profiles.mjs](./lint-profiles.mjs): the composition and witness-isolation lint over Quint's parsed IR; `baseline --check` ratchets.
-- [check-style.mjs](./check-style.mjs): the two Quint style caps (lines at most 120 characters, module headers at most 25 comment lines) over files not in the style allowlist; `--report` prints the readability measurements.
 - [differential.mjs](./differential.mjs): replays a composed profile's corpus against its reference revision in both directions (`make differential`).
 
 ## Generators (`make formal-generate`, `make fixtures-check`)

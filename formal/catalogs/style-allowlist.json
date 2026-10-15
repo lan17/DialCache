@@ -61,5 +61,8 @@
     "formal/models/kernel/shadow-reads.qnt",
     "formal/models/kernel/shadow.qnt"
   ],
-  "headerLength": []
+  "headerLength": [
+    "formal/models/fixtures/kernel/held-remote.qnt",
+    "formal/models/fixtures/kernel/payload-classes.qnt"
+  ]
 }

@@ -1102,7 +1102,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "ecbfe0483a91ab2bf2c40db82dece7546cb764650abdf1bfc38cefa45be85343",
+      "sha256": "7f3aee31a1f311f27420550960f1ceed757ecae1f1616bea01436a9635cd12f6",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},
