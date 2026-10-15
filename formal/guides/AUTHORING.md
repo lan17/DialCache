@@ -78,7 +78,15 @@ scrolling. Keep a genuinely short action compact. Prefer a descriptive
 intermediate state such as `published` or `completed` over a chain of `x`, `y`,
 and `z`. Comments should explain ownership, ordering, assumptions, or a boundary
 case, rather than narrate the syntax. Quint 0.32.0 has no CLI formatting command;
-these are reviewed authoring conventions.
+these are reviewed authoring conventions, with two of them enforced:
+`node formal/tools/check-style.mjs`, a step of `make audit`, fails a Quint line over
+120 characters and a module header over 25 comment lines in any file not named in
+[style-allowlist.json](../catalogs/style-allowlist.json). That list names the files
+that broke a cap when it landed and only shrinks: once a file is clean, delete its
+entry, or the check fails on the stale entry. `--report` prints the readability
+measurements (long lines, header lengths, comment and guide sentence lengths,
+parameter widths, free-text exclusion reasons) so progress is reproducible; those
+are reported, not enforced.
 
 A kernel module under `formal/models/kernel/` opens with one header of at most
 25 comment lines, each within 100 columns, in a fixed shape: one sentence of
