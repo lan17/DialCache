@@ -15,7 +15,7 @@ module dialcache_independent_conformance {
   // C24/C56: each owns its read and source deadline. Read failure denies only
   // that caller's refill (C28); recovery keeps its captured policy, snapshot,
   // and original error (selected aspects of C36/C40-C46/C58).
-  // See BEHAVIOR.md: "Generated feature profiles" and its independent input table.
+  // See formal/generated/PROFILES.md (independent) for the input table and BEHAVIOR.md "Generated profiles".
   // No local/request storage, shadow work, or publication failures participate.
   // Every rule is a kernel transition (formal/models/kernel): the held remote
   // traversal (remote_io) with its recovery snapshots (recovery) under the

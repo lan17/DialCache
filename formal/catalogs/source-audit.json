@@ -1102,7 +1102,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "03b8af5f20f5bc6cffa2670d79f5787f6f4d11f6735b7052adaf2253f5e81636",
+      "sha256": "a8927a0580df5e67d795407d78040aa2a364e54cc20530c3d3db59507ce67d6f",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},
@@ -1124,7 +1124,7 @@
     },
     {
       "path": "formal/guides/BEHAVIOR.md",
-      "sha256": "9997811fae33b9ecd7a774bca0cdbf851bbdc109f4b2ad0b06b6756cb3c65ac3",
+      "sha256": "7adc2ad8756d8df060b09c6d6c83c6d084e612c7b21afe2107029cb3c2ea2e99",
       "entries": [
         {"title":"Portable behavioral scenarios and generated profiles"},
         {"title":"Scenario format"},

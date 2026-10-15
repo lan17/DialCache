@@ -2,7 +2,7 @@
 
 [`behavioral-scenarios.json`](../catalogs/behavioral-scenarios.json) specifies deterministic feature scenarios independently of TypeScript. [`dialcache-effects-conformance.qnt`](../models/dialcache-effects-conformance.qnt) generates additional races using the same driver operations. Together with the [core profile](./CONFORMANCE.md) and [protocol vectors](../catalogs/protocol-vectors.json), these are executable contracts for implementation tests and language ports. The core profile is the introductory one and stays uncomposed from the kernel library: its drivers read the model's private state fields as their observation, so composing it is a driver-contract change in both ports.
 
-The deterministic corpus currently contains 244 scenarios across 12 behavior families. It includes request-scope lifetime, coalescing, both read and fallback deadlines, local TTL/LRU, runtime snapshots, layer precedence, cache failures, tracked invalidation, frame age/retention, stale recovery, and shadow validation. These scenarios are test-derived contracts, **not Quint-generated traces**. The effects model generates interleavings of calls, loader settlement, clock observations, native writes, and invalidation. Recovery, policy, and shadow models generate further feature schedules through the same driver; their bounds and action mappings appear below. Keeping these complementary forms avoids a single model containing every feature combination. The [feature map](./FEATURE-COVERAGE.md) relates the scenarios to the full reviewed behavioral, protocol, and native inventory.
+The deterministic corpus currently contains 244 scenarios across 12 behavior families. It includes request-scope lifetime, coalescing, both read and fallback deadlines, local TTL/LRU, runtime snapshots, layer precedence, cache failures, tracked invalidation, frame age/retention, stale recovery, and shadow validation. These scenarios are test-derived contracts, **not Quint-generated traces**. The effects model generates interleavings of calls, loader settlement, clock observations, native writes, and invalidation. Recovery, policy, and shadow models generate further feature schedules through the same driver; their bounds and action mappings are generated into [PROFILES.md](../generated/PROFILES.md). Keeping these complementary forms avoids a single model containing every feature combination. The [feature map](./FEATURE-COVERAGE.md) relates the scenarios to the full reviewed behavioral, protocol, and native inventory.
 
 The corpus includes interaction regressions for scope closure during recovery, runtime coalescing changes during an active flight, independent retained snapshots, recovery/shadow exclusion, local insertion TTL after an aging remote hit, and shadow capacity ownership. These are fixed portable schedules: they extend implementation conformance without claiming that the generated profiles explore those combinations. The [behavioral evidence map](./TEST-MAP.md#behavioral-map) connects these obligations to implementation tests and the current generated profiles.
 
@@ -101,14 +101,15 @@ A returned cache value, loader invocation, or acknowledged write does not prove 
 
 ## Generated profiles
 
-Every profile except `core` is a Quint model whose public actions decode into driver
-commands; the drivers replay its sampled histories and exported regressions. What a
-profile's drivers are configured with, which commands each recorded action and choice
-decode into, and which observation channels the coordinator compares are generated
-from the replay descriptors into [PROFILES.md](../generated/PROFILES.md), one section
-per profile. This section keeps what those tables do not state: the trace contract,
-the value codes, the meaning of each observation channel, the rules a profile holds
-its drivers to, and how to replay a generated trace.
+Every profile is a Quint model whose public actions decode into driver commands;
+the drivers replay its sampled histories and exported regressions, and all but
+`core` compose the kernel library. What a profile's drivers are configured with,
+which commands each recorded action and choice decode into, and which observation
+channels the coordinator compares are generated from the replay descriptors into
+[PROFILES.md](../generated/PROFILES.md), one section per profile. This section keeps
+what those tables do not state: the trace contract, the value codes, the meaning of
+each observation channel, the rules a profile holds its drivers to, what each
+profile leaves to others, and how to replay a generated trace.
 
 ### Trace contract
 
@@ -125,7 +126,8 @@ implementation projection. A driver selects explicit choices for source indices 
 uses its own invocation counts for actions that target the latest effect; it never
 reads expected counters, phases, cached values or fences to select an input or to
 fabricate an observation. Failure actions set a fixture fault, release the selected
-external gate, drain runnable work and restore the fault.
+external gate, drain runnable work and restore the fault. A failing replay reports the
+trace, the step, the action and both observations.
 
 ### Value codes
 
@@ -143,34 +145,44 @@ as an intended input-domain expansion.
 
 ### Observation channels
 
-- `s.io = { budgets, aborted, sourceErrors }` (independent, recovery-read, effects):
-  `budgets` are the actual adapter read budgets in read invocation order, `aborted`
-  the cooperative cancellation indices in delivery order, and `sourceErrors` one entry
-  per caller, zero unless the caller returned its source's ordinary error, otherwise
-  the one-based actual source identity. The driver projects adapter callbacks and
-  returned error tokens; model-private ownership never enters execution.
+- `s.io = { budgets, aborted, sourceErrors }` (independent, recovery-read,
+  shadow-read-deadlines): `budgets` are the actual adapter read budgets in read
+  invocation order, `aborted` the cooperative cancellation indices in delivery order,
+  and `sourceErrors` one entry per caller, zero unless the caller returned its
+  source's ordinary error, otherwise the one-based actual source identity. The driver
+  projects adapter callbacks and returned error tokens; model-private ownership never
+  enters execution. The effects profile asserts `s.o`, `s.io` and `s.events` only,
+  its `io` carrying budgets and aborted reads; asserting `io` with source errors or
+  `d` beside `events` under the shared codes would be a separate observation-schema
+  change.
 - `s.d = { warnings, ages, coalesced, fallbackErrors }` (scope, recovery, shadow,
-  dark-layers, effects, shadow-read-deadlines), with `configErrors` where the profile
-  counts `config_resolution` events, `futureOffsets` where it records them, and
-  `inspections` for dark-layers' public process snapshots. Ages are integer
-  milliseconds in Quint and compared with actual callback seconds after unit
-  conversion. Recovery records an age only after a successful retained decode; shadow
-  records the original C0 age at a match or confirmed-mismatch verdict, clamped to
-  zero after a wall rollback, and warns only for a confirmed mismatch whose admitted
-  policy enabled logging. `coalesced` records request or process scope labels;
-  `fallbackErrors` records the layer a failed source is attributed to, failures later
-  recovered as stale included. An active local layer attributes its failed source to
-  `local` even inside a request memo; without a shared layer a transient request
-  attributes it to `request_local`; a request that closes while policy is pending
-  attributes to `noop`, and admission-time attribution survives later closure.
+  dark-layers, shadow-read-deadlines), with `configErrors` where the profile counts
+  `config_resolution` events carrying the remote, non-fallback labels, `futureOffsets`
+  where it records them, and `inspections` for dark-layers' public process snapshots.
+  Ages are integer milliseconds in Quint and compared with actual callback seconds
+  after unit conversion. Recovery records an age only after a successful retained
+  decode; shadow records the original C0 age at a match or confirmed-mismatch
+  verdict, clamped to zero after a wall rollback, and warns only for a confirmed
+  mismatch whose admitted policy enabled logging. `coalesced` records request or
+  process scope labels; `fallbackErrors` records the layer a failed source is
+  attributed to, failures later recovered as stale included. Scope fixtures assert one
+  trail for shared failures and no cache-error trail for disabled pass-through work.
+  An active local layer attributes its failed source to `local` even inside a request
+  memo; without a shared layer a transient request attributes it to `request_local`;
+  a request that closes while policy is pending attributes to `noop`, and
+  admission-time attribution survives later closure. Exact native JSON warning
+  formatting remains a binding obligation.
 - `s.events` (effects) records `{ event, location, detail, amount }` in order:
   location is a reached layer or coalescing scope; amount is an integer millisecond
   measurement (get, fallback, serialization, future offset), a byte size, a
-  write-dispatch index or zero. A follower emits its coalescing event without repeating
-  the leader's trail; fresh decoding counts in the remote-get duration; source duration
-  ends at accepted settlement or deadline; a dump has its own duration; late sources
-  do not repeat failures; size events precede adapter dispatch even when the write
-  stays pending.
+  write-dispatch index or zero. Replay converts model milliseconds to callback seconds
+  and compares the ordered events, their labels and source-error attribution. A
+  follower emits its coalescing event without repeating the leader's trail; fresh
+  decoding counts in the remote-get duration; source duration ends at accepted
+  settlement or deadline; a dump has its own duration; late sources do not repeat
+  failures; size events precede adapter dispatch even when the write stays pending.
+  Scalar value 1 has one serialized byte here; Unicode and binary byte accounting is
+  covered by the protocol vectors and the fixed scenarios.
 - `s.markers` and `s.compression` (recovery-read) record each observed invalidation
   marker as `{ cutoffMs, ttlMs }` and each decode's outcome, `decompressed` or
   `fallback_raw`.
@@ -179,10 +191,14 @@ as an intended input-domain expansion.
 
 ### Rules the profiles hold their drivers to
 
-- **effects.** Monotonic time and application wall time are separate; `tick` and
-  `jumpClock` advance 10 ms with and without timer delivery; read budgets are
+- **effects.** Each history has at most eight callers and eight sources; successful
+  values are 1; no local cache, recovery, shadow work or physical expiry is enabled.
+  Monotonic time and application wall time are separate; `tick` and `jumpClock`
+  advance 10 ms with and without timer delivery, and clock jumps without delivery
+  are generated during 10 ms reads and source-owned phases; read budgets are
   multiples of the 10 ms step and a budget change affects later reads while followers
-  keep their leader's budget. A read deadline starts a fresh source budget and
+  keep their leader's budget. An `observerFault` fails the diagnostic callbacks and
+  leaves cache outcomes unchanged. A read deadline starts a fresh source budget and
   suppresses refill; a successful raw read clears that budget before decoding; a
   failed fresh decode permits refill; an accepted serialization or write outlives the
   source budget, with the observed fence checked again after preparation. The queued
@@ -198,7 +214,9 @@ as an intended input-domain expansion.
   resulting miss and refill behavior.
 - **recovery.** Contexts 0 and 1 are open in every fixture; request misses may join
   one process flight, after which each attached open context memoizes the result; a
-  same-request follower records request coalescing, a new request process coalescing.
+  same-request follower records request coalescing, a new request process coalescing,
+  and a `joinCall` into pending shared work can still be won by a preexisting request
+  memo.
   Recovered values are never published to shared storage. Closing a context clears
   its memo and prevents late recovery from populating it. Recovery starts at a source
   deadline reached inside a larger elapsed-time step, and its held decode may
@@ -210,55 +228,82 @@ as an intended input-domain expansion.
   released, even while its source is pending; sources settle in any order; same-key
   followers join only while the current policy permits sharing; a shared leader stays
   registered when an independent source publishes or fails. An overlay replaces the
-  whole runtime overlay and omitted leaves inherit the fixture. Wall time and elapsed
-  time are separate: a local hit survives a rollback before its TTL and expires at
-  that TTL despite it, a future-dated frame is rejected, a retained candidate that a
-  rollback makes future-dated is rejected, physical Redis expiry is independent, and
-  invalidation never lowers a watermark.
+  whole runtime overlay and omitted leaves inherit the fixture; choices 10 to 19 are
+  choices 0 to 9 with `coalesce: false`; an invalid remote read budget of 0 bypasses
+  all caching for the invocation; an invalid local or remote ramp of 101 disables
+  that layer and preserves the other; an invalid recovery maximum age of 1 or -1 s
+  leaves normal serving active and writes with the ordinary 1 s retention; an invalid
+  shadow ramp of 101 leaves normal fresh serving active. In policy and recovery, wall
+  time and elapsed time are separate: a local hit survives a rollback before its TTL
+  and expires at that TTL despite it, a future-dated frame is rejected, a retained
+  candidate that a rollback makes future-dated is rejected, physical Redis expiry is
+  independent, and invalidation never lowers a watermark.
 - **shadow.** Payload choices make text and binary share exact UTF-8 bytes while
   different byte spellings decode to the same value; comparison uses decoded values,
-  confirmation uses bytes; `reencode` records the replacement payload as an explicit
-  choice. Another call is admitted once the preceding source and owned job work have
-  settled. Fixtures 11 and 12 advance elapsed and wall time by `sourceWorkMs` without
-  delivering timers while the source begins: at 9 ms the dark job still dispatches C0,
-  at exactly 10 ms the job reports timeout without a Redis read while the caller stays
-  pending, and the caller's later settlement or timer gives its deadline error.
-  Malformed logging keeps comparison active with warnings disabled; later runtime
-  changes do not rewrite an admitted job's policy.
+  confirmation uses bytes, and C1 compares the retained payload identity even when
+  the replacement's timestamp is future-dated; `reencode` replaces the stored bytes
+  with an alternate text or binary form during C1 and records it as an explicit
+  choice, so a driver never consults expected storage; `advanceWall` moves only the
+  application wall clock while C1 is pending, elapsed deadlines and physical Redis
+  expiry standing still. Another call is admitted once the preceding source and owned
+  job work have settled. Fixtures 11 and 12 advance elapsed and wall time by
+  `sourceWorkMs` without delivering timers while the source begins: at 9 ms the dark
+  job still dispatches C0, at exactly 10 ms the job reports timeout without a Redis
+  read while the caller stays pending, and the caller's later settlement or timer
+  gives its deadline error; these fixtures observe after overdue timers are
+  delivered, and intermediate native timer ordering is outside their bounds. Timer
+  delivery is not required for elapsed-time rejection. Malformed logging keeps
+  comparison active with warnings disabled, and a job admitted under it records a
+  configuration error and captures logging off; later runtime changes do not rewrite
+  an admitted job's policy.
 - **admission.** Caller reads and all decoding are held; a successful read acquires
   C0 and completing its decode considers shadow admission under the flight's accepted
   policy; coalesced followers share one admission; a detached source runs with caching
   disabled; an unequal comparison triggers a held C1 read; no shadow action changes a
   caller result or writes cache values. A whole-job timeout emits one outcome but keeps
   the slot until its pending source, decode or confirmation read settles; later
-  completion starts no new work and emits no replacement verdict. Two instances with
-  two slots each make a duplicate drop distinguishable from a full instance.
-- **independent.** Each call captures its own read budget and recovery policy; a read
-  failure or timeout cannot borrow another call's refill authority; each recovery
-  chain retains its own candidate and source error; invalidation cannot revoke an
-  acquired decode or candidate, though recovery still rechecks age around the decode;
-  late settlement of one call never affects another. Deadlines are delivered in time
-  order, registration order at equal instants, new deadlines reached within the
-  advance included.
+  completion starts no new work and emits no replacement verdict, and once the owned
+  work drains a later hit may admit another job. Two instances with two slots each
+  make a duplicate drop distinguishable from a full instance. At most sixteen calls
+  and sixteen admitted jobs give at most 32 read and 32 decode effects, and elapsed
+  time is bounded to 600 ms so serving reads stay fresh and below their separate
+  deadline. The committed smoke trace keeps the actions, choices and observation
+  records of the first 57 states of a generated history with the model-private fields
+  omitted; the parser replays both forms without special handling.
+- **independent.** Six callers can each own one read, one source and one decode;
+  only raw reads and decoding are held, and accepted publication completes at the
+  source-settlement boundary. Each call captures its own read budget and recovery
+  policy; a read failure or timeout cannot borrow another call's refill authority;
+  each recovery chain retains its own candidate and source error; invalidation cannot
+  revoke an acquired decode or candidate, though recovery still rechecks age around
+  the decode; late settlement of one call never affects another. Deadlines are
+  delivered in time order, registration order at equal instants, new deadlines reached
+  within the advance included; other runtimes need not use the same timer
+  implementation.
 - **layers.** Fixture modes 4 and 5 omit the Redis adapter, so an explicit
   invalidation reports `missing_remote` and dispatches nothing. Two instances share
   Redis but own their local capacity and process flights; contexts 0 and 1 belong to
   instance 0, context 2 to instance 1, and contexts 3 and 4 are fresh invocation
   scopes on each instance. Twenty calls and eighty steps keep entries fresh, so TTL
-  boundaries stay in the policy profile and the scenarios. A completed source
-  publishes only to participating eligible layers; tracked remote fallback skips
-  direct local publication while an authoritative hit may warm local; invalidation
-  fences later remote reads while acquired request and local values survive; a
-  policy change preserves an admitted source's publication decision.
+  boundaries stay in the policy profile and the scenarios; four logical identities
+  over a two-slot local cache show promotion and eviction while request storage can
+  exceed that capacity. A completed source publishes only to participating eligible
+  layers; tracked remote fallback skips direct local publication while an
+  authoritative hit may warm local; invalidation of an entity fences later remote
+  reads of both tracked operation variants while acquired request and local values
+  survive; a policy change preserves an admitted source's publication decision.
 - **scope.** `openScope` opens contexts 1 to 4 at most once each, nested ones only
   while outer 0 lives and 4 only after 3; `closeScope` closes any opened unfinished
   context after the first call; closing 0 or 1 clears that lifetime's memo and flights,
-  closing a nested context does not end the outer lifetime, and a closed outer context
-  is pass-through. Enabled calls wait for `releasePolicy`; disabled, detached and
-  outside calls start their own source with no provider invocation; at most one
-  provider reply is held while accepted sources may overlap. A late source returns to
-  its original caller after closure but cannot populate a replacement memo; coalescing
-  admission precedes reading a memo another accepted source populated.
+  closing a nested context does not end the outer lifetime, a closed outer context is
+  pass-through, and a completed nested context still belongs to its live outer
+  lifetime. These are context ownership rules; a port need not reproduce
+  AsyncLocalStorage or Promise scheduling. Enabled calls wait for `releasePolicy`;
+  disabled, detached and outside calls start their own source with no provider
+  invocation; at most one provider reply is held while accepted sources may overlap.
+  A late source returns to its original caller after closure but cannot populate a
+  replacement memo; coalescing admission precedes reading a memo another accepted
+  source populated.
 - **dark-layers.** The `inspect` action takes a public process snapshot of either
   instance into `s.d.inspections` (instance, leader and follower counts, oldest
   monotonic leader age; the model records an idle age as -1, the native projection as
@@ -268,6 +313,17 @@ as an intended input-domain expansion.
 The remaining composed profiles (recovery-read, local-failure, runtime-boundaries,
 shadow-layers, source-budgets, shadow-read-deadlines, local-clock) are summarized in
 the next section; their rules live in the kernel module headers the profiles compose.
+
+Each profile leaves the rest to others. Independent does not combine coalesced
+recovery, scope lifetimes, wall rollback or held publication. Layers leaves larger
+capacities, more scopes and instances, mixed deadline, recovery and shadow
+combinations and expiry during LRU ordering outside its bounds. Scope leaves request
+deadlines, recovery, shared-process flights, arbitrary context trees and more than
+two outer lifetimes to other profiles. Admission leaves ordinary misses, read and
+decode faults, separate read timeouts, shadow fill writes, custom comparator
+failures, local and request layers and fractional cohort selection to other
+profiles, the scenarios and the vectors. Every generated profile establishes
+occurrence of its witnesses, not fairness, exhaustive interleavings or wider claims.
 
 ### Replaying generated traces
 
