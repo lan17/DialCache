@@ -113,7 +113,7 @@ profile leaves to others, and how to replay a generated trace.
 
 ### Trace contract
 
-Each ITF state carries the authoritative `input.name` and `input.choice` beside the
+Each [ITF](./GLOSSARY.md#itf-informal-trace-format) state carries the authoritative `input.name` and `input.choice` beside the
 expected state `s`. The choice is a nonnegative ITF integer on actions that have
 choices and `-1` otherwise; optional `mbt::actionTaken` and `mbt::nondetPicks.choice`
 annotations must agree with it, and raw regression exports carry no annotations

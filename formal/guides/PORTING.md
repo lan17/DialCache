@@ -95,7 +95,8 @@ of the Go cache library.
 
 ## Trace and observation contract
 
-Quint exports ITF JSON. A trace contains a nonempty `states` array with an
+Quint exports [ITF](./GLOSSARY.md#itf-informal-trace-format) JSON, the Informal
+Trace Format. A trace contains a nonempty `states` array with an
 initial state followed by public actions. Reject unknown profiles/versions,
 unknown actions, malformed or out-of-domain choices, missing observations,
 misplaced initialization, and empty histories.

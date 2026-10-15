@@ -149,8 +149,10 @@ fields.
 
 ### 4. Replay every history in every port
 
-The [coordinator](./replay/coordinator.mjs) runs one history against a driver
-over the wire protocol typed by
+Each history is an [ITF](./guides/GLOSSARY.md#itf-informal-trace-format)
+trace, the JSON trace format Quint writes. The
+[coordinator](./replay/coordinator.mjs) runs it against a driver over the wire
+protocol typed by
 [protocol.schema.json](./replay/protocol.schema.json). It hands the driver the
 fixture and each step's recorded external command, never the predicted
 observation. The driver calls the real library, controls the external gates and

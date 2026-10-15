@@ -1084,7 +1084,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "d0909683d29cc71771c4bae8b4d2eed03111b3d35102aa41c1c23859f61943f5",
+      "sha256": "d37b38c1cdf72dbbf26eef1702136076354309bb4d1c497ddc39569b9b9b1578",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1129,7 +1129,7 @@
     },
     {
       "path": "formal/guides/BEHAVIOR.md",
-      "sha256": "ce18b2f90117b2080a0780405986c59bc22f8441ce281115b43535902ead0ec9",
+      "sha256": "5d6cb8d7e779cb99e6a60f6ea553b524d49c7a42b79a74f912a90ff44c5bafe8",
       "entries": [
         {"title":"Portable behavioral scenarios and generated profiles"},
         {"title":"Scenario format"},
@@ -1225,7 +1225,7 @@
     },
     {
       "path": "formal/guides/CONFORMANCE.md",
-      "sha256": "fb1edc1c05e51a8b647fcb1fe91fd5c75f48f6aae4920892ae479884af67adc7",
+      "sha256": "3bc580b0ea32bd21e53f54ec78523afb59ebaf40f8396b7884b51d4a7b8ec898",
       "entries": [
         {"title":"Core behavioral conformance profile"},
         {"title":"Trace format and trust boundary"},
@@ -1375,7 +1375,7 @@
     },
     {
       "path": "formal/guides/GLOSSARY.md",
-      "sha256": "2e1ae3a35f4b2c525a144e9cd7f079994bd3ebffb3a737c5dd770bd7f5e39fe8",
+      "sha256": "3737909010fb573669e59ee574b1fabd37131021b9faec5b36ca02d81a590f82",
       "entries": [
         {"title":"Glossary"},
         {"title":"Specification and replay"},
@@ -1386,6 +1386,7 @@
         {"title":"Connection model"},
         {"title":"Smoke"},
         {"title":"Lane"},
+        {"title":"ITF (Informal Trace Format)"},
         {"title":"Corpus, history, regression, exported run and public-only run"},
         {"title":"Differential"},
         {"title":"Bytes per state"},
@@ -1480,7 +1481,7 @@
     },
     {
       "path": "formal/guides/PORTING.md",
-      "sha256": "f30121b24b1b929ae7b75a2383e2bdafd2c546f39e82f56654885c6f6201923d",
+      "sha256": "342cfd680eeba31a57c7cc790693fb21d56e358e20ce105a6a6ce28a9e511a7e",
       "entries": [
         {"title":"Implementing another DialCache port"},
         {"title":"What a port supplies"},

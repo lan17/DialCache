@@ -4,7 +4,7 @@ This document specifies the bounded `core` profile implemented by the TypeScript
 
 ## Trace format and trust boundary
 
-Inputs use Quint 0.32.0's ITF JSON format. Each entry in `states` has:
+Inputs are Quint 0.32.0 [ITF](./GLOSSARY.md#itf-informal-trace-format) traces (the Informal Trace Format, JSON). Each entry in `states` has:
 
 - `input`: the authoritative public action, encoded as `{"name":"init","choice":{"#bigint":"-1"}}`. The first action is `init`; every core action uses `choice: -1` because it has no external arguments.
 - `s`: the expected model state after that action. Integers are encoded as `{"#bigint":"123"}`; booleans are JSON booleans.
