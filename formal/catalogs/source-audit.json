@@ -1084,7 +1084,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "bc318ab21ccd8d5589584f280ef09fdd49404596c8ce0dfedd147aa41b0f2d6e",
+      "sha256": "8fa28f2e7a726708a486b837756dcbf69d6073534e510fa652b20d64c89c6d33",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1102,7 +1102,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "7f3aee31a1f311f27420550960f1ceed757ecae1f1616bea01436a9635cd12f6",
+      "sha256": "7ca3b3b7502feaadcda03586b604b60df64bfec9e9e1ed68bffd3d118de50a59",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},

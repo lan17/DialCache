@@ -12,6 +12,7 @@ which scripts a target runs.
 
 - [validation.mjs](./validation.mjs): the target dispatcher; composes every `make` target from the scripts below and checks prerequisites.
 - [execution.mjs](./execution.mjs): reads and validates the execution manifest; `node formal/tools/execution.mjs` prints the inventory.
+- [where.mjs](./where.mjs): `node formal/tools/where.mjs C45` prints where one contract or semantic case is stated, tested, challenged and mapped, from the catalogs; `--json` for agents.
 
 ## Checks
 
