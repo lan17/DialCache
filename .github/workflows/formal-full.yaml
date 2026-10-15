@@ -1,8 +1,21 @@
 name: Full formal verification
+run-name: Formal ${{ inputs.mode || 'full' }} on ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
     inputs:
+      # Each mode adds to the one before it. replay: generate the corpus (or
+      # restore it from the cache) and complete every port replay. mutations:
+      # also measure the TypeScript, Go and Rust mutation campaigns. full: also
+      # check every Quint model and run the model-fault campaign, which reads
+      # only the models, the challenge catalog and the Quint toolchain. The
+      # weekly schedule runs full; formal/guides/VALIDATION.md says which
+      # changes need which mode.
+      mode:
+        description: "replay (corpus and every port), mutations (plus port mutation campaigns) or full (plus model checks and the model-fault campaign)."
+        type: choice
+        options: [replay, mutations, full]
+        default: full
       exploration:
         description: Explore a fresh seed in every port in addition to pinned acceptance.
         type: boolean
@@ -13,8 +26,10 @@ on:
 permissions:
   contents: read
 
+# One run per branch and mode: a replay dispatched beside a running full run
+# starts at once instead of waiting hours; same-mode dispatches still queue.
 concurrency:
-  group: formal-full-${{ github.ref }}
+  group: formal-full-${{ github.ref }}-${{ inputs.mode || 'full' }}
   cancel-in-progress: false
 
 jobs:
@@ -51,7 +66,9 @@ jobs:
   # reads its output, so it runs beside generation and only the aggregate waits.
   check-models:
     # Scheduled workflows run the default branch; keep the intended main scope explicit.
-    if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
+    # Only the full mode runs it: its result depends on the models and the
+    # challenge catalog alone, so a port-only change cannot alter it.
+    if: (github.event_name != 'schedule' || github.ref == 'refs/heads/main') && inputs.mode != 'replay' && inputs.mode != 'mutations'
     runs-on: ubuntu-latest
     # Shared-library challenges now execute the importing profiles' partitions,
     # including clean baselines and mutant checks cached by exact source closure.
@@ -93,8 +110,33 @@ jobs:
       - uses: ./.github/actions/setup-validation
         with:
           quint: "true"
+      # The corpus is a deterministic function of these inputs (pinned seed,
+      # one Quint thread), so a hit restores a corpus identical in content to
+      # what generation would write; only Quint's #meta timestamps differ, and
+      # every digest downstream is taken from the restored files. Only an
+      # exact key matches: a stale corpus must never stand in for a
+      # regenerated one. The review ledgers are left out because generation
+      # never reads them; formal/guides/CONTRACTS.md is left out because
+      # generation reads it only to validate challenge contract IDs, which
+      # every port lane's conformance.mjs prepare re-validates.
+      - name: Restore the corpus generated from identical inputs
+        id: corpus
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .formal-traces
+          key: formal-traces-${{ hashFiles('formal/models/**', 'formal/replay/**', 'formal/tools/**', 'formal/generated/**', 'formal/catalogs/**', '!formal/catalogs/source-audit.json', '!formal/catalogs/go-parity.json', '!formal/catalogs/feature-coverage.json', 'typescript/test/fixtures/**', '.github/actions/setup-quint/**', 'Makefile', 'package.json', 'pnpm-lock.yaml') }}
+      # The weekly run regenerates even on a hit, so a freshly installed
+      # toolchain re-exports the committed fixtures and vectors once a week;
+      # the save below stays skipped when the entry already exists.
       - name: Regenerate artifacts and evaluate shared witness evidence
+        if: steps.corpus.outputs.cache-hit != 'true' || github.event_name == 'schedule'
         run: make formal-generate
+      - name: Save the corpus for later runs on the same inputs
+        if: steps.corpus.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .formal-traces
+          key: ${{ steps.corpus.outputs.cache-primary-key }}
       - name: Preserve formal corpus, witness evidence and counterexamples
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -167,6 +209,7 @@ jobs:
   # that fails the pull request until the matrix grows.
   typescript-mutations:
     needs: generate
+    if: inputs.mode != 'replay'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -329,6 +372,7 @@ jobs:
   # the matrix grows.
   go-mutations:
     needs: generate
+    if: inputs.mode != 'replay'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -391,6 +435,7 @@ jobs:
   # generated cohort in about a minute; the budget mirrors go-mutations.
   rust-mutations:
     needs: generate
+    if: inputs.mode != 'replay'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -532,8 +577,9 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 90
-      - name: Require the model check, the generated corpus, every port replay and every merged mutation measurement
+      - name: Require the generated corpus, every port replay and every lane the mode selects
         env:
+          MODE: ${{ inputs.mode || 'full' }}
           CHECK_MODELS_RESULT: ${{ needs.check-models.result }}
           GENERATE_RESULT: ${{ needs.generate.result }}
           TYPESCRIPT_RESULT: ${{ needs.typescript-parity.result }}
@@ -547,18 +593,40 @@ jobs:
           EXPLORATION_RESULT: ${{ needs.exploration.result }}
           EXPLORATION_REQUIRED: ${{ github.event_name == 'schedule' || inputs.exploration == true }}
         run: |
-          test "$CHECK_MODELS_RESULT" = success
           test "$GENERATE_RESULT" = success
           test "$TYPESCRIPT_RESULT" = success
-          test "$TYPESCRIPT_MUTATIONS_MERGE_RESULT" = success
           test "$GO_RESULT" = success
-          test "$GO_MUTATIONS_MERGE_RESULT" = success
-          test "$RUST_MUTATIONS_MERGE_RESULT" = success
           test "$RUST_RESULT" = success
           test "$PYTHON_RESULT" = success
           test "$SYMBOLIC_RESULT" = success
+          # A lane the mode does not select must be skipped, never failed or
+          # silently absent, so a misrouted dispatch cannot pass as a stronger mode.
+          case "$MODE" in
+            full)
+              test "$CHECK_MODELS_RESULT" = success
+              test "$TYPESCRIPT_MUTATIONS_MERGE_RESULT" = success
+              test "$GO_MUTATIONS_MERGE_RESULT" = success
+              test "$RUST_MUTATIONS_MERGE_RESULT" = success
+              skipped="none" ;;
+            mutations)
+              test "$CHECK_MODELS_RESULT" = skipped
+              test "$TYPESCRIPT_MUTATIONS_MERGE_RESULT" = success
+              test "$GO_MUTATIONS_MERGE_RESULT" = success
+              test "$RUST_MUTATIONS_MERGE_RESULT" = success
+              skipped="model checks and the model-fault campaign" ;;
+            replay)
+              test "$CHECK_MODELS_RESULT" = skipped
+              test "$TYPESCRIPT_MUTATIONS_MERGE_RESULT" = skipped
+              test "$GO_MUTATIONS_MERGE_RESULT" = skipped
+              test "$RUST_MUTATIONS_MERGE_RESULT" = skipped
+              skipped="model checks, the model-fault campaign and the port mutation campaigns" ;;
+            *)
+              echo "Unknown mode: $MODE" >&2
+              exit 1 ;;
+          esac
           if [ "$EXPLORATION_REQUIRED" = true ]; then
             test "$EXPLORATION_RESULT" = success
           else
             test "$EXPLORATION_RESULT" = skipped
           fi
+          printf 'Mode: %s on %s. Not run in this mode: %s.\n' "$MODE" "$GITHUB_SHA" "$skipped" >> "$GITHUB_STEP_SUMMARY"

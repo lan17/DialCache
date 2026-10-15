@@ -217,7 +217,7 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "836a026530b6773e06aa461a29891fe8c6d2578360f5678702e8d7374d2deb09",
+      "sha256": "23c819b75f1ef6399e60e0918daa67b78986117b51139cff484a4121a60fad17",
       "entries": [
         {"title":"Maintainer guide","contracts":["B01"]},
         {"title":"Validation","contracts":["B01"]},
@@ -1102,7 +1102,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "46ea31d30b5cfebfa6163dfad1ad33b770148bf147329bb5c0a93271d4806962",
+      "sha256": "97e42e308d046dd1021d8adfd643e50a94d00c28a5552a25693eafff68da7394",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},
@@ -1689,7 +1689,7 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "20132bd3ea23510eef25022fec91482fd09bf24f0a285f72aa018d69a69bd154",
+      "sha256": "db335e1c3bc6981d33f136afa5dce31ac0ed4ea08b2593248a3962e88bb920c2",
       "entries": [
         {"title":"Validation and evidence"},
         {"title":"Choosing a run"},
