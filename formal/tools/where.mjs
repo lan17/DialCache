@@ -11,7 +11,15 @@
 // data and no gate: this is the navigation a reviewer or an agent otherwise
 // assembles by hand.
 //
+// For one model-fault challenge (recovery-inclusive-maximum) or one native
+// mutant (M01) it prints the entry in full: the edit, the invariant, the
+// mapping, the reproducer and the profile partition, or the rationale, the
+// edits per port and the required detections. The generated index tables under
+// formal/generated/ list the IDs.
+//
 //   node formal/tools/where.mjs C45 [--json]
+//   node formal/tools/where.mjs recovery-inclusive-maximum
+//   node formal/tools/where.mjs M01
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,8 +59,10 @@ function contractRow(id, directory) {
 }
 
 export function lookup(query, { directory = root } = {}) {
+  if (/^M\d{2}$/.test(query ?? '')) return lookupMutant(query, directory);
+  if (/^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/.test(query ?? '')) return lookupChallenge(query, directory);
   const match = /^([CWEBX]\d{2})(?:\.([\w-]+))?$/.exec(query ?? '');
-  if (!match) throw new Error(`${query}: expected a contract ID such as C45, a semantic case such as C45.recheck-after-decode or a native case such as B01.registration-and-policy-snapshot`);
+  if (!match) throw new Error(`${query}: expected a contract ID such as C45, a semantic case such as C45.recheck-after-decode, a native case such as B01.registration-and-policy-snapshot, a challenge ID such as recovery-inclusive-maximum or a mutant ID such as M01`);
   const [, id, caseName] = match;
   const caseId = caseName ? `${id}.${caseName}` : undefined;
   const row = contractRow(id, directory);
@@ -104,7 +114,63 @@ export function lookup(query, { directory = root } = {}) {
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
+function lookupChallenge(id, directory) {
+  const challenge = (json('formal/catalogs/execution.json', directory).challenges ?? []).find(entry => entry.id === id);
+  if (!challenge) throw new Error(`${id}: not a challenge in formal/catalogs/execution.json`);
+  const mutants = json('formal/catalogs/mutations.json', directory).mutations ?? [];
+  const mutant = challenge.nativeMutants?.mutant ? mutants.find(entry => entry.id === challenge.nativeMutants.mutant) : undefined;
+  return { kind: 'challenge', ...challenge, mutantCase: mutant?.case };
+}
+
+function lookupMutant(id, directory) {
+  const mutant = (json('formal/catalogs/mutations.json', directory).mutations ?? []).find(entry => entry.id === id);
+  if (!mutant) throw new Error(`${id}: not a mutant in formal/catalogs/mutations.json`);
+  const rust = (json('formal/catalogs/rust-mutations.json', directory).mutations ?? []).find(entry => (entry.typescriptMutation ?? entry.id) === id);
+  const challenges = (json('formal/catalogs/execution.json', directory).challenges ?? []).filter(entry => entry.nativeMutants?.mutant === id).map(entry => entry.id);
+  return { kind: 'mutant', ...mutant, rust, challenges };
+}
+
+const block = text => String(text).split('\n').map(line => `    ${line}`).join('\n');
+
+function renderChallenge(c) {
+  const lines = [`${c.id}: challenge on ${c.contract}, ${c.source} under ${c.model}:${c.invariant}`, ''];
+  lines.push('Edit', '  before:', block(c.before), '  after:', block(c.after), '');
+  const native = c.nativeMutants ?? {};
+  lines.push(`Native mutant: ${native.kind}${native.mutant ? ` ${native.mutant}${c.mutantCase ? ` (${c.mutantCase})` : ''}` : ''}`);
+  if (native.text) lines.push(block(native.text));
+  if (native.crossContract) lines.push('  cross-contract:', block(native.crossContract));
+  if (native.evidence) lines.push(`  evidence checkpoint: ${JSON.stringify(native.evidence)}`);
+  if (c.measures) lines.push('', 'Measures', block(c.measures));
+  const r = c.reproducer ?? {};
+  lines.push('', `Reproducer${r.kind ? ` (${r.kind})` : ''}`);
+  if (r.run) lines.push(`  run ${r.run} in ${r.model ?? c.model}`);
+  if (r.family) lines.push(`  family ${r.family}`);
+  if (r.scope) lines.push('  scope:', block(r.scope));
+  if (r.failure) lines.push('  expected failure under the fault:', block(r.failure));
+  const profiles = r.profiles ?? [];
+  lines.push('', `Detected by ${plural(profiles.filter(p => !p.includes('/')).length, 'profile')}${profiles.some(p => p.includes('/')) ? ` and ${plural(profiles.filter(p => p.includes('/')).length, 'model')}` : ''}: ${profiles.join(', ') || 'none'}`);
+  const exclusions = Object.entries(r.exclusions ?? {});
+  lines.push('', `Excluded (${exclusions.length})`);
+  for (const [profile, reason] of exclusions) lines.push(`  ${profile}: ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
+  return lines.join('\n') + '\n';
+}
+
+function renderMutant(m) {
+  const lines = [`${m.id}: ${m.description} (case ${m.case})`, ''];
+  if (m.rationale) lines.push('Rationale', block(m.rationale), '');
+  for (const [port, spec] of [['TypeScript', m.typescript], ['Go', m.go], ['Rust', m.rust]]) {
+    if (!spec?.edits?.length) continue;
+    lines.push(`${port}: required detections ${spec.requiredDetections?.join(', ') || 'none'}`);
+    for (const edit of spec.edits) lines.push(`  ${edit.path}`, '    before:', block(edit.before).replace(/^/gm, '  '), '    after:', block(edit.after).replace(/^/gm, '  '));
+    lines.push('');
+  }
+  lines.push(`Challenges mapped to it: ${m.challenges.join(', ') || 'none'}`);
+  return lines.join('\n') + '\n';
+}
+
 export function render(result) {
+  if (result.kind === 'challenge') return renderChallenge(result);
+  if (result.kind === 'mutant') return renderMutant(result);
   const lines = [result.case ? `${result.case}: ${result.caseRule}` : `${result.id}: ${result.obligation}`, ''];
   if (result.case) lines.push(`Contract ${result.id}: ${result.obligation}`, '');
   lines.push('Stated', `  formal/guides/CONTRACTS.md:${result.contractsLine}  (evidence column: ${result.evidence})`);
@@ -144,7 +210,7 @@ export function render(result) {
 export function parseArguments(args) {
   const flags = args.filter(arg => arg.startsWith('--')), positional = args.filter(arg => !arg.startsWith('--'));
   const unknown = flags.filter(flag => flag !== '--json');
-  if (positional.length !== 1 || unknown.length) throw new Error('Usage: node formal/tools/where.mjs <contract or case, e.g. C45, C45.recheck-after-decode or B01.registration-and-policy-snapshot> [--json]');
+  if (positional.length !== 1 || unknown.length) throw new Error('Usage: node formal/tools/where.mjs <contract, case, challenge or mutant: C45, C45.recheck-after-decode, B01.registration-and-policy-snapshot, recovery-inclusive-maximum, M01> [--json]');
   return { query: positional[0], json: flags.includes('--json') };
 }
 

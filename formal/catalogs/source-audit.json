@@ -1084,7 +1084,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "8042f90203465f6836322afa565479e36dcfdc6628a9a1d4140eea38093cd6f8",
+      "sha256": "f03253dbdc8b87c8b272b16a0b0898413efddf9cb97a144b261810eff09633bc",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1102,7 +1102,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "a8927a0580df5e67d795407d78040aa2a364e54cc20530c3d3db59507ce67d6f",
+      "sha256": "46ea31d30b5cfebfa6163dfad1ad33b770148bf147329bb5c0a93271d4806962",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},
@@ -1534,7 +1534,7 @@
     },
     {
       "path": "formal/guides/README.md",
-      "sha256": "14d3ff0c562d1d2679d1127c050d266fda452cd27ce93d891adde8967b327137",
+      "sha256": "4607559e473de61ff46e08b855ad262b6851c1a5e6b505dd31ed80c36e21445f",
       "entries": [
         {"title":"Guides"},
         {"title":"Contract guides: what a port must preserve"},
