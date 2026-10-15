@@ -38,6 +38,7 @@ generated-fixture verification; `validation.mjs` is the list of record.
 - [generate-artifacts.mjs](./generate-artifacts.mjs): regenerates every committed artifact (`--write`) or verifies it (`--check`).
 - [generated-fixtures.mjs](./generated-fixtures.mjs): the smoke traces, witness fixtures and the lock from `fixture-recipes.json`.
 - [generate-key-vectors.mjs](./generate-key-vectors.mjs), [generate-frame-vectors.mjs](./generate-frame-vectors.mjs), [generate-envelope-vectors.mjs](./generate-envelope-vectors.mjs), [generate-invalidation-vectors.mjs](./generate-invalidation-vectors.mjs): one generated vector file each.
+- [generate-catalog-docs.mjs](./generate-catalog-docs.mjs): the generated read views under `formal/generated/` (`PROFILES.md`) from the replay descriptors and the catalogs; `--check` runs in the `audit` lane.
 - [witnesses.mjs](./witnesses.mjs): language-neutral witness evaluation over the generated corpus and its baseline.
 - [replay-inputs.mjs](./replay-inputs.mjs): adds replay annotations to exported regressions from their explicit input record.
 - [explore.mjs](./explore.mjs): a fresh-seed exploration in an isolated source snapshot (`make explore`); `--replay` reproduces a saved run.

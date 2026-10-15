@@ -1084,7 +1084,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "cb6204391896e6c69ac5ab5e6195bc1c5f07261358220bb156433b9f5599b14a",
+      "sha256": "8042f90203465f6836322afa565479e36dcfdc6628a9a1d4140eea38093cd6f8",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1102,7 +1102,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "728051bdcc8e1a7df19052aaa259ccdf8d7375647255325e514beafb9e22933b",
+      "sha256": "03b8af5f20f5bc6cffa2670d79f5787f6f4d11f6735b7052adaf2253f5e81636",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},
@@ -1124,22 +1124,22 @@
     },
     {
       "path": "formal/guides/BEHAVIOR.md",
-      "sha256": "6c835d7e3aecafce708b9ec7bf4b54d7c2d5daa4fa9c9a02ea71bbd5446b34a6",
+      "sha256": "9997811fae33b9ecd7a774bca0cdbf851bbdc109f4b2ad0b06b6756cb3c65ac3",
       "entries": [
-        {"title":"Portable behavioral scenarios and generated feature profiles"},
+        {"title":"Portable behavioral scenarios and generated profiles"},
         {"title":"Scenario format"},
         {"title":"Optional observed events"},
         {"title":"Fixture"},
         {"title":"Inputs and completion boundaries"},
-        {"title":"Additional composition profiles"},
         {"title":"Observations"},
         {"title":"Additional fixed-scenario inputs"},
-        {"title":"Generated pending-effect profile"},
-        {"title":"Generated feature profiles"},
-        {"title":"Generated independent-caller profile"},
-        {"title":"Generated layer-composition profile"},
-        {"title":"Generated request-scope profile"},
-        {"title":"Generated served-hit shadow admission profile"},
+        {"title":"Generated profiles"},
+        {"title":"Trace contract"},
+        {"title":"Value codes"},
+        {"title":"Observation channels"},
+        {"title":"Rules the profiles hold their drivers to"},
+        {"title":"Replaying generated traces"},
+        {"title":"Additional composition profiles"},
         {"title":"Port workflow and limits"}
       ],
       "review": {
@@ -1534,12 +1534,13 @@
     },
     {
       "path": "formal/guides/README.md",
-      "sha256": "2fb4e87fab1388f3c4bdce6ea41d865db52bb7edcade425630038013dca65b6a",
+      "sha256": "14d3ff0c562d1d2679d1127c050d266fda452cd27ce93d891adde8967b327137",
       "entries": [
         {"title":"Guides"},
         {"title":"Contract guides: what a port must preserve"},
         {"title":"Tooling guides: how to do the work"},
         {"title":"Coverage guides: what the evidence establishes"},
+        {"title":"Generated views: read, never edit"},
         {"title":"Historical evidence: what was measured, and when"}
       ],
       "review": {

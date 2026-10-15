@@ -30,6 +30,10 @@ by-task view; this index is the by-kind view it lacks. Read
 - [TEST-MAP.md](./TEST-MAP.md): the map from contracts to implementation evidence.
 - [TEST-AUDIT.md](./TEST-AUDIT.md): keeping the docs and test audit ledger current.
 
+## Generated views: read, never edit
+
+- [../generated/PROFILES.md](../generated/PROFILES.md): every conformance profile's fixture, setup, action decodings and observation channels, rendered from the replay descriptors; [BEHAVIOR.md](./BEHAVIOR.md) keeps the rules behind them.
+
 ## Historical evidence: what was measured, and when
 
 - [HISTORY.md](./HISTORY.md): the composition records of each profile's rewrite over the kernel library, and the PR #161 validation baseline, at the revisions they were measured.

@@ -34,7 +34,7 @@ and generated artifacts; a reader should not need to open them to learn a rule.
 | [replay/](./replay/) | The shared replay coordinator, profile descriptors and witness classifiers every port executes | [replay/README.md](./replay/README.md) |
 | [tools/](./tools/) | The Node scripts behind the `make` targets: checks, generators, measurements and runners | [tools/README.md](./tools/README.md) |
 | [catalogs/](./catalogs/) | Hand-maintained manifests, evidence catalogs, ledgers, baselines and the fixed vector corpora | [catalogs/README.md](./catalogs/README.md) |
-| [generated/](./generated/) | Smoke traces, the fixtures lock and generated vectors; regenerated, never edited | [generated/README.md](./generated/README.md) |
+| [generated/](./generated/) | Smoke traces, the fixtures lock, generated vectors and the generated read views such as [PROFILES.md](./generated/PROFILES.md); regenerated, never edited | [generated/README.md](./generated/README.md) |
 
 ## How the specification connects to code
 
