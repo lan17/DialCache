@@ -12,7 +12,7 @@ required witnesses in both languages. Fast PR checks use committed smoke,
 fixed supplements and freshness audits without claiming full parity;
 model/generator changes additionally recompute committed artifacts. Full
 validation remains required for behavior/model changes before merge and for
-release/new-port acceptance. See the [Make targets](../README.md#generating-and-replaying-behavior).
+release/new-port acceptance. See the [Make targets](../README.md#run-it).
 
 ## Scenario format
 

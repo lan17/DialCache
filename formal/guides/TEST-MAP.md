@@ -107,7 +107,7 @@ small compression caps exercise wrapper decisions without allocating the real
 
 ## Evidence and measurement
 
-Run the commands in [README.md](../README.md#generating-and-replaying-behavior)
+Run the commands in [README.md](../README.md#run-it)
 and inspect `node formal/tools/check-semantic-coverage.mjs` for current accounting.
 Checking a model, reaching a witness and replaying its observations are separate
 requirements. Both implementation completion gates derive the exact sampled

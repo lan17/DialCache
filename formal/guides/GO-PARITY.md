@@ -29,7 +29,7 @@ artifact generation and prepared TS/Go replay. Run `make model-check` for the
 separate finite symbolic checks, then `make mutations` and `make integration`
 for their fault and real-server evidence.
 `make ci NODE22_BIN=/path/to/node22/bin/node` runs all local lanes in order,
-including symbolic checks and the exact Node 22.15.0 package floor; see the [Make target guide](../README.md#generating-and-replaying-behavior)
+including symbolic checks and the exact Node 22.15.0 package floor; see the [Make target guide](../README.md#run-it)
 for pinned prerequisites and individual targets.
 
 Hosted PR checks run native/race tests, committed smoke, audits and real

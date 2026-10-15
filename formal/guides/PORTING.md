@@ -329,7 +329,7 @@ harness; those corruptions receive no positive conformance credit.
 
 ## Complete corpus and reusable acceptance checks
 
-Use the [shared Make targets and pinned prerequisites](../README.md#generating-and-replaying-behavior)
+Use the [shared Make targets and pinned prerequisites](../README.md#run-it)
 from the repository root:
 
 ```sh

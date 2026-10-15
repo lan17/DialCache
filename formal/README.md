@@ -1,21 +1,29 @@
 # Executable DialCache specification
 
-Quint defines the portable contracts that TypeScript, Go, Rust and future ports
-must preserve. TypeScript is the executable reference those contracts formalize; a
-disagreement between the two is settled by a distinguishing [regression](./guides/GLOSSARY.md#corpus-history-regression-exported-run-and-public-only-run) and a
-recorded decision, not by editing the easier side. Native [drivers](./guides/GLOSSARY.md#driver) execute
-external commands against the real libraries; generated expectations stay in
-the test [coordinator](./guides/GLOSSARY.md#coordinator).
+DialCache's portable behavior is defined once, in Quint, and every language port
+is held to the same generated histories. TypeScript is the executable reference
+the models formalize; when the two disagree, the resolution is a distinguishing
+[regression](./guides/GLOSSARY.md#corpus-history-regression-exported-run-and-public-only-run)
+and a recorded decision, never an edit to whichever side is easier. Native
+[drivers](./guides/GLOSSARY.md#driver) execute external commands against the
+real libraries, and the expectations stay in the shared
+[coordinator](./guides/GLOSSARY.md#coordinator), so no port can pass by
+consulting its own predictions.
+
+This page explains the setup from the models down to the CI lanes, then lists
+where everything lives. [guides/README.md](./guides/README.md) indexes the prose
+by kind and [GLOSSARY.md](./guides/GLOSSARY.md) defines the terms.
 
 ## Start with your task
 
 | Task | Read first |
 | --- | --- |
-| Understand system behavior | [SPEC.md](./guides/SPEC.md), then the relevant model below |
-| Follow one rule into all three implementations | [WALKTHROUGH.md](./guides/WALKTHROUGH.md) |
+| See how the pieces fit together | [The setup, top to bottom](#the-setup-top-to-bottom), then [WALKTHROUGH.md](./guides/WALKTHROUGH.md) |
+| Understand system behavior | [SPEC.md](./guides/SPEC.md), then the relevant model in [models/README.md](./models/README.md) |
+| Follow one rule into every implementation | [WALKTHROUGH.md](./guides/WALKTHROUGH.md) |
 | Change a behavior or extend coverage | [AUTHORING.md](./guides/AUTHORING.md) |
 | Implement another language | [PORTING.md](./guides/PORTING.md) and [PROTOCOL.md](./guides/PROTOCOL.md) |
-| Locate or reproduce a failing check | [TEST-MAP.md](./guides/TEST-MAP.md) and the commands below |
+| Locate or reproduce a failing check | [TEST-MAP.md](./guides/TEST-MAP.md) and [Run it](#run-it) |
 | See where one contract is stated, tested, challenged and mapped, or read one challenge or mutant in full | `node formal/tools/where.mjs C45` (or `C45.recheck-after-decode`, `B01.registration-and-policy-snapshot`, `recovery-inclusive-maximum`, `M01`) |
 | Interpret validation results | [VALIDATION.md](./guides/VALIDATION.md) |
 | Look up a term | [GLOSSARY.md](./guides/GLOSSARY.md) |
@@ -24,6 +32,255 @@ Start with readable Quint and a named regression. The JSON catalogs are indexes
 and generated artifacts; a reader should not need to open them to learn a rule.
 [CONTRACTS.md](./guides/CONTRACTS.md) gives stable obligation IDs and
 [FEATURE-COVERAGE.md](./guides/FEATURE-COVERAGE.md) organizes their boundary cases.
+
+## The setup, top to bottom
+
+Six stages turn a rule into evidence. Each stage below names its directory, its
+tool, what it produces and where to read more; the diagram summarizes the same
+flow.
+
+```mermaid
+flowchart LR
+  subgraph written ["Written by hand"]
+    M["Quint models<br/>models/"]
+    X["Manifests and catalogs<br/>catalogs/"]
+    D["Native drivers<br/>typescript/ go/ rust/ python/"]
+  end
+  subgraph pipeline ["tools/ and replay/"]
+    RM["2. Check<br/>run-models.mjs"]
+    GA["3. Generate<br/>generate-artifacts.mjs, witnesses.mjs"]
+    CO["4. Replay<br/>replay/coordinator.mjs"]
+    CK["5. Account, 6. Gate<br/>measure-*.mjs, check-*.mjs"]
+  end
+  subgraph produced ["Produced"]
+    CP["Corpus and regressions<br/>.formal-traces/"]
+    GF["Committed artifacts<br/>generated/"]
+    RP["Completion, witness<br/>and mutation reports"]
+  end
+  M --> RM
+  X --> RM
+  RM --> CP
+  M --> GA
+  X --> GA
+  GA --> GF
+  CP --> CO
+  GF --> CO
+  CO <--> D
+  CO --> RP
+  RP --> CK
+  X --> CK
+```
+
+### 1. State the rule in Quint
+
+[cache-rules.qnt](./models/cache-rules.qnt) holds the shared
+[judgments](./guides/GLOSSARY.md#judgment-judged-once-and-applied-from-a-judgment)
+every model imports: age, expiry, deadline and fence. The
+[kernel library](./models/kernel/README.md) states the portable rules as pure
+transitions over named shapes, one concern per module. A composed
+[profile](./guides/GLOSSARY.md#profile-conformance-profile) assigns state only
+through those transitions, exposes its external commands as public actions, and
+records each step's command and choices in an explicit input, so replay never
+infers a command from changed cache state. Sixteen of the seventeen conformance
+profiles compose the kernel; the introductory core profile predates it. Beside
+them sit the sum-typed verification models that are model-checked, the
+connection models that hold a profile's history against
+[cache-contract.qnt](./models/cache-contract.qnt), and the wire models that each
+generate one vector file. Properties stay independent: an assertion never calls
+the helper it challenges, and each named `Test` run is a public-action
+regression that pins one boundary. Protocol classifiers use the same fence
+judgment as the generated byte vectors and the behavioral remote reads.
+
+Read more: [SPEC.md](./guides/SPEC.md) for the behavior,
+[models/README.md](./models/README.md) for the file groups,
+[kernel/README.md](./models/kernel/README.md) for the composition rules,
+[AUTHORING.md](./guides/AUTHORING.md) to change a model.
+
+### 2. Check the models
+
+[execution.json](./catalogs/execution.json) schedules every model: its
+invariants, bounds, trace paths and exported runs. `node
+formal/tools/run-models.mjs check` typechecks each scheduled model, runs it with
+the Rust evaluator and exports every public-only run of a profile model as a
+regression; runs are discovered from the Quint source, never listed separately,
+and a private state-patching run stays model-only unless it is rewritten as a
+public action. `check-model-properties.mjs` runs the
+[challenge](./guides/GLOSSARY.md#challenge-fault-mutant-and-reproducer) catalog
+in the same manifest: for every scheduled model, at least one compiling
+single-site fault that a named invariant must detect, with a deterministic
+reproducer that fails only under the fault. `lint-profiles.mjs` ratchets the
+composition and witness-isolation lint. Those three form the Quint evidence
+[lane](./guides/GLOSSARY.md#lane), `make formal-check`. Two separate targets
+read the models from another angle: `make model-check` verifies the finite
+boundary rules in
+[dialcache-rule-checks.qnt](./models/dialcache-rule-checks.qnt) symbolically
+with Apalache, and the [differential](./guides/GLOSSARY.md#differential) replays
+each composed profile's corpus against the merge base with `origin/main` in both
+directions, so a change in observable behavior must be declared by bumping the
+profile's `behaviorVersion`. A new profile has no previous text; it establishes
+its behavior through independent properties, consequential witnesses and replay
+in every port.
+
+Read more: [VALIDATION.md](./guides/VALIDATION.md) for what each run proves,
+[CHALLENGES.md](./generated/CHALLENGES.md) for the challenge index,
+[AUTHORING.md](./guides/AUTHORING.md#mapping-every-challenge-to-native-mutants)
+for writing one.
+
+### 3. Generate the corpus and the committed artifacts
+
+`make formal-generate` writes the sampled corpus and the exported regressions
+under `.formal-traces/`, which is never committed, then evaluates the required
+[witness](./guides/GLOSSARY.md#witness-label-and-classifier) labels from
+[coverage-witnesses.json](./catalogs/coverage-witnesses.json) over the complete
+corpus with `witnesses.mjs`. That language-neutral step is the sole producer of
+the witness evidence every port lane reads, and it fails generation when a
+gated label's sampled hits fall below
+[witness-baseline.json](./catalogs/witness-baseline.json). The committed
+artifacts under [generated/](./generated/README.md) are rebuilt by
+`node formal/tools/generate-artifacts.mjs --write`: one
+[smoke](./guides/GLOSSARY.md#smoke) trace per profile from the recipes in
+[fixture-recipes.json](./catalogs/fixture-recipes.json), the lock that pins the
+input hashes of every model, recipe and generator beside the output hashes, the
+four wire vector files, and the witness fixtures under
+`typescript/test/fixtures/`. `make fixtures-check` recomputes them all with
+pinned Quint and fails on any difference. The read views
+[PROFILES.md](./generated/PROFILES.md), [CHALLENGES.md](./generated/CHALLENGES.md)
+and [MUTANTS.md](./generated/MUTANTS.md) are rendered from the replay
+descriptors and the catalogs by `generate-catalog-docs.mjs --write` and need no
+Quint.
+
+Read more: [generated/README.md](./generated/README.md),
+[catalogs/README.md](./catalogs/README.md),
+[PORTING.md](./guides/PORTING.md#witness-evidence) for the witness evidence
+fields.
+
+### 4. Replay every history in every port
+
+The [coordinator](./replay/coordinator.mjs) runs one history against a driver
+over the wire protocol typed by
+[protocol.schema.json](./replay/protocol.schema.json). It hands the driver the
+fixture and each step's recorded external command, never the predicted
+observation. The driver calls the real library, controls the external gates and
+clocks, and reports actual results and effects. The coordinator validates each
+observation, rejecting a malformed one as an infrastructure error before any
+comparison, and asserts it against the model's prediction step by step. Profile
+descriptors ([core.mjs](./replay/core.mjs), [effects.mjs](./replay/effects.mjs),
+[features.mjs](./replay/features.mjs),
+[local-clock.mjs](./replay/local-clock.mjs) and [profiles/](./replay/profiles/))
+decode each profile's integer choices into driver commands;
+[PROFILES.md](./generated/PROFILES.md) is their rendered view and
+[profiles.json](./catalogs/profiles.json) is the profile registry. The drivers
+are [behavior-driver.ts](../typescript/test/formal/behavior-driver.ts),
+[behavior_driver_test.go](../go/behavior_driver_test.go),
+[driver.rs](../rust/tests/formal/driver.rs) and
+[driver.py](../python/tests/formal/driver.py). `make smoke` replays the
+committed traces in all four ports; `make formal-ts`, `make formal-go`, `make
+formal-rust` and `make formal-python` replay the complete generated corpus and
+write a completion report.
+
+Read more: [WALKTHROUGH.md](./guides/WALKTHROUGH.md) follows one history through
+the ports, [PORTING.md](./guides/PORTING.md) is the driver contract with its
+[observation contract](./guides/PORTING.md#observation-contract),
+[replay/README.md](./replay/README.md) lists the modules,
+[CONFORMANCE.md](./guides/CONFORMANCE.md) describes the core profile's trace
+format and trust boundary.
+
+### 5. Account for the evidence
+
+`node formal/tools/conformance.mjs check` accepts a completion report only when
+every scheduled case passed exactly once against the exact corpus and sources it
+names. Witness coverage is required across the union of the named regressions
+and the sampled corpus, so a corpus that stops reaching a corner is visible even
+while the regressions keep the gate green. The mutation campaigns then challenge
+the assertions themselves. [mutations.json](./catalogs/mutations.json) and
+[rust-mutations.json](./catalogs/rust-mutations.json) catalog compiling semantic
+faults in each port; `make mutations-ts`, `make mutations-go` and `make
+mutations-rust` measure that the generated histories, the real-Redis
+invalidation vectors and the shared witnesses detect every mapped mutant. Each
+model challenge maps to the native mutant that injects the same wrong behavior,
+and a mapped fault must violate its original property, fail the declared
+expectation in a deterministic Quint run, and reach the same public assertion in
+the completed TypeScript and Go recordings. Fixed corpora complement the
+generated ones: [protocol-vectors.json](./catalogs/protocol-vectors.json),
+[invalidation-vectors.json](./catalogs/invalidation-vectors.json) and
+[behavioral-scenarios.json](./catalogs/behavioral-scenarios.json) carry
+handwritten expectations, and their evidence mappings do not mechanically prove
+that each fixed assertion agrees with Quint.
+[semantic-cases.json](./catalogs/semantic-cases.json) and
+[feature-coverage.json](./catalogs/feature-coverage.json) index every semantic
+case and native feature family to its evidence; `where.mjs` answers from them.
+
+Read more: [SEMANTIC-COVERAGE.md](./guides/SEMANTIC-COVERAGE.md) for the
+evidence inventory and the mutation comparison,
+[FEATURE-COVERAGE.md](./guides/FEATURE-COVERAGE.md),
+[TEST-MAP.md](./guides/TEST-MAP.md), [CONTRACTS.md](./guides/CONTRACTS.md) for
+the obligation IDs, [MUTANTS.md](./generated/MUTANTS.md) for the mutant index.
+
+### 6. Gate a change
+
+The ledgers in [catalogs/](./catalogs/README.md) make review state checkable.
+[source-audit.json](./catalogs/source-audit.json) keys every reviewed guide and
+ordinary test by its headings and contract dispositions, so a text edit is
+followed by `node formal/tools/check-source-audit.mjs --refresh <path>`.
+[go-parity.json](./catalogs/go-parity.json) pins the catalogs, sources and
+dispositions the Go parity claim rests on and is re-pinned with
+`node formal/tools/check-go-parity.mjs --refresh-inputs`. The lint, witness and
+style baselines ratchet. `make audit` runs those checks together with the
+semantic and feature coverage inventories, the generated-fixture and read-view
+freshness checks and the Quint style caps. The pipelines below run it on every
+change, and the full workflow runs everything above.
+
+Read more: [TEST-AUDIT.md](./guides/TEST-AUDIT.md) for keeping the ledger
+current, [GO-PARITY.md](./guides/GO-PARITY.md),
+[tools/README.md](./tools/README.md) for every script behind a target.
+
+## Pipelines
+
+Three GitHub Actions workflows run the same Make targets as local work.
+
+```mermaid
+flowchart TB
+  subgraph pr ["Every push and pull request"]
+    CI["CI<br/>typescript, go, rust, python, wire, then the test aggregate"]
+    SM["Formal smoke<br/>make audit smoke; make fixtures-check when a Quint input changed"]
+    DF["differential 1 to 4, pull requests only<br/>make differential over the composed profiles"]
+  end
+  subgraph full ["Full formal verification: weekly on main, or dispatched for a branch"]
+    CM["check-models<br/>make formal-check"]
+    GE["generate<br/>make formal-generate"]
+    SY["symbolic<br/>make model-check"]
+    EX["exploration<br/>make explore"]
+    GE --> TP["typescript-parity"] & GP["go-parity"] & RP["rust-parity"] & PP["python-parity"]
+    GE --> TM["typescript-mutations, 6 shards"] & GM["go-mutations, 10 shards"] & RMU["rust-mutations, 3 shards"]
+    CM & SY & EX & TP & GP & RP & PP & TM & GM & RMU --> AG["formal-full aggregate"]
+  end
+```
+
+- **CI** ([ci.yaml](../.github/workflows/ci.yaml)) runs each language's native
+  checks and real-server integration, the cross-language wire suite and the
+  package floor. Its aggregate `test` job is the required check on `main`. A
+  docs-only change clears it in a few minutes.
+- **Formal smoke** ([formal.yaml](../.github/workflows/formal.yaml)) runs `make
+  audit smoke`: the ledgers and inventories, then the committed traces in all
+  four ports. When [fixture-scope.mjs](../.github/scripts/fixture-scope.mjs)
+  detects a changed Quint input, the job also recomputes every committed
+  artifact with pinned Quint, and on a pull request four `differential` shards
+  replay the composed profiles against the merge base. Any edit to a Quint
+  source counts, including a comment. The shards are migration evidence, not a
+  completion claim, and take up to about half an hour.
+- **Full formal verification**
+  ([formal-full.yaml](../.github/workflows/formal-full.yaml)) runs weekly on
+  `main` and on demand for any branch. `check-models` and `generate` run side by
+  side; the four parity lanes and the three sharded mutation campaigns wait only
+  for `generate`; the symbolic lane and, when scheduled or requested, the
+  exploration lane run beside them. The `formal-full` aggregate requires every
+  lane and keeps a summary artifact for 90 days. The scheduled run takes about
+  two and a half hours.
+
+The pull request lanes are fast checks. A behavior, model or replay change
+requires the full workflow on its branch before merge, and the PR body records
+which run. [VALIDATION.md](./guides/VALIDATION.md) explains how to choose a run
+and how to read the reports.
 
 ## Where things are
 
@@ -36,110 +293,12 @@ and generated artifacts; a reader should not need to open them to learn a rule.
 | [catalogs/](./catalogs/) | Hand-maintained manifests, evidence catalogs, ledgers, baselines and the fixed vector corpora | [catalogs/README.md](./catalogs/README.md) |
 | [generated/](./generated/) | Smoke traces, the fixtures lock, generated vectors and the generated read views ([PROFILES.md](./generated/PROFILES.md), the [CHALLENGES.md](./generated/CHALLENGES.md) and [MUTANTS.md](./generated/MUTANTS.md) indexes); regenerated, never edited | [generated/README.md](./generated/README.md) |
 
-## How the specification connects to code
-
-Canonical Quint rules define shared acceptance conditions. Focused models
-compose those rules with ownership, policy capture and environment transitions.
-Independent properties check the resulting histories; [conformance profiles](./guides/GLOSSARY.md#profile-conformance-profile)
-expose commands that the native implementations can execute.
-
-The shared replay boundary separates three responsibilities:
-
-- **Quint:** permitted transitions, expected results/effects, and semantic properties.
-- **Replay coordination:** decode explicit inputs, map observations, check assertions,
-  classify reached boundaries, and account for every required result.
-- **Native drivers:** call the library, control external gates/clocks, and report
-  actual results and effects without consulting expectations.
-
-The important links are executable. Shared helpers prevent repeated transition
-[judgments](./guides/GLOSSARY.md#judgment-judged-once-and-applied-from-a-judgment) from drifting; profile connection checks establish selected
-correspondences with the contract. Independent assertions deliberately avoid
-calling the helper they are meant to challenge.
-
-## Models and composition profiles
-
-Read [cache-rules.qnt](./models/cache-rules.qnt) and
-[cache-contract.qnt](./models/cache-contract.qnt) for shared judgments and acquired
-ownership records. [SPEC.md](./guides/SPEC.md#definition-ownership-and-executable-connections)
-maps them to the four checked profile connections.
-[dialcache-rule-checks.qnt](./models/dialcache-rule-checks.qnt) supplies the finite
-symbolic boundary checks.
-
-The [verification models](./guides/GLOSSARY.md#verification-model) emphasize individual ownership or safety boundaries:
-
-| Model | Starting point |
-| --- | --- |
-| [dialcache-core.qnt](./models/dialcache-core.qnt) | Enabled scopes, traversal and publication |
-| [dialcache-runtime-policy.qnt](./models/dialcache-runtime-policy.qnt) | Sparse overlays and captured policy |
-| [dialcache-tracked-invalidation.qnt](./models/dialcache-tracked-invalidation.qnt) | Acquired snapshots, watermarks and delayed writes |
-| [dialcache-stale-recovery.qnt](./models/dialcache-stale-recovery.qnt) | Retained bytes, age checks and recovery authority |
-| [dialcache-redis-protocol.qnt](./models/dialcache-redis-protocol.qnt) | Frame/fence validation order |
-
-Conformance profiles expose external commands that every language driver replays:
-
-| Profile | Behavior and interactions |
-| --- | --- |
-| [core](./models/dialcache-conformance.qnt) | Enabled traversal, hits, misses, publication and invalidation |
-| [effects](./models/dialcache-effects-conformance.qnt) | Pending reads, sources and serialization; deadlines, refill authority and late effects |
-| [scope](./models/dialcache-scope-conformance.qnt) | Nested enablement, request memoization, shared work and scope closure |
-| [recovery](./models/dialcache-recovery-conformance.qnt) | Retained stale bytes, classifier policy, age checks and request-only recovery publication |
-| [policy](./models/dialcache-policy-conformance.qnt) | Runtime overlays, captured policy, cache lifetime, capacity and coalescing changes |
-| [shadow](./models/dialcache-shadow-conformance.qnt) | Dark reads, source comparison, confirmation, conditional fills and diagnostic outcomes |
-| [admission](./models/dialcache-admission-conformance.qnt) | Served-hit shadow admission, deduplication, deadlines and capacity held by unfinished work |
-| [layers](./models/dialcache-layers-conformance.qnt) | Request/local/remote composition, instance and key isolation, publication and invalidation |
-| [independent](./models/dialcache-independent-conformance.qnt) | Uncoalesced callers, independent budgets, acquired snapshots and per-call refill authority |
-| [recovery-read](./models/dialcache-recovery-read-conformance.qnt) | Held reads/decode, compressed recovery, logical versus physical age, marker lifetime and publication |
-| [local-failure](./models/dialcache-local-failure-conformance.qnt) | Local storage faults, preserved source outcomes and request publication |
-| [runtime-boundaries](./models/dialcache-runtime-boundaries-conformance.qnt) | Omitted/invalid policy leaves, defaults, exact rollout cohorts and policy capture |
-| [shadow-layers](./models/dialcache-shadow-layers-conformance.qnt) | Dark fills and local/request reuse; independent sources and mixed served/dark capacity |
-| [local-clock](./models/dialcache-local-clock-conformance.qnt) | Fractional environment time and the shared whole-millisecond process-local expiry grid |
-| [source-budgets](./models/dialcache-source-budgets-conformance.qnt) | Default/unbounded/finite source deadlines, held policy, followers, outside calls and key failures |
-| [dark-layers](./models/dialcache-dark-layers-conformance.qnt) | Held dark work across request/local reuse, source deadlines, instance isolation, captured fill policy, tracked fences and clock rollback |
-| [shadow-read-deadlines](./models/dialcache-shadow-read-deadlines-conformance.qnt) | Separate C0/C1 read deadlines, raw capacity ownership, cancellation, captured read policy and whole-job ordering |
-
-These profiles deliberately bound callers, keys, contexts, capacities, payloads
-and time. Their introduction does not imply that every product of those domains
-is explored. [profiles.json](./catalogs/profiles.json) records profile versions, input
-encodings, [smoke](./guides/GLOSSARY.md#smoke) traces and implementation declarations.
-
-The [kernel library](./models/kernel/README.md) states shared portable rules as pure
-transitions; a composed profile assigns state only through them. Every profile
-except core composes this library. The corpus [differential](./guides/GLOSSARY.md#differential) checks that changes
-preserve existing profiles' observable behavior; a new profile establishes its
-behavior through independent properties, consequential [witnesses](./guides/GLOSSARY.md#witness-label-and-classifier) and replay in
-every supported implementation.
-
-## Generating and replaying behavior
-
-Use Node 24, pnpm 10.33.0, Go 1.27.1 and Rust/cargo 1.98.1 to match CI.
-Install dependencies with `corepack pnpm install --frozen-lockfile`; rustup reads
-the native Rust toolchain pin from `rust/rust-toolchain.toml`.
-Model work requires Quint 0.32.0 and its Rust evaluator 0.6.0
-(`npm install --global @informalsystems/quint@0.32.0`). The evaluator is separate
-from the native Rust port's compiler toolchain.
-`make formal` and `make explore` use the Rust evaluator and do not need Java.
-The separate `make model-check` target needs Java 21 and `tar`. Its standalone
-Apalache 0.56.1 runner downloads the versioned release, verifies the SHA-256 in
-[execution.json](./catalogs/execution.json), and extracts those verified bytes afresh.
-The archive is cached under `~/.cache/dialcache/apalache/0.56.1/`; for offline
-use, supply `APALACHE_ARCHIVE=/absolute/path/to/apalache-0.56.1.tgz`. Supplied
-archives must pass the same checksum check.
-
-Real-server tests and TypeScript/Go mutation campaigns require Docker. Each
-TypeScript/Go mutation shard starts a private Redis 6.2 server, replays all
-generated invalidation vectors against the production Lua, and removes its own
-container afterward. The Rust mutation campaign uses its separate native fault
-catalog without Docker. The package floor requires exact Node 22.15.0
-provided through `NODE22_BIN`. `make help` lists targets and prerequisites.
-`make model-check` and `make ci` additionally require Java 21 and `tar`, because
-the pinned Apalache distribution is unpacked from a checksummed tarball; both
-tools are probed before any step runs, and a missing one fails with a setup
-message instead of a mid-run extraction error. Only the symbolic runner
-downloads its pinned solver archive.
+## Run it
 
 ```sh
 make help          # Targets and prerequisites.
 make check         # Native checks, package, docs and inventories.
+make audit         # Ledgers, inventories, generated views and the Quint style caps.
 make smoke         # Committed Quint-derived histories in every port.
 make formal        # Quint model checks, full corpus and every port's completion.
 make differential  # Replay composed profiles' reference corpus through the working tree.
@@ -150,89 +309,13 @@ make explore       # Fresh recorded seed in an isolated source snapshot.
 make ci NODE22_BIN=/absolute/path/to/node22/bin/node
 ```
 
-`make formal-check` is the Quint evidence [lane](./guides/GLOSSARY.md#lane): it typechecks and runs every
-scheduled model with the Rust evaluator, the public regressions and the model
-mutation [challenges](./guides/GLOSSARY.md#challenge-fault-mutant-and-reproducer). Its first command, `node formal/tools/run-models.mjs check`,
-runs only the unmodified model checks and regressions; the next step runs the
-complete pinned fault campaign. `make formal` and `make ci` require both steps.
-`make explore` retains the model checks, generation and all port replays but
-omits that identical pinned campaign; its result remains non-acceptance evidence.
-`make formal-generate` runs generation, fixture
-recomputation and the shared witness evaluation; `make formal-ts`,
-`make formal-go` and `make formal-rust` then complete each port's replay against
-that exact corpus. `make mutations-ts`, `make mutations-go` and
-`make mutations-rust` split the fault campaigns. The parity and mutation lanes
-depend only on the generated corpus and shared witness evidence, so hosted CI
-runs all six in parallel and none of them waits for the
-model check, which runs beside generation; the aggregate requires every lane.
-`make fixtures-check` recomputes committed artifacts; after an intentional model
-edit, update them with `node formal/tools/generate-artifacts.mjs --write` first.
-`make ci` includes the separate symbolic checks after `make formal`, as well as
-the other local lanes.
+Pinned toolchain versions, the Docker and Java requirements and the environment
+variables are in [VALIDATION.md](./guides/VALIDATION.md#prerequisites). After an
+intentional model edit, run `node formal/tools/generate-artifacts.mjs --write`
+before `make fixtures-check`. To replay one failing history, see
+[Reproducing one history](./guides/VALIDATION.md#reproducing-one-history) and
+the walkthrough's [run this example](./guides/WALKTHROUGH.md#run-this-example).
 
-`make differential` checks the lint baseline, regenerates each composed
-profile's corpus from the merge base with `origin/main` and from the working
-tree, and replays each corpus through the other text (see kernel/README.md).
-
-Pinned acceptance clears inherited trace selectors and `QUINT_SEED`. Exploration
-keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. See
-[VALIDATION.md](./guides/VALIDATION.md) for CI policy and report interpretation.
-
-Scheduled named public-action Quint regressions exercise their declared
-boundaries independently of sampling. Every port replays those histories and the
-complete sampled corpus; required witness coverage is checked across their
-union. `execution.json` schedules the models; the tools discover their runs
-from the Quint source and export every public-only run of a profile model.
-Do not maintain a separate regression list in the manifest. Private state-patch
-checks stay model-only unless rewritten as public actions.
-
-The replay protocol schema types every observation, fixture [sentinel](./guides/GLOSSARY.md#encodings-and-sentinels) and the
-wall epoch, and the coordinator rejects a malformed observation as an
-infrastructure error before any comparison; see the
-[observation contract](./guides/PORTING.md#observation-contract).
-
-`execution.json` also carries the challenge catalog: for every scheduled model,
-at least one compiling single-site fault that a named invariant must detect.
-`node formal/tools/check-model-properties.mjs --only=<id>` measures one entry locally;
-only the complete run is evidence.
-
-Replay one failing feature history in TypeScript or Go:
-
-```sh
-DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/regressions/shadow/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest.itf.json \
-  corepack pnpm --dir typescript exec vitest run test/formal-features.test.ts --coverage.enabled=false
-DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/regressions/shadow/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest.itf.json" \
-  go -C go test -race -count=1 -run '^TestFeatureConformance$' ./...
-```
-
-Core/effects use `DIALCACHE_MBT_TRACE_FILE` or `DIALCACHE_EFFECTS_TRACE_FILE`
-and their corresponding tests. Local-clock uses feature selectors with
-`typescript/test/formal-local-clock.test.ts` and the Go local-clock replay.
-The [walkthrough](./guides/WALKTHROUGH.md#run-this-example) shows one history replayed
-in all three languages, including Rust's feature-history selectors.
-
-## Shared verification and replay rules
-
-The verification models and portable profiles share transition judgments for
-local expiry, coalescing defaults, remote [retention](./guides/GLOSSARY.md#frame-stamp-retention-and-freshness), tracked publication,
-recovery acquisition and [watermark](./guides/GLOSSARY.md#fence-watermark-and-marker) reads. Their primary invariants remain
-independently stated. Each mapped fault must violate its original property,
-fail the declared expectation in a deterministic Quint run, and reach the same
-public assertion in completed TypeScript and Go recordings.
-
-The fractional local-clock profile retains the raw insertion instant beside
-its expiry. This lets its portable history distinguish a precise-clock TTL
-from the required whole-millisecond TTL while also detecting a hit that renews
-expiry. Protocol classifiers use the same fence judgment as generated byte
-vectors and behavioral remote reads; vector recordings select the exact
-reviewed row for each language binding.
-
-## Evidence and scope
-
-[execution.json](./catalogs/execution.json) schedules model properties, exports and
-bounds; every run a scheduled model declares is one of its regressions.
-[profiles.json](./catalogs/profiles.json) declares the replay profiles.
-[SEMANTIC-COVERAGE.md](./guides/SEMANTIC-COVERAGE.md) explains witness and mutation evidence.
 Query the inventories instead of copying changing totals between documents:
 
 ```sh
@@ -242,13 +325,19 @@ node formal/tools/check-feature-coverage.mjs
 node formal/tools/run-models.mjs check --dry-run
 ```
 
-The suite combines model properties, generated conformance histories,
-independently computed wire vectors, complementary fixed examples and native
-integration tests. Fixed scenarios have handwritten expectations and are not
-Quint-generated. Their evidence mappings do not mechanically prove each fixed
-assertion agrees with Quint.
+## Reference
 
-The specification and tests use declared finite domains. Environmental
-assumptions, allowed races and the limits of conformance claims are centralized
-in [SPEC.md](./guides/SPEC.md#assumptions-evidence-and-claims); wire/binding obligations
-are in [PROTOCOL.md](./guides/PROTOCOL.md) and [GO-PARITY.md](./guides/GO-PARITY.md).
+Every part of the system, one line per group, for reading further.
+
+- **Contract guides:** [SPEC.md](./guides/SPEC.md), [CONTRACTS.md](./guides/CONTRACTS.md), [PROTOCOL.md](./guides/PROTOCOL.md), [CONFORMANCE.md](./guides/CONFORMANCE.md), [BEHAVIOR.md](./guides/BEHAVIOR.md).
+- **Tooling guides:** [WALKTHROUGH.md](./guides/WALKTHROUGH.md), [AUTHORING.md](./guides/AUTHORING.md), [PORTING.md](./guides/PORTING.md), [VALIDATION.md](./guides/VALIDATION.md), [GO-PARITY.md](./guides/GO-PARITY.md), [GLOSSARY.md](./guides/GLOSSARY.md).
+- **Coverage guides:** [SEMANTIC-COVERAGE.md](./guides/SEMANTIC-COVERAGE.md), [FEATURE-COVERAGE.md](./guides/FEATURE-COVERAGE.md), [TEST-MAP.md](./guides/TEST-MAP.md), [TEST-AUDIT.md](./guides/TEST-AUDIT.md); measurements at the revisions they were made in [HISTORY.md](./guides/HISTORY.md).
+- **Generated views:** [PROFILES.md](./generated/PROFILES.md), [CHALLENGES.md](./generated/CHALLENGES.md), [MUTANTS.md](./generated/MUTANTS.md).
+- **Shared Quint helpers:** [cache-rules.qnt](./models/cache-rules.qnt), [cache-contract.qnt](./models/cache-contract.qnt), [cohort-boundaries.qnt](./models/cohort-boundaries.qnt), [conformance-observations.qnt](./models/conformance-observations.qnt), [wire-text.qnt](./models/wire-text.qnt); the [kernel library](./models/kernel/README.md) and its [fixtures](./models/fixtures/kernel/).
+- **Verification models:** [core](./models/dialcache-core.qnt), [runtime-policy](./models/dialcache-runtime-policy.qnt), [tracked-invalidation](./models/dialcache-tracked-invalidation.qnt), [stale-recovery](./models/dialcache-stale-recovery.qnt), [redis-protocol](./models/dialcache-redis-protocol.qnt), [rule-checks](./models/dialcache-rule-checks.qnt).
+- **Conformance profiles:** [core](./models/dialcache-conformance.qnt), [effects](./models/dialcache-effects-conformance.qnt), [scope](./models/dialcache-scope-conformance.qnt), [recovery](./models/dialcache-recovery-conformance.qnt), [policy](./models/dialcache-policy-conformance.qnt), [shadow](./models/dialcache-shadow-conformance.qnt), [admission](./models/dialcache-admission-conformance.qnt), [layers](./models/dialcache-layers-conformance.qnt), [independent](./models/dialcache-independent-conformance.qnt), [recovery-read](./models/dialcache-recovery-read-conformance.qnt), [local-failure](./models/dialcache-local-failure-conformance.qnt), [runtime-boundaries](./models/dialcache-runtime-boundaries-conformance.qnt), [shadow-layers](./models/dialcache-shadow-layers-conformance.qnt), [local-clock](./models/dialcache-local-clock-conformance.qnt), [source-budgets](./models/dialcache-source-budgets-conformance.qnt), [dark-layers](./models/dialcache-dark-layers-conformance.qnt), [shadow-read-deadlines](./models/dialcache-shadow-read-deadlines-conformance.qnt); one line each in [models/README.md](./models/README.md), decodings in [PROFILES.md](./generated/PROFILES.md).
+- **Connection and wire models:** [source](./models/dialcache-source-connection.qnt), [recovery](./models/dialcache-recovery-connection.qnt), [recovery-read](./models/dialcache-recovery-read-connection.qnt), [independent](./models/dialcache-independent-connection.qnt), [shadow-layers](./models/dialcache-shadow-layers-connection.qnt); [key-protocol](./models/dialcache-key-protocol.qnt), [frame-vectors](./models/dialcache-frame-vectors.qnt), [envelope-vectors](./models/dialcache-envelope-vectors.qnt), [invalidation-transition](./models/dialcache-invalidation-transition.qnt).
+- **Manifests and catalogs:** [execution.json](./catalogs/execution.json), [profiles.json](./catalogs/profiles.json), [semantic-cases.json](./catalogs/semantic-cases.json), [coverage-witnesses.json](./catalogs/coverage-witnesses.json), [feature-coverage.json](./catalogs/feature-coverage.json), [mutations.json](./catalogs/mutations.json), [rust-mutations.json](./catalogs/rust-mutations.json), [fixture-recipes.json](./catalogs/fixture-recipes.json), [behavioral-scenarios.json](./catalogs/behavioral-scenarios.json); the ledgers and baselines [source-audit.json](./catalogs/source-audit.json), [go-parity.json](./catalogs/go-parity.json), [profile-lint-baseline.json](./catalogs/profile-lint-baseline.json), [witness-baseline.json](./catalogs/witness-baseline.json), [style-allowlist.json](./catalogs/style-allowlist.json); the fixed corpora [protocol-vectors.json](./catalogs/protocol-vectors.json), [invalidation-vectors.json](./catalogs/invalidation-vectors.json).
+- **Replay:** [coordinator.mjs](./replay/coordinator.mjs), [bindings.mjs](./replay/bindings.mjs), [settlement.mjs](./replay/settlement.mjs), [protocol.schema.json](./replay/protocol.schema.json), the descriptors in [profiles/](./replay/profiles/) and the classifiers in [witnesses/](./replay/witnesses/).
+- **Tools:** [validation.mjs](./tools/validation.mjs) dispatches every target; [execution.mjs](./tools/execution.mjs), [where.mjs](./tools/where.mjs), [run-models.mjs](./tools/run-models.mjs), [generate-artifacts.mjs](./tools/generate-artifacts.mjs), [witnesses.mjs](./tools/witnesses.mjs), [differential.mjs](./tools/differential.mjs), [explore.mjs](./tools/explore.mjs), [check-source-audit.mjs](./tools/check-source-audit.mjs), [check-go-parity.mjs](./tools/check-go-parity.mjs), [check-style.mjs](./tools/check-style.mjs); the rest in [tools/README.md](./tools/README.md).
+- **Scope and claims:** the specification and tests use declared finite domains, and the profiles deliberately bound callers, keys, contexts, capacities, payloads and time without claiming that every product of those domains is explored. Environmental assumptions, allowed races and the limits of conformance claims are centralized in [SPEC.md](./guides/SPEC.md#assumptions-evidence-and-claims); the wire and binding obligations are in [PROTOCOL.md](./guides/PROTOCOL.md) and [GO-PARITY.md](./guides/GO-PARITY.md).

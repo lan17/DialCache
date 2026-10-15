@@ -127,7 +127,7 @@ records native tests and explicit adaptations.
 
 ## Run this example
 
-Use the [pinned prerequisites](../README.md#generating-and-replaying-behavior)
+Use the [pinned prerequisites](./VALIDATION.md#prerequisites)
 from the repository root. This focused command runs the named Quint regression
 and writes its history into a separate exploration directory:
 
