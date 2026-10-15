@@ -16,6 +16,7 @@ the test [coordinator](./guides/GLOSSARY.md#coordinator).
 | Change a behavior or extend coverage | [AUTHORING.md](./guides/AUTHORING.md) |
 | Implement another language | [PORTING.md](./guides/PORTING.md) and [PROTOCOL.md](./guides/PROTOCOL.md) |
 | Locate or reproduce a failing check | [TEST-MAP.md](./guides/TEST-MAP.md) and the commands below |
+| See where one contract is stated, tested, challenged and mapped, or read one challenge or mutant in full | `node formal/tools/where.mjs C45` (or `C45.recheck-after-decode`, `B01.registration-and-policy-snapshot`, `recovery-inclusive-maximum`, `M01`) |
 | Interpret validation results | [VALIDATION.md](./guides/VALIDATION.md) |
 | Look up a term | [GLOSSARY.md](./guides/GLOSSARY.md) |
 
@@ -33,7 +34,7 @@ and generated artifacts; a reader should not need to open them to learn a rule.
 | [replay/](./replay/) | The shared replay coordinator, profile descriptors and witness classifiers every port executes | [replay/README.md](./replay/README.md) |
 | [tools/](./tools/) | The Node scripts behind the `make` targets: checks, generators, measurements and runners | [tools/README.md](./tools/README.md) |
 | [catalogs/](./catalogs/) | Hand-maintained manifests, evidence catalogs, ledgers, baselines and the fixed vector corpora | [catalogs/README.md](./catalogs/README.md) |
-| [generated/](./generated/) | Smoke traces, the fixtures lock and generated vectors; regenerated, never edited | [generated/README.md](./generated/README.md) |
+| [generated/](./generated/) | Smoke traces, the fixtures lock, generated vectors and the generated read views ([PROFILES.md](./generated/PROFILES.md), the [CHALLENGES.md](./generated/CHALLENGES.md) and [MUTANTS.md](./generated/MUTANTS.md) indexes); regenerated, never edited | [generated/README.md](./generated/README.md) |
 
 ## How the specification connects to code
 

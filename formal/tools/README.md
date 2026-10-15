@@ -2,8 +2,9 @@
 
 The Node scripts behind the `make` targets. `make <target>` is
 `node formal/tools/validation.mjs <target>`; `make help` lists the targets and
-their prerequisites. Every script reads its inputs from
-[../catalogs/](../catalogs/README.md) and writes generated output only under
+their prerequisites. The scripts read their inputs from
+[../catalogs/](../catalogs/README.md) (and, for the checks and lookups over the
+text, from the models and guides) and write generated output only under
 [../generated/](../generated/README.md) and, for the witness fixtures,
 `typescript/test/fixtures/`. Start with `validation.mjs` to see
 which scripts a target runs.
@@ -12,13 +13,18 @@ which scripts a target runs.
 
 - [validation.mjs](./validation.mjs): the target dispatcher; composes every `make` target from the scripts below and checks prerequisites.
 - [execution.mjs](./execution.mjs): reads and validates the execution manifest; `node formal/tools/execution.mjs` prints the inventory.
+- [where.mjs](./where.mjs): `node formal/tools/where.mjs C45` prints where one contract, semantic case or native case is stated, tested, challenged and mapped, from the catalogs and the model comments; a challenge or mutant ID prints that entry in full; `--json` for agents.
 
-## Checks (the `audit` lane runs `execution.mjs` and the first four)
+## Checks
+
+The `audit` lane runs `execution.mjs`, the first five checks below and the
+generated-fixture verification; `validation.mjs` is the list of record.
 
 - [check-source-audit.mjs](./check-source-audit.mjs): the docs and test review ledger against the current files; `--refresh <path>...` re-keys the named files after their review.
 - [check-semantic-coverage.mjs](./check-semantic-coverage.mjs): every semantic case cites scheduled checks, scenarios, vectors and witnesses.
 - [check-feature-coverage.mjs](./check-feature-coverage.mjs): the native feature inventory and its evidence references.
 - [check-go-parity.mjs](./check-go-parity.mjs): the Go parity ledger against the catalogs and both source trees; `--refresh-inputs` re-pins its catalog, audit-dispositions and vector artifact digests.
+- [check-style.mjs](./check-style.mjs): the two Quint style caps (lines at most 120 characters, module headers at most 25 comment lines) over files not in the style allowlist; `--report` prints the readability measurements.
 - [check-model-properties.mjs](./check-model-properties.mjs): the model-fault challenge catalog; `--only=<id>` measures one.
 - [check-kernel-fixtures.mjs](./check-kernel-fixtures.mjs): typechecks and runs the kernel fixtures (`make kernel-fixtures`).
 - [check-symbolic-models.mjs](./check-symbolic-models.mjs): the finite symbolic checks with Apalache (`make model-check`).
@@ -32,6 +38,7 @@ which scripts a target runs.
 - [generate-artifacts.mjs](./generate-artifacts.mjs): regenerates every committed artifact (`--write`) or verifies it (`--check`).
 - [generated-fixtures.mjs](./generated-fixtures.mjs): the smoke traces, witness fixtures and the lock from `fixture-recipes.json`.
 - [generate-key-vectors.mjs](./generate-key-vectors.mjs), [generate-frame-vectors.mjs](./generate-frame-vectors.mjs), [generate-envelope-vectors.mjs](./generate-envelope-vectors.mjs), [generate-invalidation-vectors.mjs](./generate-invalidation-vectors.mjs): one generated vector file each.
+- [generate-catalog-docs.mjs](./generate-catalog-docs.mjs): the generated read views under `formal/generated/` (`PROFILES.md`, and the `CHALLENGES.md` and `MUTANTS.md` indexes) from the replay descriptors and the catalogs; `--check` runs in the `audit` lane.
 - [witnesses.mjs](./witnesses.mjs): language-neutral witness evaluation over the generated corpus and its baseline.
 - [replay-inputs.mjs](./replay-inputs.mjs): adds replay annotations to exported regressions from their explicit input record.
 - [explore.mjs](./explore.mjs): a fresh-seed exploration in an isolated source snapshot (`make explore`); `--replay` reproduces a saved run.

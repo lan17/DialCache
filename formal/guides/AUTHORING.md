@@ -78,7 +78,18 @@ scrolling. Keep a genuinely short action compact. Prefer a descriptive
 intermediate state such as `published` or `completed` over a chain of `x`, `y`,
 and `z`. Comments should explain ownership, ordering, assumptions, or a boundary
 case, rather than narrate the syntax. Quint 0.32.0 has no CLI formatting command;
-these are reviewed authoring conventions.
+these are reviewed authoring conventions, with two of them enforced.
+`node formal/tools/check-style.mjs`, a step of `make audit`, fails a Quint line over
+120 characters and a module header over 25 comment lines in any `.qnt` file under
+`formal/models` not named for that rule in
+[style-allowlist.json](../catalogs/style-allowlist.json). The header is the `//`
+comment block beside the `module` line, written before it or after it, up to the
+first import or definition. The allowlist names the files that broke a cap when it
+landed and may only shrink: once a file is clean, delete its entry, or the check
+fails on the stale entry; adding an entry is a reviewed exception. `--report`
+prints the readability measurements so progress is reproducible: long lines,
+header lengths, comment and guide sentence lengths, parameter widths and the
+free-text exclusion reasons. Those are reported, not enforced.
 
 A kernel module under `formal/models/kernel/` opens with one header of at most
 25 comment lines, each within 100 columns, in a fixed shape: one sentence of
@@ -249,7 +260,10 @@ work in issue #165 does not need to precede unrelated feature or port developmen
 ## Give reviewers focused context
 
 For a human or LLM review, search the stable contract and case IDs first, then
-extract the matching catalog entries. Provide a small context packet:
+extract the matching catalog entries; `node formal/tools/where.mjs C45` (or a
+case ID) prints the catalog entries and model citations in one place, with
+`--json` for an agent; the validation evidence and port mappings below come
+from the reports and the replay descriptors. Provide a small context packet:
 
 - Contract/case IDs, the observable rule or change, and its documentation link.
 - Model file, exact regression/property symbols, and their execution-manifest entries.
@@ -389,6 +403,16 @@ investigate differences rather than replacing expectations to obtain a pass.
 Formatting and deduplication improve reviewability; they do not increase the
 number of behavioral cases or justify a broader conformance claim. Changes to
 behavior, bounds, or claims should be reviewed separately from cleanup.
+
+The read views under `formal/generated/` ([PROFILES.md](../generated/PROFILES.md)
+and the [CHALLENGES.md](../generated/CHALLENGES.md) and
+[MUTANTS.md](../generated/MUTANTS.md) indexes) are rendered from the replay
+descriptors and the catalogs; after a descriptor, `profiles.json`, `execution.json`,
+`coverage-witnesses.json`, `mutations.json`, `rust-mutations.json` or a model's
+public runs (its replayed regressions) change, run
+`node formal/tools/generate-catalog-docs.mjs --write` and commit the result.
+`make audit` runs the `--check` form and fails on a stale view. Edit the
+descriptor or the catalog, never the view.
 
 ### Challenging every model
 

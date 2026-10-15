@@ -26,15 +26,34 @@ export function profileActions() {
 // observation; "wallClock" for core, whose commands are awaited
 // request/response but whose wall clock the schedule controls; "none" for
 // local-clock, which reports the real process clock that no rule constrains.
+// The fixture and the setup commands a profile's drivers receive before the
+// first step, from the init choice: the one place that knows them, read by
+// the bindings below and by the generated profile view.
+export function fixtureFor(name, initChoice) {
+  if (Object.hasOwn(profiles, name)) {
+    const profile = profiles[name];
+    return typeof profile.fixture === "function" ? profile.fixture(initChoice) : profile.fixture;
+  }
+  if (name === "effects") return effects.fixtureFor(initChoice);
+  return {};
+}
+export function setupFor(name, initChoice) {
+  if (Object.hasOwn(profiles, name)) return profiles[name].setup;
+  if (name === "effects") {
+    return [
+      { op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } },
+      ...effects.inputsFor({ action: "init", choice: initChoice }, emptyObservation(effects.fixtureFor(initChoice)), { wallMs: 0 }),
+    ];
+  }
+  return [];
+}
+
 export function bindTrace(name, raw, path) {
   if (Object.hasOwn(profiles, name)) {
     const profile = profiles[name];
     const trace = parseTrace(raw, path, profile);
-    const fixture = typeof profile.fixture === "function"
-      ? profile.fixture(trace.steps[0].choice)
-      : profile.fixture;
     return {
-      trace, fixture, setup: profile.setup, observation: "behaviorObservation", settlement: "receipt",
+      trace, fixture: fixtureFor(name, trace.steps[0].choice), setup: setupFor(name), observation: "behaviorObservation", settlement: "receipt",
       commands(index, observed, environment) {
         const { action, choice } = trace.steps[index];
         return action === "init" ? [] : [featureInput(profile, action, choice, observed, environment)];
@@ -72,15 +91,9 @@ export function bindTrace(name, raw, path) {
   }
   if (name === "effects") {
     const trace = effects.parseTrace(raw, path);
-    const fixture = effects.fixtureFor(trace.steps[0].choice);
     const expected = effects.expectedObservations(trace);
-    const initialInput = { action: "init", choice: trace.steps[0].choice };
     return {
-      trace, fixture, observation: "behaviorObservation", settlement: "receipt",
-      setup: [
-        { op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } },
-        ...effects.inputsFor(initialInput, emptyObservation(fixture), { wallMs: 0 }),
-      ],
+      trace, fixture: fixtureFor(name, trace.steps[0].choice), setup: setupFor(name, trace.steps[0].choice), observation: "behaviorObservation", settlement: "receipt",
       commands(index, observed, environment) {
         const { action, choice } = trace.steps[index];
         const input = { action, ...(choice === undefined ? {} : { choice }) };

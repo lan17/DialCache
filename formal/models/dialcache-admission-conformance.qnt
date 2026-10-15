@@ -18,7 +18,7 @@ module dialcache_admission_conformance {
   // explicit source settlements and elapsed clock steps. Bounds: three keys,
   // two instances, two job slots each, sixteen callers; elapsed time stays
   // below read deadlines and physical Redis expiration.
-  // See BEHAVIOR.md "Generated served-hit shadow admission profile" for the
+  // See formal/generated/PROFILES.md (admission) and BEHAVIOR.md "Generated profiles" for the
   // drivers' input table.
   // Every rule is a kernel transition (formal/models/kernel): the held remote
   // traversal with immediate replies (remote_io, through the shadow module's

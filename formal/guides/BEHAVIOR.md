@@ -1,8 +1,8 @@
-# Portable behavioral scenarios and generated feature profiles
+# Portable behavioral scenarios and generated profiles
 
 [`behavioral-scenarios.json`](../catalogs/behavioral-scenarios.json) specifies deterministic feature scenarios independently of TypeScript. [`dialcache-effects-conformance.qnt`](../models/dialcache-effects-conformance.qnt) generates additional races using the same driver operations. Together with the [core profile](./CONFORMANCE.md) and [protocol vectors](../catalogs/protocol-vectors.json), these are executable contracts for implementation tests and language ports. The core profile is the introductory one and stays uncomposed from the kernel library: its drivers read the model's private state fields as their observation, so composing it is a driver-contract change in both ports.
 
-The deterministic corpus currently contains 244 scenarios across 12 behavior families. It includes request-scope lifetime, coalescing, both read and fallback deadlines, local TTL/LRU, runtime snapshots, layer precedence, cache failures, tracked invalidation, frame age/retention, stale recovery, and shadow validation. These scenarios are test-derived contracts, **not Quint-generated traces**. The effects model generates interleavings of calls, loader settlement, clock observations, native writes, and invalidation. Recovery, policy, and shadow models generate further feature schedules through the same driver; their bounds and action mappings appear below. Keeping these complementary forms avoids a single model containing every feature combination. The [feature map](./FEATURE-COVERAGE.md) relates the scenarios to the full reviewed behavioral, protocol, and native inventory.
+The deterministic corpus currently contains 244 scenarios across 12 behavior families. It includes request-scope lifetime, coalescing, both read and fallback deadlines, local TTL/LRU, runtime snapshots, layer precedence, cache failures, tracked invalidation, frame age/retention, stale recovery, and shadow validation. These scenarios are test-derived contracts, **not Quint-generated traces**. The effects model generates interleavings of calls, loader settlement, clock observations, native writes, and invalidation. Recovery, policy, and shadow models generate further feature schedules through the same driver; their bounds and action mappings are generated into [PROFILES.md](../generated/PROFILES.md). Keeping these complementary forms avoids a single model containing every feature combination. The [feature map](./FEATURE-COVERAGE.md) relates the scenarios to the full reviewed behavioral, protocol, and native inventory.
 
 The corpus includes interaction regressions for scope closure during recovery, runtime coalescing changes during an active flight, independent retained snapshots, recovery/shadow exclusion, local insertion TTL after an aging remote hit, and shadow capacity ownership. These are fixed portable schedules: they extend implementation conformance without claiming that the generated profiles explore those combinations. The [behavioral evidence map](./TEST-MAP.md#behavioral-map) connects these obligations to implementation tests and the current generated profiles.
 
@@ -81,12 +81,280 @@ Wall time starts at `2026-09-08T12:00:00Z`; monotonic time starts at zero. Elaps
 
 Only unresolved external operations are gated. A port can use its own executor and explicit request-context handles. It must not reproduce Node Promise turns. The TypeScript driver captures its execution context inside public enable/disable calls; it does not read DialCache's context internals.
 
+## Observations
+
+- `calls`: every caller, in start order, is `{"status":"pending"}`, `{"status":"value","value":1}`, or `{"status":"error","error":"source:0"}` / `"timeout:0"`. Source IDs identify the original loader error; timeout IDs identify distinct timeout outcomes in observation order. Coalesced followers must receive the same error identity. Ports can compare a shared logical error token without adopting JavaScript object identity.
+- `loaders`, `reads`, `writes`, `invalidations`, `loads`, `dumps`, `policyCalls`: cumulative actual loader, adapter, serializer, and provider invocations. Failed and still-pending attempts count. Value writes and invalidations are separate.
+- `classifications`, `comparisons`: actual invocations of the fixture-owned classifier/comparator. Built-in defaults are not instrumented.
+- `sourceScopes`: actual source-entry enablement observations when the explicit scope probe is enabled; otherwise empty.
+- `writeTtls`: actual requested physical write TTLs in milliseconds, in dispatch order.
+- `maintenance`: public invalidation outcomes, `ok`, `mutation_error`, or `missing_remote`. The last category records the actual public error; a port need not reproduce its native class or text.
+- `shadow`, `recovery`: terminal outcomes from the public diagnostic hooks, in observed order. Exact telemetry timing and ordinary metrics are not asserted.
+
+A returned cache value, loader invocation, or acknowledged write does not prove publication. Subsequent calls test cache retention and invalidation. Negative harness tests deliberately remove recovery, local storage, and acknowledged invalidation and require a later observable divergence.
+
+### Additional fixed-scenario inputs
+
+`adapterReply` stages one JSON-shaped semantic adapter result for the next successful raw-read settlement. Only one result may be staged at a time. The driver supplies it to the real cache at the adapter boundary; it neither decodes it on behalf of DialCache nor records a predicted miss/hit. Existing held reads and read failures remain independent. Tests use invalid replies to check the core's normalization; ports whose adapter type cannot represent malformed replies can enforce that boundary when decoding external input.
+
+`seed.payloadText` supplies exact UTF-8 text serializer bytes; `seed.payloadHex` supplies raw binary serializer/envelope bytes, framed with the current wall timestamp minus `ageMs`. `seed.frameHex` remains a complete frame, including header; ordinary `seed.value` still uses the scalar fixture codec. These inputs change only the fake Redis environment.
+
+## Generated profiles
+
+Every profile is a Quint model whose public actions decode into driver commands;
+the drivers replay its sampled histories and exported regressions, and all but
+`core` compose the kernel library. What a profile's drivers are configured with,
+which commands each recorded action and choice decode into, and which observation
+channels the coordinator compares are generated from the replay descriptors into
+[PROFILES.md](../generated/PROFILES.md), one section per profile. This section keeps
+what those tables do not state: the trace contract, the value codes, the meaning of
+each observation channel, the rules a profile holds its drivers to, what each
+profile leaves to others, and how to replay a generated trace.
+
+### Trace contract
+
+Each ITF state carries the authoritative `input.name` and `input.choice` beside the
+expected state `s`. The choice is a nonnegative ITF integer on actions that have
+choices and `-1` otherwise; optional `mbt::actionTaken` and `mbt::nondetPicks.choice`
+annotations must agree with it, and raw regression exports carry no annotations
+([trace contract](./PORTING.md#trace-and-observation-contract)). The parser rejects
+unknown actions, unsupported choices, missing observation fields and integer
+precision loss. `s.o` and the channels a profile declares (`s.io`, `s.d`, `s.markers`,
+`s.compression`, `s.policyErrors`, the effects `s.events`) are the asserted channels;
+the rest of `s` is the model's private prediction and never enters execution or the
+implementation projection. A driver selects explicit choices for source indices and
+uses its own invocation counts for actions that target the latest effect; it never
+reads expected counters, phases, cached values or fences to select an input or to
+fabricate an observation. Failure actions set a fixture fault, release the selected
+external gate, drain runnable work and restore the fault. A failing replay reports the
+trace, the step, the action and both observations.
+
+### Value codes
+
+Caller observations encode pending as 0, fixture values 1 and 2 as 1 and 2, a source
+error as 3 and a deadline error as 4. Codes 5 to 9 are the absent, `null`, `false`,
+zero and empty-string values the scope and policy profiles generate; 11 is the text
+`"undefined"`, distinct from absent; 10 is invalid. Other outcomes fail replay. The
+generated profiles compare error categories; the fixed scenarios compare logical
+error identity. The effects model keeps the version-2 codes of its own contract, 0
+pending, 1 value, 2 source error and 3 timeout; its composed text records the shared
+codes in `s.o.calls` and the parser maps them, so that observation schema is
+unchanged. Version 3 of effects added the explicit wall-advance domain and the
+last-fresh and exact-expiry adapter-frame histories; the differential records that
+as an intended input-domain expansion.
+
+### Observation channels
+
+- `s.io = { budgets, aborted, sourceErrors }` (independent, recovery-read,
+  shadow-read-deadlines): `budgets` are the actual adapter read budgets in read
+  invocation order, `aborted` the cooperative cancellation indices in delivery order,
+  and `sourceErrors` one entry per caller, zero unless the caller returned its
+  source's ordinary error, otherwise the one-based actual source identity. The driver
+  projects adapter callbacks and returned error tokens; model-private ownership never
+  enters execution. The effects profile asserts `s.o`, `s.io` and `s.events` only,
+  its `io` carrying budgets and aborted reads; asserting `io` with source errors or
+  `d` beside `events` under the shared codes would be a separate observation-schema
+  change.
+- `s.d = { warnings, ages, coalesced, fallbackErrors }` (scope, recovery, shadow,
+  dark-layers, shadow-read-deadlines), with `configErrors` where the profile counts
+  `config_resolution` events carrying the remote, non-fallback labels, `futureOffsets`
+  where it records them, and `inspections` for dark-layers' public process snapshots.
+  Ages are integer milliseconds in Quint and compared with actual callback seconds
+  after unit conversion. Recovery records an age only after a successful retained
+  decode; shadow records the original C0 age at a match or confirmed-mismatch
+  verdict, clamped to zero after a wall rollback, and warns only for a confirmed
+  mismatch whose admitted policy enabled logging. `coalesced` records request or
+  process scope labels; `fallbackErrors` records the layer a failed source is
+  attributed to, failures later recovered as stale included. Scope fixtures assert one
+  trail for shared failures and no cache-error trail for disabled pass-through work.
+  An active local layer attributes its failed source to `local` even inside a request
+  memo; without a shared layer a transient request attributes it to `request_local`;
+  a request that closes while policy is pending attributes to `noop`, and
+  admission-time attribution survives later closure. Exact native JSON warning
+  formatting remains a binding obligation.
+- `s.events` (effects) records `{ event, location, detail, amount }` in order:
+  location is a reached layer or coalescing scope; amount is an integer millisecond
+  measurement (get, fallback, serialization, future offset), a byte size, a
+  write-dispatch index or zero. Replay converts model milliseconds to callback seconds
+  and compares the ordered events, their labels and source-error attribution. A
+  follower emits its coalescing event without repeating the leader's trail; fresh
+  decoding counts in the remote-get duration; source duration ends at accepted
+  settlement or deadline; a dump has its own duration; late sources do not repeat
+  failures; size events precede adapter dispatch even when the write stays pending.
+  Scalar value 1 has one serialized byte here; Unicode and binary byte accounting is
+  covered by the protocol vectors and the fixed scenarios.
+- `s.markers` and `s.compression` (recovery-read) record each observed invalidation
+  marker as `{ cutoffMs, ttlMs }` and each decode's outcome, `decompressed` or
+  `fallback_raw`.
+- `s.policyErrors` (policy) records each configuration error as
+  `{ layer: "noop", errorType: "config_resolution" }`.
+
+### Rules the profiles hold their drivers to
+
+- **effects.** Each history has at most eight callers and eight sources; successful
+  values are 1; no local cache, recovery, shadow work or physical expiry is enabled.
+  Monotonic time and application wall time are separate; `tick` and `jumpClock`
+  advance 10 ms with and without timer delivery, and clock jumps without delivery
+  are generated during 10 ms reads and source-owned phases; read budgets are
+  multiples of the 10 ms step and a budget change affects later reads while followers
+  keep their leader's budget. An `observerFault` fails the diagnostic callbacks and
+  leaves cache outcomes unchanged. A read deadline starts a fresh source budget and
+  suppresses refill; a successful raw read clears that budget before decoding; a
+  failed fresh decode permits refill; an accepted serialization or write outlives the
+  source budget, with the observed fence checked again after preparation. The queued
+  adapter reply classes are, by choice: 1 null, 2 primitive, 3 legacy watermark shape,
+  4 kindless metadata, 5 missing miss reason, 6 unknown reason, 7 unknown reason with a
+  valid future fence, 8 fenced reason without a fence, 9 negative fence, 10 fractional
+  fence, 11 unsafe fence, 12 absent reason with a future fence, 13 expired reason with
+  a zero fence, 14 miss with stray frame fields, 15 valid frame with stray miss
+  metadata, 16 fenced reason with a valid future fence; future fences are the input
+  wall clock plus 20 ms. A successful raw completion consumes the reply even when
+  DialCache abandoned that read; an adapter failure leaves it queued. A port with typed
+  replies may normalize these encodings at its boundary but must preserve the
+  resulting miss and refill behavior.
+- **recovery.** Contexts 0 and 1 are open in every fixture; request misses may join
+  one process flight, after which each attached open context memoizes the result; a
+  same-request follower records request coalescing, a new request process coalescing,
+  and a `joinCall` into pending shared work can still be won by a preexisting request
+  memo.
+  Recovered values are never published to shared storage. Closing a context clears
+  its memo and prevents late recovery from populating it. Recovery starts at a source
+  deadline reached inside a larger elapsed-time step, and its held decode may
+  complete later; the retained snapshot and source-error identity survive late
+  settlement. Init choices 0 to 3 select the timeout-only default or an instance
+  classifier that allows, denies or throws; 4 to 7 add request-local caching; a
+  call's recovery choice 3 inherits the instance policy and 0 to 2 override it.
+- **policy.** Another invocation is admitted once the preceding provider reply is
+  released, even while its source is pending; sources settle in any order; same-key
+  followers join only while the current policy permits sharing; a shared leader stays
+  registered when an independent source publishes or fails. An overlay replaces the
+  whole runtime overlay and omitted leaves inherit the fixture; choices 10 to 19 are
+  choices 0 to 9 with `coalesce: false`; an invalid remote read budget of 0 bypasses
+  all caching for the invocation; an invalid local or remote ramp of 101 disables
+  that layer and preserves the other; an invalid recovery maximum age of 1 or -1 s
+  leaves normal serving active and writes with the ordinary 1 s retention; an invalid
+  shadow ramp of 101 leaves normal fresh serving active. In policy and recovery, wall
+  time and elapsed time are separate: a local hit survives a rollback before its TTL
+  and expires at that TTL despite it, a future-dated frame is rejected, a retained
+  candidate that a rollback makes future-dated is rejected, physical Redis expiry is
+  independent, and invalidation never lowers a watermark.
+- **shadow.** Payload choices make text and binary share exact UTF-8 bytes while
+  different byte spellings decode to the same value; comparison uses decoded values,
+  confirmation uses bytes, and C1 compares the retained payload identity even when
+  the replacement's timestamp is future-dated; `reencode` replaces the stored bytes
+  with an alternate text or binary form during C1 and records it as an explicit
+  choice, so a driver never consults expected storage; `advanceWall` moves only the
+  application wall clock while C1 is pending, elapsed deadlines and physical Redis
+  expiry standing still. Another call is admitted once the preceding source and owned
+  job work have settled. Fixtures 11 and 12 advance elapsed and wall time by
+  `sourceWorkMs` without delivering timers while the source begins: at 9 ms the dark
+  job still dispatches C0, at exactly 10 ms the job reports timeout without a Redis
+  read while the caller stays pending, and the caller's later settlement or timer
+  gives its deadline error; these fixtures observe after overdue timers are
+  delivered, and intermediate native timer ordering is outside their bounds. Timer
+  delivery is not required for elapsed-time rejection. Malformed logging keeps
+  comparison active with warnings disabled, and a job admitted under it records a
+  configuration error and captures logging off; later runtime changes do not rewrite
+  an admitted job's policy.
+- **admission.** Caller reads and all decoding are held; a successful read acquires
+  C0 and completing its decode considers shadow admission under the flight's accepted
+  policy; coalesced followers share one admission; a detached source runs with caching
+  disabled; an unequal comparison triggers a held C1 read; no shadow action changes a
+  caller result or writes cache values. A whole-job timeout emits one outcome but keeps
+  the slot until its pending source, decode or confirmation read settles; later
+  completion starts no new work and emits no replacement verdict, and once the owned
+  work drains a later hit may admit another job. Two instances with two slots each
+  make a duplicate drop distinguishable from a full instance. At most sixteen calls
+  and sixteen admitted jobs give at most 32 read and 32 decode effects, and elapsed
+  time is bounded to 600 ms so serving reads stay fresh and below their separate
+  deadline. The committed smoke trace keeps the actions, choices and observation
+  records of the first 57 states of a generated history with the model-private fields
+  omitted; the parser replays both forms without special handling.
+- **independent.** Six callers can each own one read, one source and one decode;
+  only raw reads and decoding are held, and accepted publication completes at the
+  source-settlement boundary. Each call captures its own read budget and recovery
+  policy; a read failure or timeout cannot borrow another call's refill authority;
+  each recovery chain retains its own candidate and source error; invalidation cannot
+  revoke an acquired decode or candidate, though recovery still rechecks age around
+  the decode; late settlement of one call never affects another. Deadlines are
+  delivered in time order, registration order at equal instants, new deadlines reached
+  within the advance included; other runtimes need not use the same timer
+  implementation.
+- **layers.** Fixture modes 4 and 5 omit the Redis adapter, so an explicit
+  invalidation reports `missing_remote` and dispatches nothing. Two instances share
+  Redis but own their local capacity and process flights; contexts 0 and 1 belong to
+  instance 0, context 2 to instance 1, and contexts 3 and 4 are fresh invocation
+  scopes on each instance. Twenty calls and eighty steps keep entries fresh, so TTL
+  boundaries stay in the policy profile and the scenarios; four logical identities
+  over a two-slot local cache show promotion and eviction while request storage can
+  exceed that capacity. A completed source publishes only to participating eligible
+  layers; tracked remote fallback skips direct local publication while an
+  authoritative hit may warm local; invalidation of an entity fences later remote
+  reads of both tracked operation variants while acquired request and local values
+  survive; a policy change preserves an admitted source's publication decision.
+- **scope.** `openScope` opens contexts 1 to 4 at most once each, nested ones only
+  while outer 0 lives and 4 only after 3; `closeScope` closes any opened unfinished
+  context after the first call; closing 0 or 1 clears that lifetime's memo and flights,
+  closing a nested context does not end the outer lifetime, a closed outer context is
+  pass-through, and a completed nested context still belongs to its live outer
+  lifetime. These are context ownership rules; a port need not reproduce
+  AsyncLocalStorage or Promise scheduling. Enabled calls wait for `releasePolicy`;
+  disabled, detached and outside calls start their own source with no provider
+  invocation; at most one provider reply is held while accepted sources may overlap.
+  A late source returns to its original caller after closure but cannot populate a
+  replacement memo; coalescing admission precedes reading a memo another accepted
+  source populated.
+- **dark-layers.** The `inspect` action takes a public process snapshot of either
+  instance into `s.d.inspections` (instance, leader and follower counts, oldest
+  monotonic leader age; the model records an idle age as -1, the native projection as
+  `null`). Served shadow work and a caller's held write beside its held read are
+  outside this profile.
+
+The remaining composed profiles (recovery-read, local-failure, runtime-boundaries,
+shadow-layers, source-budgets, shadow-read-deadlines, local-clock) are summarized in
+the next section; their rules live in the kernel module headers the profiles compose.
+
+Each profile leaves the rest to others. Independent does not combine coalesced
+recovery, scope lifetimes, wall rollback or held publication. Layers leaves larger
+capacities, more scopes and instances, mixed deadline, recovery and shadow
+combinations and expiry during LRU ordering outside its bounds. Scope leaves request
+deadlines, recovery, shared-process flights, arbitrary context trees and more than
+two outer lifetimes to other profiles. Admission leaves ordinary misses, read and
+decode faults, separate read timeouts, shadow fill writes, custom comparator
+failures, local and request layers and fractional cohort selection to other
+profiles, the scenarios and the vectors. Every generated profile establishes
+occurrence of its witnesses, not fairness, exhaustive interleavings or wider claims.
+
+### Replaying generated traces
+
+`typescript/test/formal-features.test.ts` replays the feature traces and checks the
+parser and assertion trust boundaries; the committed smoke traces under
+`formal/generated/` run without Quint in the fast checks, and full validation replays
+every generated trace in every port. To replay one downloaded trace or a whole corpus:
+
+```sh
+DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/recovery/trace_0.itf.json \
+  corepack pnpm --dir typescript exec vitest run test/formal-features.test.ts --coverage.enabled=false
+DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features \
+  corepack pnpm --dir typescript exec vitest run test/formal-features.test.ts --coverage.enabled=false
+```
+
+The parent directory (`recovery/`, `policy/`, `shadow/` and so on) identifies the
+fixture; keep a failing trace with its profile directory when copying it. The witnesses
+each profile's corpus must reach are listed per profile in
+[coverage-witnesses.json](../catalogs/coverage-witnesses.json); the witness checks
+establish occurrence only, and a corpus that misses a promised path fails them. Ports
+must select the specification revision that matches the traces they replay and reject
+unsupported actions or choices.
+
 ## Additional composition profiles
 
 The following profiles extend the existing ownership models. Their exact bounds,
-checked properties and replayed regressions are registered in `execution.json`.
-Each records explicit public inputs as described in `AUTHORING.md`; expected
-observations never select a command, effect index or source result.
+checked properties and replayed regressions are registered in `execution.json`, and
+their fixtures, setup, action decodings and observation channels are generated into
+[PROFILES.md](../generated/PROFILES.md). Each records explicit public inputs as
+described in `AUTHORING.md`; expected observations never select a command, effect
+index or source result.
 
 | Profile | Boundary and distinguishing public observations | Executable mapping |
 | --- | --- | --- |
@@ -134,285 +402,6 @@ defines the fixture environment; production providers may choose their own
 reply values and only their delivered replies determine policy.
 
 Calls may remain pending at a scenario's end. Drivers release fixture-owned work during cleanup; cleanup effects are outside the trace and cannot satisfy its assertions. Unknown operations, missing effects, and repeated settlement fail replay.
-
-## Observations
-
-- `calls`: every caller, in start order, is `{"status":"pending"}`, `{"status":"value","value":1}`, or `{"status":"error","error":"source:0"}` / `"timeout:0"`. Source IDs identify the original loader error; timeout IDs identify distinct timeout outcomes in observation order. Coalesced followers must receive the same error identity. Ports can compare a shared logical error token without adopting JavaScript object identity.
-- `loaders`, `reads`, `writes`, `invalidations`, `loads`, `dumps`, `policyCalls`: cumulative actual loader, adapter, serializer, and provider invocations. Failed and still-pending attempts count. Value writes and invalidations are separate.
-- `classifications`, `comparisons`: actual invocations of the fixture-owned classifier/comparator. Built-in defaults are not instrumented.
-- `sourceScopes`: actual source-entry enablement observations when the explicit scope probe is enabled; otherwise empty.
-- `writeTtls`: actual requested physical write TTLs in milliseconds, in dispatch order.
-- `maintenance`: public invalidation outcomes, `ok`, `mutation_error`, or `missing_remote`. The last category records the actual public error; a port need not reproduce its native class or text.
-- `shadow`, `recovery`: terminal outcomes from the public diagnostic hooks, in observed order. Exact telemetry timing and ordinary metrics are not asserted.
-
-A returned cache value, loader invocation, or acknowledged write does not prove publication. Subsequent calls test cache retention and invalidation. Negative harness tests deliberately remove recovery, local storage, and acknowledged invalidation and require a later observable divergence.
-
-### Additional fixed-scenario inputs
-
-`adapterReply` stages one JSON-shaped semantic adapter result for the next successful raw-read settlement. Only one result may be staged at a time. The driver supplies it to the real cache at the adapter boundary; it neither decodes it on behalf of DialCache nor records a predicted miss/hit. Existing held reads and read failures remain independent. Tests use invalid replies to check the core's normalization; ports whose adapter type cannot represent malformed replies can enforce that boundary when decoding external input.
-
-`seed.payloadText` supplies exact UTF-8 text serializer bytes; `seed.payloadHex` supplies raw binary serializer/envelope bytes, framed with the current wall timestamp minus `ageMs`. `seed.frameHex` remains a complete frame, including header; ordinary `seed.value` still uses the scalar fixture codec. These inputs change only the fake Redis environment.
-
-## Generated pending-effect profile
-
-The effects model fixes remote-only policy to 60 seconds, a 10 ms source deadline and separately configured read budgets, and held read/decode/serialize/write effects. It bounds each trace to eight callers and eight sources; successful values are 1. Model monotonic time and application wall time are separate. No local cache, recovery, shadow work, or physical expiry is enabled in this profile. The model is composed from the kernel library: the held remote traversal under the budgeted lifecycle with its refills held, the queued adapter reply, and the metric events the drivers compare.
-
-| Quint action | Driver input |
-| --- | --- |
-| `init` | Choice 0..5 configures the fresh fixture and initial policy; hold reads, loads, dumps, and writes; observe budgets, cancellation, dispatch, and portable diagnostic events |
-| `beginCall` | `begin` |
-| `resolveLoader` / `rejectLoader` | Resolve with value 1 / reject, using explicit source index `choice` |
-| `releaseRead` / `failRead` | Release the explicitly selected raw read with success / failure |
-| `releaseLoad/Dump/Write` / `failLoad/Dump/Write` | Settle the latest corresponding actual effect with success / failure |
-| `seedRemote` | Seed value 1 at the current application wall time |
-| `tick` / `jumpClock` | Advance 10 ms with / without timer delivery |
-| `rollbackWall` | Move application wall time back 1,000 ms, preserving monotonic time and Redis physical expiry |
-| `advanceWall` | Version 3: move application wall time forward by explicit choice 1/59999/60000 ms; preserve monotonic time, deadlines and physical expiry |
-| `invalidate` / `futureFence` | Invalidate with a 0 / 20 ms future buffer |
-| `observerFault` | Choice 0/1 restores / fails diagnostic callbacks; cache outcomes remain unchanged |
-| `adapterReply` | Choice 1..16 supplies one next raw adapter reply; a second cannot be queued until the first is consumed |
-| `readBudgetPolicy` | Choice 0 inherits the operation/instance budget; choices 1..4 supply runtime budgets 10/20/30/50 ms |
-
-Initial choices 0..4 use tracked keys; choice 5 checks untracked reply/fence behavior. The effects initial input selects these precedence cases. Budget changes affect later reads; followers retain the registered leader's budget. Read budgets are multiples of the 10 ms clock step. Clock jumps without timer delivery are generated during 10 ms reads and source/application-owned phases; larger reads use delivered timer steps.
-
-| Initial choice | Instance | Operation default | Initial runtime | Effective read budget |
-| --- | --- | --- | --- | --- |
-| 0 | Omitted | Omitted | Inherit | Library 50 ms |
-| 1 | 20 ms | Omitted | Inherit | 20 ms |
-| 2 | 20 ms | 10 ms | Inherit | 10 ms |
-| 3 | 20 ms | 10 ms | 30 ms | 30 ms |
-| 4 | 20 ms | 10 ms | Provider returns null | 10 ms |
-| 5 | 20 ms | 10 ms | Inherit; untracked key | 10 ms |
-
-Each ITF state contains authoritative `input.name` and `input.choice`, plus
-expected state `s`. Choices are ITF integers: read/source settlement records an
-actual effect index; `observerFault` records 0/1; `init` records 0..5,
-`readBudgetPolicy` records 0..4, `adapterReply` records 1..16, and
-`advanceWall` records 1, 59999 or 60000 milliseconds. Actions without
-an external choice use `-1`. Optional MBT compatibility annotations must agree
-with the explicit input; raw regression exports need no annotations. See the
-[trace contract](./PORTING.md#trace-and-observation-contract).
-The parser rejects missing, unexpected, or unsafe choices. Failure actions set a fixture fault, release the selected external gate, drain runnable work, and restore the fault. `s.o`, `s.io` and `s.events` are the asserted channels; the rest of `s` is the model's private prediction and never enters execution or implementation projection.
-
-After every step, replay compares actual caller outcomes, loader/read/write/invalidation/serializer/provider counts, physical write TTLs, actual raw-read context budgets/initial cancellation state, and ordered cancellation IDs. Model caller codes are 0 pending, 1 value 1, 2 original source error, 3 timeout; the composed text records the shared conformance codes in `s.o.calls` (3 source error, 4 deadline error) and the parser maps them to these, so the observation schema introduced by version 2 is unchanged. Version 3 adds the explicit wall-advance domain and exported last-fresh/exact-expiry adapter-frame histories; the differential records this intended input-domain expansion. Asserting `io` and `d` beside `events` under the shared codes, as the feature profiles do, would be a separate observation-schema change. Fixed scenarios additionally compare logical error identity. A read deadline starts a fresh source budget and suppresses refill; successful raw-read completion clears that budget before application-owned decoding. Failed fresh decoding permits refill. Accepted serialization/write outlives the source budget, with the observed fence checked again after preparation.
-
-Full validation exports 512 traces from 4,096 samples, up to 60 transitions, and requires all actions plus 95 witnesses covering abandoned source/read settlement, independent budgets, late settlement guards, application-owned phases, acquired snapshots across invalidation, failure-specific publication, clock rollback at the second fence check, and observer failure isolation. Scheduled deterministic regressions anchor their declared boundaries; [execution.json](../catalogs/execution.json) distinguishes model checks from exported replays. Sampling favors the narrow rollback-during-publication boundary as well as unrestricted clock changes; it does not restrict that behavior to the favored schedule.
-
-Full validation runs all profiles in `execution.json` through TypeScript and Go. PR checks run the committed subset alongside ordinary tests. Committed ITF smokes run without Quint. Failure diagnostics include trace, step, action, and both observations. The effects choice/state schema and scope/policy value choices changed with this specification revision; ports must select a matching revision and reject unsupported actions or choices. Behavioral scenario schema 2 is unchanged.
-
-The queued adapter choices are: 1 null, 2 primitive, 3 legacy watermark shape, 4 kindless metadata, 5 missing miss reason, 6 unknown reason, 7 unknown reason with valid future fence, 8 fenced reason without fence, 9 negative fence, 10 fractional fence, 11 unsafe fence, 12 absent reason with future fence, 13 expired reason with zero fence, 14 miss with stray frame fields, 15 valid frame with stray miss metadata, and 16 fenced reason with valid future fence. Future fences are the input wall clock plus 20 ms. Successful raw completion consumes the reply even when DialCache has abandoned that read; adapter failure leaves it queued. Ports with strongly typed replies may normalize these encodings at their input boundary, but must preserve the resulting miss/refill behavior.
-
-`s.events` records `{ event, location, detail, amount }`. Location identifies a reached layer or coalescing scope. Amount is an integer millisecond measurement (get, fallback, serialization, future offset), a byte size, a write-dispatch index, or zero. Replay converts model milliseconds to callback seconds and compares actual ordered events, their labels, and source-error attribution. A follower emits its coalescing event without repeating the leader's read/source trail. Fresh decoding is included in remote-get duration; source duration ends at accepted settlement/deadline; dump has its own duration. Late sources do not repeat failures. Size events precede actual adapter dispatch, including when that write remains pending. Scalar value 1 has one serialized byte here; Unicode/binary byte accounting remains covered by protocol vectors and fixed scenarios.
-
-The profile requires 95 witnesses, listed in [coverage-witnesses.json](../catalogs/coverage-witnesses.json): fixture and race boundaries, every reply class consumed by an active read, untracked fence demotion, normalized fences blocking publication, every selected event kind, error/miss categories, and nonzero held load/dump durations. Its 51 exported public regressions, the model's public-only runs, anchor normalization, phase timing, late-failure suppression, and the sampled boundaries that random generation reaches only rarely, so a fresh seed cannot lose them. Missing/corrupted diagnostic observations fail the harness.
-
-## Generated feature profiles
-
-The generated feature models share the existing driver and a common [observation record](../models/conformance-observations.qnt). Their ITF states contain authoritative `input.name` and `input.choice`, with `s.o` as the expected observation. State outside `s.o` and the optional diagnostic record `s.d` is model-private prediction, not an implementation observation. The explicit choice is a nonnegative ITF integer on actions with choices below, or `-1` otherwise. Optional `mbt::actionTaken` and `mbt::nondetPicks.choice` annotations must agree with it. Reject unknown actions, unsupported choices, missing observation fields, and integer precision loss.
-
-Call observations encode pending as 0, fixture values 1/2 as 1/2, source errors as 3, and deadline errors as 4. Success codes 5..9 represent absent, null, false, zero, and empty string respectively; scope/policy generate these values. Other outcomes fail replay. These profiles compare error categories; the fixed scenarios compare logical error identity. All other observation fields use the scenario vocabulary directly, including zero/empty fields. A driver must use explicit action choices for selected source indices and its actual invocation counts for actions targeting the latest effect. It must never use expected counters, phases, cached values, or fences to select an input or fabricate an observation.
-
-| Profile | Fixture and bounds | Generated coverage |
-| --- | --- | --- |
-| [Independent](../models/dialcache-independent-conformance.qnt) | Tracked same-key calls, coalescing disabled, six callers, independent read/source/decode gates, read budgets 5/10 ms, F=1 s and captured M=2/5 s | Per-call cancellation, late effects, refill authority, recovery snapshots/policy and original source-error identities |
-| [Layers](../models/dialcache-layers-conformance.qnt) | Two instances, three persistent contexts, four identities, tracked/untracked and capacity 0/2 fixtures, twenty calls | Request/process sharing, layer precedence, LRU promotion/eviction, per-instance capacity, tracked local warming and operation-group invalidation |
-| [Admission](../models/dialcache-admission-conformance.qnt) | Tracked served remote hits, three keys, two instances, two shadow slots per instance, held reads/decodes, 10 ms job deadline, up to sixteen callers | Same-key deduplication, capacity drops, instance isolation, coalesced hits, policy snapshots, disabled detached sources, match/mismatch/supersession, capacity retained through timed-out source/decode/C1 work. Composed from the kernel library: the held remote traversal (`remote_io`) with the shadow module's held served-job lifecycle and its budgets |
-| [Scope](../models/dialcache-scope-conformance.qnt) | Request-only, one key, two outer lifetimes, three nested contexts, one held provider reply, independently settled sources, no deadline, up to sixteen callers | Scope isolation/closure/replacement; nested and disabled contexts; reenablement; pending policy at closure; shared rejection/retry; request/coalescing policy changes; late source settlement |
-| [Recovery](../models/dialcache-recovery-conformance.qnt) | Tracked remote with optional request memoization in two contexts, F=1 s, M initially 5 s, 10 ms source deadline, held decoding, up to eight callers | Fresh/stale/future frames; F/M boundaries; allow/deny/failing classifier; coalesced followers; source success versus rejection/deadline; default timeout-only classification and explicit overrides; abandoned source settlement; age checks around decode; invalidation/replacement; read/decode failures; captured recovery policy. Composed from the kernel library: the held remote traversal with its recovery snapshots under the budgeted lifecycle, the read settled at admission, and the diagnosed variants that record the coalesced scope, the failed layer and the recovery age |
-| [Policy](../models/dialcache-policy-conformance.qnt) | Untracked local+remote, both TTLs initially 1 s, M=5 s, local capacity one, two keys, one held provider reply, independently settled sources, no source deadline, up to twelve callers | Runtime coalescing on/off, per-source policy snapshots, shared versus independent same-key work, cross-key overlap and reverse settlement; independent runtime leaves; invalid local/remote TTL; provider/read/dump/write failure; policy acquisition and pending publication; local eviction/insertion TTL; logical Redis freshness versus physical retention |
-| [Shadow](../models/dialcache-shadow-conformance.qnt) | Tracked remote TTL=60 s, serving ramp=0, shadow ramp initially 100 (runtime 0/100/invalid), optional outcome hook, caller/job deadline=10 ms, all read/load/dump/write effects held, up to eight callers | Independent dark C0/source settlement; captured payload decode; match/mismatch/C1 supersession; confirmation failure; conditional fills; source/read/decode/dump/write failure; deadline during held effects; late work cannot change emitted outcomes. Composed from the kernel library: the dark arm of the shadow module's held lifecycle (the job's C0 read, decode and confirmation read held and released by ordinal) over the diagnosed budgeted held remote traversal, with the held fill and the buffered invalidation |
-| [Dark layers](../models/dialcache-dark-layers-conformance.qnt) | Two instances, two keys, three persistent scopes and two transient contexts; twelve callers, one dark job per instance, 10 ms source/job budget, 60 s local TTL; held read/load/dump/write effects | Request/process followers, independent publication, source-error retry, captured fill retention, strict read/write fences, buffered invalidation, wall rollback, payload faults and failure-layer diagnostics |
-| [Shadow read deadlines](../models/dialcache-shadow-read-deadlines-conformance.qnt) | Two keys, one instance, one shadow slot, eight callers; 10 ms source/job budget, 5 or 20 ms read budgets; held effects and a 100 ms elapsed-time bound | C0/C1 errors at their own read deadlines, raw ownership and readmission, independent job timeout, captured C1 budget and dispatch-relative timing |
-
-Dark-layers inputs use explicit effect ordinals and source indices. `beginCall` choices 0..9 encode key modulo two and context divided by two; `resolveLoader` choices 1..24 encode source index and value 1/2. Policy choices 0..8 select request/local layers, coalescing and dark-shadow admission, with remote serving always off. Seeds 0..11 select two keys and six frame classes; invalidation 0..3 selects a key and a 0/20 ms future buffer. `advance` accepts 1, 10 or 60000 ms, `rollbackWall` shifts wall time back 1000 ms, and each read/load/dump/write fault toggles 0/1. Version 2 adds `inspect` choices 0/1 for public process snapshots of either instance and `s.d.inspections`. The snapshot records instance, leader/follower counts, and oldest monotonic leader age; the model uses -1 for an idle age and the native projection uses null. Five exported histories require live counts, request/process follower separation, oldest-leader replacement, instance isolation, wall rollback independence, cleanup on success/error/timeout, and exclusion of unfinished shadow or abandoned raw work. Served shadow work and the caller's own held write beside its held read remain outside this profile.
-
-The dark-layers native replay settled one diagnostics rule against the TypeScript reference: an active local layer attributes its failed source to `local` even inside a request memo; without a shared layer, a transient request attributes it to `request_local`. Named public histories pin both cases in TypeScript and Go.
-
-Recovery opens contexts 0 and 1 in every fixture. New calls use open contexts; the separate scope profile covers detached calls after closure. Request misses may join the same process flight, after which each attached open context memoizes its result. A same-request follower records request coalescing; a new request records process coalescing. Recovered values have no shared-cache publication. Closing a context clears its memo and prevents late recovery from populating it. Four required witnesses include a recovered memo hit, later probes of both requests after shared recovery, a new read after closed-scope recovery, and request followers sharing recovery work. Three deterministic regressions anchor these cases.
-
-Policy and recovery separate wall timestamps from elapsed time. Generated public probes require local hits to survive a rollback before their original TTL, expiry at that TTL despite rollback, remote future-frame rejection, and retained recovery rejection when rollback makes its candidate future-dated. Physical Redis expiry remains independent. Invalidation never lowers an existing watermark. Four deterministic regressions anchor these clock rules.
-
-Recovery begins with value 1 seeded at age 1,000 ms. Policy and shadow begin with empty storage. Every trace gets a fresh fixture. The shadow profile permits another call once its preceding source and owned job work have settled. The separate admission and shadow-layers profiles exercise cross-key capacity/drop and mixed ownership boundaries alongside fixed scenarios. Recovery advances through a source deadline before the end of a larger elapsed-time step; recovery starts at that deadline and its held decode may complete later. The retained snapshot and source-error identity survive late source settlement. Recovery initial input 0/1/2/3 selects the timeout-only library default or an instance classifier that allows, denies, or throws; 4..7 selects the same classifier with request-local caching enabled. Operation choice 3 inherits that instance policy; 0/1/2 replaces it with allow/deny/error. Full validation requires all eight initial fixtures, both directions of operation override, instance allow on ordinary source errors, instance denial on source deadline, and classifier-error preservation of the source failure. Policy admits another invocation after the preceding provider reply is released, even while its source remains pending. Sources can settle in any order; same-key followers join only while their current policy permits sharing. A shared leader remains registered when an independent source publishes or fails. Request scopes have their own generated profile; held publication remains outside this policy profile.
-
-Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` releases the most recently observed corresponding external effect in scope/recovery/policy/shadow; admission and independent instead select explicit pending read/load indices; `readFault/loadFault/dumpFault/writeFault/providerFault` sets that failure flag from choice 0/1 (provider uses `faults.policy`). Shadow `rejectLoader` rejects the latest actual loader; recovery/scope/policy/admission/independent settlement selects an explicit source index. No action reads or mutates the cache's internal state.
-
-| Profile/action | Input mapping and allowed choices |
-| --- | --- |
-| Recovery `closeScope` | Close context choice 0/1; late work can finish but cannot memoize into the closed context |
-| Recovery `beginCall` | Choice 0..7: context `floor(choice / 4)` and operation classifier `choice % 4` (allow/deny/error/inherit) |
-| Recovery `joinCall` | Begin in context choice 0/1 while shared work is pending; a preexisting request memo can still win |
-| Recovery `resolveLoader` / `rejectLoader` / `rejectTimeout` | Choice 0..7 selects an unsettled source; resolve with value 2 / reject with ordinary error / reject with a propagated timeout error |
-| Recovery `seed` | Choices 0..6 give ages `[0,999,1000,4999,5000,-1,1000]` ms; value 1 except choice 6 gives value 2 |
-| Recovery `advance` | Elapsed time choice 1, 10, 1000, or 4000 ms, with timers delivered |
-| Recovery / Policy `rollbackWall` | Move only the application wall clock back 1,000 ms; local deadlines and physical expiry retain elapsed time |
-| Recovery `invalidate` | Public invalidation with zero future buffer |
-| Recovery `policy` | Set `staleOnErrorMaxAgeSec` to choice 2000/5000 divided by 1000 |
-| Policy `beginCall` | Key is string `"0"` or `"1"` from choice 0/1 |
-| Policy `resolveLoader` | Choice 1..84 encodes source index `floor((choice - 1) / 7)` and the value at `(choice - 1) % 7` in `[1,2,absent,null,false,0,""]`; only pending sources are generated |
-| Policy `rejectLoader` | Reject the explicitly selected source index, choice 0..11; only pending sources are generated |
-| Policy `seed` | Choice 0..3 supplies key `floor(choice/2)` with value `1 + choice%2`, current wall stamp, and 5 s physical TTL |
-| Policy `advance` | Elapsed time choice 1, 500, 1000, 2000, or 5000 ms |
-| Policy `policy` | Replace overlay using the numbered table below |
-| Shadow `init` | Choice 0..3 selects default/equal/unequal/error comparison; 4..7 selects the same comparison with mismatch logging enabled; 8 omits the outcome hook; 9/10 supplies equal/error comparison consuming 10 ms; 11/12 uses default comparison and consumes 9/10 ms of external source work before deferred job dispatch. Logging is initially off for 8..12 |
-| Shadow `rollbackWall` | Move the wall clock back 1,000 ms without changing elapsed time |
-| Shadow `logPolicy` | Choice 0/1 disables/enables logging; choice 2 supplies the malformed string `"invalid"`. Newly admitted eligible jobs record a configuration error and capture logging off for choice 2; omitted ramp inherits the fixture default |
-| Shadow `shadowPolicy` | Choice 0/1/2 replaces the runtime overlay with shadow ramp 100/0/101; omitted logging inherits the fixture default |
-| Shadow `beginCall` | Plain `begin` |
-| Shadow `resolveLoader` | Resolve latest loader with choice 1/2 |
-| Shadow `seed` / `reencode` | Store the explicit payload choice below at current wall time; `reencode` chooses the alternate text/binary form of the currently stored bytes during C1 |
-| Shadow `seedUnicode` | Store text/binary multibyte JSON using choice 7/8; this extra environment branch increases representation-boundary sampling while ordinary `seed` retains all payloads |
-| Shadow `advance` | Elapsed time choice 1/10 ms, delivering due timers; blocked-source fixtures 11/12 use only 10 ms windows |
-| Shadow `advanceWall` | Move only the application wall clock forward by choice 1/60000 ms while C1 confirmation is pending; elapsed deadlines and physical Redis TTL do not advance |
-| Shadow `invalidate` | Public invalidation with future buffer choice 0/20 ms |
-
-Shadow payload choices 1/2 are text JSON `1`/`2`; 3/4 are binary hex `31`/`32`; 5 is binary `2031`; 6 is text ` 1`; 7 is text JSON `"café"`; 8 is binary `22636166c3a922`. Thus text and binary may share exact UTF-8 bytes, while different byte spellings may decode to the same value. Comparison uses decoded values; confirmation uses bytes. `reencode` records the replacement payload as an explicit choice, so a driver never consults expected storage. Required witnesses include both Unicode text/binary confirmation directions, equal decoded values superseded by different bytes, binary C0 decoding, and successful/failing comparison exhausting the deadline. Timer delivery is not required for elapsed-time rejection.
-
-Policy overlay choices replace the entire runtime overlay; omitted leaves inherit the fixture's defaults:
-
-| Choice | Overlay |
-| --- | --- |
-| 0 | Empty/inherit |
-| 1 | Local TTL 2 s |
-| 2 | Remote TTL 2 s |
-| 3 | Local serving ramp 0 |
-| 4 | Remote serving ramp 0 |
-| 5 | Invalid local TTL -1 s |
-| 6 | Invalid remote TTL -1 s |
-| 7 | Recovery maximum age 2 s |
-| 8 | Both serving ramps 0 |
-| 9 | Remote TTL 4 s, recovery disabled (maximum age 0) |
-| 10..19 | Same overlay as choice minus 10, with `coalesce: false`; other choices inherit default sharing |
-| 20 | Invalid remote read budget 0: bypass all caching for the invocation |
-| 21 / 22 | Invalid local / remote ramp 101: disable that layer while preserving the other |
-| 23 / 24 | Invalid recovery maximum age 1 / -1 s: normal serving remains active, writes use ordinary 1 s retention |
-| 25 | Invalid shadow ramp 101: normal fresh serving remains active |
-
-Five deterministic policy regressions anchor invalid budget, per-layer ramp, optional recovery retention, and fresh-hit shadow-policy behavior. The generated sample requires each boundary, including a Redis hit under invalid shadow policy and both invalid recovery retention cases. Independent Redis seeding makes external replacement/read scenarios reachable.
-
-Generation exports 512 recovery traces from 4,096 samples, and 512 policy traces from 2,048 samples and 1,024 shadow traces from 4,096 samples, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 favors completion and logging changes while retaining replacement, fencing, read failure, time, and admission-policy changes. This changes exploration frequency, not the allowed transition semantics.
-
-Full validation requires every named action, all three recovery outcomes, recovery across invalidation, coalesced recovery, age-out during decoding, local/remote hits, changed-policy publication, physical TTLs of 1/2/4/5 seconds, both C0/source orders, all twelve modeled shadow outcomes, and a write completing after shadow timeout. These witness checks fail if a configured corpus misses its promised paths. They establish occurrence only. The separate verification models still reason about wider abstractions such as shadow admission, and the portable fixed corpus covers additional binding-independent boundaries.
-
-Scope and recovery expose `s.d = { warnings, ages, coalesced, fallbackErrors }`. Shadow profile version 2 adds `configErrors`, counting actual `config_resolution` events with remote/non-fallback labels. Other profile diagnostic schemas are unchanged. Ages are integer milliseconds in Quint and compared to actual callback seconds after unit conversion. The driver obtains this projection only from observed callbacks; it checks their operation/outcome labels and retains their order. Recovery records age only after successful retained decode. Shadow records original-C0 age at match/confirmed-mismatch verdict, clamped to zero after wall rollback; it emits a warning only for a confirmed mismatch whose admitted policy enabled logging. Later runtime changes do not rewrite that policy. Malformed logging leaves comparison active and warnings disabled. C1 compares retained payload identity even when a replacement timestamp is future-dated. Exact native JSON warning formatting remains a binding obligation.
-
-`coalesced` records actual request/process scope labels; `fallbackErrors` records the source-failure layer, including failures later recovered as stale. Scope fixtures assert one trail for shared failures, no cache-error trail for disabled pass-through work, and `noop` attribution if the request closes while policy is pending. Admission-time attribution survives later scope closure. Three deterministic scope regressions and five diagnostic witnesses anchor these consequences. Other cache/maintenance errors are outside this feature diagnostic projection and remain checked by effects and fixed scenarios.
-
-Thirteen shadow fixtures, both custom comparison overrides, comparison failure, both captured-logging directions, logging on/off, malformed logging at a completed mismatch, no warning for match/supersession, clamped age, and positive verdict age are required witnesses. Thirty-nine deterministic shadow regressions, every one an exported public schedule, anchor these rules. Required witnesses also cover no job without the outcome hook, disabled/invalid policy skipping new jobs, and an admitted job completing under its original policy. Missing or corrupted diagnostic expectations must fail harness checks.
-
-Fixtures 11/12 use the existing external `sourceWorkMs` input, advancing elapsed and wall time without delivering timers while the source begins. At 9 ms, the dark job still dispatches C0 and an immediately settled source can succeed. At exactly 10 ms, the deferred job reports timeout without a Redis read, while the caller remains pending. Subsequent source resolution or rejection produces the caller's deadline error when settlement checks elapsed time; delivering its timer may produce that error first. These fixtures advance in full 10 ms windows after the blocked work, observing after overdue timers are delivered; intermediate native timer ordering is outside their bounds. This distinguishes job abandonment from source timer delivery. Generated witnesses require both boundaries and both late settlement outcomes. The `expiredSourceWorkSkipsRedis` invariant independently forbids reads in the exhausted-work fixture; warning authorization is checked against captured valid policy separately from verdict emission.
-
-`typescript/test/formal-features.test.ts` replays these traces and checks parser/assertion trust boundaries. Fast PR checks use the committed `recovery-smoke.itf.json`, `policy-smoke.itf.json`, and `shadow-smoke.itf.json` without Quint. Full validation replays every generated trace. To replay a downloaded artifact:
-
-```sh
-DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/recovery/trace_0.itf.json \
-  corepack pnpm --dir typescript exec vitest run test/formal-features.test.ts --coverage.enabled=false
-```
-
-Full policy validation requires six additional concurrency witnesses: cross-key overlap, uncoalesced same-key overlap, a join after policy changes, reverse source settlement, one source settling multiple callers, and publication while another provider reply is held. Its committed smoke is a generated prefix containing a shared rejection and a later independent settlement; it also runs without Quint. Policy settlement choices changed with the concurrent profile, so replay these traces with the matching specification revision.
-
-The parent `independent/`, `layers/`, `scope/`, `recovery/`, `policy/`, `shadow/`, or `admission/` directory identifies the fixture. To replay a whole generated feature corpus, set `DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features` instead. Keep a failing trace with its profile directory when copying it.
-
-## Generated independent-caller profile
-
-[`dialcache-independent-conformance.qnt`](../models/dialcache-independent-conformance.qnt) tests the same key with coalescing disabled. The single registered-flight models cannot express independent acquired reads and recovery chains; this companion reuses the existing driver and effect vocabulary. Six callers can each own one read, one source, and one decode. Tracked remote freshness is 1 s, initial recovery maximum age is 5 s, read budget is 5 ms, and source budget is 10 ms. Recovery classification allows ordinary errors and timeouts. Value 1 initially has age 1,000 ms and physical TTL 60,000 ms. Only raw reads and decoding are held; accepted publication completes at the source-settlement boundary.
-
-| Action | Environment/public input |
-| --- | --- |
-| `beginCall` | Begin another independent same-key call |
-| `releaseRead` / `failRead`, `releaseLoad` / `failLoad` | Complete or reject the explicitly selected actual read/decode index, 0..5 |
-| `resolveLoader` | Choice 1..12: source `floor((choice - 1) / 2)`, value `1 + (choice - 1) % 2` |
-| `rejectLoader` | Reject source index 0..5 with that source's logical error |
-| `advance` | Advance 1, 5, 10, or 1,000 ms and deliver due deadlines |
-| `seed` | Choice 0..5: values `[1,1,2,1,2,1]`, ages `[0,1000,1000,4999,0,1999]` ms, physical TTL 60,000 ms |
-| `invalidate` | Public invalidation with zero future buffer |
-| `policy` | Choice 0..3: read budget 5 ms for even choices, 10 ms for odd; recovery maximum age 5 s for 0/1, 2 s for 2/3 |
-
-Each call captures its read budget and recovery policy. Read failure or timeout cannot borrow another call's refill authority. Each recovery chain retains its own eligible bytes and original source error. Later invalidation cannot revoke an already acquired fresh decode or stale candidate; recovery still rechecks age around decode. Late raw read/source settlement cannot affect another call. The environment delivers deadlines in time order, using registration order for equal instants, including new source deadlines reached within one advance. This is the supplied schedule; other runtimes need not use the same timer implementation.
-
-Besides the common `s.o`, replay requires `s.io = { budgets, aborted, sourceErrors }`. `budgets` records actual adapter read budgets in read invocation order; `aborted` records actual cooperative cancellation indices in delivery order. `sourceErrors` has one entry per caller: zero unless the caller returned its source's ordinary error, otherwise the one-based actual source identity. The driver projects actual adapter callbacks and returned error tokens; model-private ownership records never enter execution. Parser and corrupted-budget tests protect that boundary.
-
-Full validation emits 512 traces from 2,048 samples, up to 60 steps, and requires every action plus the witnesses listed for it in [coverage-witnesses.json](../catalogs/coverage-witnesses.json), covering separate budgets/deadlines, distinct recovery values/errors, captured age policy, failed-read refill suppression, acquired observations across invalidation, and late completion isolation. The profile's deterministic regressions, the runs its model declares, anchor these rules. The committed `independent-smoke.itf.json` replays without Quint. Coalesced recovery, scope lifetimes, wall rollback, and held publication retain separate profile coverage; this model does not combine every feature.
-
-## Generated layer-composition profile
-
-[`dialcache-layers-conformance.qnt`](../models/dialcache-layers-conformance.qnt) connects request memoization, process flights, local storage, Redis, and source publication. The separate scope and policy profiles isolate lifetime and policy history; composition is needed to test a request miss joining a process flight, per-instance storage shared across operations, and the publication consequences of tracked reads.
-
-The initial **input choice**, never expected model state, selects the fresh fixture:
-
-| `init` choice | Identity and Redis adapter | Local capacity per instance |
-| --- | --- | --- |
-| 0 | Untracked, adapter present | 2 |
-| 1 | Tracked, adapter present | 2 |
-| 2 | Untracked, adapter present | 0 |
-| 3 | Tracked, adapter present | 0 |
-| 4 | Untracked, adapter absent | 2 |
-| 5 | Tracked, adapter absent | 2 |
-
-Modes 4 and 5 omit the Redis adapter and require public local-hit reuse after explicit invalidation reports `missing_remote`; no adapter mutation is dispatched. All modes enable request-local caching and 60-second local/remote TTLs, with no source deadline. Sources are held independently; other external effects settle at their action boundary. Two instances share Redis but own their local capacity and process flights. Persistent contexts 0 and 1 belong to instance 0; context 2 belongs to instance 1. Contexts 3 and 4 mean a fresh invocation scope on instance 0 and 1 respectively. This is an input-level fixture description, not a requirement to reproduce any host context API.
-
-| Action | Input mapping |
-| --- | --- |
-| `beginCall` | Choice 0..19: context `floor(choice/4)`, identity `choice%4`; identity maps to entity `floor(identity/2)` and operation `Layers0`/`Layers1` from `identity%2` |
-| `resolveLoader` | Choice 1..40 selects source `floor((choice-1)/2)` and value `1+(choice-1)%2` |
-| `rejectLoader` | Explicit pending source index 0..19 |
-| `closeScope` | Persistent context 0..2; captured handles remain usable for detached calls |
-| `policy` | 0 all layers; 1 disable request; 2 disable local; 3 disable remote; 4 request only; 5 no serving layers |
-| `seed` | Choice 0..7 selects identity `floor(choice/2)` and value `1+choice%2` |
-| `invalidate` | Entity 0/1, affecting both tracked operation variants |
-| `tick` | Advance 1 ms |
-
-At most twenty calls and eighty steps keep entries fresh throughout this profile; TTL boundaries remain in policy/scenario coverage. There are four logical identities, so a two-slot local cache can demonstrate read promotion and eviction, while request storage can exceed that capacity. Successful source completion publishes only to participating eligible layers. Tracked remote fallback skips direct local publication; an authoritative hit can warm local. Invalidation fences subsequent remote reads while acquired request/local values survive. Policy changes preserve admitted sources' publication decisions.
-
-Full validation exports 512 traces from 2,048 samples. Required witnesses include all six fixtures and local reuse without Redis before and after a surfaced maintenance error, cross-request process sharing, zero-capacity sharing/reload, uncapped request memoization, LRU promotion/eviction with later public probes, per-instance capacity, tracked read warming, local survival across invalidation, both operation variants fenced, and untracked reads ignoring markers. Private model records select reachability witnesses only; storage-related witnesses require actual replayed calls that probe their predictions. They never control the adapter or become implementation observations. Scheduled deterministic regressions anchor these boundaries, and a committed generated smoke runs without Quint. The current regression inventory is the model's runs; the witness inventory is in [coverage-witnesses.json](../catalogs/coverage-witnesses.json).
-
-This profile uses the same observations and public/environment inputs as the other feature profiles. It adds initial fixture choices; drivers must reject unsupported choices. Larger capacities, more scopes/instances, mixed deadline/recovery/shadow combinations, and expiry during LRU ordering are outside its generated bounds.
-
-## Generated request-scope profile
-
-The scope profile reuses the same `openScope`, `closeScope`, `begin`, policy, and source-settlement inputs. It adds no public API or driver mechanism. It starts with enabled outer context `0`, held provider replies, request-local caching on, no shared storage, and the source-scope probe enabled. Its single key isolates request-lifetime semantics from the storage/TTL state in the policy profile.
-
-| Context choice | Meaning |
-| --- | --- |
-| 0 | Initially open outer request |
-| 1 | A separately opened outer request; it may overlap or replace 0 |
-| 2 | Enabled context nested under 0 |
-| 3 | Disabled context nested under 0 |
-| 4 | Enabled context nested under 3, reusing 0's live memo lifetime |
-| 5 | Outside every request; only usable by `beginCall` |
-
-`openScope` chooses 1..4, each at most once. Nested contexts open only while outer 0 is live, and 4 requires 3 to exist. `closeScope` chooses any opened, unfinished context 0..4 after the first call. Closing 0/1 clears that lifetime's memo and registered flights. Closing nested contexts does not end the outer lifetime. Captured contexts remain usable by later calls: closed outer contexts are pass-through, while completed nested contexts still belong to a live outer lifetime. These are context ownership rules; ports need not reproduce AsyncLocalStorage or Promise scheduling.
-
-`beginCall` chooses context 0..5. Enabled calls wait for `releasePolicy`; disabled/detached/outside calls immediately start their own source without a provider invocation. At most one provider response is held, but any accepted sources may overlap. `policy` choice 0 inherits request caching and coalescing; 1 sets `requestLocal: false`; 2 sets `coalesce: false` while retaining memoization. Settlements select actual loader indices: `resolveLoader` choice 1..112 encodes index `floor((choice - 1) / 7)` and the value at `(choice - 1) % 7` in `[1,2,absent,null,false,0,""]`; `rejectLoader` chooses index 0..15. Only pending sources are generated.
-
-The model predicts memo lifetime and flight ownership. Replay observes actual caller values/errors, source enablement, and provider/source invocations; subsequent calls establish hits or misses. A late source may return to its original caller after closure, but cannot populate a replacement memo. Coalescing admission precedes reading a memo populated by another independently accepted source.
-
-Generation exports 256 traces from 1,024 samples, up to 60 transitions, with at most sixteen calls. Sampling keeps closure reachable while favoring useful call progress; no fairness or exhaustive context-tree claim is made. Full validation requires every action plus the cataloged witnesses, including disabled/detached bypass, policy reply after closure, rejection/retry, shared rejection, source settlement after closure, replacement miss after that settlement, independent scope overlap, uncoalesced same-scope overlap, memo hits, nested/reenabled hits, memo reuse after nested closure, memo reuse after policy bypass, memo hits for all five empty/falsy/absent values, and five failure-attribution/shared-trail witnesses. Deterministic model regressions anchor closure, replacement, nested/disabled reuse, rejection/retry, and error attribution.
-
-The committed `scope-smoke.itf.json` is a generated schedule including absent-value reuse and request closure. It runs without Quint in fast PR checks. Request deadlines, recovery, shared-process flights, arbitrary context trees, and more than two outer lifetimes remain covered separately or outside this generated profile.
-
-## Generated served-hit shadow admission profile
-
-[`dialcache-admission-conformance.qnt`](../models/dialcache-admission-conformance.qnt) reuses the existing public driver and observation schema. It separates admission and resource ownership from the dark C0/fill protocol. Three shared Redis keys initially contain value 1, with tracked serving and shadow ramps at 100%. Two cache instances each have two shadow slots. This makes a duplicate drop distinguishable from a full instance, and permits checking another instance while the first is full.
-
-Caller reads and all decoding are held. A successful caller read acquires C0; completing its decode returns that value and considers shadow admission using the caller flight's accepted policy. Coalesced followers share this one admission. Independently accepted calls can each attempt admission. An admitted detached source runs with caching disabled. Shadow comparison uses its retained C0 and source result; unequal values trigger a held C1 read. No shadow action changes a caller result or writes cache values. Every rule is a kernel transition: the held remote traversal with immediate replies (`remote_io`) through the shadow module's held served-job lifecycle, which captures the cohort selection when the caller's read is dispatched and consults it when the decode completes the hit, with the job budgets kept by `deadlines`; the profile owns the bounded state, the input decoding and the guards.
-
-| Quint action | Portable input and choice |
-| --- | --- |
-| `beginCall` | Choice 0..5 selects instance `floor(choice / 3)` and key `choice % 3`, both decimal strings |
-| `releaseRead` / `releaseLoad` | Release the explicitly chosen actual effect index, 0..31 |
-| `resolveLoader` | Choice 1..32 selects source index `floor((choice - 1) / 2)` and value `1 + (choice - 1) % 2` |
-| `rejectLoader` | Reject the chosen actual source index, 0..15 |
-| `seed` | Choice 0..5 replaces key `floor(choice / 2)` with value `1 + choice % 2`; both instances observe the shared environment |
-| `policy` | Choice 0 inherits enabled shadow/coalescing; 1 disables shadow; 2 disables coalescing; 3 disables both. Only new caller flights acquire the changed policy |
-| `advance` | Advance 1 or 10 ms and deliver timers, bounded to 600 ms total elapsed time |
-
-Only pending effects/sources may settle. There are at most sixteen calls and sixteen admitted jobs, giving at most 32 read and 32 decode effects. Redis TTL is 60 seconds, each shadow job's deadline is 10 ms, and the read deadline is 1,000 ms. The elapsed-time bound keeps serving reads fresh and below their separate deadline. Ordinary misses, read/decode faults, separate read timeouts, shadow fill writes, custom comparator failures, local/request layers, and fractional cohort selection retain coverage in other profiles, scenarios, or vectors.
-
-A whole-job timeout emits one diagnostic outcome but keeps the slot until its pending source, decode, or confirmation read settles. Later completion cannot start another decode/read or emit a replacement verdict. Once the owned work drains, a subsequent hit may admit another job. This models resource ownership rather than cancellation or language executor turns.
-
-Full validation exports 128 traces from 1,024 samples, up to 60 transitions, and requires every action plus the cataloged witnesses, including six terminal outcomes (match, mismatch, superseded, source_error, timeout, dropped), one admission for coalesced hits, uncoalesced hit overlap, accepted shadow policy after a change, unselected hits, duplicate drops while capacity is available, full-capacity drops, admission while the other instance is full, per-instance deduplication, capacity retained by each of the three timed-out phases, and readmission after expired work drains. Deterministic model regressions anchor coalesced admission, duplicate drops, per-instance capacity, all three timeout ownership phases, the shadow selection captured with the read across a policy change, and an uncoalesced caller's own read beside the registered leader.
-
-The committed `admission-smoke.itf.json` retains actions, choices, and observation records from the first 57 states of a generated trace. Model-private prediction fields are omitted to keep it compact. It contains a timed-out decode, a blocked duplicate, completion of the raw decode, and subsequent admission for that key. Full generated ITF states remain in the full workflow artifacts. The existing parser replays both forms without special handling or expected-state input to the driver.
 
 ## Port workflow and limits
 

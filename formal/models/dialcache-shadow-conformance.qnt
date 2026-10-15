@@ -19,7 +19,7 @@ module dialcache_shadow_conformance {
   // One ramped-down caller source and its selected dark C0/source/C1 job.
   // Selected rules from C47/C49-C54 govern admission, comparison, fill authority,
   // and timeout ownership; C57/C60 cover snapshot age and captured logging.
-  // See BEHAVIOR.md: "Generated feature profiles" for fixtures and payloads.
+  // See formal/generated/PROFILES.md (shadow) for fixtures and payloads and BEHAVIOR.md "Generated profiles".
   // Each source/read/decode/serialize/write can remain externally pending. This
   // profile excludes serving hits, request/local storage, and overlapping jobs.
   // `now` is elapsed milliseconds; the wall clock is `now` plus a skew the

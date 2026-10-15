@@ -21,7 +21,7 @@ export const targetDescriptions = {
   'check-rust': 'Rust formatting check, clippy with warnings denied and default tests including the smoke conformance run',
   'check-python': 'Python native, protocol, scenario and committed smoke tests with coverage (coverage/python/native.lcov)',
   docs: 'Check shared examples and links; generate native API references and the documentation site (Go, Rust and Python required)',
-  audit: 'Check source, behavior, feature, Go and generated-fixture freshness inventories',
+  audit: 'Check source, behavior, feature, Go, generated-fixture and generated-view freshness inventories and the Quint style caps',
   smoke: 'Replay committed Quint-derived fixtures in TypeScript, Go, Rust and Python; no full completion claim',
   formal: 'Check every scheduled Quint model, generate the complete corpus and shared witness evidence, then replay TypeScript, Go, Rust and Python',
   'formal-check': 'Typecheck and run every scheduled Quint model, its public regressions and the model mutation challenges',
@@ -195,6 +195,8 @@ export function validationPlan(target, { directory = root, environment = process
     audit: ['execution', 'check-source-audit', 'check-semantic-coverage', 'check-feature-coverage', 'check-go-parity']
       .map(name => node(`Check ${name}`, `formal/tools/${name}.mjs`))
       .concat(node('Verify committed fixture fingerprints', 'formal/tools/generated-fixtures.mjs', '--verify'),
+        node('Check the Quint style caps', 'formal/tools/check-style.mjs'),
+        node('Check the generated read views', 'formal/tools/generate-catalog-docs.mjs', '--check'),
         node('Check conditional fixture regeneration scope', '--test', '.github/scripts/fixture-scope.test.mjs')),
     smoke: [tsReplay(false), nativeGo(false), nativeRust(false),
       python('Replay committed Python fixtures and scenarios', '-m', 'pytest', 'python/tests/test_conformance.py')],
