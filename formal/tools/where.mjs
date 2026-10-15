@@ -31,9 +31,11 @@ export function lookup(query, { directory = root } = {}) {
   const row = read('formal/guides/CONTRACTS.md', directory).split('\n').map((line, index) => [line, index + 1]).find(([line]) => line.startsWith(`| ${id} |`));
   if (!row) throw new Error(`${id}: not a contract in formal/guides/CONTRACTS.md`);
   const [, obligation, evidence] = row[0].trim().replace(/^\|\s*|\s*\|$/g, '').split(/\s*\|\s*/);
-  const cites = new RegExp(`\\b${id}\\b`);
+  // A comment cites the ID when it appears as a whole token: the ID is a letter
+  // and two digits, so a neighbouring word character means another ID (C450).
+  const cites = line => { let at = line.indexOf(id); while (at >= 0) { const before = line[at - 1], after = line[at + id.length]; if (!/\w/.test(before ?? ' ') && !/\w/.test(after ?? ' ')) return true; at = line.indexOf(id, at + 1); } return false; };
   const quint = quintFiles(directory).flatMap(path => read(path, directory).split('\n').flatMap((line, index) =>
-    line.trim().startsWith('//') && cites.test(line) ? [{ path, line: index + 1, text: line.trim().replace(/^\/\/\s?/, '') }] : []));
+    line.trim().startsWith('//') && cites(line) ? [{ path, line: index + 1, text: line.trim().replace(/^\/\/\s?/, '') }] : []));
   const semantic = json('formal/catalogs/semantic-cases.json', directory).cases
     .filter(entry => caseId ? entry.id === caseId : (entry.contracts ?? []).includes(id) || entry.id.startsWith(`${id}.`))
     .map(entry => ({ id: entry.id, rule: entry.rule, scenarios: entry.scenarios ?? [], models: (entry.models ?? []).map(model => model.ref),
