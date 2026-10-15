@@ -2,8 +2,9 @@
 
 The Node scripts behind the `make` targets. `make <target>` is
 `node formal/tools/validation.mjs <target>`; `make help` lists the targets and
-their prerequisites. Every script reads its inputs from
-[../catalogs/](../catalogs/README.md) and writes generated output only under
+their prerequisites. The scripts read their inputs from
+[../catalogs/](../catalogs/README.md) (and, for the checks and lookups over the
+text, from the models and guides) and write generated output only under
 [../generated/](../generated/README.md) and, for the witness fixtures,
 `typescript/test/fixtures/`. Start with `validation.mjs` to see
 which scripts a target runs.
@@ -12,6 +13,7 @@ which scripts a target runs.
 
 - [validation.mjs](./validation.mjs): the target dispatcher; composes every `make` target from the scripts below and checks prerequisites.
 - [execution.mjs](./execution.mjs): reads and validates the execution manifest; `node formal/tools/execution.mjs` prints the inventory.
+- [where.mjs](./where.mjs): `node formal/tools/where.mjs C45` prints where one contract, semantic case or native case is stated, tested, challenged and mapped, from the catalogs and the model comments; `--json` for agents.
 
 ## Checks
 
