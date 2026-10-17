@@ -20,7 +20,7 @@ concurrency:
 jobs:
   exploration:
     if: (github.event_name == 'schedule' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.exploration)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Run 35568655690 exhausted the old hour inside the expanded challenge
     # campaign, before generation or native replay. Allow the model job's
     # budget below plus time for the fresh corpus and every port; individual
@@ -52,7 +52,7 @@ jobs:
   check-models:
     # Scheduled workflows run the default branch; keep the intended main scope explicit.
     if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Shared-library challenges now execute the importing profiles' partitions,
     # including clean baselines and mutant checks cached by exact source closure.
     # The expanded partition campaign was still running after an hour in
@@ -84,7 +84,7 @@ jobs:
   generate:
     # Scheduled workflows run the default branch; keep the intended main scope explicit.
     if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Run 34660598461 spent 2.5 minutes on generation, 1 on fixtures and under a
     # minute on witnesses; a 2x slower runner needs about 9, plus setup.
     timeout-minutes: 25
@@ -107,7 +107,7 @@ jobs:
 
   typescript-parity:
     needs: generate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Run 34660598461 replayed the TypeScript corpus in 32 seconds.
     timeout-minutes: 20
     steps:
@@ -134,7 +134,7 @@ jobs:
           retention-days: 14
 
   symbolic:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -167,7 +167,7 @@ jobs:
   # that fails the pull request until the matrix grows.
   typescript-mutations:
     needs: generate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -206,7 +206,7 @@ jobs:
     # Run after the shards regardless of their result so a missing shard is
     # diagnosed by the merge; skip only when the matrix itself never ran.
     if: always() && needs.typescript-mutations.result != 'skipped'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -230,7 +230,7 @@ jobs:
 
   go-parity:
     needs: generate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Run 34660598461 replayed the Go corpus with race detection in 4.5 minutes.
     timeout-minutes: 40
     steps:
@@ -260,7 +260,7 @@ jobs:
 
   rust-parity:
     needs: generate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # The Rust replay compiles the crate in release mode before replaying the
     # same corpus Go completes in about 4.5 minutes; the budget mirrors go-parity.
     timeout-minutes: 40
@@ -291,7 +291,7 @@ jobs:
 
   python-parity:
     needs: generate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -329,7 +329,7 @@ jobs:
   # the matrix grows.
   go-mutations:
     needs: generate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -364,7 +364,7 @@ jobs:
     # Run after the shards regardless of their result so a missing shard is
     # diagnosed by the merge; skip only when the matrix itself never ran.
     if: always() && needs.go-mutations.result != 'skipped'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -391,7 +391,7 @@ jobs:
   # generated cohort in about a minute; the budget mirrors go-mutations.
   rust-mutations:
     needs: generate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -425,7 +425,7 @@ jobs:
     # Run after the shards regardless of their result so a missing shard is
     # diagnosed by the merge; skip only when the matrix itself never ran.
     if: always() && needs.rust-mutations.result != 'skipped'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -453,7 +453,7 @@ jobs:
   formal-full:
     needs: [check-models, generate, typescript-parity, symbolic, typescript-mutations-merge, go-parity, go-mutations-merge, rust-parity, rust-mutations-merge, python-parity, exploration]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       # Long-retention summary: completion/context reports and the model check,
