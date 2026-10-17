@@ -16,7 +16,7 @@ concurrency:
 jobs:
   prepare:
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     # The preparation run can create a branch and PR, but it cannot publish to
     # registries, tag a release, approve the PR, merge it, or bypass branch protection.
@@ -171,7 +171,7 @@ jobs:
 
   publish:
     if: "${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: ') }}"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     outputs:
       release_commit: ${{ steps.source.outputs.release_commit }}
@@ -380,7 +380,7 @@ jobs:
     # npm publication or Go tagging. Always use the captured release, even if
     # main has advanced before the retry.
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -433,7 +433,7 @@ jobs:
     # Retry only this job after a PyPI failure. The immutable artifact from this
     # workflow run contains the exact files validated before npm publication.
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     environment:
       name: pypi

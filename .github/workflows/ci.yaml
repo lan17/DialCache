@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   typescript:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     services:
       docs-redis:
         image: redis:6.2
@@ -58,7 +58,7 @@ jobs:
         run: make package-floor
 
   go:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     services:
       docs-redis:
         image: redis:6.2
@@ -102,7 +102,7 @@ jobs:
           if-no-files-found: warn
 
   rust:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       id-token: write
@@ -170,7 +170,7 @@ jobs:
       id-token: write
 
   wire:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -195,7 +195,7 @@ jobs:
   test:
     needs: [typescript, go, rust, python, wire]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Require successful native and cross-language wire checks
