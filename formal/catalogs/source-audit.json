@@ -1084,7 +1084,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "d37b38c1cdf72dbbf26eef1702136076354309bb4d1c497ddc39569b9b9b1578",
+      "sha256": "9964fbd32dbe69d2ce0e4b0721fb44cb39b3699659e69eb55e94854dffe3b45b",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1095,6 +1095,7 @@
         {"title":"4. Replay every history in every port"},
         {"title":"5. Account for the evidence"},
         {"title":"6. Gate a change"},
+        {"title":"What is and is not claimed"},
         {"title":"Pipelines"},
         {"title":"Where things are"},
         {"title":"Run it"},
