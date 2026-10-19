@@ -18,7 +18,7 @@ profile for the behavior you care about;
 - [conformance-observations.qnt](./conformance-observations.qnt): the caller outcome codes and the observation record the drivers compare.
 - [wire-text.qnt](./wire-text.qnt): the UTF-16 to UTF-8 writer and the UTF-8 reader the wire models use.
 
-## Verification models (sum-typed, model-checked)
+## Verification models (sum-typed, checked against their invariants)
 
 - [dialcache-core.qnt](./dialcache-core.qnt): one-key traversal and publication; scopes, layer precedence, pass-through, local faults.
 - [dialcache-runtime-policy.qnt](./dialcache-runtime-policy.qnt): sparse runtime overlays and captured policy.

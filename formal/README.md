@@ -48,7 +48,7 @@ flowchart LR
   GF["Committed artifacts<br/>generated/"]:::out
   WE["Witness evidence"]:::out
   RP["Completion reports"]:::out
-  M --> RM --> MR --> CK
+  M --> RM --> MR
   X --> RM
   M --> GA --> CP --> CO
   GA --> GF --> CO
@@ -56,6 +56,7 @@ flowchart LR
   X --> GA
   CO <--> D
   CO --> RP --> CK
+  CP --> CK
   X --> CK
   classDef hand fill:#fff7d6,stroke:#b59b00,color:#1f2328
   classDef tool fill:#e3f0ff,stroke:#2b6cb0,color:#1f2328
@@ -67,17 +68,20 @@ flowchart LR
 Every portable rule is written once, in Quint.
 [cache-rules.qnt](./models/cache-rules.qnt) holds the shared
 [judgments](./guides/GLOSSARY.md#judgment-judged-once-and-applied-from-a-judgment)
-every model imports: age, expiry, deadline and fence. The [kernel
-library](./models/kernel/README.md) builds on them, stating each rule as a pure
-transition, one concern per module. A conformance
+of age, expiry, deadline and fence that the kernel library and the verification
+models import. The [kernel library](./models/kernel/README.md) builds on them,
+stating each rule as a pure transition, one concern per module. A conformance
 [profile](./guides/GLOSSARY.md#profile-conformance-profile) composes those
 transitions into a small system with public actions and records each step's
 command in an explicit input, so replay never infers a command from changed
-state. Three other kinds of model sit beside the profiles: verification models,
-which are model-checked; connection models, which check a profile's history
-against [cache-contract.qnt](./models/cache-contract.qnt); and wire models,
-which each generate one vector file. Each named `Test` run is a regression that
-pins one boundary.
+state. Sixteen of the seventeen profiles compose the kernel this way; the
+introductory core profile predates it. Three other kinds of model sit beside the
+profiles. Verification models are simulated against their invariants; only the
+rule-checks model is model-checked, by Apalache. Connection models check a
+profile's history step by step against facts the profile does not carry, three
+of them through [cache-contract.qnt](./models/cache-contract.qnt). Wire models
+each generate one vector file. Each named `Test` run is a regression that pins
+one boundary.
 
 Read more: [SPEC.md](./guides/SPEC.md) for the behavior,
 [models/README.md](./models/README.md) for the file groups,
@@ -86,18 +90,23 @@ Read more: [SPEC.md](./guides/SPEC.md) for the behavior,
 
 ### 2. Check the models
 
-Before anything is generated, every model must hold its own properties.
+Every model must hold its own properties before its histories count as evidence.
 [execution.json](./catalogs/execution.json) schedules each model with its
-invariants, bounds and exported runs. `run-models.mjs check` typechecks each
-scheduled model and runs it with Quint's Rust evaluator, the simulator inside
-Quint, not the Rust port. `check-model-properties.mjs` then runs the
+invariants and generation bounds. The tools read its regressions, and which of
+them are exported for replay, from the `run` declarations in the Quint text.
+`run-models.mjs check` typechecks each scheduled model and runs it with Quint's
+Rust evaluator, the simulator inside Quint, not the Rust port.
+`check-model-properties.mjs` then runs the
 [challenge](./guides/GLOSSARY.md#challenge-fault-mutant-and-reproducer) catalog:
 for every model, at least one deliberate single-site fault that a named
 invariant must catch, with a reproducer that fails only under the fault.
-`lint-profiles.mjs` keeps the composition lint from loosening. Together these
-are `make formal-check`, the Quint evidence [lane](./guides/GLOSSARY.md#lane).
-Separately, `make model-check` proves the finite boundary rules in
-[dialcache-rule-checks.qnt](./models/dialcache-rule-checks.qnt) with Apalache.
+`lint-profiles.mjs` checks three rules over the parsed Quint, first that a
+composed profile assigns state only through kernel transitions, and fails when a
+profile's exceptions rise above its recorded baseline. Together these are `make
+formal-check`, the Quint evidence [lane](./guides/GLOSSARY.md#lane). Separately,
+`make model-check` proves the finite boundary rules in
+[dialcache-rule-checks.qnt](./models/dialcache-rule-checks.qnt) with Apalache, a
+symbolic model checker.
 
 Read more: [VALIDATION.md](./guides/VALIDATION.md) for what each run proves,
 [CHALLENGES.md](./generated/CHALLENGES.md) for the challenge index,
@@ -109,16 +118,23 @@ for writing one.
 Generation turns the models into the histories every port will replay. `make
 formal-generate` runs `run-models.mjs generate`, which writes the sampled corpus
 and the exported regressions under `.formal-traces/`; that directory is never
-committed. It then runs `witnesses.mjs`, which checks that the corpus reaches
-every required [witness](./guides/GLOSSARY.md#witness-label-and-classifier)
-label in [coverage-witnesses.json](./catalogs/coverage-witnesses.json) and fails
-when a label's hits fall below
-[witness-baseline.json](./catalogs/witness-baseline.json). That step is the only
-producer of the witness evidence the port lanes read. The committed artifacts
-under [generated/](./generated/README.md) are smaller and rebuilt by
-`generate-artifacts.mjs --write`: one [smoke](./guides/GLOSSARY.md#smoke) trace
-per profile, the lock that pins every input and output hash, and the wire
-vectors. `make fixtures-check` recomputes them and fails on any difference.
+committed. It then recomputes the committed smoke, witness and wire artifacts
+and fails on any difference. Next it runs `witnesses.mjs`, which checks that the
+corpus reaches every required
+[witness](./guides/GLOSSARY.md#witness-label-and-classifier) label in
+[coverage-witnesses.json](./catalogs/coverage-witnesses.json). A label recorded
+at ten or more sampled hits in
+[witness-baseline.json](./catalogs/witness-baseline.json) fails the run when the
+corpus reaches it fewer than half as often; an exploration seed gets a
+statistical allowance. That step writes the per-profile witness evidence under
+`.formal-traces/go-parity-witnesses/` and is its only producer; the Go, Rust and
+Python replays take it as an input and the TypeScript suite checks the same
+gate. The committed artifacts are smaller and rebuilt by `generate-artifacts.mjs
+--write`: one [smoke](./guides/GLOSSARY.md#smoke) trace per profile under
+[generated/](./generated/README.md), the TypeScript witness fixtures, and the
+lock that pins their inputs and output hashes. The four wire vector files are
+rebuilt in the same pass, and [go-parity.json](./catalogs/go-parity.json) pins
+their hashes. `make fixtures-check` recomputes them and fails on any difference.
 
 Read more: [generated/README.md](./generated/README.md),
 [catalogs/README.md](./catalogs/README.md),
@@ -130,16 +146,17 @@ fields.
 Replay is where the models meet the real libraries. Each history is an
 [ITF](./guides/GLOSSARY.md#itf-informal-trace-format) trace, the JSON trace
 format Quint writes. The [coordinator](./replay/coordinator.mjs) runs it against
-a driver over a typed wire protocol. It hands the driver the fixture and each
-step's recorded command, never the predicted observation. The driver calls the
-real library, controls the external gates and clocks, and reports what happened.
-The coordinator checks the shape of each observation, rejecting a malformed one
-as an infrastructure error, then compares it with the model's prediction step by
-step. Profile descriptors under [replay/](./replay/README.md) decode each
-profile's integer choices into driver commands; the four drivers are listed
-under Reference. `make smoke` replays the committed traces in all four ports;
-the `make formal-<port>` targets replay the complete corpus and write a
-completion report.
+a driver over a typed replay protocol
+([protocol.schema.json](./replay/protocol.schema.json)). It hands the driver the
+fixture and each step's recorded command, never the predicted observation. The
+driver calls the real library, controls the external gates and clocks, and
+reports what happened. The coordinator checks the shape of each observation,
+rejecting a malformed one as an infrastructure error, then compares it with the
+model's prediction step by step. Profile descriptors under
+[replay/](./replay/README.md) decode each profile's integer choices into driver
+commands; the four drivers are listed under Reference. `make smoke` replays the
+committed traces in all four ports; the `make formal-<port>` targets replay the
+complete corpus and write a completion report.
 
 Read more: [WALKTHROUGH.md](./guides/WALKTHROUGH.md) follows one history through
 the ports, [PORTING.md](./guides/PORTING.md) is the driver contract with its
@@ -161,13 +178,13 @@ port and require replay to catch them.
 [mutations.json](./catalogs/mutations.json) and
 [rust-mutations.json](./catalogs/rust-mutations.json) catalog the faults; `make
 mutations-ts`, `make mutations-go` and `make mutations-rust` measure that the
-generated histories, the real-Redis invalidation vectors and the shared
-witnesses detect every one. Each model challenge maps to the native mutant that
-injects the same wrong behavior, so a challenge is evidence that the corpus
-would catch that mistake in a port, not only in the model.
-[semantic-cases.json](./catalogs/semantic-cases.json) and
-[feature-coverage.json](./catalogs/feature-coverage.json) index every case to
-its evidence, and `where.mjs` answers from them.
+generated histories, the shared witnesses and, for TypeScript and Go, the
+real-Redis invalidation vectors detect every one. Each model challenge maps to
+the native mutant that injects the same wrong behavior, so a challenge is
+evidence that the corpus would catch that mistake in a port, not only in the
+model. [semantic-cases.json](./catalogs/semantic-cases.json) and
+[feature-coverage.json](./catalogs/feature-coverage.json) index every semantic
+case and native feature to its evidence, and `where.mjs` answers from them.
 
 Read more: [SEMANTIC-COVERAGE.md](./guides/SEMANTIC-COVERAGE.md) for the
 evidence inventory and the mutation comparison,
@@ -180,19 +197,27 @@ the obligation IDs, [MUTANTS.md](./generated/MUTANTS.md) for the mutant index.
 The last stage makes review state checkable, so a change cannot quietly outrun
 its evidence. The ledgers in [catalogs/](./catalogs/README.md) record what was
 reviewed. [source-audit.json](./catalogs/source-audit.json) keys every reviewed
-guide and test by its headings and contract dispositions and is refreshed with
-`check-source-audit.mjs --refresh <path>`.
-[go-parity.json](./catalogs/go-parity.json) pins the inputs the Go parity claim
-rests on and is re-pinned with `check-go-parity.mjs --refresh-inputs`. The lint,
-witness and style baselines ratchet: each can only tighten. `make audit` runs
-those checks with the coverage inventories, the fixture and read-view freshness
-checks and the Quint style caps.
+guide and test by its headings and its contract dispositions, the contracts each
+section is recorded as covering, and is refreshed with `check-source-audit.mjs
+--refresh <path>`. [go-parity.json](./catalogs/go-parity.json) pins the inputs
+the Go parity claim rests on and is re-pinned with `check-go-parity.mjs
+--refresh-inputs`.
+
+Two baselines ratchet: the lint baseline fails when a profile's exception count
+rises, and the style allowlist fails when a listed file becomes clean. The
+witness baseline is the tolerance gate of stage 3, not a ratchet. `make audit`
+runs the two ledger checks with the coverage inventories, the freshness checks
+of the committed fixtures and of the generated read views (PROFILES.md and the
+two indexes), and the Quint style caps. The lint baseline runs in `make
+formal-check` and `make differential`, and the witness gate in `make
+formal-generate`.
 
 The [differential](./guides/GLOSSARY.md#differential) guards the composed
-profiles. `make differential` generates each profile's corpus from the merge
-base with `origin/main` and from the working tree, then replays each corpus
-through the other text. A change in observable behavior fails it unless the
-profile declares the change by bumping its `behaviorVersion`.
+profiles, every profile except core. `make differential` generates each
+profile's corpus from the merge base with `origin/main` and from the working
+tree, then replays each corpus through the other text. A change in observable
+behavior fails it unless the profile declares the change by bumping its
+`behaviorVersion`.
 
 Read more: [TEST-AUDIT.md](./guides/TEST-AUDIT.md) for keeping the ledger
 current, [GO-PARITY.md](./guides/GO-PARITY.md),
@@ -206,20 +231,21 @@ wire vectors, fixed examples and native integration tests. The fixed corpora,
 [invalidation-vectors.json](./catalogs/invalidation-vectors.json) and
 [behavioral-scenarios.json](./catalogs/behavioral-scenarios.json), carry
 handwritten expectations; their evidence mappings do not mechanically prove that
-each fixed assertion agrees with Quint. The models use declared finite domains,
-and the profiles deliberately bound callers, keys, contexts, capacities,
-payloads and time without claiming that every product of those domains is
-explored. Environmental assumptions, allowed races and the limits of conformance
-claims are stated once in
+each fixed assertion agrees with Quint.
+
+The models use declared finite domains, and the profiles deliberately bound
+callers, keys, contexts, capacities, payloads and time without claiming that
+every product of those domains is explored. Environmental assumptions, allowed
+races and the limits of conformance claims are stated once in
 [SPEC.md](./guides/SPEC.md#assumptions-evidence-and-claims); the wire and
 binding obligations are in [PROTOCOL.md](./guides/PROTOCOL.md) and
 [GO-PARITY.md](./guides/GO-PARITY.md).
 
 ## Pipelines
 
-Three GitHub Actions workflows run the same Make targets as local work. The
-diagram is the full workflow's job graph; all three workflows are described
-below it.
+The three validation workflows run the same Make targets as local work. The
+diagram is the full workflow's job graph, merge jobs included; all three
+workflows are described below it.
 
 ```mermaid
 flowchart LR
@@ -229,12 +255,33 @@ flowchart LR
   EX["exploration<br/>make explore"]
   GE --> TSP["typescript-parity<br/>make formal-ts"] & GOP["go-parity<br/>make formal-go"] & RSP["rust-parity<br/>make formal-rust"] & PYP["python-parity<br/>make formal-python"]
   GE --> TSM["typescript-mutations, 6 shards<br/>make mutations-ts"] & GOM["go-mutations, 10 shards<br/>make mutations-go"] & RSM["rust-mutations, 3 shards<br/>make mutations-rust"]
-  CM & SY & EX & TSP & GOP & RSP & PYP & TSM & GOM & RSM --> AG["formal-full aggregate"]
+  TSM --> TSMM["typescript-mutations-merge<br/>make mutations-merge-ts"]
+  GOM --> GOMM["go-mutations-merge<br/>make mutations-merge-go"]
+  RSM --> RSMM["rust-mutations-merge<br/>make mutations-merge-rust"]
+  CM & SY & EX & TSP & GOP & RSP & PYP & TSMM & GOMM & RSMM --> AG["formal-full aggregate"]
 ```
 
-- **CI** ([ci.yaml](../.github/workflows/ci.yaml)) runs each language's native checks and real-server integration, the cross-language wire suite and the package floor. Its aggregate `test` job is the required check on `main`. A docs-only change clears it in a few minutes.
-- **Formal smoke** ([formal.yaml](../.github/workflows/formal.yaml)) runs `make audit smoke`: the ledgers and inventories, then the committed traces in all four ports. When [fixture-scope.mjs](../.github/scripts/fixture-scope.mjs) detects a changed Quint input, the job also recomputes every committed artifact with pinned Quint, and on a pull request four `differential` shards replay the composed profiles against the merge base. Any edit to a Quint source counts, including a comment. The shards are migration evidence, not a completion claim, and take up to about half an hour.
-- **Full formal verification** ([formal-full.yaml](../.github/workflows/formal-full.yaml)) runs weekly on `main` and on demand for any branch. The parity and mutation lanes wait only for `generate`; the aggregate requires every lane and keeps a summary artifact for 90 days. The scheduled run takes about two and a half hours.
+- **CI** ([ci.yaml](../.github/workflows/ci.yaml)) runs each language's native
+  checks and real-server integration, the cross-language wire suite and the
+  package floor. Its aggregate `test` job is the required check on `main`. A
+  docs-only change clears it in a few minutes.
+- **Formal smoke** ([formal.yaml](../.github/workflows/formal.yaml)) runs `make
+  audit smoke`: the ledgers and inventories, then the committed traces in all
+  four ports. When [fixture-scope.mjs](../.github/scripts/fixture-scope.mjs)
+  detects a changed Quint input, the job also recomputes every committed
+  artifact with pinned Quint. Any edit to a Quint source counts, including a
+  comment.
+- **Differential shards** (the same workflow, pull requests only) replay the
+  composed profiles against the merge base when a Quint input changed, four
+  shards in parallel. They show whether a rewrite preserved behavior; they are
+  not a completion claim. They take up to about half an hour.
+- **Full formal verification**
+  ([formal-full.yaml](../.github/workflows/formal-full.yaml)) runs weekly on
+  `main` and on demand for any branch. The parity and mutation lanes wait only
+  for `generate`, each mutation lane merges its shards, and the aggregate
+  requires every lane and keeps a summary artifact for 90 days. The scheduled
+  run takes about two and a half hours, and its wall clock is set by the
+  `check-models` job.
 
 The pull request lanes are fast checks. A behavior, model or replay change
 requires the full workflow on its branch before merge, and the PR body records

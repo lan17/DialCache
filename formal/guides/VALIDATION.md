@@ -8,36 +8,36 @@ made, are in [HISTORY.md](./HISTORY.md).
 
 ## Prerequisites
 
-Use Node 24, pnpm 10.33.0, Go 1.27.1, Rust/cargo 1.98.1 and Python 3.11 or
-later to match CI. Install dependencies with
-`corepack pnpm install --frozen-lockfile`; rustup reads the native Rust
-toolchain pin from `rust/rust-toolchain.toml`; create `python/.venv` and install
-`./python[test,redis]` into it, or point `PYTHON` at another prepared
-interpreter. Model work requires Quint 0.32.0 and its Rust evaluator 0.6.0
-(`npm install --global @informalsystems/quint@0.32.0`); the evaluator is
-separate from the native Rust port's compiler toolchain. `make formal` and
-`make explore` use the Rust evaluator and do not need Java.
-
-The separate `make model-check` target needs Java 21 and `tar`. Its standalone
-Apalache 0.56.1 runner downloads the versioned release, verifies the SHA-256 in
-[execution.json](../catalogs/execution.json), and extracts those verified bytes
-afresh. The archive is cached under `~/.cache/dialcache/apalache/0.56.1/`; for
-offline use, supply `APALACHE_ARCHIVE=/absolute/path/to/apalache-0.56.1.tgz`.
-Supplied archives must pass the same checksum check. `make ci` requires the same
-two tools; both are probed before any step runs, and a missing one fails with a
-setup message instead of a mid-run extraction error. Only the symbolic runner
-downloads its pinned solver archive.
-
-Real-server tests and the TypeScript and Go mutation campaigns require Docker.
-Each TypeScript or Go mutation shard starts a private Redis 6.2 server, replays
-all generated invalidation vectors against the production Lua, and removes its
-own container afterward. The Rust mutation campaign uses its separate native
-fault catalog without Docker. The package floor requires exact Node 22.15.0
-provided through `NODE22_BIN`. `make help` lists targets and prerequisites.
-
-Pinned acceptance clears inherited trace selectors and `QUINT_SEED`.
-Exploration keeps a separate source snapshot, seed, corpus and diagnostic
-replay evidence.
+- **Toolchains.** Node 24, pnpm 10.33.0, Go 1.27.1, Rust/cargo 1.98.1 and Python
+  3.11 or later match CI. Install dependencies with `corepack pnpm install
+  --frozen-lockfile`; rustup reads the native Rust toolchain pin from
+  `rust/rust-toolchain.toml`; create `python/.venv` and install
+  `./python[test,redis]` into it, or point `PYTHON` at another prepared
+  interpreter.
+- **Quint.** Model work requires Quint 0.32.0 and its Rust evaluator 0.6.0 (`npm
+  install --global @informalsystems/quint@0.32.0`); the evaluator is separate
+  from the native Rust port's compiler toolchain. `make formal` and `make
+  explore` use the Rust evaluator and do not need Java.
+- **Java and Apalache.** `make model-check` and `make ci` need Java 21 and
+  `tar`; both are probed before any step runs, and a missing one fails with a
+  setup message instead of a mid-run extraction error. The standalone Apalache
+  0.56.1 runner downloads the versioned release, verifies the SHA-256 in
+  [execution.json](../catalogs/execution.json), and extracts those verified
+  bytes afresh. The archive is cached under
+  `~/.cache/dialcache/apalache/0.56.1/`; for offline use,
+  `APALACHE_ARCHIVE=/absolute/path/to/apalache-0.56.1.tgz` supplies one, which
+  must pass the same checksum. Only the symbolic runner downloads its pinned
+  solver archive.
+- **Docker.** Real-server tests and the TypeScript and Go mutation campaigns
+  require it. Each TypeScript or Go mutation shard starts a private Redis 6.2
+  server, replays all generated invalidation vectors against the production Lua,
+  and removes its own container afterward. The Rust mutation campaign uses its
+  separate native fault catalog without Docker.
+- **Node 22.** The package floor requires exact Node 22.15.0 provided through
+  `NODE22_BIN`.
+- **Environment.** Pinned acceptance clears inherited trace selectors and
+  `QUINT_SEED`. Exploration keeps a separate source snapshot, seed, corpus and
+  diagnostic replay evidence. `make help` lists targets and prerequisites.
 
 ## Choosing a run
 
@@ -142,9 +142,12 @@ DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/regressions/shadow/confirmatio
 Core and effects histories use `DIALCACHE_MBT_TRACE_FILE` or
 `DIALCACHE_EFFECTS_TRACE_FILE` with their corresponding tests. Local-clock uses
 feature selectors with `typescript/test/formal-local-clock.test.ts` and the Go
-local-clock replay. The [walkthrough](./WALKTHROUGH.md#run-this-example) shows
-one history replayed in TypeScript, Go and Rust, including Rust's
-feature-history selectors.
+local-clock replay, `TestLocalClockConformance` in
+`go/local_clock_profile_test.go`. Python replays one history with
+`python/.venv/bin/python python/tests/run_conformance.py --profile <profile>
+--trace <path>`. The [walkthrough](./WALKTHROUGH.md#run-this-example) shows one
+history replayed in TypeScript, Go and Rust, including Rust's feature-history
+selectors.
 
 ## Mutation evidence
 
