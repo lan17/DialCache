@@ -1,0 +1,128 @@
+# 13. Catalogs and ledgers (10 min)
+
+**What you get:** what the JSON files under `formal/catalogs/` are for, which
+one fires after which kind of edit, and how a ledger is re-keyed only after a
+review.
+
+## The idea
+
+A reader learns a rule from the Quint and the guides, never from a catalog.
+The catalogs exist so that review state is checkable: a tool can say "this
+inventory is complete", "this claim rests on these exact inputs", "this guide
+changed since it was reviewed". They come in three kinds.
+
+**Manifests** schedule the work. [execution.json](../../catalogs/execution.json)
+lists every model with its invariants, bounds and trace paths, and carries the
+challenge catalog from lesson 11. [profiles.json](../../catalogs/profiles.json)
+registers each profile with its version, input encoding, smoke trace and the
+ports that claim it. Both are edited by hand and validated on every run; what
+can be read from the Quint text (the runs, the libraries) is deliberately not
+listed, so it cannot drift.
+
+**Evidence catalogs** connect cases to proof. `semantic-cases.json` gives
+every behavioral case its scenarios, witnesses and scoped Quint citations;
+`coverage-witnesses.json` names the required labels (lesson 10);
+`mutations.json` holds the native mutants (lesson 11); `fixture-recipes.json`
+says how each smoke trace is produced (lesson 6). A citation here is checked
+for existence and scheduling, not for meaning: the `scope` text on each
+citation is the reviewer's judgment, written down.
+
+**Ledgers** record review, keyed by content. A
+[ledger](../GLOSSARY.md#ledger) stores a fingerprint of what was reviewed, so
+a later edit fails the check until someone reviews again and re-keys it.
+[source-audit.json](../../catalogs/source-audit.json) covers two inventories:
+`sources` (the README, the `docs/` pages and the ordinary TypeScript tests,
+each heading or test title with its contract dispositions) and
+`reviewedGuides` (every guide under `formal/guides/`, `formal/README.md` and
+`go/README.md`, each with a content hash, its heading list, and a review
+record of kind and scope). [go-parity.json](../../catalogs/go-parity.json)
+pins the inputs the Go parity claim rests on: catalog digests, a digest of the
+audit's dispositions and review records, counts of models, regressions and
+exported histories, and reviewed TypeScript-to-Go source mappings.
+
+Re-keying is a command, `check-source-audit.mjs --refresh <path>`, and the
+rule around it is the whole point: run it after reading the changed prose or
+assertions, never to make the check pass. It recomputes the hash and the
+heading inventory, carries each disposition to the entry with the same title,
+and leaves a new heading empty so the check keeps failing until a reviewer
+fills it in. `check-go-parity.mjs --refresh-inputs` re-pins the digests the
+parity ledger reads; its hand-maintained counts and source mappings stay as
+they are until a reviewer changes them.
+
+Baselines are the third ledger kind: the lint baseline, the witness baseline
+and the style allowlist can only tighten. Each records a count that may fall
+and must never rise without a reviewed `--write`.
+
+This course lives under `formal/guides/course/`, which the guide inventory
+does not scan: these lessons are navigation and exercises, and `source-audit.json`
+does not need an entry for them.
+
+## See it in the repo
+
+- **[../../catalogs/README.md](../../catalogs/README.md)**: one line per
+  file: purpose, the check that validates it, how it changes.
+- **[source-audit.json](../../catalogs/source-audit.json)**: find the
+  `reviewedGuides` entry for `formal/guides/WALKTHROUGH.md`: `sha256`, five
+  `entries` (its headings), and `review.kind` / `review.scope`.
+- **[go-parity.json](../../catalogs/go-parity.json)**: the `inventory`
+  object, including `scheduledRegressions` and `exportedRegressionHistories`;
+  lesson 17 shows what moves them.
+- **[../TEST-AUDIT.md](../TEST-AUDIT.md#keeping-the-audit-current)**, "Keeping
+  the audit current" and
+  "[Formal and Go guide review](../TEST-AUDIT.md#formal-and-go-guide-review)":
+  the review rule and what reaches the parity ledger (a changed disposition or
+  review record does; a prose edit that keeps its headings does not).
+- **[../GO-PARITY.md](../GO-PARITY.md#reading-and-updating-the-ledger)**,
+  "Reading and updating the ledger".
+
+## Try it (4 min)
+
+You will edit a tracked guide and undo it at the end.
+
+1. Check the ledger on a clean tree:
+
+   ```sh
+   node formal/tools/check-source-audit.mjs
+   ```
+
+   You should see `{ sources: 50, tests: 564, sections: 215, reviewedGuides: 19, guideSections: 186 }`.
+
+2. Add a heading to a reviewed guide and check again:
+
+   ```sh
+   printf '\n## A heading I just added\n\nScratch.\n' >> formal/guides/WALKTHROUGH.md
+   node formal/tools/check-source-audit.mjs
+   ```
+
+   You should see the check fail with
+   `formal/guides/WALKTHROUGH.md: contents changed; review assertions/prose and refresh its audit`
+   and `formal/guides/WALKTHROUGH.md: guide section inventory changed`.
+
+3. Re-key that one file, as a reviewer would after reading the change:
+
+   ```sh
+   node formal/tools/check-source-audit.mjs --refresh formal/guides/WALKTHROUGH.md
+   ```
+
+   You should see `formal/guides/WALKTHROUGH.md: refreshed, 6 entries` and
+   `guideSections: 187`. Now `git diff --stat` shows two files: the guide and
+   the ledger. The parity ledger did not move; run
+   `node formal/tools/check-go-parity.mjs` and it still passes, because a
+   heading is not a disposition and the review record is unchanged.
+
+4. Undo both:
+
+   ```sh
+   git checkout -- formal/guides/WALKTHROUGH.md formal/catalogs/source-audit.json
+   ```
+
+## Recap
+
+- **Manifests schedule, evidence catalogs connect, ledgers record review;**
+  none of them is where a rule is learned.
+- **A ledger is keyed by content,** so an edit fails the check until a
+  reviewer re-keys it with `--refresh`, after reading, never to silence it.
+- **Baselines only tighten,** and what reaches the parity ledger is a changed
+  disposition or review record, not prose.
+
+**Next:** [14. CI lanes and running things locally](./14-lanes-and-local-runs.md)
