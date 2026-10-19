@@ -101,7 +101,7 @@ Rust evaluator, the simulator inside Quint, not the Rust port.
 for every model, at least one deliberate single-site fault that a named
 invariant must catch, with a reproducer that fails only under the fault.
 `lint-profiles.mjs` checks three rules over the parsed Quint, first that a
-composed profile assigns state only through kernel transitions, and fails when a
+composed profile assigns state only through kernel transitions. It fails when a
 profile's composition-violation count differs from its recorded baseline: a rise
 is a regression, and a fall is recorded with `--write`. Together these are `make
 formal-check`, the Quint evidence [lane](./guides/GLOSSARY.md#lane). Separately,

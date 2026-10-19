@@ -1084,7 +1084,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "1862b47c94c21bc918f327ff0da1ef1cff280b84e40ebd880b6e331c52aba849",
+      "sha256": "a8d0e85c55e9d219649cdfbe3d10e74eaf75bef603e05bc016d19b43f84136b1",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
