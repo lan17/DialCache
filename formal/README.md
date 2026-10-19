@@ -204,15 +204,15 @@ section is recorded as covering, and is refreshed with `check-source-audit.mjs
 the Go parity claim rests on and is re-pinned with `check-go-parity.mjs
 --refresh-inputs`.
 
-Two baselines ratchet: the lint baseline fails when a profile's
-composition-violation count differs from the recorded one (a fall is recorded
-with `--write`), and the style allowlist fails when a listed file becomes clean.
-The witness baseline is the tolerance gate of stage 3, not a ratchet. `make
-audit` runs the two ledger checks with the coverage inventories, the freshness
-checks of the committed fixtures and of the generated read views (PROFILES.md
-and the two indexes), and the Quint style caps. The lint baseline runs in `make
-formal-check` and `make differential`, and the witness gate in `make
-formal-generate`.
+Two baselines ratchet. The lint baseline fails when a profile's
+composition-violation count differs from the recorded one, and a fall is
+recorded with `--write`. The style allowlist fails when a listed file becomes
+clean. The witness baseline is the tolerance gate of stage 3, not a ratchet.
+`make audit` runs the two ledger checks with the coverage inventories, the
+freshness checks of the committed fixtures and of the generated read views
+(PROFILES.md and the two indexes), and the Quint style caps. The lint baseline
+runs in `make formal-check` and `make differential`, and the witness gate in
+`make formal-generate`.
 
 The [differential](./guides/GLOSSARY.md#differential) guards the composed
 profiles, every profile except core. `make differential` generates each
