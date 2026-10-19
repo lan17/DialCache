@@ -102,7 +102,8 @@ for every model, at least one deliberate single-site fault that a named
 invariant must catch, with a reproducer that fails only under the fault.
 `lint-profiles.mjs` checks three rules over the parsed Quint, first that a
 composed profile assigns state only through kernel transitions, and fails when a
-profile's exceptions rise above its recorded baseline. Together these are `make
+profile's composition-violation count differs from its recorded baseline: a rise
+is a regression, and a fall is recorded with `--write`. Together these are `make
 formal-check`, the Quint evidence [lane](./guides/GLOSSARY.md#lane). Separately,
 `make model-check` proves the finite boundary rules in
 [dialcache-rule-checks.qnt](./models/dialcache-rule-checks.qnt) with Apalache, a
@@ -118,12 +119,12 @@ for writing one.
 Generation turns the models into the histories every port will replay. `make
 formal-generate` runs `run-models.mjs generate`, which writes the sampled corpus
 and the exported regressions under `.formal-traces/`; that directory is never
-committed. It then recomputes the committed smoke, witness and wire artifacts
-and fails on any difference. Next it runs `witnesses.mjs`, which checks that the
-corpus reaches every required
-[witness](./guides/GLOSSARY.md#witness-label-and-classifier) label in
-[coverage-witnesses.json](./catalogs/coverage-witnesses.json). A label recorded
-at ten or more sampled hits in
+committed. The same step recomputes the four wire vector files, and the next
+recomputes the committed smoke and witness fixtures; either fails on any
+difference. Next it runs `witnesses.mjs`, which checks that the corpus reaches
+every required [witness](./guides/GLOSSARY.md#witness-label-and-classifier)
+label in [coverage-witnesses.json](./catalogs/coverage-witnesses.json). A label
+recorded at ten or more sampled hits in
 [witness-baseline.json](./catalogs/witness-baseline.json) fails the run when the
 corpus reaches it fewer than half as often; an exploration seed gets a
 statistical allowance. That step writes the per-profile witness evidence under
@@ -203,12 +204,13 @@ section is recorded as covering, and is refreshed with `check-source-audit.mjs
 the Go parity claim rests on and is re-pinned with `check-go-parity.mjs
 --refresh-inputs`.
 
-Two baselines ratchet: the lint baseline fails when a profile's exception count
-rises, and the style allowlist fails when a listed file becomes clean. The
-witness baseline is the tolerance gate of stage 3, not a ratchet. `make audit`
-runs the two ledger checks with the coverage inventories, the freshness checks
-of the committed fixtures and of the generated read views (PROFILES.md and the
-two indexes), and the Quint style caps. The lint baseline runs in `make
+Two baselines ratchet: the lint baseline fails when a profile's
+composition-violation count differs from the recorded one (a fall is recorded
+with `--write`), and the style allowlist fails when a listed file becomes clean.
+The witness baseline is the tolerance gate of stage 3, not a ratchet. `make
+audit` runs the two ledger checks with the coverage inventories, the freshness
+checks of the committed fixtures and of the generated read views (PROFILES.md
+and the two indexes), and the Quint style caps. The lint baseline runs in `make
 formal-check` and `make differential`, and the witness gate in `make
 formal-generate`.
 
@@ -258,7 +260,7 @@ flowchart LR
   TSM --> TSMM["typescript-mutations-merge<br/>make mutations-merge-ts"]
   GOM --> GOMM["go-mutations-merge<br/>make mutations-merge-go"]
   RSM --> RSMM["rust-mutations-merge<br/>make mutations-merge-rust"]
-  CM & SY & EX & TSP & GOP & RSP & PYP & TSMM & GOMM & RSMM --> AG["formal-full aggregate"]
+  CM & GE & SY & EX & TSP & GOP & RSP & PYP & TSMM & GOMM & RSMM --> AG["formal-full aggregate"]
 ```
 
 - **CI** ([ci.yaml](../.github/workflows/ci.yaml)) runs each language's native
