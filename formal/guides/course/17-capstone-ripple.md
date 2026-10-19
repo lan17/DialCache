@@ -44,17 +44,18 @@ ports.
 ## See it in the repo
 
 - **[generated-fixtures.mjs](../../tools/generated-fixtures.mjs)**: the
-  `--verify` mode the audit lane runs (lesson 14, `validation.mjs` line 197)
-  and the `--write` path behind `generate-artifacts.mjs`.
-- **[../../generated/README.md](../../generated/README.md)**: the two
-  regeneration commands and the rule "never edit a file in this directory".
-- **[check-go-parity.mjs](../../tools/check-go-parity.mjs)**, lines 145 to
-  146: the two count checks, computed from the models' runs and the exported
-  replays.
-- **[../AUTHORING.md](../AUTHORING.md#maintaining-case-and-witness-evidence)**,
-  "Maintaining case and witness evidence": how a run is cited from a case.
-- **[../VALIDATION.md](../VALIDATION.md#choosing-a-run)**: which runs a
-  behavior change needs before merge.
+  `--verify` mode the audit lane runs
+  ([validation.mjs](../../tools/validation.mjs) line 197, `--verify`) and the
+  `--write` path behind `generate-artifacts.mjs`. -
+  **[../../generated/README.md](../../generated/README.md)**: the two
+  regeneration commands and the rule "never edit a file in this directory". -
+  **[check-go-parity.mjs](../../tools/check-go-parity.mjs)**, lines 145 to 146:
+  the two count checks (`scheduledRegressions`, `exportedRegressionHistories`),
+  computed from the models' runs and the exported replays. -
+  **[../AUTHORING.md](../AUTHORING.md#maintaining-case-and-witness-evidence)**,
+  "Maintaining case and witness evidence": how a run is cited from a case. -
+  **[../VALIDATION.md](../VALIDATION.md#choosing-a-run)**: which runs a behavior
+  change needs before merge.
 
 ## Try it (6 min)
 

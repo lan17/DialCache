@@ -100,3 +100,22 @@ does not restate the guides: when a guide explains something best, a lesson
 quotes at most a sentence and links. The guides themselves are indexed in
 [../README.md](../README.md) by kind and in [../../README.md](../../README.md)
 by task; terms are defined in [../GLOSSARY.md](../GLOSSARY.md).
+
+## How the course stays current
+
+Lessons point at exact lines and quote command output, and both drift as the
+tree changes. `make audit` runs [check-course.mjs](../../tools/check-course.mjs)
+so the drift is caught, not discovered by a learner:
+
+- **A line citation names its file and a symbol.** Write `lines 65 to 86` (or
+  `line 141`) after a link to the file in the same bullet or paragraph, or make
+  the citation itself the link, and put a backticked symbol from those lines in
+  the same clause or just before the citation. The check fails when the symbol
+  is no longer on those lines; fix the citation, then reread the lesson, since
+  the code may have moved for a reason the lesson should mention.
+- **A quoted count comes from the inventory.** Quote a number only in the form
+  `"regressions": 468` that `node formal/tools/execution.mjs` prints; the check
+  compares it with today's inventory. When an exercise changes a count, say so
+  in words rather than quoting the new number.
+- **The course is outside the review ledger on purpose.** The lessons are
+  didactic, not normative; the guides they link to are the reviewed text.

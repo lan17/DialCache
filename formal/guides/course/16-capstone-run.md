@@ -48,15 +48,16 @@ every port.
 
 ## See it in the repo
 
-- **[dialcache-source-budgets-conformance.qnt](../../models/dialcache-source-budgets-conformance.qnt)**,
+-
+  **[dialcache-source-budgets-conformance.qnt](../../models/dialcache-source-budgets-conformance.qnt)**,
   lines 256 to 260: `abandonedSourceCannotReplaceSuccessfulRetryTest`, the
-  nearest existing run; compare its shape with the new one.
-- **[conformance-observations.qnt](../../models/conformance-observations.qnt)**,
-  lines 8 to 17: the caller outcome codes.
-- **[deadlines.qnt](../../models/kernel/deadlines.qnt)**, lines 181 to 197:
+  nearest existing run; compare its shape with the new one. -
+  **[conformance-observations.qnt](../../models/conformance-observations.qnt)**,
+  lines 8 to 17: the caller outcome codes, `CALL_PENDING` first. -
+  **[deadlines.qnt](../../models/kernel/deadlines.qnt)**, lines 181 to 197:
   `releaseLocal` stamps the retry's deadline from `state.now`; `advanceLocal`
-  delivers it.
-- **[../AUTHORING.md](../AUTHORING.md#exporting-a-deterministic-regression)**,
+  delivers it. -
+  **[../AUTHORING.md](../AUTHORING.md#exporting-a-deterministic-regression)**,
   "Exporting a deterministic regression": the rules a run must meet to be
   exported.
 
@@ -108,8 +109,8 @@ You will edit a tracked model; part 3 undoes it.
    node formal/tools/execution.mjs | head -8
    ```
 
-   You should see `"regressions": 469` and `"exportedRegressionTraces": 359`,
-   one more each than the 468 and 358 on a clean tree.
+You should see `regressions` and `exportedRegressionTraces` each one higher than
+   the clean tree printed in lesson 2.
 
 Leave the edit in place for part 3.
 

@@ -15,10 +15,10 @@ protocol over its stdin and stdout.
 
 | Duty | Go | Rust | Python |
 | --- | --- | --- | --- |
-| Apply a command | `behaviorDriver.apply`, [behavior_driver_test.go](../../../go/behavior_driver_test.go) line 671 | `Driver::apply`, [driver.rs](../../../rust/tests/formal/driver.rs) line 497, with `begin` at 759 | `BehaviorDriver.apply`, [driver.py](../../../python/tests/formal/driver.py) line 405, with `begin` at 327 |
-| Settle | `settle`, line 543 | `settle`, line 711 | `settle`, line 522 |
-| Report | `observation` 519, `receipt` 528 | `observation` 1002, `receipt` 1006 | `observe` 531, `receipt` 534 |
-| Transport | `replayCoordinator` in [replay_coordinator_test.go](../../../go/replay_coordinator_test.go): `prepare` 183, `replay` 234 | `Coordinator` in [transport.rs](../../../rust/tests/formal/transport.rs): `spawn` 96, `call` 187, `prepare` 253 | `Coordinator` in [coordinator.py](../../../python/tests/formal/coordinator.py): `request` 31, `replay` 53 |
+| Apply a command | `behaviorDriver`'s `apply` at [line 671](../../../go/behavior_driver_test.go) | `Driver`'s `apply` at [line 497](../../../rust/tests/formal/driver.rs), `begin` at [line 759](../../../rust/tests/formal/driver.rs) | `BehaviorDriver`'s `apply` at [line 405](../../../python/tests/formal/driver.py), `begin` at [line 327](../../../python/tests/formal/driver.py) |
+| Settle | `settle` at [line 543](../../../go/behavior_driver_test.go) | `settle` at [line 711](../../../rust/tests/formal/driver.rs) | `settle` at [line 522](../../../python/tests/formal/driver.py) |
+| Report | `observation` at [line 519](../../../go/behavior_driver_test.go), `receipt` at [line 528](../../../go/behavior_driver_test.go) | `observation` at [line 1002](../../../rust/tests/formal/driver.rs), `receipt` at [line 1006](../../../rust/tests/formal/driver.rs) | `observe` at [line 531](../../../python/tests/formal/driver.py), `receipt` at [line 534](../../../python/tests/formal/driver.py) |
+| Transport | `replayCoordinator` in [replay_coordinator_test.go](../../../go/replay_coordinator_test.go): `prepare` at [line 183](../../../go/replay_coordinator_test.go), `replay` at [line 234](../../../go/replay_coordinator_test.go) | `Coordinator` in [transport.rs](../../../rust/tests/formal/transport.rs): `spawn` at [line 96](../../../rust/tests/formal/transport.rs), `call` at [line 187](../../../rust/tests/formal/transport.rs), `prepare` at [line 253](../../../rust/tests/formal/transport.rs) | `Coordinator` in [coordinator.py](../../../python/tests/formal/coordinator.py): `request` at [line 31](../../../python/tests/formal/coordinator.py), `replay` at [line 53](../../../python/tests/formal/coordinator.py) |
 
 The transports share three habits. Request ids strictly increase for the life
 of the child process. Each observation and receipt is validated locally
@@ -48,19 +48,20 @@ profile with `DIALCACHE_PYTHON_PROFILE`.
 
 ## See it in the repo
 
-- **Go:** [behavior_driver_test.go](../../../go/behavior_driver_test.go) lines
-  1 to 4, the same no-prediction rule as TypeScript; `apply` from line 671
-  (`begin` builds a real `Operation` and calls `GetOrLoad`).
+- **Go:** [behavior_driver_test.go](../../../go/behavior_driver_test.go) lines 1
+  to 4, the same no-prediction rule as TypeScript (`model expectation`); `apply`
+  from line 671 (`begin` builds a real `Operation` and calls `GetOrLoad`).
   [feature_replay_test.go](../../../go/feature_replay_test.go),
-  `TestFeatureConformance`: the selectors and the per-profile coordinator.
-- **Rust:** [conformance.rs](../../../rust/tests/conformance.rs), header lines
-  1 to 10: what the harness replays with and without selectors and the
-  `DIALCACHE_RUST_SUITE` switch. [transport.rs](../../../rust/tests/formal/transport.rs),
-  lines 1 to 13: the Node 24 requirement.
-- **Python:** [test_conformance.py](../../../python/tests/test_conformance.py),
-  lines 13 to 29: `test_profile_smoke` over every registered profile, or the
-  one named by `DIALCACHE_PYTHON_PROFILE`.
-- **[../PORTING.md](../PORTING.md#what-a-port-supplies)**, "What a port
+  `TestFeatureConformance`: the selectors and the per-profile coordinator. -
+  **Rust:** [conformance.rs](../../../rust/tests/conformance.rs), header lines 1
+  to 10: what the harness replays with and without selectors and the
+  `DIALCACHE_RUST_SUITE` switch.
+  [transport.rs](../../../rust/tests/formal/transport.rs), lines 1 to 13: the
+  `Node 24` requirement. - **Python:**
+  [test_conformance.py](../../../python/tests/test_conformance.py), lines 13 to
+  29: `test_profile_smoke` over every registered profile, or the one named by
+  `DIALCACHE_PYTHON_PROFILE`. -
+  **[../PORTING.md](../PORTING.md#what-a-port-supplies)**, "What a port
   supplies": the driver operations table, with the settlement row.
 
 ## Try it (4 min, pick one port or all three)

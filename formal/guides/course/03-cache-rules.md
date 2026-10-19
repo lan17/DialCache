@@ -57,20 +57,20 @@ driver commands.
 
 ## See it in the repo
 
-- **[cache-rules.qnt](../../models/cache-rules.qnt)**, lines 22 to 29: fresh
-  and recovery age (`created <= observed and observed - created < ceiling`,
-  so a future-stamped frame is rejected). Lines 43 to 49: local expiry and the
-  whole-millisecond grid. Lines 51 to 56: the deadline. Lines 58 to 64: the
-  fence, and `readFenceAllows`, which lets untracked reads ignore the
-  watermark.
-- **[dialcache-rule-checks.qnt](../../models/dialcache-rule-checks.qnt)**,
-  lines 42 to 49: the seven boundary invariants. Lines 51 to 54:
-  `exactBoundariesRejectTest`, one state where every boundary sits exactly on
-  its edge and every judgment says no.
-- **[../SPEC.md](../SPEC.md#definition-ownership-and-executable-connections)**,
+- **[cache-rules.qnt](../../models/cache-rules.qnt)**, lines 22 to 29: fresh and
+  recovery age (`created <= observed and observed - created < ceiling`, so a
+  future-stamped frame is rejected). Lines 43 to 49: local expiry
+  (`localEntryLiveAt`) and the whole-millisecond grid. Lines 51 to 56: the
+  deadline (`deadlinePendingAt`). Lines 58 to 64: the fence, and
+  `readFenceAllows`, which lets untracked reads ignore the watermark. -
+  **[dialcache-rule-checks.qnt](../../models/dialcache-rule-checks.qnt)**, lines
+  42 to 49: the seven boundary invariants, from `freshBoundaryIsExclusive` on.
+  Lines 51 to 54: `exactBoundariesRejectTest`, one state where every boundary
+  sits exactly on its edge and every judgment says no. -
+  **[../SPEC.md](../SPEC.md#definition-ownership-and-executable-connections)**,
   "Definition ownership and executable connections": which file owns which
-  decision, and why boundary assertions "state inequalities directly".
-- **[../../models/README.md](../../models/README.md)**: the shared helpers and
+  decision, and why boundary assertions "state inequalities directly". -
+  **[../../models/README.md](../../models/README.md)**: the shared helpers and
   the verification models, one line each.
 
 ## Try it (4 min)

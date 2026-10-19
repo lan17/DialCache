@@ -54,20 +54,22 @@ labels are in that state.
 ## See it in the repo
 
 - **[witnesses/source-budgets.mjs](../../replay/witnesses/source-budgets.mjs)**,
-  lines 9 to 45: the seven rules, one per required label; lines 29 to 33 are
-  the rule above.
-- **[witnesses/public-prefix.mjs](../../replay/witnesses/public-prefix.mjs)**,
+  lines 9 to 45: `sourceBudgetsWitnessRules`, the seven rules, one per required
+  label; lines 29 to 33 are the rule above,
+  `policy-wait-does-not-spend-source-budget`. -
+  **[witnesses/public-prefix.mjs](../../replay/witnesses/public-prefix.mjs)**,
   lines 15 to 41: the evaluator for such rules, reading `input` and `s.o` only.
-- **[witnesses/index.mjs](../../replay/witnesses/index.mjs)**, lines 64 to 85:
-  which classifier runs for which profile; lines 131 to 141, `checkCorpus`,
-  the completion gate: every required label and every declared action must be
-  reached.
-- **[coverage-witnesses.json](../../catalogs/coverage-witnesses.json)**, key
-  `source-budgets`: the seven required labels.
-- **[../PORTING.md](../PORTING.md#witness-evidence)**, "Witness evidence": the
-  evidence file fields and the baseline rules.
-- **[../SEMANTIC-COVERAGE.md](../SEMANTIC-COVERAGE.md#generated-boundary-evidence)**,
-  "Generated boundary evidence": what a witness establishes and what it does not.
+  - **[witnesses/index.mjs](../../replay/witnesses/index.mjs)**, lines 64 to 85:
+  `evaluateCorpus`, which classifier runs for which profile; lines 131 to 141,
+  `checkCorpus`, the completion gate: every required label and every declared
+  action must be reached. -
+  **[coverage-witnesses.json](../../catalogs/coverage-witnesses.json)**, key
+  `source-budgets`: the seven required labels. -
+  **[../PORTING.md](../PORTING.md#witness-evidence)**, "Witness evidence": the
+  evidence file fields and the baseline rules. -
+  **[../SEMANTIC-COVERAGE.md](../SEMANTIC-COVERAGE.md#generated-boundary-evidence)**,
+  "Generated boundary evidence": what a witness establishes and what it does
+  not.
 
 ## Try it (3 min)
 

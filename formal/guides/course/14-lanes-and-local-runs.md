@@ -49,22 +49,21 @@ so the step name tells you which lesson's check fired.
 
 ## See it in the repo
 
-- **[formal.yaml](../../../.github/workflows/formal.yaml)**, lines 15 to 40:
-  the `quint` job (`make audit smoke`, conditional `make fixtures-check`);
-  lines 62 to 90: the `differential` job on pull requests.
-- **[formal-full.yaml](../../../.github/workflows/formal-full.yaml)**: the job
+- **[formal.yaml](../../../.github/workflows/formal.yaml)**, lines 15 to 40: the
+  `quint` job (`make audit smoke`, conditional `make fixtures-check`); lines 62
+  to 90: the `differential` job on pull requests. -
+  **[formal-full.yaml](../../../.github/workflows/formal-full.yaml)**: the job
   list (`exploration`, `check-models`, `generate`, the four parity jobs,
-  `symbolic`, the three mutation lanes with their merge jobs, `formal-full`)
-  and the `timeout-minutes` budget on each.
-- **[validation.mjs](../../tools/validation.mjs)**, lines 11 to 12: `check`
-  and `formal` as lists of other targets; line 195: the five checks of
-  `audit`; lines 197 to 200: its fixture, style, read-view and scope steps;
-  line 201: `smoke`; line 211: `formal-check`.
-- **[../VALIDATION.md](../VALIDATION.md#choosing-a-run)**, "Choosing a run":
-  the task-to-command table, and the rest of the page for reading a completion
-  report and a mutation report.
-- **[../../README.md](../../README.md)**: the "Run it" command list with one
-  line per target.
+  `symbolic`, the three mutation lanes with their merge jobs, `formal-full`) and
+  the `timeout-minutes` budget on each. -
+  **[validation.mjs](../../tools/validation.mjs)**, lines 11 to 12: `check` and
+  `formal` as lists of other targets; line 195: the five checks of `audit`;
+  lines 197 to 201: its fixture, style (`check-style.mjs`), course, read-view
+  and scope steps; line 202: `smoke`; line 212: `formal-check`. -
+  **[../VALIDATION.md](../VALIDATION.md#choosing-a-run)**, "Choosing a run": the
+  task-to-command table, and the rest of the page for reading a completion
+  report and a mutation report. - **[../../README.md](../../README.md)**: the
+  "Run it" command list with one line per target.
 
 ## Try it (3 min, plus an optional 1 min)
 

@@ -16,26 +16,32 @@ and three source budgets (the 60 s default, unbounded, and a finite 10 ms).
 
 Read it in the order the file is written.
 
-**The header** (lines 10 to 19) states the contracts (C01, C23 to C27), what
-is in scope and what is deliberately out (remote I/O, request memo, shadow
-work). A profile bounds callers, keys, capacities and time on purpose; the
-header says so.
+**The header** ([lines 10 to
+19](../../models/dialcache-source-budgets-conformance.qnt)) states the contracts
+(`C01`, `C23` to `C27`), what is in scope and what is deliberately out (remote
+I/O, request memo, shadow work). A profile bounds callers, keys, capacities and
+time on purpose; the header says so.
 
-**The codes** (lines 21 to 38) are integers the drivers decode:
-`FINITE_BUDGET_MODE = 2`, `ENABLED = 0`, `OUTSIDE = 1`. They are part of the
-replay contract, so the comment says "keep these codes stable". The `LAYOUT`
-record tells the kernel the geometry: one key per instance, no persistent
-request contexts, a policy provider installed.
+**The codes** ([lines 21 to
+38](../../models/dialcache-source-budgets-conformance.qnt)) are integers the
+drivers decode: `FINITE_BUDGET_MODE = 2`, `ENABLED = 0`, `OUTSIDE = 1`. They are
+part of the replay contract, so the comment says "keep these codes stable". The
+`LAYOUT` record tells the kernel the geometry: one key per instance, no
+persistent request contexts, a policy provider installed.
 
-**The state** (lines 43 to 69) is one flat record, `s`, whose fields are
-exactly what the composed kernel shapes need, plus `var input: { name: str,
-choice: int }`. The comment at line 66 draws the line that matters most:
-`s.o` is the public observation a driver is compared against; the rest
-(`owners`, `processFlights`, `localValues`) is model-owned prediction a
+**The state** ([lines 43 to
+69](../../models/dialcache-source-budgets-conformance.qnt)) is one flat record,
+`var s`, whose fields are exactly what the composed kernel shapes need, plus
+`var input: { name: str, choice: int }`. The comment at [line
+66](../../models/dialcache-source-budgets-conformance.qnt) draws the line that
+matters most: `s.o` is the public observation a driver is compared against; the
+rest (`owners`, `processFlights`, `localValues`) is model-owned prediction a
 driver may never read.
 
-**The actions** (lines 116 to 158) come in pairs. The parameterized one is
-the rule; the public one picks an input:
+**The actions** ([lines 116 to
+158](../../models/dialcache-source-budgets-conformance.qnt)) come in pairs,
+`beginCall` and its public `begin` among them. The parameterized one is the
+rule; the public one picks an input:
 
 ```quint
 action begin(kind: int): bool = all {
@@ -54,16 +60,21 @@ infer what happened from changed cache state. The `advance` choices,
 `Set(1, 3, 6, 9, 10, 100, 59999, 60001)`, are chosen so that random histories
 can land exactly on the 10 ms budget, the 60 s default and the 1 s local TTL.
 
-**The invariants** (lines 160 to 213) are stated independently of the kernel
-transitions they check. `acceptedSourceRespectsItsOwnStart` compares each
-accepted source's recorded settlement instant with its recorded start and
-budget, restating the inequality itself instead of asking the deadline module
-whether the source was still pending.
+**The invariants** ([lines 160 to
+213](../../models/dialcache-source-budgets-conformance.qnt)) are stated
+independently of the kernel transitions they check;
+`acceptedSourceRespectsItsOwnStart`, for one, compares each accepted source's
+recorded settlement instant with its recorded start and budget, restating the
+inequality itself instead of asking the deadline module whether the source was
+still pending.
 
-**The runs** (lines 215 to 305) are the exported regressions. Lesson 1's rule
-is `heldPolicyDoesNotSpendSourceBudgetTest` at line 242: hold the policy for
-100 ms, release, take 9 of the 10 ms budget, and expect `VALUE_ONE` served
-twice from one loader.
+**The runs** ([lines 215 to
+305](../../models/dialcache-source-budgets-conformance.qnt)) are the exported
+regressions, each a `run` whose name ends in `Test`. Lesson 1's rule is
+`heldPolicyDoesNotSpendSourceBudgetTest` at [line
+242](../../models/dialcache-source-budgets-conformance.qnt): hold the policy for
+100 ms, release, take 9 of the 10 ms budget, and expect `VALUE_ONE` served twice
+from one loader.
 
 One more model watches this one. A
 [connection model](../GLOSSARY.md#connection-model),

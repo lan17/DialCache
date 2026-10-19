@@ -63,19 +63,20 @@ other claim is sampled or replayed.
 
 ## See it in the repo
 
-- **[dialcache-conformance.qnt](../../models/dialcache-conformance.qnt)**,
-  lines 17 to 36: `State`, `var s`, `var input`. Lines 90 to 102: `localCall`.
-  Lines 164 to 173: `step`. Lines 195 to 199: the invariant
-  `servedLayerValueMatchesCache`, stated over the `input` record. Lines 201
-  to 220: the five runs.
-- **[../AUTHORING.md](../AUTHORING.md#reading-a-model)**, "Reading a model":
-  the reading order (scope, types, predicates, transitions, `step`,
-  invariants, runs) and the three kinds of information to keep apart:
-  environment inputs, DialCache ownership and recorded observations.
-- **[../GLOSSARY.md](../GLOSSARY.md#verification-model)**: a
-  [verification model](../GLOSSARY.md#verification-model) is model-checked
-  and never replayed; a [profile](../GLOSSARY.md#profile-conformance-profile)
-  is replayed by every port. The core profile is the simplest profile.
+- **[dialcache-conformance.qnt](../../models/dialcache-conformance.qnt)**, lines
+  17 to 36: `State`, `var s`, `var input`. Lines 90 to 102: `localCall`. Lines
+  164 to 173: `step`. Lines 195 to 199: the invariant
+  `servedLayerValueMatchesCache`, stated over the `input` record. Lines 201 to
+  220: the five runs, starting with
+  `disabledAndRequestCallsKeepTheirOwnLifetimesTest`. -
+  **[../AUTHORING.md](../AUTHORING.md#reading-a-model)**, "Reading a model": the
+  reading order (scope, types, predicates, transitions, `step`, invariants,
+  runs) and the three kinds of information to keep apart: environment inputs,
+  DialCache ownership and recorded observations. -
+  **[../GLOSSARY.md](../GLOSSARY.md#verification-model)**: a [verification
+  model](../GLOSSARY.md#verification-model) is model-checked and never replayed;
+  a [profile](../GLOSSARY.md#profile-conformance-profile) is replayed by every
+  port. The core profile is the simplest profile.
 
 ## Try it (4 min)
 

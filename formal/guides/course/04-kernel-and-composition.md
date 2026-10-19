@@ -57,23 +57,23 @@ built only to reach those [seams](../GLOSSARY.md#seam).
 
 ## See it in the repo
 
-- **[kernel/README.md](../../models/kernel/README.md#modules)**, "Modules":
-  one row per module with its concern and entry points. Then
-  "[Layering and reading order](../../models/kernel/README.md#layering-and-reading-order)":
-  nine layers by import depth; start at `serving` to trace a rule.
-- **[policy-gate.qnt](../../models/kernel/policy-gate.qnt)**, lines 18 to 43:
-  the `Held` and `Gated[r]` shapes and the six entry points. The header
-  comment (lines 2 to 14) follows the fixed shape every kernel module uses:
-  purpose, Rules, Shapes, Consumers.
-- **[deadlines.qnt](../../models/kernel/deadlines.qnt)**, lines 51 to 73: the
-  `Due`, `Scheduled[r]`, `Budgeted[r]` and `BudgetedLocal[r]` shapes. Lines
-  175 to 197: the budgeted local variants `admitLocal`, `releaseLocal`,
-  `settleLocal`, `advanceLocal`.
-- **[serving.qnt](../../models/kernel/serving.qnt)**, lines 40 to 43: the
-  [`Layout`](../GLOSSARY.md#layout) record a profile passes to every
-  transition. Lines 57 to 67 and 104 to 111: `Traversed[r, p]` and its local
-  projection `LocalServed[r]`.
-- **[kernel/README.md](../../models/kernel/README.md#composing-a-profile)**,
+- **[kernel/README.md](../../models/kernel/README.md#modules)**, "Modules": one
+  row per module with its concern and entry points. Then "[Layering and reading
+  order](../../models/kernel/README.md#layering-and-reading-order)": nine layers
+  by import depth; start at `serving` to trace a rule. -
+  **[policy-gate.qnt](../../models/kernel/policy-gate.qnt)**, lines 18 to 43:
+  the `Held` and `Gated[r]` shapes and the six entry points. The header comment
+  (lines 2 to 14) follows the fixed shape every kernel module uses: purpose,
+  then `Rules`, Shapes and Consumers. -
+  **[deadlines.qnt](../../models/kernel/deadlines.qnt)**, lines 51 to 73: the
+  `Due`, `Scheduled[r]`, `Budgeted[r]` and `BudgetedLocal[r]` shapes. Lines 175
+  to 197: the budgeted local variants `admitLocal`, `releaseLocal`,
+  `settleLocal`, `advanceLocal`. -
+  **[serving.qnt](../../models/kernel/serving.qnt)**, lines 40 to 43: the
+  [`Layout`](../GLOSSARY.md#layout) record a profile passes to every transition.
+  Lines 57 to 67 and 104 to 111: `Traversed[r, p]` and its local projection
+  `LocalServed[r]`. -
+  **[kernel/README.md](../../models/kernel/README.md#composing-a-profile)**,
   "Composing a profile": the wrapper example and the rule that a profile may
   keep only wiring.
 
@@ -89,8 +89,10 @@ built only to reach those [seams](../GLOSSARY.md#seam).
    `zeroBudgetSourceSettlesAsDeadlineErrorTest`: a corner no scheduled profile
    reaches, pinned here instead.
 
-2. Read the fixture's header, lines 1 to 8 of the same file: it names exactly
-   which seams it pins. That is the pattern for every fixture.
+2. Read the fixture's header, [lines 1 to
+   8](../../models/fixtures/kernel/budgeted-local.qnt) of the same file
+   (`budgeted local lifecycle`): it names exactly which seams it pins. That is
+   the pattern for every fixture.
 
 3. Optional (one to two minutes, runs the fixtures concurrently): every
    fixture at once, as the differential and model-check lanes do:

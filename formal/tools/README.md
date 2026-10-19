@@ -25,6 +25,7 @@ generated-fixture verification; `validation.mjs` is the list of record.
 - [check-feature-coverage.mjs](./check-feature-coverage.mjs): the native feature inventory and its evidence references.
 - [check-go-parity.mjs](./check-go-parity.mjs): the Go parity ledger against the catalogs and both source trees; `--refresh-inputs` re-pins its catalog, audit-dispositions and vector artifact digests.
 - [check-style.mjs](./check-style.mjs): the two Quint style caps (lines at most 120 characters, module headers at most 25 comment lines) over files not in the style allowlist; `--report` prints the readability measurements.
+- [check-course.mjs](./check-course.mjs): every line citation in `formal/guides/course/` names its file and a symbol that is still on those lines, and every inventory count a lesson quotes matches `execution.mjs`; runs in the `audit` lane.
 - [check-model-properties.mjs](./check-model-properties.mjs): the model-fault challenge catalog; `--only=<id>` measures one.
 - [check-kernel-fixtures.mjs](./check-kernel-fixtures.mjs): typechecks and runs the kernel fixtures (`make kernel-fixtures`).
 - [check-symbolic-models.mjs](./check-symbolic-models.mjs): the finite symbolic checks with Apalache (`make model-check`).

@@ -59,20 +59,21 @@ import the source are excluded structurally, with no catalog entry.
 - **[../../generated/CHALLENGES.md](../../generated/CHALLENGES.md)** and
   **[../../generated/MUTANTS.md](../../generated/MUTANTS.md)**: one row per
   challenge and per mutant, generated from the catalogs. Find
-  `profile-source-wrong-clock` and `M33`.
-- **[execution.json](../../catalogs/execution.json)**, `challenges`: the first
+  `profile-source-wrong-clock` and `M33`. -
+  **[execution.json](../../catalogs/execution.json)**, `challenges`: the first
   entry, `recovery-inclusive-maximum`, shows every field: `source`, `model`,
   `invariant`, `before`, `after`, `nativeMutants`, `reproducer` with its
-  `profiles` and `exclusions`.
-- **[../AUTHORING.md](../AUTHORING.md#challenging-every-model)**, "Challenging
-  every model", and
-  "[Mapping every challenge to native mutants](../AUTHORING.md#mapping-every-challenge-to-native-mutants)":
-  the rules for writing one, and the three `nativeMutants` kinds.
-- **[../VALIDATION.md](../VALIDATION.md#mutation-evidence)**, "Mutation
-  evidence": `confirmed`, `side-effect-only`, `not-divergent`, `unreached`;
-  why a crash or timeout is a failed measurement, never a detection.
-- **[check-model-properties.mjs](../../tools/check-model-properties.mjs)**,
-  lines 25 to 32: what the clean model and the mutant must each report.
+  `profiles` and `exclusions`. -
+  **[../AUTHORING.md](../AUTHORING.md#challenging-every-model)**, "Challenging
+  every model", and "[Mapping every challenge to native
+  mutants](../AUTHORING.md#mapping-every-challenge-to-native-mutants)": the
+  rules for writing one, and the three `nativeMutants` kinds. -
+  **[../VALIDATION.md](../VALIDATION.md#mutation-evidence)**, "Mutation
+  evidence": `confirmed`, `side-effect-only`, `not-divergent`, `unreached`; why
+  a crash or timeout is a failed measurement, never a detection. -
+  **[check-model-properties.mjs](../../tools/check-model-properties.mjs)**,
+  lines 25 to 32: what the clean model and the mutant must each report about a
+  `reproducer`.
 
 ## Try it (3 min, plus an optional 3.5 min)
 

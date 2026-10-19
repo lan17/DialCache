@@ -57,20 +57,20 @@ becomes `{ op: "resolve", loader: 1, value: 1 }`.
 
 - **[behavior-driver.ts](../../../typescript/test/formal/behavior-driver.ts)**:
   lines 54 to 69, the `Input` union, every command a driver understands; lines
-  73 to 90, the `Observation` record; lines 111 to 112, the rule "no expected
-  observation is passed to this class"; lines 294 to 343, `apply` for `begin`;
-  lines 345 to 360, `resolve`, `reject`, `advance`; lines 405 to 412,
-  `release`; lines 440 to 472, the settle drain and the receipt; lines 481
-  to 483, `snapshot()` and `receipt()`.
-- **[formal-features.test.ts](../../../typescript/test/formal-features.test.ts)**,
-  lines 16 to 53: the replay loop, and the `DIALCACHE_FEATURE_TRACE_FILE` and
-  `DIALCACHE_FEATURE_PROFILE` selectors at lines 58 to 60.
-- **[features.mjs](../../replay/features.mjs)**: `featureInput` (line 510)
-  and `assertFeatureObservation` (line 512), shared by every port through the
-  coordinator.
-- **[profiles/source-budgets.mjs](../../replay/profiles/source-budgets.mjs)**:
-  the fixture by init choice, the setup command, and the action decodings.
-- **[../WALKTHROUGH.md](../WALKTHROUGH.md#follow-input-and-evidence-separately)**,
+  73 to 90, the `Observation` record; lines 111 to 112, the rule `no expected
+  observation is passed to this class`; lines 294 to 343, `apply` for `begin`;
+  lines 345 to 360, `resolve`, `reject`, `advance`; lines 405 to 412, `release`;
+  lines 440 to 472, the `settle` drain and the receipt; lines 481 to 483,
+  `snapshot()` and `receipt()`. -
+  **[formal-features.test.ts](../../../typescript/test/formal-features.test.ts)**,
+  lines 16 to 53: the `replay` loop; lines 58 to 60: the
+  `DIALCACHE_FEATURE_TRACE_FILE` and `DIALCACHE_FEATURE_PROFILE` selectors. -
+  **[features.mjs](../../replay/features.mjs)**: `featureInput` (line 510) and
+  `assertFeatureObservation` (line 512), shared by every port through the
+  coordinator. -
+  **[profiles/source-budgets.mjs](../../replay/profiles/source-budgets.mjs)**:
+  the fixture by init choice, the setup command, and the action decodings. -
+  **[../WALKTHROUGH.md](../WALKTHROUGH.md#follow-input-and-evidence-separately)**,
   "Follow input and evidence separately": the same split drawn as a diagram.
 
 ## Try it (3 min)

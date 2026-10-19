@@ -51,18 +51,19 @@ action in front.
 ## See it in the repo
 
 - **[coordinator.mjs](../../replay/coordinator.mjs)**, lines 13 to 14: the
-  one-sentence design rule. Lines 65 to 86: what `prepare` returns. Lines 96
-  to 147: the order of checks on `observe` (shape, receipt, comparison, next
-  commands); line 141 states that predictions never choose commands.
-- **[protocol.schema.json](../../replay/protocol.schema.json)**: the `$defs`
-  for `request`, `command`, `behaviorObservation` (line 1780),
-  `settlementReceipt` (line 2090) and `behaviorFixture` (line 2165). The
-  schema file, not the version number, is the compatibility unit.
-- **[../PORTING.md](../PORTING.md#shared-coordinator-protocol)**, "Shared
-  coordinator protocol" and
-  "[Observation contract](../PORTING.md#observation-contract)": every field of
-  an observation, the fixture sentinels, and the receipt rules R1 to R5.
-- **[../../replay/README.md](../../replay/README.md)**: the coordinator, the
+  one-sentence design rule (`retains predictions`). Lines 65 to 86: what
+  `prepare` returns. Lines 96 to 147: the order of checks on `observe` (shape,
+  receipt, comparison, next commands); line 141 says it again (`Predictions
+  never choose commands`). -
+  **[protocol.schema.json](../../replay/protocol.schema.json)**: the `$defs` for
+  `request`, `command`, `behaviorObservation` (line 1780), `settlementReceipt`
+  (line 2090) and `behaviorFixture` (line 2165). The schema file, not the
+  version number, is the compatibility unit. -
+  **[../PORTING.md](../PORTING.md#shared-coordinator-protocol)**, "Shared
+  coordinator protocol" and "[Observation
+  contract](../PORTING.md#observation-contract)": every field of an observation,
+  the fixture sentinels, and the receipt rules R1 to R5. -
+  **[../../replay/README.md](../../replay/README.md)**: the coordinator, the
   profile descriptors and the witness classifiers, one line each; nothing in
   that directory names a port.
 
