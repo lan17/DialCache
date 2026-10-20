@@ -10,8 +10,10 @@
 //   or just before itself. The symbol must appear on those lines of that file
 //   today.
 // - A quoted inventory count ("regressions": 468) must equal what
-//   `node formal/tools/execution.mjs` prints today; a lesson that wants to show
-//   a count changing says so in words instead of quoting a stale number.
+//   `node formal/tools/execution.mjs` prints today, and a source-audit count
+//   shown as that check prints it (guideSections: 195) must equal what
+//   `node formal/tools/check-source-audit.mjs` prints; a lesson that wants to
+//   show a count changing says so in words instead of quoting a stale number.
 //
 // `make audit` runs it. A failure names the lesson, the citation and what is
 // missing; fixing the citation is the mechanical part, and the lesson around
@@ -71,13 +73,26 @@ export function quotedCounts(text) {
   return [...text.matchAll(/"(\w+)":\s*(\d+)\b/g)].map(m => ({ key: m[1], value: Number(m[2]) }));
 }
 
+// The five counts check-source-audit.mjs prints as a plain object: sources, tests, sections, reviewedGuides, guideSections.
+export const auditKeys = ['sources', 'tests', 'sections', 'reviewedGuides', 'guideSections'];
+export function auditCounts(directory = root) {
+  const result = spawnSync(process.execPath, ['formal/tools/check-source-audit.mjs'], { cwd: directory, encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(`check-source-audit.mjs failed:\n${result.stderr}`);
+  const counts = {};
+  for (const m of result.stdout.matchAll(/\b(\w+): (\d+)\b/g)) if (auditKeys.includes(m[1])) counts[m[1]] = Number(m[2]);
+  return counts;
+}
+export function quotedAuditCounts(text) {
+  return [...text.matchAll(/\b(sources|tests|sections|reviewedGuides|guideSections): (\d+)\b/g)].map(m => ({ key: m[1], value: Number(m[2]) }));
+}
+
 export function inventory(directory = root) {
   const result = spawnSync(process.execPath, ['formal/tools/execution.mjs'], { cwd: directory, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(`execution.mjs failed:\n${result.stderr}`);
   return JSON.parse(result.stdout);
 }
 
-export function checkCourse({ directory = root, inventory: counts = inventory(directory) } = {}) {
+export function checkCourse({ directory = root, inventory: counts = inventory(directory), audit = auditCounts(directory) } = {}) {
   const errors = [];
   let citationTotal = 0, countTotal = 0;
   const files = lessons(directory);
@@ -99,6 +114,11 @@ export function checkCourse({ directory = root, inventory: counts = inventory(di
       if (!(q.key in counts)) continue;
       countTotal++;
       if (counts[q.key] !== q.value) errors.push(`${lesson}: quotes "${q.key}": ${q.value}; the inventory prints ${counts[q.key]}`);
+    }
+    for (const q of quotedAuditCounts(text)) {
+      if (!(q.key in audit)) continue;
+      countTotal++;
+      if (audit[q.key] !== q.value) errors.push(`${lesson}: shows ${q.key}: ${q.value}; check-source-audit prints ${audit[q.key]}`);
     }
   }
   if (errors.length) throw new Error(errors.join('\n'));

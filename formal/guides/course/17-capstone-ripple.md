@@ -25,14 +25,13 @@ fails with `Generated views are stale`, and `--write` regenerates the three
 views. Edit the descriptor or the catalog, never the view.
 
 **The parity ledger.** `go-parity.json` pins two counts, `scheduledRegressions`
-(468) and `exportedRegressionHistories` (358). `check-go-parity.mjs` fails
-with `Quint scheduled model/check counts are stale` and `Exported Quint
-regression history count is stale`. These are hand-maintained numbers, by
-design. `--refresh-inputs` re-pins digests only and tells you the ledger still
-fails. A reviewer bumps both to 469 and 359 while reviewing what the
-regression adds, as
-[GO-PARITY.md](../GO-PARITY.md#reading-and-updating-the-ledger) describes.
-This course does not edit that ledger; you will see the message and then undo
+and `exportedRegressionHistories`. `check-go-parity.mjs` fails with `Quint
+scheduled model/check counts are stale` and `Exported Quint regression history
+count is stale`. These are hand-maintained numbers, by design.
+`--refresh-inputs` re-pins digests only and tells you the ledger still fails. A
+reviewer bumps both by one while reviewing what the regression adds, as
+[GO-PARITY.md](../GO-PARITY.md#reading-and-updating-the-ledger) describes. This
+course does not edit that ledger; you will see the message and then undo
 everything.
 
 Three other things a real change would carry. The differential (lesson 12)

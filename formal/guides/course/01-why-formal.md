@@ -84,7 +84,7 @@ Six stages turn a rule into evidence. Every later lesson sits in one of them:
 
    Read it as: 32 Quint models, 17 of them
    [profiles](../GLOSSARY.md#profile-conformance-profile) that ports replay,
-   253 checked invariants and 468 named runs.
+   `"invariants": 253` checked invariants and `"regressions": 468` named runs.
 
 2. Ask where C23 lives:
 

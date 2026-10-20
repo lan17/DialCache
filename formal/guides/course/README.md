@@ -36,18 +36,19 @@ how long it takes.
 
 Run everything from the repository root.
 
-1. **Node 24 and Quint 0.32.0 on PATH.** Check with `node --version`
-   (`v24.x`) and `quint --version` (`0.32.0`). Lessons 2 to 6, 11, 12, 16 and
-   17 need Quint; the rest need only Node. Install Quint with
-   `npm install --global @informalsystems/quint@0.32.0` if it is missing.
-2. **Install the workspace:** `corepack pnpm install --frozen-lockfile`.
-3. **Confirm the tools answer:** `node formal/tools/execution.mjs` prints an
-   inventory that starts with `"models": 32`.
-4. **Optional ports.** Lesson 9 uses Go, Rust and a Python virtual environment
-   at `python/.venv`; lesson 16 uses Go; the optional step of lesson 14 uses
-   all four ports. `make help` lists the pinned versions. Docker is never
-   needed in this course; the mutation lanes that need it are named in lesson
-   11 and not run.
+1. **Node 24 and Quint 0.32.0 on PATH.** Check with `node --version` (`v24.x`)
+   and `quint --version` (`0.32.0`). Lessons 2 to 6, 11, 12, 16 and 17 need
+   Quint; the rest need only Node. Install Quint with `npm install --global
+   @informalsystems/quint@0.32.0` if it is missing. 2. **Install the
+   workspace:** `corepack pnpm install --frozen-lockfile`. 3. **Confirm the
+   tools answer:** `node formal/tools/execution.mjs` prints an inventory that
+   starts with `"models": 32`. 4. **Optional ports.** Lesson 9 uses Go, Rust and
+   a Python virtual environment at `python/.venv`; lesson 16 uses Go; the
+   optional step of lesson 14 uses all four ports. Create the environment once
+   with any Python 3.11 or later: `python3.11 -m venv python/.venv &&
+   python/.venv/bin/python -m pip install -e './python[test,redis]'`. `make
+   help` lists the pinned versions. Docker is never needed in this course; the
+   mutation lanes that need it are named in lesson 11 and not run.
 
 If your default `node` is another major version, put Node 24 first on PATH for
 the Quint and port commands, and pass `NODE=/path/to/node24` to `make`. The
@@ -145,9 +146,10 @@ so the drift is caught by the check, not by a learner:
   same clause or immediately before the citation. The check fails when the
   symbol is no longer on those lines. Fix the citation, then reread the lesson:
   the code may have moved for a reason the lesson should mention.
-- **A quoted count comes from the inventory.** Quote a number only in the form
-  `"regressions": 468` that `node formal/tools/execution.mjs` prints; the check
-  compares it with today's inventory. When an exercise changes a count, say so
-  in words rather than quoting the new number.
+- **A quoted count comes from a check.** Quote a number only as `node
+  formal/tools/execution.mjs` prints it (`"regressions": 468`) or as `node
+  formal/tools/check-source-audit.mjs` prints it (`guideSections: 195`); the
+  check compares both with today's output. When an exercise changes a count, say
+  so in words rather than quoting the new number.
 - **The course is outside the review ledger on purpose.** The lessons are
   didactic, not normative; the guides they link to are the reviewed text.

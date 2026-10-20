@@ -121,12 +121,11 @@ You will edit a tracked guide and undo it at the end.
    node formal/tools/check-source-audit.mjs --refresh formal/guides/WALKTHROUGH.md
    ```
 
-   You should see `formal/guides/WALKTHROUGH.md: refreshed, 6 entries`, then
-   the five counts again with `guideSections` one higher than in step 1
-   (`guideSections: 196`). Now `git diff --stat` shows two files: the guide
-   and the ledger. The parity ledger did not move: run
-   `node formal/tools/check-go-parity.mjs` and it still passes, because a
-   heading is not a disposition and the review record is unchanged.
+You should see `formal/guides/WALKTHROUGH.md: refreshed, 6 entries`, then the
+   five counts again with `guideSections` one higher than in step 1. Now `git
+   diff --stat` shows two files: the guide and the ledger. The parity ledger did
+   not move: run `node formal/tools/check-go-parity.mjs` and it still passes,
+   because a heading is not a disposition and the review record is unchanged.
 
 4. Undo both:
 

@@ -34,27 +34,23 @@ not that its budget is whole.
 
 1. **State the contract.** C23 already states it; no prose change. A larger
    change would edit [SPEC.md](../SPEC.md) and [CONTRACTS.md](../CONTRACTS.md)
-   first.
-2. **Model the smallest boundary.** One `run ...Test` in
+   first. 2. **Model the smallest boundary.** One `run ...Test` in
    [dialcache-source-budgets-conformance.qnt](../../models/dialcache-source-budgets-conformance.qnt),
    using only the profile's public actions. It is therefore public-only and
    exported automatically (lesson 6). No new profile, no new action, no new
-   code.
-3. **Challenge the rule.** Nothing to add. The scheduled invariant
+   code. 3. **Challenge the rule.** Nothing to add. The scheduled invariant
    `acceptedSourceRespectsItsOwnStart` already compares each accepted source
    with its own start and budget. The challenge `profile-source-wrong-clock`
    from lesson 11 already attacks the deadline origin, and the new run would
-   fail under that same fault.
-4. **Exercise every implementation.** Run it in Quint, export it, replay it in
-   TypeScript and Go (lessons 6, 8 and 9). The full workflow would replay it
-   in Rust and Python too, because exported runs are part of every port's
-   required inventory.
-5. **Account for the evidence.** The run adds one to the 468 regressions and
-   the 358 exported histories, two counts the Go parity ledger pins. The
-   model's hash changes, which moves the fixture lock. The generated profile
-   view counts exported regressions, so it must be regenerated. A real change
-   would also cite the run from a semantic case in `semantic-cases.json` with
-   a reviewed scope.
+   fail under that same fault. 4. **Exercise every implementation.** Run it in
+   Quint, export it, replay it in TypeScript and Go (lessons 6, 8 and 9). The
+   full workflow would replay it in Rust and Python too, because exported runs
+   are part of every port's required inventory. 5. **Account for the evidence.**
+   The run adds one to the regression count and one to the exported-history
+   count, two numbers the Go parity ledger pins. The model's hash changes, which
+   moves the fixture lock. The generated profile view counts exported
+   regressions, so it must be regenerated. A real change would also cite the run
+   from a semantic case in `semantic-cases.json` with a reviewed scope.
 
 Part 2 does steps 2 and 4. Part 3 does step 5 and shows that each gate names
 its own fix.
@@ -62,20 +58,21 @@ its own fix.
 ## See it in the repo
 
 - **[../CONTRACTS.md](../CONTRACTS.md)**, the row `| C23 |` (line 69), and
-  "[Where the boundary lies](../CONTRACTS.md#where-the-boundary-lies)" for
-  what counts as portable at all.
-- **[semantic-cases.json](../../catalogs/semantic-cases.json)**: the eight
+  "[Where the boundary lies](../CONTRACTS.md#where-the-boundary-lies)" for what
+  counts as portable at all. -
+  **[semantic-cases.json](../../catalogs/semantic-cases.json)**: the eight
   `C23.*` cases. `C23.default-source-budget` cites
   `source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest` under
-  `quintReplays`, which is the shape a new citation would take.
-- **[../WALKTHROUGH.md](../WALKTHROUGH.md#find-the-rules-catalog-entries)**,
-  "Find the rule's catalog entries": which catalog is responsible for which
-  part of one rule.
-- **[../AUTHORING.md](../AUTHORING.md#give-reviewers-focused-context)**, "Give
-  reviewers focused context": the context packet a reviewer needs, which is
-  also the shape of a good PR description here.
-- **[go-parity.json](../../catalogs/go-parity.json)**, `inventory`: the two
-  counts `scheduledRegressions` (468) and `exportedRegressionHistories` (358).
+  `quintReplays`, which is the shape a new citation would take. -
+  **[../WALKTHROUGH.md](../WALKTHROUGH.md#find-the-rules-catalog-entries)**,
+  "Find the rule's catalog entries": which catalog is responsible for which part
+  of one rule. -
+  **[../AUTHORING.md](../AUTHORING.md#give-reviewers-focused-context)**, "Give
+  reviewers focused context": the context packet a reviewer needs, which is also
+  the shape of a good PR description here. -
+  **[go-parity.json](../../catalogs/go-parity.json)**, `inventory`: the two
+  counts `scheduledRegressions` and `exportedRegressionHistories`, the live
+  numbers from the inventory lesson 1 printed.
 
 ## Try it (4 min)
 
