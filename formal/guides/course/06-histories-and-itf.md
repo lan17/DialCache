@@ -5,11 +5,14 @@ by hand, and which histories are committed to the repository.
 
 ## The idea
 
-Everything a port replays is a history: an initial state followed by public
-actions, each recording its command. Quint writes histories in
+Lesson 5 read the profile; this lesson looks at what Quint writes out when it
+runs. Everything a port replays is a history: an initial state followed by
+public actions, each recording its command.
+
+Quint writes histories in
 [ITF](../GLOSSARY.md#itf-informal-trace-format), the [Informal Trace
 Format](https://apalache-mc.org/docs/adr/015adr-trace.html) defined by
-Apalache's ADR-015 and written by `quint run --out-itf`, which is plain JSON: a
+Apalache's ADR-015; `quint run --out-itf` writes it. It is plain JSON: a
 `vars` list, a `states` array, and integers written as `{"#bigint": "123"}` so
 that no JSON reader rounds them. Each state carries the two variables lesson 5
 introduced: `input`, the command taken, and `s`, the model's state after it.
@@ -23,12 +26,12 @@ Here is one state of the walkthrough regression, trimmed:
 }
 ```
 
-Read it as: the driver released policy call 0; afterwards one call is pending
-(`0` is `CALL_PENDING`), one loader has started, one policy call was made.
-`s.o` is the public observation a driver will be compared against; the other
-fields of `s` are predictions a driver never reads.
+Read it as: the driver released policy call 0. Afterwards one call is pending
+(`0` is `CALL_PENDING`), one loader has started, and one policy call was made.
+`s.o` is the public observation a driver is compared against; the other fields
+of `s` are predictions a driver never reads.
 
-Where do histories come from? Two places, and together they are the
+Histories come from two places. Together they are the
 [corpus](../GLOSSARY.md#corpus-history-regression-exported-run-and-public-only-run):
 
 - **Sampled histories.** `quint run --mbt --out-itf` writes random histories
@@ -43,14 +46,13 @@ Nothing under `.formal-traces/` is committed. What is committed, under
 [formal/generated/](../../generated/), is one [smoke](../GLOSSARY.md#smoke)
 trace per profile: a single named history that every port replays without
 Quint in `make check` and `make smoke`. A lock file pins the hash of every
-input (models, recipes, generators) and every output, so an edited model fails
-the fast lane until the artifacts are regenerated. The smoke lane is the quick
-check; it makes no claim about the full corpus.
+input (models, recipes, generators) and every output. An edited model
+therefore fails the fast lane until the artifacts are regenerated. The smoke
+lane is the quick check; it claims nothing about the full corpus.
 
-Two detail differences you will meet. A smoke trace carries extra
-`mbt::actionTaken` and `mbt::nondetPicks` fields, added by generation; a raw
-`quint test` export has none. Both are accepted, and `input` is always the
-authority.
+One difference you will meet. A smoke trace carries extra `mbt::actionTaken`
+and `mbt::nondetPicks` fields, added by generation; a raw `quint test` export
+has none. Both are accepted, and `input` is always the authority.
 
 ## See it in the repo
 
@@ -58,17 +60,19 @@ authority.
   open it and find `#meta` (the model and the recipe that produced it),
   `vars`, and the first two states.
 - **[../../generated/README.md](../../generated/README.md)**: what each
-  generated file is and the two commands that regenerate them.
+  generated file is, and the two commands that regenerate them.
 - **[../../catalogs/fixture-recipes.json](../../catalogs/fixture-recipes.json)**:
   the recipe for each smoke trace names a run or an action schedule, never an
   expected state; Quint recomputes the states.
 - **[../PORTING.md](../PORTING.md#trace-and-observation-contract)**, "Trace and
   observation contract": the exact decoding rules (safe integers, `choice: -1`
   for no choice, rejected shapes).
-- **[../AUTHORING.md](../AUTHORING.md#exported-runs-are-exactly-the-public-only-runs)**:
-  why nothing lists the exported runs; the tools classify each run from its body.
 - **[../../replay/itf.mjs](../../replay/itf.mjs)**: 51 lines that decode an
   ITF integer and refuse precision loss.
+
+Read more: [../AUTHORING.md](../AUTHORING.md#exported-runs-are-exactly-the-public-only-runs)
+explains why nothing lists the exported runs; the tools classify each run from
+its body.
 
 ## Try it (4 min)
 
@@ -112,8 +116,8 @@ authority.
 
    Step 2 is the rule: 100 ms pass with no loader started, so the budget has
    not begun. Step 7 is the consequence: the second call is served from local
-   storage and `loaders` stays 1. (`s.now` is a private field; the table shows
-   it to explain the steps, a driver never sees it.)
+   storage and `loaders` stays 1. (`s.now` is a private field. The table shows
+   it to explain the steps; a driver never sees it.)
 
 ## Recap
 

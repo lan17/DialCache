@@ -1,18 +1,18 @@
 # A course through formal/, in ten-minute lessons
 
-Seventeen lessons, each about ten minutes to read and do, that walk you down the
-`formal/` tree: the Quint models, the tools that check them and generate test
-histories, the replay that runs those histories against every language port,
-the evidence catalogs, and the CI lanes. Each lesson teaches one idea and ends
-with one exercise you run yourself.
+Seventeen lessons, each about ten minutes to read and do. They walk down the
+`formal/` tree in order. First the Quint models, then the tools that check
+them and generate test histories, then the replay that runs those histories
+against every language port, the evidence catalogs, and the CI lanes. Each
+lesson teaches one idea and ends with one exercise you run yourself.
 
 ## Who this is for
 
 You know what DialCache does (a request-scoped cache with TypeScript, Go, Rust
-and Python ports) and you can read code in at least one of those languages.
-You have not used Quint or a model checker. You may have ADHD or simply little
-time at a stretch: every lesson is one sitting, and stopping after any lesson
-leaves nothing half-done.
+and Python ports) and you read code in at least one of those languages. You
+have not used Quint or a model checker. You may have ADHD, or little time at a
+stretch: every lesson is one sitting, and stopping after any lesson leaves
+nothing half-done.
 
 ## What you will be able to do
 
@@ -28,8 +28,9 @@ leaves nothing half-done.
 ## Time
 
 Seventeen lessons of about ten minutes each: roughly 2 hours 50 minutes in
-total. A few lessons offer an optional longer run (one to four minutes) that
-you can skip without losing the thread.
+total. A few lessons offer an optional longer run, from twenty seconds to four
+minutes, that you can skip without losing the thread. Each optional step says
+how long it takes.
 
 ## Setup, once (5 min)
 
@@ -42,13 +43,14 @@ Run everything from the repository root.
 2. **Install the workspace:** `corepack pnpm install --frozen-lockfile`.
 3. **Confirm the tools answer:** `node formal/tools/execution.mjs` prints an
    inventory that starts with `"models": 32`.
-4. **Optional ports.** Lessons 9 and 16 use Go, Rust and a Python virtual
-   environment at `python/.venv`; `make help` lists the pinned versions.
-   Docker is never needed in this course; the mutation lanes that need it are
-   named in lesson 11 and not run.
+4. **Optional ports.** Lesson 9 uses Go, Rust and a Python virtual environment
+   at `python/.venv`; lesson 16 uses Go; the optional step of lesson 14 uses
+   all four ports. `make help` lists the pinned versions. Docker is never
+   needed in this course; the mutation lanes that need it are named in lesson
+   11 and not run.
 
 If your default `node` is another major version, put Node 24 first on PATH for
-the Quint and port commands and pass `NODE=/path/to/node24` to `make`; the
+the Quint and port commands, and pass `NODE=/path/to/node24` to `make`. The
 Python transport reads the same `NODE` variable.
 
 ## How to use it
@@ -59,7 +61,7 @@ Python transport reads the same `NODE` variable.
   ends with a "Next" link, so you never need to remember the plan.
 - **Short on time?** Do only "Try it" and "Recap". The exercise is the lesson.
 - **Keep the tree clean.** Lessons 12, 13 and 16 ask you to edit a tracked
-  file and undo it with `git checkout`; the exercises say exactly which file,
+  file and undo it with `git checkout`. The exercises say exactly which file,
   and lesson 17 ends with the undo for the capstone.
 
 Tick lessons off here as you go:
@@ -96,8 +98,8 @@ Tick lessons off here as you go:
 ## Where this fits
 
 This course adds sequence, plain-language framing, exercises and recaps. It
-does not restate the guides: when a guide explains something best, a lesson
-quotes at most a sentence and links. The guides themselves are indexed in
+does not restate the guides. When a guide explains something best, a lesson
+quotes at most a sentence and links to it. The guides are indexed in
 [../README.md](../README.md) by kind and in [../../README.md](../../README.md)
 by task; terms are defined in [../GLOSSARY.md](../GLOSSARY.md).
 
@@ -107,15 +109,15 @@ The lessons link each outside concept where it first appears. Collected here,
 with the lesson that uses it:
 
 - **Quint.** The [documentation index](https://quint.sh/docs) and
-  [getting started](https://quint.sh/docs/getting-started) (lesson 1);
+  [getting started](https://quint.sh/docs/getting-started) (lesson 1). The
   [language basics](https://quint.sh/docs/language-basics), the
   [built-in operators](https://quint.sh/docs/builtin), the
   [language manual](https://quint.sh/docs/lang), the
   [CLI manual](https://quint.sh/docs/quint),
   [checking properties](https://quint.sh/docs/checking-properties),
   [how the simulator works](https://quint.sh/docs/simulator) and
-  [model checkers](https://quint.sh/docs/model-checkers) (lesson 2);
-  [model-based testing](https://quint.sh/docs/model-based-testing) (lesson 7).
+  [model checkers](https://quint.sh/docs/model-checkers) (lesson 2).
+  [Model-based testing](https://quint.sh/docs/model-based-testing) (lesson 7).
   The language lives at [quint-co/quint](https://github.com/quint-co/quint).
 - **Apalache.** The [documentation](https://apalache-mc.org/docs/) of the
   symbolic model checker behind `make model-check` (lessons 2 and 3), and
@@ -123,25 +125,25 @@ with the lesson that uses it:
   of the Informal Trace Format (lesson 6).
 - **Background.** [TLA+](https://lamport.azurewebsites.net/tla/tla.html), the
   temporal logic of actions Quint is built on, and
-  [model checking](https://en.wikipedia.org/wiki/Model_checking) (lesson 1);
-  [model-based testing](https://en.wikipedia.org/wiki/Model-based_testing) and
-  [JSON Lines](https://jsonlines.org/), the replay protocol's framing (lesson 7);
-  [mutation testing](https://en.wikipedia.org/wiki/Mutation_testing) and
+  [model checking](https://en.wikipedia.org/wiki/Model_checking) (lesson 1).
+  [Model-based testing](https://en.wikipedia.org/wiki/Model-based_testing) and
+  [JSON Lines](https://jsonlines.org/), the replay protocol's framing (lesson 7).
+  [Mutation testing](https://en.wikipedia.org/wiki/Mutation_testing) and
   [Redis Lua scripting](https://redis.io/docs/latest/develop/programmability/eval-intro/)
-  (lesson 11); [differential testing](https://en.wikipedia.org/wiki/Differential_testing)
+  (lesson 11). [Differential testing](https://en.wikipedia.org/wiki/Differential_testing)
   (lesson 12).
 
 ## How the course stays current
 
 Lessons point at exact lines and quote command output, and both drift as the
 tree changes. `make audit` runs [check-course.mjs](../../tools/check-course.mjs)
-so the drift is caught, not discovered by a learner:
+so the drift is caught by the check, not by a learner:
 
 - **A line citation names its file and a symbol.** Write `lines 65 to 86` (or
   `line 141`) after a link to the file in the same bullet or paragraph, or make
-  the citation itself the link, and put a backticked symbol from those lines in
-  the same clause or just before the citation. The check fails when the symbol
-  is no longer on those lines; fix the citation, then reread the lesson, since
+  the citation itself the link. Put a backticked symbol from those lines in the
+  same clause or immediately before the citation. The check fails when the
+  symbol is no longer on those lines. Fix the citation, then reread the lesson:
   the code may have moved for a reason the lesson should mention.
 - **A quoted count comes from the inventory.** Quote a number only in the form
   `"regressions": 468` that `node formal/tools/execution.mjs` prints; the check

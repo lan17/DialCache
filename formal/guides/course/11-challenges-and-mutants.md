@@ -1,81 +1,89 @@
 # 11. Challenges and native mutants (10 min)
 
-**What you get:** how the suite proves that its own checks can fail: a
-deliberate fault in the model that a named invariant must catch, and the same
-fault in each port that the generated histories must catch.
+**What you get:** proof that the checks can fail: a deliberate fault in the
+model that a named invariant must catch, and the same fault in each port that
+the corpus must catch.
 
 ## The idea
 
-A green check proves little unless you know it would turn red for the bug it
-guards against. The tree makes that a measured fact at two levels.
+Lesson 10 asked whether the corpus reached the corners; this lesson asks
+whether the checks would notice a bug there. A green check proves little
+unless you know it would turn red for the bug it guards against. The tree
+makes that a measured fact at two levels: the model and the ports.
 
-A [challenge](../GLOSSARY.md#challenge-fault-mutant-and-reproducer) is one
+**Level one: the model.** A
+[challenge](../GLOSSARY.md#challenge-fault-mutant-and-reproducer) is one
 deliberate single-site edit of a Quint source: an exact `before` text that
-occurs once, and its `after`. The catalog, the `challenges` array of
-[execution.json](../../catalogs/execution.json), names the model and the
-scheduled invariant that must detect it. The mutated model is the mutant, in the
-sense of [mutation testing](https://en.wikipedia.org/wiki/Mutation_testing): a
-deliberate fault the tests must catch. A reproducer pins the detection to one
-deterministic run that passes on the clean model and fails under the fault at a
-declared `.expect`; the checker also cuts the run just before and just through
-that checkpoint, so the fault must break exactly the stated expectation and not
-some earlier step.
+occurs once, and its `after`. The catalog is the `challenges` array of
+[execution.json](../../catalogs/execution.json). Each entry names the model
+and the scheduled invariant that must detect the edit. The edited model is
+the mutant, in the sense of
+[mutation testing](https://en.wikipedia.org/wiki/Mutation_testing): a
+deliberate fault the tests must catch.
 
-The example this course has been following has a challenge. In
-`deadlines.qnt`, the registration `at: state.now + budget` is edited to
-`at: budget`: a deadline anchored at the clock origin instead of the source's
-start. The connection model's `sourceOriginsMatchContract` detects it, and
-the reproducer is `heldPolicyDoesNotSpendSourceBudgetTest`, which fails at
-its final checkpoint: the deadline is already past when the source starts
-after the 100 ms policy wait, so the source expires at the next advance
-instead of settling with `VALUE_ONE`.
+A reproducer pins the detection to one deterministic run. The run passes on
+the clean model and fails under the fault at a declared `.expect`. The checker
+also cuts the run immediately before, and through, that checkpoint. So the
+fault must break exactly the stated expectation, and not some earlier step.
 
-A model challenge says nothing about the ports until the same wrong behavior
-is injected into them. That is the
-[native mutant](../GLOSSARY.md#native-mutant):
-[mutations.json](../../catalogs/mutations.json) holds one entry per fault with
+The example this course follows has a challenge. In `deadlines.qnt`, the
+registration `at: state.now + budget` is edited to `at: budget`: a deadline
+anchored at the clock origin instead of the source's start. The connection
+model's `sourceOriginsMatchContract` detects it. The reproducer is
+`heldPolicyDoesNotSpendSourceBudgetTest`, which fails at its final checkpoint.
+Under the fault the deadline is already past when the source starts after the
+100 ms policy wait, so the source expires at the next advance instead of
+settling with `VALUE_ONE`.
+
+**Level two: the ports.** A model challenge says nothing about the ports until
+the same wrong behavior is injected into them. That is the
+[native mutant](../GLOSSARY.md#native-mutant).
+[mutations.json](../../catalogs/mutations.json) holds one entry per fault:
 anchored `before`/`after` edits to `typescript/src/` and `go/` (Rust has its
 own catalog), a rationale naming the lines, and the `requiredDetections` each
 test cohort must record. Each challenge carries a `nativeMutants` entry that
-maps it to such a mutant, or explains why no port line exists (`unobservable`,
-`model-only`). The deadline challenge maps to `M33`: TypeScript judges a
-settlement with `performance.now() >= timeoutMs` instead of the elapsed time
-since the source started, and Go drops `- started` from the same comparison.
+maps it to such a mutant, or explains why no port line exists
+(`unobservable`, `model-only`).
 
-The mutation lanes (`make mutations-ts`, `make mutations-go`, Docker required
-for the real-Redis vectors, which run the invalidation script as [Redis
-Lua](https://redis.io/docs/latest/develop/programmability/eval-intro/); `make
-mutations-rust` without Docker) apply each mutant in an isolated copy, run the
-generated corpus against it, and require the replay to fail. A mutant that
-survives is a coverage gap, not a license: the corpus does not distinguish that
-fault, so the fix is an exported regression or a witness that does, before the
-challenge counts as mapped.
+The deadline challenge maps to `M33`. TypeScript judges a settlement with
+`performance.now() >= timeoutMs` instead of the time elapsed since the source
+started; Go drops `- started` from the same comparison.
+
+The mutation lanes apply each mutant in an isolated copy, run the generated
+corpus against it, and require the replay to fail. They are
+`make mutations-ts`, `make mutations-go` and `make mutations-rust`. The first
+two need Docker for the real-Redis vectors, which run the invalidation script
+as [Redis Lua](https://redis.io/docs/latest/develop/programmability/eval-intro/);
+the Rust lane does not. A mutant that survives is a coverage gap, not a
+license. The corpus does not distinguish that fault, so the fix is an exported
+regression or a witness that does. Until then the challenge does not count as
+mapped.
 
 For a fault in a shared library, every profile that imports the source must
-either detect it or appear in `exclusions` with a reason, and the checker
-measures each reaching
-[exclusion](../GLOSSARY.md#exclusion-structural-versus-measured) by requiring
-the profile's runs to keep passing under the mutant. Profiles that do not
-import the source are excluded structurally, with no catalog entry.
+either detect it or appear in `exclusions` with a reason. The checker measures
+each reaching [exclusion](../GLOSSARY.md#exclusion-structural-versus-measured)
+by requiring the profile's runs to keep passing under the mutant. Profiles
+that do not import the source are excluded structurally, with no catalog
+entry.
 
 ## See it in the repo
 
 - **[../../generated/CHALLENGES.md](../../generated/CHALLENGES.md)** and
   **[../../generated/MUTANTS.md](../../generated/MUTANTS.md)**: one row per
   challenge and per mutant, generated from the catalogs. Find
-  `profile-source-wrong-clock` and `M33`. -
-  **[execution.json](../../catalogs/execution.json)**, `challenges`: the first
+  `profile-source-wrong-clock` and `M33`.
+- **[execution.json](../../catalogs/execution.json)**, `challenges`: the first
   entry, `recovery-inclusive-maximum`, shows every field: `source`, `model`,
-  `invariant`, `before`, `after`, `nativeMutants`, `reproducer` with its
-  `profiles` and `exclusions`. -
-  **[../AUTHORING.md](../AUTHORING.md#challenging-every-model)**, "Challenging
+  `invariant`, `before`, `after`, `nativeMutants`, and `reproducer` with its
+  `profiles` and `exclusions`.
+- **[../AUTHORING.md](../AUTHORING.md#challenging-every-model)**, "Challenging
   every model", and "[Mapping every challenge to native
   mutants](../AUTHORING.md#mapping-every-challenge-to-native-mutants)": the
-  rules for writing one, and the three `nativeMutants` kinds. -
-  **[../VALIDATION.md](../VALIDATION.md#mutation-evidence)**, "Mutation
-  evidence": `confirmed`, `side-effect-only`, `not-divergent`, `unreached`; why
-  a crash or timeout is a failed measurement, never a detection. -
-  **[check-model-properties.mjs](../../tools/check-model-properties.mjs)**,
+  rules for writing one, and the three `nativeMutants` kinds.
+- **[../VALIDATION.md](../VALIDATION.md#mutation-evidence)**, "Mutation
+  evidence": `confirmed`, `side-effect-only`, `not-divergent`, `unreached`,
+  and why a crash or timeout is a failed measurement, never a detection.
+- **[check-model-properties.mjs](../../tools/check-model-properties.mjs)**,
   lines 25 to 32: what the clean model and the mutant must each report about a
   `reproducer`.
 
@@ -104,8 +112,8 @@ import the source are excluded structurally, with no catalog entry.
    required detections.
 
 3. Optional (about 3.5 min, Quint): measure this one challenge. The partition
-   step, which re-runs the nine detecting profiles and the excluded one under
-   the mutant, takes most of the time:
+   step takes most of the time: it re-runs the nine detecting profiles and
+   the excluded one under the mutant. Nothing prints until each step ends:
 
    ```sh
    node formal/tools/check-model-properties.mjs --only=profile-source-wrong-clock

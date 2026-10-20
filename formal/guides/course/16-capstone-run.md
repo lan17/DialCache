@@ -1,17 +1,19 @@
 # 16. Capstone, part 2: write, export and replay the run (10 min)
 
 **What you get:** the new regression written into the profile, checked in
-Quint, exported as a history and replayed through two ports: steps 2 and 4 of
-the plan from part 1.
+Quint, exported as a history and replayed through two ports (plan steps 2
+and 4).
 
 ## The idea
 
+Part 1 planned one new run; this lesson writes it, exports it and replays it.
 A run is a claim about the model, written as the exact public commands a
-driver can execute, with checkpoints along the way. Writing one well means
-three things. Use only public actions, so the run is exported and every port
+driver can execute, with checkpoints along the way.
+
+Writing one well means three things. Use only public actions, so the run is exported and every port
 replays it. Put a checkpoint at the step where the rule shows, not only at the
 end, so a failure names the boundary. And read the expected observation off
-the drivers' encoding: `CALL_PENDING` is 0, `DEADLINE_ERROR` is 4,
+the drivers' encoding: `CALL_PENDING` is 0, `DEADLINE_ERROR` is 4 and
 `VALUE_TWO` is 2, as `conformance-observations.qnt` fixes them.
 
 Here is the run, with its comment in the file's style:
@@ -29,35 +31,39 @@ Here is the run, with its comment in the file's style:
     .expect(s.o.calls == List(DEADLINE_ERROR, VALUE_TWO) and s.o.loaders == 2)
 ```
 
-Read it against the kernel from lesson 4. `release(0)` starts source 0 at
-time 0 with the finite 10 ms budget. `advanced(10)` delivers that deadline:
-the kernel's `advanceLocal` expires the source and completes its caller with
-`DEADLINE_ERROR`; the local slot stays empty because a deadline error
-publishes nothing. `release(1)` finds no live entry and no pending flight, so
-it starts source 1 at time 10 with a fresh budget, deadline 20. `advanced(9)`
-reaches 19: still pending, so `calls` is `[4, 0]` and `loaders` is 2. Then
-`resolved(1, VALUE_TWO)` settles one millisecond before the deadline and the
-caller gets `VALUE_TWO`. A kernel that measured the retry's budget from time 0
-would have expired it at 10 and this run would fail at the second checkpoint.
+Read it against the kernel from lesson 4, one step at a time:
 
-Why does `resolved(1, VALUE_TWO)` encode as choice 4? Lesson 5's decoder:
-`id * 2 + value`, so source 1 with value 2 is 4, and the TypeScript descriptor
-turns 4 back into `{ op: "resolve", loader: 1, value: 2 }`. You never compute
-that by hand; the point is that the same integer means the same command in
-every port.
+1. `release(0)` starts source 0 at time 0 with the finite 10 ms budget.
+2. `advanced(10)` delivers that deadline. The kernel's `advanceLocal` expires
+   the source and completes its caller with `DEADLINE_ERROR`. The local slot
+   stays empty, because a deadline error publishes nothing.
+3. `release(1)` finds no live entry and no pending flight, so it starts source
+   1 at time 10 with a fresh budget: deadline 20.
+4. `advanced(9)` reaches 19. The retry is still pending, so `calls` is
+   `[4, 0]` and `loaders` is 2.
+5. `resolved(1, VALUE_TWO)` settles one millisecond before the deadline, and
+   the caller gets `VALUE_TWO`.
+
+A kernel that measured the retry's budget from time 0 would have expired it
+at 10, and the run would fail at the second checkpoint.
+
+Why does `resolved(1, VALUE_TWO)` encode as choice 4? The profile's decoder
+comment (lesson 5) packs a source and a value as `id * 2 + value`, so source 1
+with value 2 is 4. The TypeScript descriptor turns 4 back into
+`{ op: "resolve", loader: 1, value: 2 }`. You never compute that by hand; the
+point is that the same integer means the same command in every port.
 
 ## See it in the repo
 
--
-  **[dialcache-source-budgets-conformance.qnt](../../models/dialcache-source-budgets-conformance.qnt)**,
+- **[dialcache-source-budgets-conformance.qnt](../../models/dialcache-source-budgets-conformance.qnt)**,
   lines 256 to 260: `abandonedSourceCannotReplaceSuccessfulRetryTest`, the
-  nearest existing run; compare its shape with the new one. -
-  **[conformance-observations.qnt](../../models/conformance-observations.qnt)**,
-  lines 8 to 17: the caller outcome codes, `CALL_PENDING` first. -
-  **[deadlines.qnt](../../models/kernel/deadlines.qnt)**, lines 181 to 197:
+  nearest existing run; compare its shape with the new one.
+- **[conformance-observations.qnt](../../models/conformance-observations.qnt)**,
+  lines 8 to 17: the caller outcome codes, `CALL_PENDING` first.
+- **[deadlines.qnt](../../models/kernel/deadlines.qnt)**, lines 181 to 197:
   `releaseLocal` stamps the retry's deadline from `state.now`; `advanceLocal`
-  delivers it. -
-  **[../AUTHORING.md](../AUTHORING.md#exporting-a-deterministic-regression)**,
+  delivers it.
+- **[../AUTHORING.md](../AUTHORING.md#exporting-a-deterministic-regression)**,
   "Exporting a deterministic regression": the rules a run must meet to be
   exported.
 
@@ -109,8 +115,8 @@ You will edit a tracked model; part 3 undoes it.
    node formal/tools/execution.mjs | head -8
    ```
 
-You should see `regressions` and `exportedRegressionTraces` each one higher than
-   the clean tree printed in lesson 2.
+   You should see `regressions` and `exportedRegressionTraces` each one
+   higher than the clean tree printed in lesson 1.
 
 Leave the edit in place for part 3.
 

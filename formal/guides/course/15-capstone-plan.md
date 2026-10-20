@@ -6,22 +6,26 @@ derived from a contract ID with `where.mjs` and the authoring checklist. Parts
 
 ## The idea
 
-Every change to portable behavior starts from a contract, not from a file. The
-contract inventory gives each obligation a stable ID; the catalogs connect that
-ID to the model that states it, the runs that pin it, the witnesses that must
-reach it, the challenges that attack it and the mutants that attack the ports.
-`node formal/tools/where.mjs <id>` assembles that view in one place, so a plan
-begins by reading it rather than by searching the tree.
+Lessons 1 to 14 covered the pipeline; the three capstone lessons push one
+small change through it. Every change to portable behavior starts from a
+contract, not from a file. The contract inventory gives each obligation a
+stable ID.
+
+The catalogs connect that ID to the model that states it, the runs
+that pin it, the witnesses that must reach it, the challenges that attack it
+and the mutants that attack the ports. `node formal/tools/where.mjs <id>`
+assembles that view in one place, so a plan begins by reading it rather than
+by searching the tree.
 
 The change this capstone makes is deliberately small: one new regression in
 the source-budgets profile. The rule it pins is already true of the model and
-the ports, which is the right size for a first contribution, because every
-gate you meet is then about bookkeeping, not behavior.
+the ports. That is the right size for a first contribution, because every gate
+you meet is then about bookkeeping, not behavior.
 
 **The rule.** When a source expires at its deadline, the next call for the
-same key starts a new source, and that retry gets its own full budget measured
+same key starts a new source. That retry gets its own full budget, measured
 from its own start. Under C23 ("source ... starts only at source invocation")
-this is a corner no existing run states in those words:
+this is a corner no existing run states in those words.
 `abandonedSourceCannotReplaceSuccessfulRetryTest` shows the retry winning, but
 not that its budget is whole.
 
@@ -33,23 +37,24 @@ not that its budget is whole.
    first.
 2. **Model the smallest boundary.** One `run ...Test` in
    [dialcache-source-budgets-conformance.qnt](../../models/dialcache-source-budgets-conformance.qnt),
-   using only the profile's public actions, so it is public-only and therefore
-   exported automatically (lesson 6). No new profile, no new action, no new code.
-3. **Challenge the rule.** Nothing to add: the scheduled invariant
+   using only the profile's public actions. It is therefore public-only and
+   exported automatically (lesson 6). No new profile, no new action, no new
+   code.
+3. **Challenge the rule.** Nothing to add. The scheduled invariant
    `acceptedSourceRespectsItsOwnStart` already compares each accepted source
-   with its own start and budget, and the challenge
-   `profile-source-wrong-clock` from lesson 11 already attacks the deadline
-   origin. The new run would fail under that same fault.
+   with its own start and budget. The challenge `profile-source-wrong-clock`
+   from lesson 11 already attacks the deadline origin, and the new run would
+   fail under that same fault.
 4. **Exercise every implementation.** Run it in Quint, export it, replay it in
    TypeScript and Go (lessons 6, 8 and 9). The full workflow would replay it
    in Rust and Python too, because exported runs are part of every port's
    required inventory.
-5. **Account for the evidence.** The run becomes one of the 469 regressions
-   and 359 exported histories, which moves two counts the Go parity ledger
-   pins; the model's hash changes, which moves the fixture lock; the generated
-   profile view counts exported regressions, so it must be regenerated. A real
-   change would also cite the run from a semantic case in
-   `semantic-cases.json` with a reviewed scope.
+5. **Account for the evidence.** The run adds one to the 468 regressions and
+   the 358 exported histories, two counts the Go parity ledger pins. The
+   model's hash changes, which moves the fixture lock. The generated profile
+   view counts exported regressions, so it must be regenerated. A real change
+   would also cite the run from a semantic case in `semantic-cases.json` with
+   a reviewed scope.
 
 Part 2 does steps 2 and 4. Part 3 does step 5 and shows that each gate names
 its own fix.
@@ -60,7 +65,7 @@ its own fix.
   "[Where the boundary lies](../CONTRACTS.md#where-the-boundary-lies)" for
   what counts as portable at all.
 - **[semantic-cases.json](../../catalogs/semantic-cases.json)**: the eight
-  `C23.*` cases; `C23.default-source-budget` cites
+  `C23.*` cases. `C23.default-source-budget` cites
   `source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest` under
   `quintReplays`, which is the shape a new citation would take.
 - **[../WALKTHROUGH.md](../WALKTHROUGH.md#find-the-rules-catalog-entries)**,
@@ -80,7 +85,7 @@ its own fix.
    node formal/tools/where.mjs C23
    ```
 
-   Under `Stated`, the profile header at
+   You should see four blocks. Under `Stated`, the profile header at
    `dialcache-source-budgets-conformance.qnt:10`. Under `Tested`, eight cases;
    `C23.default-source-budget` and `C23.policy-does-not-spend-source-budget`
    both cite source-budgets runs. Under `Challenged`, three challenges, two of
@@ -96,11 +101,12 @@ its own fix.
    You should see its `scenarios`, `quint checks`, `witnesses` and `replays`
    lines: the four kinds of evidence a case can carry.
 
-3. Write the run you will add in part 2, on paper or in a scratch file, as a
-   sequence of the profile's public actions. Check your draft against lesson 5:
-   `begin(ENABLED)`, `release(n)`, `advanced(ms)` with `ms` in the `advance`
-   choice set, `resolved(id, value)`. The answer is in part 2; the point is to
-   notice that the budget is 10 ms and the choice set offers `10` and `9`.
+3. Draft the run you will add in part 2, on paper or in a scratch file, as a
+   sequence of the profile's public actions. Check your draft against lesson
+   5: `begin(ENABLED)`, `release(n)`, `advanced(ms)` with `ms` in the
+   `advance` choice set, `resolved(id, value)`. The answer is in part 2. The
+   point is to notice that the budget is 10 ms and the choice set offers `10`
+   and `9`.
 
 ## Recap
 

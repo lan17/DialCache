@@ -1,12 +1,13 @@
 # 17. Capstone, part 3: the ripple, the fixes and the undo (10 min)
 
 **What you get:** every gate the one-run change from part 2 trips, in the
-order the audit lane meets them, with the fix each one names; then the undo
-that leaves your tree clean. This is step 5 of the plan.
+order the audit lane meets them, with the fix each one names. Then the undo
+that leaves your tree clean (plan step 5).
 
 ## The idea
 
-Nothing about the new run is wrong, yet three checks turn red. That is the
+Part 2 left the new run in your tree; this lesson watches the checks react to
+it. Nothing about the run is wrong, yet three checks turn red. That is the
 design from lesson 13 working as intended: a model edit must not outrun the
 artifacts and ledgers that describe it, and each check says what to do.
 
@@ -15,9 +16,8 @@ model that feeds a committed smoke trace. The model's bytes changed, so the
 verification fails with `Generated fixture inputs changed; regenerate and
 review`. The fix is `node formal/tools/generate-artifacts.mjs --write`, which
 recomputes every committed artifact with Quint (about 40 s). Here the smoke
-traces come out byte-identical, so the only diff is one hash in the lock, and
-that diff is the review: a reviewer sees that regeneration changed no
-prediction.
+traces come out byte-identical, so the only diff is one hash in the lock. That
+diff is the review: a reviewer sees that regeneration changed no prediction.
 
 **The generated view.** `PROFILES.md` shows "10 exported regressions" for
 source-budgets; the model now has 11. `generate-catalog-docs.mjs --check`
@@ -28,15 +28,16 @@ views. Edit the descriptor or the catalog, never the view.
 (468) and `exportedRegressionHistories` (358). `check-go-parity.mjs` fails
 with `Quint scheduled model/check counts are stale` and `Exported Quint
 regression history count is stale`. These are hand-maintained numbers, by
-design: `--refresh-inputs` re-pins digests only and tells you the ledger still
-fails, so a reviewer bumps both to 469 and 359 while reviewing what the
-regression adds, as [GO-PARITY.md](../GO-PARITY.md#reading-and-updating-the-ledger)
-describes. This course does not edit that ledger; you will see the message and
-then undo everything.
+design. `--refresh-inputs` re-pins digests only and tells you the ledger still
+fails. A reviewer bumps both to 469 and 359 while reviewing what the
+regression adds, as
+[GO-PARITY.md](../GO-PARITY.md#reading-and-updating-the-ledger) describes.
+This course does not edit that ledger; you will see the message and then undo
+everything.
 
 Three other things a real change would carry. The differential (lesson 12)
 replays the reference corpus through the new text and your 11 regressions
-through the old: both directions agree, so no `behaviorVersion` bump. A
+through the old; both directions agree, so no `behaviorVersion` bump. A
 semantic case cites the run under `quintReplays` with a reviewed scope. And
 the pull request names the full-workflow run that replayed it in all four
 ports.
@@ -46,15 +47,15 @@ ports.
 - **[generated-fixtures.mjs](../../tools/generated-fixtures.mjs)**: the
   `--verify` mode the audit lane runs
   ([validation.mjs](../../tools/validation.mjs) line 197, `--verify`) and the
-  `--write` path behind `generate-artifacts.mjs`. -
-  **[../../generated/README.md](../../generated/README.md)**: the two
-  regeneration commands and the rule "never edit a file in this directory". -
-  **[check-go-parity.mjs](../../tools/check-go-parity.mjs)**, lines 145 to 146:
+  `--write` path behind `generate-artifacts.mjs`.
+- **[../../generated/README.md](../../generated/README.md)**: the two
+  regeneration commands and the rule "never edit a file in this directory".
+- **[check-go-parity.mjs](../../tools/check-go-parity.mjs)**, lines 145 to 146:
   the two count checks (`scheduledRegressions`, `exportedRegressionHistories`),
-  computed from the models' runs and the exported replays. -
-  **[../AUTHORING.md](../AUTHORING.md#maintaining-case-and-witness-evidence)**,
-  "Maintaining case and witness evidence": how a run is cited from a case. -
-  **[../VALIDATION.md](../VALIDATION.md#choosing-a-run)**: which runs a behavior
+  computed from the models' runs and the exported replays.
+- **[../AUTHORING.md](../AUTHORING.md#maintaining-case-and-witness-evidence)**,
+  "Maintaining case and witness evidence": how a run is cited from a case.
+- **[../VALIDATION.md](../VALIDATION.md#choosing-a-run)**: which runs a behavior
   change needs before merge.
 
 ## Try it (6 min)
@@ -69,7 +70,8 @@ Start with the model edit from part 2 still in place.
 
    You should see `Error: Generated fixture inputs changed; regenerate and review`.
 
-2. Regenerate the committed artifacts (about 40 s, Quint):
+2. Regenerate the committed artifacts (about 40 s, Quint; it prints one line
+   per model as it goes):
 
    ```sh
    node formal/tools/generate-artifacts.mjs --write
@@ -101,11 +103,12 @@ Start with the model edit from part 2 still in place.
 
    It fails at `→ Check check-go-parity` with the two `stale` count messages.
    That is the ledger asking for its review, the one step left for a human.
+   The lane stops at its first failure, so the later steps do not run.
 
-5. Undo everything and confirm the tree is clean:
+5. Undo the three files and confirm the tree is clean:
 
    ```sh
-   git checkout -- formal
+   git checkout -- formal/models/dialcache-source-budgets-conformance.qnt formal/generated/generated-fixtures.lock.json formal/generated/PROFILES.md
    git status --short
    ```
 
