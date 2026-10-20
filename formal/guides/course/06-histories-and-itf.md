@@ -6,11 +6,13 @@ by hand, and which histories are committed to the repository.
 ## The idea
 
 Everything a port replays is a history: an initial state followed by public
-actions, each recording its command. Quint writes histories in ITF, the
-Informal Trace Format, which is plain JSON: a `vars` list, a `states` array,
-and integers written as `{"#bigint": "123"}` so that no JSON reader rounds
-them. Each state carries the two variables lesson 5 introduced: `input`, the
-command taken, and `s`, the model's state after it.
+actions, each recording its command. Quint writes histories in
+[ITF](../GLOSSARY.md#itf-informal-trace-format), the [Informal Trace
+Format](https://apalache-mc.org/docs/adr/015adr-trace.html) defined by
+Apalache's ADR-015 and written by `quint run --out-itf`, which is plain JSON: a
+`vars` list, a `states` array, and integers written as `{"#bigint": "123"}` so
+that no JSON reader rounds them. Each state carries the two variables lesson 5
+introduced: `input`, the command taken, and `s`, the model's state after it.
 
 Here is one state of the walkthrough regression, trimmed:
 

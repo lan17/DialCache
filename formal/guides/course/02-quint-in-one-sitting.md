@@ -53,13 +53,21 @@ run localValueSurvivesSourceChangeTest = init.then(localCall).then(bumpSource).t
 `.then` chains steps; `.expect` checks the state reached. Runs are the
 regressions of lesson 1.
 
-**Two commands.** `quint run` starts from `init`, samples random `step`
-sequences and checks the invariants you name; `quint test` executes the named
-runs. Both use Quint's evaluator written in Rust (`--backend=rust`, the
-default), a fast simulator, not a proof. The other tool, Apalache, is a
-symbolic model checker: it proves a property over every state within a bound
-and needs Java. Only one small model is checked that way (lesson 3); every
-other claim is sampled or replayed.
+**Two commands** ([CLI manual](https://quint.sh/docs/quint)). `quint run` starts
+from `init`, samples random `step` sequences and checks the invariants you name;
+`quint test` executes the named runs. Both use Quint's evaluator written in Rust
+(`--backend=rust`, the default), a fast simulator, not a proof ([how the
+simulator works](https://quint.sh/docs/simulator)). The other tool,
+[Apalache](https://apalache-mc.org/docs/), is a symbolic model checker ([Quint's
+model checker page](https://quint.sh/docs/model-checkers)): it proves a property
+over every state within a bound and needs Java. Only one small model is checked
+that way (lesson 3); every other claim is sampled or replayed.
+
+What this lesson skips, Quint's own documentation covers: [language
+basics](https://quint.sh/docs/language-basics), the [built-in
+operators](https://quint.sh/docs/builtin), the [language
+manual](https://quint.sh/docs/lang) and [checking
+properties](https://quint.sh/docs/checking-properties).
 
 ## See it in the repo
 

@@ -13,11 +13,13 @@ A [challenge](../GLOSSARY.md#challenge-fault-mutant-and-reproducer) is one
 deliberate single-site edit of a Quint source: an exact `before` text that
 occurs once, and its `after`. The catalog, the `challenges` array of
 [execution.json](../../catalogs/execution.json), names the model and the
-scheduled invariant that must detect it. The mutated model is the mutant. A
-reproducer pins the detection to one deterministic run that passes on the
-clean model and fails under the fault at a declared `.expect`; the checker
-also cuts the run just before and just through that checkpoint, so the fault
-must break exactly the stated expectation and not some earlier step.
+scheduled invariant that must detect it. The mutated model is the mutant, in the
+sense of [mutation testing](https://en.wikipedia.org/wiki/Mutation_testing): a
+deliberate fault the tests must catch. A reproducer pins the detection to one
+deterministic run that passes on the clean model and fails under the fault at a
+declared `.expect`; the checker also cuts the run just before and just through
+that checkpoint, so the fault must break exactly the stated expectation and not
+some earlier step.
 
 The example this course has been following has a challenge. In
 `deadlines.qnt`, the registration `at: state.now + budget` is edited to
@@ -41,11 +43,13 @@ settlement with `performance.now() >= timeoutMs` instead of the elapsed time
 since the source started, and Go drops `- started` from the same comparison.
 
 The mutation lanes (`make mutations-ts`, `make mutations-go`, Docker required
-for the real-Redis vectors; `make mutations-rust` without Docker) apply each
-mutant in an isolated copy, run the generated corpus against it, and require
-the replay to fail. A mutant that survives is a coverage gap, not a license:
-the corpus does not distinguish that fault, so the fix is an exported
-regression or a witness that does, before the challenge counts as mapped.
+for the real-Redis vectors, which run the invalidation script as [Redis
+Lua](https://redis.io/docs/latest/develop/programmability/eval-intro/); `make
+mutations-rust` without Docker) apply each mutant in an isolated copy, run the
+generated corpus against it, and require the replay to fail. A mutant that
+survives is a coverage gap, not a license: the corpus does not distinguish that
+fault, so the fix is an exported regression or a witness that does, before the
+challenge counts as mapped.
 
 For a fault in a shared library, every profile that imports the source must
 either detect it or appear in `exclusions` with a reason, and the checker

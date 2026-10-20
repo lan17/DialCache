@@ -18,13 +18,17 @@ reports what actually happened as an observation. The coordinator compares
 that observation with the prediction for the step and either returns the next
 commands or fails.
 
-Why does this split matter? If the driver could see the expected observation,
-a port could pass by echoing it, or by nudging its own state toward it. Here
-the wire replies contain no predictions at all (the comment at the top of the
+Why does this split matter? If the driver could see the expected observation, a
+port could pass by echoing it, or by nudging its own state toward it. Here the
+wire replies contain no predictions at all (the comment at the top of the
 coordinator says exactly that), so the only way to pass is to behave the same.
+This is [model-based testing](https://en.wikipedia.org/wiki/Model-based_testing)
+in the strict form Quint's own
+[guide](https://quint.sh/docs/model-based-testing) describes: the model
+generates the tests and judges the results, and the implementation only runs.
 
-The protocol is small: JSON objects, one per line, with `version: 1` and a
-strictly increasing `id`. Four operations:
+The protocol is small: [JSON Lines](https://jsonlines.org/), one JSON object per
+line, with `version: 1` and a strictly increasing `id`. Four operations:
 
 | Request | What comes back |
 | --- | --- |

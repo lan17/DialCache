@@ -42,8 +42,9 @@ again, independently, without calling the helper:
 val sourceBoundaryIsExclusive = actual.source == (c.budget < 0 or c.settled - c.started < c.budget)
 ```
 
-This is the one model the suite proves with Apalache (`make model-check`,
-Java 21 required): every combination in the declared domain, not a sample.
+This is the one model the suite proves with
+[Apalache](https://apalache-mc.org/docs/) (`make model-check`, Java 21
+required): every combination in the declared domain, not a sample.
 
 Second, the challenge catalog (lesson 11) deliberately flips `<` to `<=` in
 cache-rules.qnt and requires a named invariant to catch it.

@@ -10,7 +10,9 @@ Lesson 4 moved rules out of the profiles into the kernel. Every such move is a
 rewrite of a profile's text, and a rewrite is exactly where an accidental
 behavior change hides: the sampled corpus looks fine, every regression still
 passes, and yet some step now predicts a different observation. The
-[differential](../GLOSSARY.md#differential) is the check built for that.
+[differential](../GLOSSARY.md#differential) is the check built for that: a form
+of [differential testing](https://en.wikipedia.org/wiki/Differential_testing),
+two texts of the same profile replaying each other's corpus.
 
 It takes two texts of the same profile: the reference, which is the merge base
 with `origin/main`, and the candidate, your working tree. From each text it

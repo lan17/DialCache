@@ -13,10 +13,12 @@ and four test suites written by hand drift four different ways.
 So the portable rules are written once, in a language a tool can run. That is
 what "executable specification" means here: the rule is a small program, the
 tool generates concrete histories from it, and every port is made to replay
-those histories against its real cache. The language is Quint, a specification
-language with a simulator and a model checker. The histories are JSON files.
-The replay is a shared Node program that hands each port commands and checks
-the port's answers.
+those histories against its real cache. The language is
+[Quint](https://quint.sh/docs), a specification language built on the temporal
+logic of actions ([TLA+](https://lamport.azurewebsites.net/tla/tla.html)), with
+a simulator and a [model checker](https://en.wikipedia.org/wiki/Model_checking).
+The histories are JSON files. The replay is a shared Node program that hands
+each port commands and checks the port's answers.
 
 Take one real rule. A call that waits 100 ms for runtime policy and then
 starts a source with a 10 ms budget must still be allowed 10 ms, not 10 ms

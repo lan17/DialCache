@@ -101,6 +101,36 @@ quotes at most a sentence and links. The guides themselves are indexed in
 [../README.md](../README.md) by kind and in [../../README.md](../../README.md)
 by task; terms are defined in [../GLOSSARY.md](../GLOSSARY.md).
 
+## Further reading
+
+The lessons link each outside concept where it first appears. Collected here,
+with the lesson that uses it:
+
+- **Quint.** The [documentation index](https://quint.sh/docs) and
+  [getting started](https://quint.sh/docs/getting-started) (lesson 1);
+  [language basics](https://quint.sh/docs/language-basics), the
+  [built-in operators](https://quint.sh/docs/builtin), the
+  [language manual](https://quint.sh/docs/lang), the
+  [CLI manual](https://quint.sh/docs/quint),
+  [checking properties](https://quint.sh/docs/checking-properties),
+  [how the simulator works](https://quint.sh/docs/simulator) and
+  [model checkers](https://quint.sh/docs/model-checkers) (lesson 2);
+  [model-based testing](https://quint.sh/docs/model-based-testing) (lesson 7).
+  The language lives at [quint-co/quint](https://github.com/quint-co/quint).
+- **Apalache.** The [documentation](https://apalache-mc.org/docs/) of the
+  symbolic model checker behind `make model-check` (lessons 2 and 3), and
+  [ADR-015](https://apalache-mc.org/docs/adr/015adr-trace.html), the definition
+  of the Informal Trace Format (lesson 6).
+- **Background.** [TLA+](https://lamport.azurewebsites.net/tla/tla.html), the
+  temporal logic of actions Quint is built on, and
+  [model checking](https://en.wikipedia.org/wiki/Model_checking) (lesson 1);
+  [model-based testing](https://en.wikipedia.org/wiki/Model-based_testing) and
+  [JSON Lines](https://jsonlines.org/), the replay protocol's framing (lesson 7);
+  [mutation testing](https://en.wikipedia.org/wiki/Mutation_testing) and
+  [Redis Lua scripting](https://redis.io/docs/latest/develop/programmability/eval-intro/)
+  (lesson 11); [differential testing](https://en.wikipedia.org/wiki/Differential_testing)
+  (lesson 12).
+
 ## How the course stays current
 
 Lessons point at exact lines and quote command output, and both drift as the
