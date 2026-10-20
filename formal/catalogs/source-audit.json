@@ -217,7 +217,7 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "836a026530b6773e06aa461a29891fe8c6d2578360f5678702e8d7374d2deb09",
+      "sha256": "51b0808c1983de972421a15994bf1090bd20ca3a832a28d1a88dfc5ccc29951d",
       "entries": [
         {"title":"Maintainer guide","contracts":["B01"]},
         {"title":"Validation","contracts":["B01"]},
@@ -1084,16 +1084,22 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "f03253dbdc8b87c8b272b16a0b0898413efddf9cb97a144b261810eff09633bc",
+      "sha256": "a8d0e85c55e9d219649cdfbe3d10e74eaf75bef603e05bc016d19b43f84136b1",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
+        {"title":"The setup, top to bottom"},
+        {"title":"1. State the rule in Quint"},
+        {"title":"2. Check the models"},
+        {"title":"3. Generate the corpus and the committed artifacts"},
+        {"title":"4. Replay every history in every port"},
+        {"title":"5. Account for the evidence"},
+        {"title":"6. Gate a change"},
+        {"title":"What is and is not claimed"},
+        {"title":"Pipelines"},
         {"title":"Where things are"},
-        {"title":"How the specification connects to code"},
-        {"title":"Models and composition profiles"},
-        {"title":"Generating and replaying behavior"},
-        {"title":"Shared verification and replay rules"},
-        {"title":"Evidence and scope"}
+        {"title":"Run it"},
+        {"title":"Reference"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1102,7 +1108,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "46ea31d30b5cfebfa6163dfad1ad33b770148bf147329bb5c0a93271d4806962",
+      "sha256": "baca2abd313c0bcccce5e95d384d1cce7d60982a12fe192fee7680f143acd7a7",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},
@@ -1124,7 +1130,7 @@
     },
     {
       "path": "formal/guides/BEHAVIOR.md",
-      "sha256": "7adc2ad8756d8df060b09c6d6c83c6d084e612c7b21afe2107029cb3c2ea2e99",
+      "sha256": "5d6cb8d7e779cb99e6a60f6ea553b524d49c7a42b79a74f912a90ff44c5bafe8",
       "entries": [
         {"title":"Portable behavioral scenarios and generated profiles"},
         {"title":"Scenario format"},
@@ -1220,7 +1226,7 @@
     },
     {
       "path": "formal/guides/CONFORMANCE.md",
-      "sha256": "fb1edc1c05e51a8b647fcb1fe91fd5c75f48f6aae4920892ae479884af67adc7",
+      "sha256": "3bc580b0ea32bd21e53f54ec78523afb59ebaf40f8396b7884b51d4a7b8ec898",
       "entries": [
         {"title":"Core behavioral conformance profile"},
         {"title":"Trace format and trust boundary"},
@@ -1370,7 +1376,7 @@
     },
     {
       "path": "formal/guides/GLOSSARY.md",
-      "sha256": "2e1ae3a35f4b2c525a144e9cd7f079994bd3ebffb3a737c5dd770bd7f5e39fe8",
+      "sha256": "916d6eddcc7ccb71c249480f02a5f385ceea3f8b6aab8ebb37f62ba5b8709ed5",
       "entries": [
         {"title":"Glossary"},
         {"title":"Specification and replay"},
@@ -1381,6 +1387,7 @@
         {"title":"Connection model"},
         {"title":"Smoke"},
         {"title":"Lane"},
+        {"title":"ITF (Informal Trace Format)"},
         {"title":"Corpus, history, regression, exported run and public-only run"},
         {"title":"Differential"},
         {"title":"Bytes per state"},
@@ -1429,7 +1436,7 @@
     },
     {
       "path": "formal/guides/GO-PARITY.md",
-      "sha256": "1af6d885ef3490badfe7bc05f215bc20c3fad84bd9a2786ac4b62c00ce35e8c7",
+      "sha256": "956b12eabff3716bac5f4c57d14315c792dc89524c224a261fd15508992ff63f",
       "entries": [
         {"title":"Go parity acceptance"},
         {"title":"Required evidence"},
@@ -1475,7 +1482,7 @@
     },
     {
       "path": "formal/guides/PORTING.md",
-      "sha256": "22d0c0dc6ad513ee29f7008a83d8152ea77d1fff5a72c8393a643e0e71d5fe06",
+      "sha256": "342cfd680eeba31a57c7cc790693fb21d56e358e20ce105a6a6ce28a9e511a7e",
       "entries": [
         {"title":"Implementing another DialCache port"},
         {"title":"What a port supplies"},
@@ -1550,7 +1557,7 @@
     },
     {
       "path": "formal/guides/SEMANTIC-COVERAGE.md",
-      "sha256": "2834da3082acbcb70afffb4b4c18e5547209c47129f1ba681a598ac614d41539",
+      "sha256": "aaa54bdb961436a615dd4a0c1e29270c0c6ebe69adb24a41f97a0f26698e8282",
       "entries": [
         {"title":"Measuring semantic coverage"},
         {"title":"Evidence inventory"},
@@ -1673,7 +1680,7 @@
     },
     {
       "path": "formal/guides/TEST-MAP.md",
-      "sha256": "a32e4513667d38236aeb4df0b8c872912e725f1ae1605a6a91c07cb2970dc4d5",
+      "sha256": "66593388b326cd3c6b5378a1f98dc0cad28a2f39b387cc9b5efa032a28b0ec26",
       "entries": [
         {"title":"Formal contract and implementation evidence map"},
         {"title":"Behavioral map"},
@@ -1689,11 +1696,13 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "20132bd3ea23510eef25022fec91482fd09bf24f0a285f72aa018d69a69bd154",
+      "sha256": "4930ebe0a168dbb1988f04f2e8afd1f027f3d9b2131084c3794a15a3a6454c2f",
       "entries": [
         {"title":"Validation and evidence"},
+        {"title":"Prerequisites"},
         {"title":"Choosing a run"},
         {"title":"Reading a completion report"},
+        {"title":"Reproducing one history"},
         {"title":"Mutation evidence"},
         {"title":"Exploratory runs"},
         {"title":"A retained sampling regression"}
@@ -1705,7 +1714,7 @@
     },
     {
       "path": "formal/guides/WALKTHROUGH.md",
-      "sha256": "c7d3bdb1e65f3672f94c61c5a5cccaf9f2bfd061f5de3f226dfa93973f4fab59",
+      "sha256": "17eb27c78c4be73e47cec8e08a8f33cf07d8f33116ab0e531f19f0f59f082174",
       "entries": [
         {"title":"Follow one behavior from Quint to every port"},
         {"title":"Read the named run first"},
@@ -1720,7 +1729,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "97ceca7d13bc270a4e53341ce1d33b0a8f3906d4b4f26b7d2d30a8747f59f0f1",
+      "sha256": "fa465c2a7e53b4fe3ea2045708510c81ea5304e62533f99726d9bcdf1ba9c079",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},
