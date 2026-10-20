@@ -18,6 +18,7 @@ by kind and [GLOSSARY.md](./guides/GLOSSARY.md) defines the terms.
 | Task | Read first |
 | --- | --- |
 | See how the pieces fit together | [The setup, top to bottom](#the-setup-top-to-bottom) |
+| Learn the setup from scratch, ten minutes at a time | [the course](./guides/course/README.md), seventeen lessons with one exercise each |
 | Understand system behavior | [SPEC.md](./guides/SPEC.md), then the relevant model in [models/README.md](./models/README.md) |
 | Follow one rule into every implementation | [WALKTHROUGH.md](./guides/WALKTHROUGH.md) |
 | Change a behavior or extend coverage | [AUTHORING.md](./guides/AUTHORING.md) |
