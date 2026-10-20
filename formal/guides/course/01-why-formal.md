@@ -82,7 +82,7 @@ Six stages turn a rule into evidence. Every later lesson sits in one of them:
    "regressions": 468,
    ```
 
-   Read it as: 32 Quint models, 17 of them
+   Read it as: `"models": 32` Quint models, `"profiles": 17` of them
    [profiles](../GLOSSARY.md#profile-conformance-profile) that ports replay,
    `"invariants": 253` checked invariants and `"regressions": 468` named runs.
 
