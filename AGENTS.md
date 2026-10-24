@@ -122,7 +122,7 @@ the one the ruleset requires.
 3. Settle a Quint and TypeScript disagreement with that regression and a comment recording the
    intended behavior, never by quietly editing the easier side.
 4. Replay the regression in every port
-   ([Generating and replaying behavior](formal/README.md#generating-and-replaying-behavior)) and fix
+   ([Run it](formal/README.md#run-it)) and fix
    each port that fails it.
 
 #### Public API
@@ -291,6 +291,11 @@ The PR leaves draft only when all of these hold; the maintainer then reviews and
   through every replay, and `node formal/tools/where.mjs C45` prints where one contract is stated,
   tested, challenged and mapped. Read the model and profile bindings before opening large
   generated JSON.
+- The course under `formal/guides/course/` cites files by line and quotes command output, so it
+  drifts. A change under `formal/`, a replay driver or the replay protocol that moves what a lesson
+  points at, changes a quoted output or changes how a learner would do the task updates the
+  affected lesson in the same PR. `make audit` (`check-course.mjs`) names a citation or count that
+  moved; reread the rest of that lesson, since only a reader can tell when the idea moved.
 - `DEVELOPMENT_PROCESS.md` explains this process to human readers. A change to "Make a change"
   updates it in the same PR.
 

@@ -38,7 +38,7 @@ on a port's replay report. Each port's mutation catalog defines its measured sco
 `make ci NODE22_BIN=/path/to/node22/bin/node` runs the complete pipeline,
 including integrations, mutations and the exact Node 22.15.0 package floor.
 See the repository's
-[formal guide](https://github.com/lan17/DialCache/blob/main/formal/README.md#generating-and-replaying-behavior)
+[formal guide](https://github.com/lan17/DialCache/blob/main/formal/README.md#run-it)
 for setup, reports and single-history reproduction.
 
 Pull requests run fast native/smoke checks and real integrations. Changes to

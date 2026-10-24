@@ -39,9 +39,13 @@ One committed named history per conformance profile, `formal/generated/<profile>
 
 One validation pipeline run as its own make target and hosted CI job: the Quint evidence lane (`formal-check`), generation (`formal-generate`), the per-port parity lanes (`formal-ts`, `formal-go`, `formal-rust`, `formal-python`), the mutation lanes, and the differential, symbolic, exploration, smoke, audit and integration lanes. Parity and mutation lanes depend only on the generated corpus and witness evidence, so they run in parallel; the aggregate requires every lane. Owner: [VALIDATION.md](./VALIDATION.md)
 
+### ITF (Informal Trace Format)
+
+The JSON trace format Quint and Apalache write, defined by Informal Systems in [ADR-015](https://apalache-mc.org/docs/adr/015adr-trace.html) and produced by `quint run --out-itf` ([Quint CLI](https://quint.sh/docs/quint)). A trace is one object: a `#meta` header, the `vars` list and a `states` array holding one record of every variable per step. Integers are decimal strings inside `{"#bigint":"…"}` so no value loses precision; sets, tuples and maps use `#set`, `#tup` and `#map` wrappers. Every history here is one ITF file (`.itf.json`): the committed smoke traces, the sampled corpus and the exported regressions. Sampled histories carry the `mbt::actionTaken` and `mbt::nondetPicks` annotations the simulator adds beside the authoritative `input` record; exported regressions, which `quint test` writes without them, get the same envelope from [replay-inputs.mjs](../tools/replay-inputs.mjs). The profile descriptors read them through [itf.mjs](../replay/itf.mjs), which rejects an integer that would not survive as a JavaScript number. Owner: [itf.mjs](../replay/itf.mjs)
+
 ### Corpus, history, regression, exported run and public-only run
 
-A history is one ITF trace: an initial state then public actions, each recording its command in `input`. The corpus is everything a port replays: the sampled histories generation emits per profile plus the exported regressions. A regression is any `run ...Test` a scheduled model declares; a profile's public-only runs, whose every transition records a command, are exported for replay, while state-patching runs stay model-only. Owner: [AUTHORING.md](./AUTHORING.md), [execution.mjs](../tools/execution.mjs)
+A history is one [ITF](#itf-informal-trace-format) trace: an initial state then public actions, each recording its command in `input`. The corpus is everything a port replays: the sampled histories generation emits per profile plus the exported regressions. A regression is any `run ...Test` a scheduled model declares; a profile's public-only runs, whose every transition records a command, are exported for replay, while state-patching runs stay model-only. Owner: [AUTHORING.md](./AUTHORING.md), [execution.mjs](../tools/execution.mjs)
 
 ### Differential
 
