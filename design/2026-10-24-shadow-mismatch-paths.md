@@ -45,6 +45,9 @@ Constraints:
   complete kill switch, so every new leaf is a boolean the overlay can set.
 - Warning fields reach log pipelines, so a path list is a structured array of
   strings, not a rendered blob.
+- `shadow.logMismatches: true` is live in at least one consumer's dynamic
+  config store, so the upgrade must not silently change whether a mismatch is
+  logged or force a deploy-then-config ordering.
 - The replay protocol records the warning as an observation whose extra fields
   must be JSON primitives
   ([PORTING.md](../formal/guides/PORTING.md#trace-and-observation-contract)).
@@ -52,14 +55,27 @@ Constraints:
 ## Proposal
 
 The `shadow` group gains a `mismatchLogging` content group with three
-independent default-off leaves, replacing `logMismatches`:
+independent default-off leaves. `logMismatches` stays as the one-flag
+shorthand for every leaf:
 
 ```ts
 shadow: {
   ramp: 5,
   mismatchLogging: { paths: true, value: false, diff: false },
 }
+// Equivalent to mismatchLogging: { paths: true, value: true, diff: true }:
+shadow: { ramp: 5, logMismatches: true }
 ```
+
+`logMismatches` is expansion, not a fourth leaf: where it appears, in a
+default config or a runtime overlay, `true` expands to every leaf true and
+`false` to every leaf false before the ordinary leaf-wise merge runs. An
+explicit leaf in the same object wins over the expansion, so
+`{ logMismatches: true, mismatchLogging: { value: false } }` logs paths and
+`diff` without values. An invalid value expands to every leaf false with one
+`config_resolution`, as today. Every leaf derives from the renderings that
+`value` logs (D3), so the shorthand never exposes more than
+`logMismatches: true` exposes today; it adds fields.
 
 A warning is emitted after a confirmed mismatch when at least one leaf is
 true. It always carries `cacheNamespace`, `useCase`, `keyType`,
@@ -129,7 +145,9 @@ and `shadow_mismatch_paths=` beside `shadow_comparator`. Runtime config in
 every port validates each leaf independently: an invalid leaf acts false and
 records one `config_resolution`; unknown fields are ignored and reported as
 `config_unknown_field`; a non-object `mismatchLogging` fails resolution like a
-malformed layer map.
+malformed layer map. `logMismatches` keeps its type in every port (Go
+`LogMismatches *bool`, Rust `log_mismatches: Option<bool>`, Python
+`log_mismatches` or `logMismatches`) and expands before the leaves merge.
 
 ## Out of scope
 
@@ -162,20 +180,28 @@ malformed layer map.
   vector a pair of JSON values with the expected pointers, mapped in
   `semantic-cases.json` as `protocol/mismatchPathVectors/*` and replayed by
   every port's protocol-vector test. The function has no relation to kernel
-  state, so it is not modelled in Quint.
+  state, so it is not modelled in Quint. The completion inventory requires
+  every port to replay every vector, so the group and the row land with the
+  last port (Plan); until then the TypeScript differ is pinned by native
+  tests.
 - **Quint:** `kernel/shadow.qnt` keeps `logging: bool`, read as "at least one
   content leaf is on"; `dialcache-shadow-conformance.qnt` keeps its
   invariants and regressions, including `invalid-logging-policy`, which the
-  per-leaf validation still satisfies. The fixture encoding moves: the
-  `logPolicy` choices in `formal/replay/features.mjs` and the five fixed
-  scenarios in `behavioral-scenarios.json` that set `logMismatches` set
-  `mismatchLogging.paths` instead. That is a driver fixture change, not a
-  model change.
+  per-leaf validation still satisfies. The `logPolicy` choices in
+  `formal/replay/features.mjs` and the five fixed scenarios in
+  `behavioral-scenarios.json` keep `logMismatches`, which stays valid, so the
+  shared corpus needs no change while the ports catch up; the pull request
+  that completes the last port adds per-leaf choices and scenarios so the
+  corpus exercises the leaves and the shorthand's expansion. That is a driver
+  fixture change, not a model change.
 - **Observation record:** the `mismatchWarning` event in
   [PORTING.md](../formal/guides/PORTING.md#trace-and-observation-contract)
   gains optional `mismatchPathsJson` (the array as one JSON string, keeping
   fields primitive), `mismatchPathCount` and `diffJson`. Every port's driver
-  records them, and all four `formal-<port>` lanes run.
+  records them, and all four `formal-<port>` lanes run. While ports land one
+  at a time, a lane that compares warning fields across ports sees them from
+  TypeScript first; if that comparison is strict, the TypeScript driver
+  records the new fields only once every port emits them.
 - **Native (B03/X01):** hook execution per port (thenables in TypeScript,
   panics in Go, the bounded CPU executor in Rust, the event loop in Python);
   which native types each renderer sees; the logger backend.
@@ -319,6 +345,30 @@ malformed layer map.
   - No depth cap. The walk runs on parsed JSON, so it terminates, but a
     pathological depth is CPU on the detached budget for no diagnostic value.
 
+### D10. What happens to `shadow.logMismatches`
+
+- **Choice:** it stays, permanently, as the one-flag shorthand for every
+  content leaf, with the expansion semantics in the Proposal. The convention
+  against aliases and shims covers unused API; this field is live in a
+  consumer's config store, and the shorthand is a coarse control with a
+  defined meaning, not a deprecated path. A record that adds a leaf decides
+  whether the shorthand covers it.
+- **Status:** Open
+- **Rejected:**
+  - Removing it and treating a stale value as an ignored unknown field with a
+    `config_unknown_field` metric, as #138 decided on 2026-08-15. Rejected
+    2026-10-24: the upgrade would silently stop mismatch logging for every
+    config store that carries `logMismatches: true`, and the migration would
+    have to be sequenced after the deploy.
+  - Keeping it temporarily, with an issue for its removal. The removal is a
+    second breaking change plus the same config flip, with the same
+    silent-loss risk at that moment; the cost is deferred, not saved.
+  - Expanding `true` to `{ value: true }` only, preserving today's output
+    exactly. All-on exposes nothing beyond `value`, and it delivers paths to
+    existing configs without a change.
+  - A fourth leaf merged independently and OR'd at read time. An explicit
+    `value: false` could then never win over an inherited `true`.
+
 ## Carried decisions
 
 Reviewed and approved by the maintainer on #138; carried unchanged:
@@ -333,9 +383,9 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 - A side with no rendering fails every field it feeds closed to `null`; no
   `null → null` entries.
 - Unknown `mismatchLogging` leaves and other unknown key-config fields are
-  ignored and reported once per observed config as `config_unknown_field`;
-  stale `shadow.logMismatches` therefore no longer enables logging and never
-  bypasses the cache. A known leaf with an invalid value acts false with one
+  ignored and reported once per observed config as `config_unknown_field`.
+  (#138 applied this to `shadow.logMismatches` itself; D10 keeps that field
+  instead.) A known leaf with an invalid value acts false with one
   `config_resolution`; a non-object group fails resolution like a malformed
   layer map.
 - `value: true` without a projector logs raw JSON.
@@ -368,26 +418,30 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 - **Docs:** `shadow-validation.md` (Confirmed mismatch logging),
   `observability.md` (Confirmed mismatch warnings), `configuration.md`,
   `api.md`, the port READMEs that name `logMismatches`, and `upgrading.md`:
-  `shadow.logMismatches` is removed; `logMismatches: true` becomes
-  `mismatchLogging: { value: true }`; a stale field is ignored with a
-  `config_unknown_field` metric, so config stores flip after the library
-  upgrade lands, not before.
-- **Release:** a breaking change in every port, titled with `!` and a
-  `BREAKING CHANGE:` footer.
+  `shadow.logMismatches` stays and now also logs `mismatchPaths`,
+  `mismatchPathCount` and `diffJson`; no config migration is required.
+- **Release:** additive for TypeScript, Go and Python. Breaking for Rust,
+  where `ShadowPolicy` gains a public field and existing struct literals stop
+  compiling; the title keeps `!` and the `BREAKING CHANGE:` footer names
+  that.
 
 ## Plan
 
-1. One draft pull request, titled for the change, opens with this record as
-   its first commit and stays at the design gate until every decision is
-   confirmed and the record is `Accepted`.
-2. The same pull request then carries the implementation for all four ports,
-   their replay drivers, the vector group, the fixture encoding, contracts,
-   catalogs and docs. The ports cannot follow TypeScript in a later pull
-   request: the shared fixed scenarios and the generated shadow profile
-   encode the logging policy, so a `main` where only TypeScript understands
-   `mismatchLogging` fails the other ports' replay lanes. Validation tier:
-   Full once on the final candidate (Portable behavior), with the mutation
-   lanes covering the moved M08 and M09 anchors.
+1. #242 opens with this record as its first commit and stays at the design
+   gate until every decision is confirmed and the record is `Accepted`.
+2. #242 then carries the TypeScript reference: the leaves and the shorthand,
+   the built-in differ, both hooks, the warning fields, the TypeScript replay
+   driver, C60's wording, the TypeScript docs and catalogs, and native tests
+   that pin the differ. The shared corpus keeps `logMismatches`, which stays
+   valid in every port, so the other ports keep passing. Tier: Replay and
+   Mutations, since M08 and M09 anchor on the moved logging code.
+3. Go, Rust and Python each follow in their own pull request against the
+   TypeScript semantics, with their drivers and docs. Tier: Replay and
+   Mutations each.
+4. The pull request that completes the last port adds the vector group, its
+   `semantic-cases.json` mapping and the new contract row, and re-encodes the
+   `logPolicy` choices and scenarios per leaf. Tier: Full (Portable
+   behavior).
 
 ## Deviations
 
