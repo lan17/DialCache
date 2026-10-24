@@ -2,7 +2,7 @@
 
 - **Status:** Proposed
 - **Issue:** none
-- **Pull requests:** none yet
+- **Pull requests:** #242
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
 - **Supersedes:** the design in pull request #138, which is unmerged; the
   decisions it carries are listed under [Carried decisions](#carried-decisions)
