@@ -1,6 +1,6 @@
 # Shadow mismatch paths: name the differing fields in confirmed-mismatch warnings
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Issue:** none
 - **Pull requests:** #242
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
@@ -298,7 +298,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 - **Choice:** the [Carried decisions](#carried-decisions) below are taken as
   settled; this record does not reopen them.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - Re-deciding each one here. They were reviewed and approved in #138's
     threads; relitigating costs a round trip and invites drift.
@@ -309,7 +310,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   `"off" | "paths" | "values"`; `cacheKey` is part of every warning. #138's
   `key` leaf is dropped. The cost accepted: a string leaf among boolean and
   numeric ones, so each port carries a three-value type with its validation.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - `key`, `value`, `diff` as in #138. The `key` leaf existed only so a
     warning could name no entity; a cache key is an identifier the
@@ -334,7 +336,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 - **Choice:** RFC 6901 JSON Pointer strings (`/profile/email`, `/items/2`,
   `""` for the root), `~0` and `~1` escaping.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - Segment arrays `["profile", "email"]` as in #138. Unambiguous but verbose,
     and log pipelines cannot group by them without flattening.
@@ -347,7 +350,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 - **Choice:** the parsed native-JSON renderings of both sides, rendered once
   each, with no entries for byte-identical renderings and one entry at `""`
   for roots of different kinds.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - The native values the comparator saw. It would explain every verdict,
     including a `Date` against its ISO string, but each port's value domain
@@ -365,7 +369,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 - **Choice:** equal lengths recurse by index; different lengths report the
   array's pointer once and do not descend.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - Index-wise always, as in #138. One inserted element reports every later
     index; for a 50-element list that is 50 misleading pointers.
@@ -378,7 +383,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 - **Choice:** object members in UTF-16 code-unit order, arrays by index,
   entries emitted in walk order.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - Insertion order. Go map iteration is randomized and Rust's `serde_json`
     map is ordered by key, so insertion order cannot be matched across ports.
@@ -394,7 +400,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   string `path` logs `null` for both `mismatchPaths` and `diffJson` and never
   falls back to the built-in; a value with no JSON rendering nulls `diffJson`
   alone.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - `shadowMismatchPaths(cached, source) => string[]`, with the library
     resolving each pointer against the JSON renderings to produce `diff`.
@@ -419,7 +426,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   the walk emits it; the hook supplies its own. The leaves are independent:
   `{ diff: "values", value: false }` logs where and what without the
   whole-value dumps.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - Dropping `diff` from the first version as too complex. Considered
     2026-10-24: the complexity was pointer resolution, which this shape
@@ -434,7 +442,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 - **Choice:** a hand-authored `mismatchPathVectors` group in
   `formal/catalogs/protocol-vectors.json`, replayed by every port.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - Quint-generated vectors. Quint has no recursive types for nested JSON,
     and the function has no relation to the kernel's state machine.
@@ -449,7 +458,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 - **Choice:** 64 entries, 512 bytes per pointer, 1 KiB per value side, depth
   32, `diffJson` 8 KiB, `mismatchPathCount` carries the uncut total; a cut
   list is visible because the count exceeds the length.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - A byte cap on the path list. The list is structured, and a count is what
     a pipeline can test.
@@ -465,7 +475,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   consumer's config store, and the shorthand is a coarse control with a
   defined meaning, not a deprecated path. A record that adds a leaf decides
   whether the shorthand covers it.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - Removing it and treating a stale value as an ignored unknown field with a
     `config_unknown_field` metric, as #138 decided on 2026-08-15. Rejected
@@ -491,7 +502,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   labels and `outcome` in `logged | hook_error | render_error | logger_error`,
   one event per warning attempt, nothing when logging is off, and
   `loggingOutcome` on the warning when it is not `logged`.
-- **Status:** Open
+- **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
+  proposed."
 - **Rejected:**
   - Nothing, as today: a null field in a log line. A hook that has thrown
     for a week is invisible, and a logger that throws is silent.
