@@ -90,7 +90,10 @@ a silently dead config, and the kill switches exist already,
 `logMismatches: false` with no leaves beside it. An invalid value expands to
 both leaves off with one `config_resolution`, as today. Everything `diff`
 logs derives from the renderings that `value` logs (D3), so the shorthand
-never exposes more than `logMismatches: true` exposes today; it adds fields.
+logs nothing outside them: a member that `toJSON` drops stays dropped. It
+can log more of them, because the walk reads each whole rendering while
+`cachedValueJson` and `sourceValueJson` stop at 8 KiB, so for a larger value
+`diff` shows differing fields past that cut.
 
 A warning is emitted after a confirmed mismatch when `value` is true or
 `diff` is above `"off"`. It always carries `cacheNamespace`, `useCase`,
@@ -139,8 +142,8 @@ non-array, or returns a member without a string `path` logs `null` for
 computation. A hook value with no JSON rendering makes `diffJson` `null`
 while `mismatchPaths` stays, since the paths are still valid and logging
 less is the safe direction. Hook values are the use case's own code, like
-the comparator: the built-in's guarantee that nothing in `diffJson` exceeds
-what `value` logs applies to the built-in only.
+the comparator: the built-in's guarantee that `diffJson` holds only what the
+renderings behind `value` contain applies to the built-in only.
 
 The built-in computation:
 
@@ -476,7 +479,10 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   defined meaning, not a deprecated path. A record that adds a leaf decides
   whether the shorthand covers it.
 - **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
-  proposed."
+  proposed." The exposure wording in the Proposal and in the rejected
+  `{ value: true }` expansion below was corrected 2026-10-24, after review
+  showed that `diff` reads past the 8 KiB value cut; the maintainer kept the
+  choice, in session: "1 sounds reasonable."
 - **Rejected:**
   - Removing it and treating a stale value as an ignored unknown field with a
     `config_unknown_field` metric, as #138 decided on 2026-08-15. Rejected
@@ -487,8 +493,11 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
     second breaking change plus the same config flip, with the same
     silent-loss risk at that moment; the cost is deferred, not saved.
   - Expanding `true` to `{ value: true }` only, preserving today's output
-    exactly. All-on exposes nothing beyond `value`, and it delivers paths to
-    existing configs without a change.
+    exactly. All-on logs nothing outside the renderings `value` logs, and it
+    delivers paths to existing configs without a change. For a value over
+    8 KiB it also shows differing fields past the dump's cut, which a team
+    that has opted into `logMismatches: true` already accepts for smaller
+    values, since truncation is not redaction.
   - A third leaf merged independently and OR'd at read time. An explicit
     `value: false` could then never win over an inherited `true`.
   - A `false` that beats leaves written beside it. Asymmetric with `true`,
