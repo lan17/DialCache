@@ -89,7 +89,7 @@ true. It always carries `cacheNamespace`, `useCase`, `keyType`,
 | `value` | `cachedValueJson`, `sourceValueJson`: native JSON of each side | 8 KiB each |
 | `diff` | `diffJson`: the entries `{ path, cached, source }` for every reported path, each side resolved from its JSON rendering and omitted where the pointer does not resolve | 8 KiB |
 
-Two per-use-case hooks sit beside `shadowComparator` on `cached()` and
+One per-use-case hook sits beside `shadowComparator` on `cached()` and
 `getOrLoad()`:
 
 ```ts
@@ -97,26 +97,22 @@ dialcache.cached(fetchUser, {
   useCase: "GetUser",
   keyType: "user_id",
   cacheKey: (id) => id,
-  // Optional. Runs once per side after confirmation; its result is what
-  // `value` logs and what the built-in paths and `diff` are computed from.
-  shadowMismatchLogValue: (user) => ({ id: user.id, updatedAt: user.updatedAt }),
-  // Optional. Replaces the built-in path computation; receives the raw
-  // compared values. Absent: the built-in JSON differ runs.
+  // Optional. Replaces the built-in path computation; receives the compared
+  // values. Absent: the built-in JSON differ runs.
   shadowMismatchPaths: (cached, source) => [...],
 });
 ```
 
-Hooks follow the comparator's discipline: synchronous, deterministic,
+The hook follows the comparator's discipline: synchronous, deterministic,
 side-effect-free, non-mutating, bounded. A hook that throws, returns a
 promise-like or returns a non-array, or an array with a non-string member,
-logs `null` for the fields it feeds and never falls back to the built-in
-computation.
+logs `null` for `mismatchPaths` and `diffJson` and never falls back to the
+built-in computation.
 
 The built-in path computation:
 
-1. Render each side to native JSON once (the projected value when
-   `shadowMismatchLogValue` is set) and parse it. A side with no rendering
-   (`undefined` at the root, a cycle, a `bigint`, a failed hook) makes
+1. Render each side to native JSON once and parse it. A side with no
+   rendering (`undefined` at the root, a cycle, a `bigint`) makes
    `mismatchPaths`, `diffJson` and that side's value field `null`.
 2. Walk both parsed values together. Objects recurse over the union of their
    member names in UTF-16 code-unit order (the order W02 already prescribes
@@ -128,8 +124,8 @@ The built-in path computation:
 3. Roots of different kinds (object against array, container against
    primitive, primitive against primitive) yield `[""]`. Byte-identical
    renderings yield `[]`: the difference is outside the logged form, which
-   means a type the rendering erased, a comparator that sees more than JSON,
-   or a field the projector removed.
+   means a type the rendering erased or a comparator that sees more than
+   JSON.
 4. Pointers are emitted in walk order, the list is cut at 64, each pointer is
    clamped to 512 bytes with the existing `...[truncated]` marker, and
    `mismatchPathCount` carries the uncut total.
@@ -139,7 +135,8 @@ Port shapes: Go `ShadowPolicy.MismatchLogging *MismatchLoggingPolicy` with
 source T) ([]string, error)`; Rust `ShadowPolicy.mismatch_logging:
 Option<MismatchLogging>` and an `Operation::mismatch_paths(...)` builder,
 where the built-in computation needs `T: Serialize`, so an operation built
-with `with_codec` has paths only through the hook; Python
+with `with_codec` has paths only through the hook, and the existing
+`Operation::preview` stays as the renderer for such types; Python
 `shadow={"mismatch_logging": {"paths": True}}` (camelCase accepted as today)
 and `shadow_mismatch_paths=` beside `shadow_comparator`. Runtime config in
 every port validates each leaf independently: an invalid leaf acts false and
@@ -162,6 +159,13 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   field). Rejected for the built-in because it is quadratic in the worst case
   and needs a per-use-case identity hint; the hook covers it.
 - Aggregating paths inside the library (top paths per window). Pipeline work.
+- A value projector hook, #138's `shadowMismatchLogValue`, which redacted
+  values in code before `value` and `diff` logged them. Deferred: `paths` is
+  the value-free tier and `diff` narrows values to the differing leaves, and
+  an optional hook is additive later. Reopen for a use case that needs the
+  differing values logged while the same values carry data that `paths`
+  cannot express; a `toJSON` on the value class or a wrapping logger covers
+  it meanwhile.
 - A key projector. Deferred as in #138.
 - Failing closed when shadow policy is enabled without a shadow observer
   (#151). Independent.
@@ -301,9 +305,6 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
     library derives `diff`.
   - Falling back to the built-in when the hook fails. A broken hook would
     then log more than its author intended.
-  - Passing the projected values. A domain hook may need the fields the
-    projector hides to compute paths, and `diff` is still resolved against the
-    projected renderings.
   - Dropping invalid members instead of nulling the result. Partial output
     from a misbehaving hook is a guess.
 
@@ -388,7 +389,7 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   instead.) A known leaf with an invalid value acts false with one
   `config_resolution`; a non-object group fails resolution like a malformed
   layer map.
-- `value: true` without a projector logs raw JSON.
+- `value: true` logs raw JSON.
 - `DialCacheKeyConfig.disabled()` sets every leaf false.
 
 ## Impact
@@ -430,7 +431,7 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 1. #242 opens with this record as its first commit and stays at the design
    gate until every decision is confirmed and the record is `Accepted`.
 2. #242 then carries the TypeScript reference: the leaves and the shorthand,
-   the built-in differ, both hooks, the warning fields, the TypeScript replay
+   the built-in differ, the hook, the warning fields, the TypeScript replay
    driver, C60's wording, the TypeScript docs and catalogs, and native tests
    that pin the differ. The shared corpus keeps `logMismatches`, which stays
    valid in every port, so the other ports keep passing. Tier: Replay and
