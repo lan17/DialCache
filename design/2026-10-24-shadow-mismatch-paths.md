@@ -433,7 +433,7 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   - Expanding `true` to `{ value: true }` only, preserving today's output
     exactly. All-on exposes nothing beyond `value`, and it delivers paths to
     existing configs without a change.
-  - A fourth leaf merged independently and OR'd at read time. An explicit
+  - A third leaf merged independently and OR'd at read time. An explicit
     `value: false` could then never win over an inherited `true`.
 
 ## Carried decisions
