@@ -15,7 +15,7 @@
     },
     {
       "path": "docs/api.md",
-      "sha256": "04683617993432aea655d42d7fac51c2e9b3553d4f8c5535f1cc1a5e5e0ce56e",
+      "sha256": "ed6e3b5290c874f2c520669c1a4de6ea29308e6be6d20f880982affb1438df19",
       "entries": [
         {"title":"API reference","contracts":["B01"]},
         {"title":"Imports","contracts":["B01"]},
@@ -90,7 +90,7 @@
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "c11e862732d05f64314b07342a5499183a40fce7a87f7438d203e0c0a2dd90f4",
+      "sha256": "96caf9ebfd50491c607ef483fae2f4f4a78320ee67e2ee868ae0d05455e0c37a",
       "entries": [
         {"title":"Configuration and rollout","contracts":["C16"]},
         {"title":"What belongs where","contracts":["C16","B01"]},
@@ -205,7 +205,7 @@
     },
     {
       "path": "docs/languages/typescript.md",
-      "sha256": "8f6706c33d8e712a9ef70acec8d212a4db20cd206c1b2d04a0c7b2f18f0f1bb7",
+      "sha256": "27a4546a5bef235b84ff89c27ab50b4fa62a84d4bebcc17b687aeb4b514e95ec",
       "entries": [
         {"title":"TypeScript integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "bdafd62305526062fe913fada398d9356c4d081b6c2f1c2744b1cc7454bbe97c",
+      "sha256": "d4a9b260bfb17fbdf1449a6d96145431291e22cac7d92f02c0d14517eca72073",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "98c932e4c75653c132d8a2408c3c8d64e4f498f88d01b56edae59a9e8c10d473",
+      "sha256": "62bd5557318ece3cd35f09fbc04ca9305da6284a5618f6146570fd76f05c9d79",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "a02cb92599073440b0bc6f693b064236759dced02d578591934830fc4c9ff425",
+      "sha256": "95cda9c4764cacab80ee0caaf2504a96b5197ac200832e644ffe58af363b87ca",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -327,6 +327,7 @@
         {"title":"Custom Redis adapters","contracts":["E01","C55"]},
         {"title":"Stale retention and downgrades","contracts":["E05","C37"]},
         {"title":"Compression and value schemas","contracts":["E05","W06","W08"]},
+        {"title":"Shadow mismatch warnings","contracts":["C60","X01"]},
         {"title":"Metric migrations","contracts":["X01"]}
       ]
     },
@@ -390,7 +391,7 @@
     },
     {
       "path": "typescript/test/datadog.test.ts",
-      "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65",
+      "sha256": "9b589e3b1d137af141a52365bcbc14cab70de61003048851c4ce9d8a34bcc15d",
       "entries": [
         {"title":"maps every DialCache metric to the default metric namespace with exact names, values, and tags","contracts":["X01"]},
         {"title":"`uses ${observationMetricType} for every observation, so switching modes requires a new namespace`","contracts":["X01"]},
@@ -453,7 +454,7 @@
     },
     {
       "path": "typescript/test/dialcache-config-ramp.test.ts",
-      "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa",
+      "sha256": "e242e99cfcd3d5c093ee062c9cb41e2c8d152f3161cf274ba1265cbfaeb9d733",
       "entries": [
         {"title":"rejects the removed public ramp sampler override","contracts":["B01"]},
         {"title":"preserves requestLocal omission until baseline and runtime config are merged","contracts":["C16"]},
@@ -461,7 +462,11 @@
         {"title":"preserves stale-on-error omission and explicit disable values","contracts":["C16","C17"]},
         {"title":"preserves shadow omission and explicit kill-switch values","contracts":["C16","C17"]},
         {"title":"clones the supplied shadow policy","contracts":["B01"]},
+        {"title":"clones the supplied mismatchLogging leaves","contracts":["B01"]},
+        {"title":"keeps only own known shadow and mismatchLogging fields","contracts":["B01"]},
+        {"title":"ignores an inherited shadow group in the constructor and the registered default","contracts":["B01","C17"]},
         {"title":"captures an immutable default policy snapshot when the use case is registered","contracts":["C18","B01"]},
+        {"title":"captures an immutable mismatchLogging snapshot when the use case is registered","contracts":["C18","B01"]},
         {"title":"enables request-local caching without TTL or ramp policy","contracts":["C07"]},
         {"title":"fetches runtime config once while traversing request-local, local, and remote layers","contracts":["C18"]},
         {"title":"uses a deterministic ramp sample per cache key and layer","contracts":["W03"]},
@@ -490,6 +495,10 @@
         {"title":"rejects unsupported runtime TTLs before cache or serialization work","contracts":["C21"]},
         {"title":"disables missing local config while allowing the remote layer to work","contracts":["C05","C21"]},
         {"title":"disables missing remote config while allowing the local layer to work","contracts":["C05","C21"]},
+        {"title":"reports config_unknown_field once when cached() registers a defaultConfig with unknown fields","contracts":["X01","B01"]},
+        {"title":"reports config_unknown_field for a getOrLoad defaultConfig on every call","contracts":["X01","B01"]},
+        {"title":"reports config_unknown_field once per provider result with unknown fields","contracts":["C16","X01"]},
+        {"title":"does not report config_unknown_field for configs with only known fields","contracts":["C16","X01"]},
         {"title":"fails open when the runtime config provider throws","contracts":["C20"]}
       ]
     },
@@ -632,7 +641,7 @@
     },
     {
       "path": "typescript/test/dialcache-metrics.test.ts",
-      "sha256": "ce0e770bbaf97621c97ea329fd513e27810a9fc27aa6f736f1ad1e1f8ffb528e",
+      "sha256": "866891f1f462f900f3dc204fd0777ab81e8d76e2b2da1e9f99a42d5dc5ef2e1c",
       "entries": [
         {"title":"accepts only the bounded miss reasons, not inherited keys or non-string values","contracts":["C55","C58"]},
         {"title":"consumes rejecting thenables returned by every metrics method without awaiting them","contracts":["C30","B02"]},
@@ -648,6 +657,7 @@
         {"title":"reports request-local cache activity and request-scoped coalescing with bounded labels","contracts":["C58"]},
         {"title":"fails open when an injected metrics adapter throws","contracts":["C30"]},
         {"title":"fails open when the coalesced metrics hook throws","contracts":["C30"]},
+        {"title":"fails open when the shadow mismatch logging metrics hook throws","contracts":["C30","C60"]},
         {"title":"classifies disabled cache skips by reason","contracts":["C58"]},
         {"title":"reports invalid stale-on-error policy without disabling fresh Redis","contracts":["C21","C58"]},
         {"title":"labels cache errors separately from fallback errors","contracts":["C58"]},
@@ -663,10 +673,21 @@
     },
     {
       "path": "typescript/test/dialcache-observability-internals.test.ts",
-      "sha256": "70e8901dd77e950362f14085989cd0560b9c9bb01f013cdca4bf5b3a9903eb8e",
+      "sha256": "7daf1ae1605606736d764a1d7adc19f36c613cb9ef0d39e0b0a810b881915b05",
       "entries": [
         {"title":"merges every runtime policy leaf independently","contracts":["C16"]},
         {"title":"preserves omitted requestLocal and coalesce through a runtime merge","contracts":["C16"]},
+        {"title":"resolves %s to the recorded effective leaves","contracts":["C16","C60"]},
+        {"title":"inherits an omitted mismatchLogging leaf from the default","contracts":["C16"]},
+        {"title":"lets a runtime mismatchLogging leaf override its default leaf","contracts":["C16"]},
+        {"title":"keeps a malformed runtime logMismatches for admission while its same-object leaves win","contracts":["C21","C60"]},
+        {"title":"resolves %s to the effective mismatch-logging leaves","contracts":["C21","C60"]},
+        {"title":"rejects the removed shadowRamp field without also reporting it as unknown","contracts":["B01","X01"]},
+        {"title":"ignores an inherited shadow group or ramp in a raw provider result","contracts":["C16","C60"]},
+        {"title":"expands the logMismatches shorthand before the same group's leaves override it","contracts":["C16","C60"]},
+        {"title":"reports unknown provider fields at %s once and still merges the known fields","contracts":["C16","X01"]},
+        {"title":"does not report unknown fields for known-only or null provider results","contracts":["C16","X01"]},
+        {"title":"rejects a provider result whose mismatchLogging is %s","contracts":["C20"]},
         {"title":"keeps invalid stale-on-error policy diagnostic-only in remote resolution","contracts":["C21"]}
       ]
     },
@@ -744,7 +765,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "98d38eaf23999cdb1072ba0f9136c7ef028f59f45f58984b41fe2969920b36b1",
+      "sha256": "25b6ce5ed4e9adbd1a9b53c0a251213189319666348c99d9df11bf8a375586c3",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -754,6 +775,17 @@
         {"title":"logs the logical key and compared values for a ramped-down confirmed mismatch","contracts":["C60"]},
         {"title":"falls back to a metadata warning when JSON detail construction throws","contracts":["C60","B03"]},
         {"title":"clamps the logical key and both JSON strings before handing details to the logger","contracts":["X01"]},
+        {"title":"logs only the paths and their count at diff paths","contracts":["C60"]},
+        {"title":"logs the paths and diffJson without whole-value JSON at diff values with value false","contracts":["C60"]},
+        {"title":"logs only the whole-value JSON and never runs the diff hook at value true alone","contracts":["C60"]},
+        {"title":"logs the exact value age the verdict observed as cachedValueAgeSeconds","contracts":["C57","C60"]},
+        {"title":"emits one logged event per confirmed mismatch after its verdict and none for a match","contracts":["C60","X01"]},
+        {"title":"logs shadowMismatchDiff entries in place of the built-in walk through %s()","contracts":["C60"]},
+        {"title":"logs null diff fields and hook_error without touching the verdict when the hook $name","contracts":["C30","C60"]},
+        {"title":"logs render_error with null source and diff fields for a bigint source value under $name","contracts":["C60","B03"]},
+        {"title":"logs hook paths without rendering values at diff paths, even for a bigint source value","contracts":["C60","B03"]},
+        {"title":"records $outcome and leaves the caller unaffected when the logger $name","contracts":["C30","C60"]},
+        {"title":"records $outcome rather than logger_error when $name and the logger throws","contracts":["C30","C60"]},
         {"title":"reports superseded when C1 is $name","contracts":["C51"]},
         {"title":"reports superseded when C1 becomes a typed watermark miss","contracts":["C51"]},
         {"title":"retains a future-dated C1 for payload confirmation and attributes its offset to remote_shadow","contracts":["C51","C57"]},
@@ -788,6 +820,10 @@
         {"title":"does not dark-read through invalid runtime policy or provider failure","contracts":["C20","C47"]},
         {"title":"fails closed for invalid runtime mismatch logging without suppressing the metric","contracts":["C60"]},
         {"title":"treats DialCacheKeyConfig.disabled() as a complete shadow kill switch","contracts":["C17","C47"]},
+        {"title":"keeps the valid default leaf and records one config_resolution for an invalid runtime leaf","contracts":["C21","C60"]},
+        {"title":"records one config_resolution for a malformed runtime shorthand and logs the leaves beside it","contracts":["C21","C60"]},
+        {"title":"logs $name","contracts":["C16","C60"]},
+        {"title":"lets DialCacheKeyConfig.disabled() override every inherited mismatch-logging leaf","contracts":["C16","C60"]},
         {"title":"keeps partial Redis-serving and shadow-observation cohorts independent","contracts":["W03","C47"]},
         {"title":"preserves remote-ramp-zero concurrency while deduplicating only shadow work","contracts":["C49"]},
         {"title":"lets the caller's SoT result populate active local cache, never the dark Redis value","contracts":["C49"]},
@@ -942,7 +978,7 @@
     },
     {
       "path": "typescript/test/prometheus.test.ts",
-      "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602",
+      "sha256": "61970a43db29426ad586cc8ecba8b400faa5e27546ed009d5d42c4f0fcf8496d",
       "entries": [
         {"title":"keeps default DialCache construction detached from Prometheus","contracts":["X01"]},
         {"title":"registers collectors only in the caller-owned registry","contracts":["X01"]},
@@ -952,12 +988,14 @@
         {"title":"exports every bounded disabled reason without rewriting labels","contracts":["X01"]},
         {"title":"exports every bounded miss reason without rewriting labels","contracts":["X01"]},
         {"title":"exports every bounded shadow-validation outcome without adding cache identity or layer labels","contracts":["X01"]},
+        {"title":"exports every bounded shadow-mismatch-logging outcome without adding cache identity or layer labels","contracts":["X01"]},
         {"title":"exports every bounded stale-recovery outcome without adding cache identity or layer labels","contracts":["X01"]},
         {"title":"exports every bounded compression outcome without rewriting labels","contracts":["X01"]},
         {"title":"uses the existing layer label for detached Redis telemetry","contracts":["X01"]},
         {"title":"reuses existing collectors when multiple adapters share a registry","contracts":["X01"]},
         {"title":"rejects a pre-registered legacy miss collector before registering anything","contracts":["X01"]},
         {"title":"reuses a pre-registered current-schema miss collector","contracts":["X01"]},
+        {"title":"reuses a pre-registered current-schema shadow-mismatch-logging collector","contracts":["X01"]},
         {"title":"`rejects an existing collector with incompatible ${schemaPart} before registering anything`","contracts":["X01"]},
         {"title":"rejects exemplar-enabled collectors before registering anything","contracts":["X01"]},
         {"title":"treats an explicitly undefined exemplar mode as disabled","contracts":["B01"]},
@@ -1043,12 +1081,37 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "97d2a80d23bbe76574f97b0f569307a203279de4fa770a253603648325801467",
+      "sha256": "9a8d4881e130ab475965d5853a4a59064b28b3eae5b21be7a7a9a37d3cff224e",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
         {"title":"catches user JSON hook failures","contracts":["C30","B03"]},
-        {"title":"byte-clamps keys and JSON without splitting UTF-8 sequences","contracts":["X01"]}
+        {"title":"byte-clamps keys and JSON without splitting UTF-8 sequences","contracts":["X01"]},
+        {"title":"computes the expected entries for $name","contracts":["C60","X01"]},
+        {"title":"renders the expected diff fields for $name","contracts":["C60","X01"]},
+        {"title":"cuts the entries at 64 in walk order and counts every difference","contracts":["C60","X01"]},
+        {"title":"clamps each pointer to 512 bytes without splitting UTF-8 sequences","contracts":["X01"]},
+        {"title":"replaces each side over 1 KiB with its clamped JSON text","contracts":["X01"]},
+        {"title":"caps the walk at 32 reference tokens however deep the difference lies","contracts":["C60","X01"]},
+        {"title":"compares equal containers past the depth cap regardless of member order and depth","contracts":["C60","X01"]},
+        {"title":"renders exactly the fields requested by %s","contracts":["C60"]},
+        {"title":"renders no entries for byte-identical renderings","contracts":["C60","B03"]},
+        {"title":"renders no entries for a Date against its ISO string","contracts":["C60","B03"]},
+        {"title":"nulls the fields fed by a root %s with render_error","contracts":["B03","X01"]},
+        {"title":"runs each side's toJSON once for every field it feeds","contracts":["C60","B03"]},
+        {"title":"clamps diffJson to 8 KiB with the truncation marker","contracts":["X01"]},
+        {"title":"clamps each built-in diffJson side to 1 KiB","contracts":["X01"]},
+        {"title":"fails the built-in walk closed with hook_error when it throws","contracts":["C60","X01"]},
+        {"title":"takes the entries from the hook and never runs the built-in walk","contracts":["C60"]},
+        {"title":"renders neither root side when the hook supplies the entries and value is off","contracts":["C60","B03"]},
+        {"title":"fails closed with hook_error and no fallback when the hook %s","contracts":["C60","B02"]},
+        {"title":"consumes a rejecting hook result without an unhandled rejection","contracts":["C30","B02"]},
+        {"title":"keeps the hook paths and nulls diffJson when a hook side is %s","contracts":["C60","B03"]},
+        {"title":"omits absent hook sides from diffJson and renders present ones as JSON","contracts":["C60"]},
+        {"title":"clamps hook paths and sides and cuts at 64 with the total count","contracts":["X01"]},
+        {"title":"does not call the hook when diff is off","contracts":["C60"]},
+        {"title":"keeps the hook entries when a root side has no rendering","contracts":["C60","B03"]},
+        {"title":"reports hook_error ahead of render_error","contracts":["C60","X01"]}
       ]
     },
     {
@@ -1257,7 +1320,7 @@
     },
     {
       "path": "formal/guides/CONTRACTS.md",
-      "sha256": "6b6c3a08412f1ad1da0700dd4777a7e61306b6b7559e3409b83b15dda75ff8c6",
+      "sha256": "913819051269fdf3c4290766dbb4cef627ecbdb2358a84281b4945175016b1c0",
       "entries": [
         {"title":"Portable contract inventory"},
         {"title":"Where the boundary lies"},
@@ -1575,7 +1638,7 @@
     },
     {
       "path": "formal/guides/SPEC.md",
-      "sha256": "e1efa3b41827ba46de5701d7c08b599dd3c6d89b302fa5c17b9a091dfe3ace14",
+      "sha256": "0dde0303a4aacc5eb6c181ab3f5fa219fa22f0d258a615f3dc1f85c67713a280",
       "entries": [
         {"title":"DialCache behavioral specification"},
         {"title":"Definition ownership and executable connections"},
