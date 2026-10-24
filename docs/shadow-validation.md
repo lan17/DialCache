@@ -121,7 +121,8 @@ A job needs all of the following:
 - An observer opted into shadow outcomes and available capacity.
 
 Missing policy, invalid policy, provider failure, or an omitted outcome hook
-cannot start a shadow-only path. `logMismatches` does not enable one either.
+cannot start a shadow-only path. Mismatch logging settings do not enable one
+either.
 
 Serving and shadow cohorts are independent. Equal partial percentages do not
 select the same keys. A partial shadow ramp therefore does not guarantee every
@@ -373,22 +374,105 @@ application's logging policy.
 
 <LanguageContent language="typescript">
 
-`shadow.logMismatches: true` adds one warning only after confirmed `mismatch`.
-It is default-off and independent of sampling. The logger receives the message
-`"DialCache shadow validation mismatch"` and an object with `cacheNamespace`,
-`useCase`, `keyType`, `outcome: "mismatch"`, and three bounded detail fields:
+Two default-off leaves under `shadow.mismatchLogging` choose what the warning
+carries, and the warning is emitted when either is on:
 
-| Field | Content | UTF-8 cap |
+| Leaf | Values | Adds to the warning |
 | --- | --- | --- |
-| `cacheKey` | Logical URN, not the physical Redis key | 2 KiB |
-| `cachedValueJson` | Native JSON of the decoded cached snapshot | 8 KiB |
-| `sourceValueJson` | Native JSON of the raw source value | 8 KiB |
+| `diff` | `"off"`, `"paths"`, `"values"` | `"paths"`: where the values differ. `"values"`: also what each side holds there |
+| `value` | `true`, `false` | Native JSON of both compared values |
 
-Clipped fields end with `...[truncated]` inside the cap. JSON failure or undefined
-output makes that side `null`; the other side is still attempted. Logging does
-not compute a diff or reuse the Redis serializer. If detail construction fails,
-DialCache still attempts the warning with the four metadata fields; all three detail
-fields can be absent.
+`diff: "paths"` logs where the values differ but not what they hold, so it is the
+level meant to stay on for user data. Member names still appear in the pointers:
+an object keyed by identifiers logs those identifiers. This config excerpt keeps
+paths-only logging on for a 5% shadow cohort:
+
+```ts
+shadow: { ramp: 5, mismatchLogging: { diff: "paths" } }
+```
+
+`diff: "values"` and `value: true` log application data and suit an
+investigation.
+
+`shadow.logMismatches` is shorthand for the whole group: `true` means
+`{ value: true, diff: "values" }` and `false` means
+`{ value: false, diff: "off" }`. A leaf written in the same `shadow` object
+overrides what the shorthand expands to. Only then do the leaves merge with the
+other configuration layer, runtime over defaults:
+
+| Written | Effective |
+| --- | --- |
+| `{ logMismatches: true, mismatchLogging: { value: false } }` | `{ value: false, diff: "values" }` |
+| `{ logMismatches: false, mismatchLogging: { diff: "paths" } }` | `{ value: false, diff: "paths" }` |
+| Default `mismatchLogging: { diff: "paths" }`, runtime `logMismatches: false` | Both off |
+| Default `mismatchLogging: { value: false }`, runtime `logMismatches: true` | `{ value: true, diff: "values" }` |
+
+The logger receives the message `"DialCache shadow validation mismatch"` and an
+object with these fields:
+
+| Field | Present | Content | UTF-8 cap |
+| --- | --- | --- | --- |
+| `cacheNamespace`, `useCase`, `keyType`, `outcome: "mismatch"` | Always | Use-case metadata | |
+| `cachedValueAgeSeconds` | Always | Age of the cached value at the verdict, as `observeShadowValueAge` records it; `null` when unavailable | |
+| `cacheKey` | Always | Logical URN, not the physical Redis key | 2 KiB |
+| `mismatchPaths` | `diff` above `"off"` | RFC 6901 JSON Pointers of the differing fields, at most 64 | 512 bytes each |
+| `mismatchPathCount` | `diff` above `"off"` | Number of differing fields before the cut to 64 | |
+| `diffJson` | `diff: "values"` | JSON array of `{ path, cached, source }` entries for the same pointers; a side the field lacks is omitted | 8 KiB, 1 KiB per side |
+| `cachedValueJson` | `value: true` | Native JSON of the decoded cached snapshot | 8 KiB |
+| `sourceValueJson` | `value: true` | Native JSON of the raw source value | 8 KiB |
+| `loggingOutcome` | After a failure | `"hook_error"` or `"render_error"`: why fields are `null` | |
+
+The paths come from the native JSON of both values: each side is rendered once
+with `JSON.stringify`, not the Redis serializer, and every field above derives
+from that rendering, so a member that `toJSON` leaves out of `cachedValueJson`
+stays out of the diff too. The diff is not limited to the 8 KiB that
+`cachedValueJson` keeps: for a larger value it can show differing fields from
+past that point. The two renderings are compared structurally:
+
+- Object members are compared in UTF-16 code-unit order of their names. A member
+  present on one side only is reported with that side.
+- Arrays of equal length are compared by index. Arrays of different length are
+  reported once, at the array's own pointer, with both arrays; DialCache does not
+  align their elements.
+- Any other differing pair is reported at its pointer with both sides, and roots
+  of different kinds are reported at the root pointer `""`.
+- The comparison descends at most 32 levels: a differing pair of containers 32
+  levels down is reported whole at its own pointer.
+
+An empty `mismatchPaths` means both renderings hold the same JSON, apart from
+member order and number precision beyond a double: the comparator saw a
+difference that native JSON does not show, such as a `Date` against its ISO
+string. A side longer than 1 KiB appears in `diffJson` as its clipped JSON text.
+Clipped fields end with `...[truncated]` inside their cap.
+
+`shadowMismatchDiff`, set beside `shadowComparator`, replaces the computation
+for one use case. It receives the compared values and returns the entries; a
+side may be omitted, so a hook that knows only where values differ returns paths
+alone. It follows the comparator's rules: synchronous, deterministic,
+side-effect-free, non-mutating, and bounded. Its entries are the use case's own
+output, so they log whatever it returns. This API excerpt assumes a `fetchUser`
+source:
+
+```ts
+const getUser = dialcache.cached(fetchUser, {
+  keyType: "user_id",
+  useCase: "GetUser",
+  cacheKey: (userId) => userId,
+  shadowMismatchDiff: (cached, source) =>
+    cached.email === source.email ? [] : [{ path: "/email" }],
+});
+```
+
+Failures log less, never more. A value without a JSON rendering (`undefined`, a
+cycle, or a `bigint`) makes its value field `null`, along with the built-in diff
+fields. A hook that throws or returns a promise, a non-array, or an entry
+without a string `path` makes `mismatchPaths`, `mismatchPathCount`, and
+`diffJson` `null`; DialCache does not fall back to the built-in computation. A
+hook value without a JSON rendering makes `diffJson` alone `null`. Any other
+failure while building the fields leaves the metadata warning. Failures never
+change the `shadowValidation` outcome, and the optional `shadowMismatchLogging`
+metric reports each warning attempt; see
+[Confirmed mismatch warnings](observability.md#confirmed-mismatch-warnings).
 
 </LanguageContent>
 

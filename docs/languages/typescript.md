@@ -66,6 +66,7 @@ UTF-16 surrogate code units. Successful decoding does not prove schema agreement
 - [Redis and Valkey](../redis.md): `dialcache/node-redis` and `dialcache/valkey-glide` wrap connected application-owned clients.
 - [Observability](../observability.md): `dialcache/prometheus` uses a supplied registry; `dialcache/datadog` uses a supplied DogStatsD client.
 - [Shadow validation](../shadow-validation.md#comparison-semantics): the default comparator is Node's `util.isDeepStrictEqual`; provide `shadowComparator` for domain equality.
+- [Confirmed mismatch logging](../shadow-validation.md#confirmed-mismatch-logging): `shadow.mismatchLogging` selects the warning's paths, diff values, and whole values; provide `shadowMismatchDiff` to compute the differing fields yourself.
 
 The site and generated API reference follow repository `main`. Use release-tag
 source and the installed package's declarations for an older release.

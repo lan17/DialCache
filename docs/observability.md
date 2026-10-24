@@ -316,6 +316,7 @@ and bytes without unit conversion:
 | `dialcache.coalesced.count` | Count | `dialcache_coalesced_counter` |
 | `dialcache.shadow.count` | Count | `dialcache_shadow_validation_counter` |
 | `dialcache.shadow.value_age` | Distribution or histogram | `dialcache_shadow_value_age_histogram` |
+| `dialcache.shadow_mismatch_logging.count` | Count | `dialcache_shadow_mismatch_logging_counter` (TypeScript adapters only) |
 | `dialcache.future_timestamp_offset` | Distribution or histogram | `dialcache_future_timestamp_offset_histogram` |
 | `dialcache.stale_recovery.count` | Count | `dialcache_stale_recovery_counter` |
 | `dialcache.stale_recovery.value_age` | Distribution or histogram | `dialcache_stale_recovery_value_age_histogram` |
@@ -334,8 +335,8 @@ Labels and meanings are shared with the [metric catalog](#metric-catalog).
 
 Synchronous client throws are isolated when DialCache invokes the adapter.
 DialCache also consumes thenables returned by adapter hooks, but this adapter does
-not forward every client return value: only `shadowValidation` and
-`staleRecovery` return the counter call's result. A custom DogStatsD client must
+not forward every client return value: only `shadowValidation`,
+`shadowMismatchLogging`, and `staleRecovery` return the counter call's result. A custom DogStatsD client must
 handle its own asynchronous delivery failures, including rejected promises.
 Direct adapter calls do not have DialCache's observer guard. Configure client error
 handling and shutdown as part of application ownership.
@@ -379,6 +380,7 @@ This table uses Prometheus names and types, without the optional prefix.
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
 | `dialcache_shadow_value_age_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `outcome` | Age in seconds of the validated Redis value at shadow verdict time, recorded for `match` and `mismatch` |
+| `dialcache_shadow_mismatch_logging_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Confirmed-mismatch warning attempts: `logged`, `hook_error`, `render_error`, or `logger_error`; TypeScript adapters only |
 | `dialcache_future_timestamp_offset_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Positive offset in seconds for a valid frame dated after the observing process clock |
 | `dialcache_stale_recovery_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Classifier-authorized stale-recovery checks: `served`, `miss`, or `deserialization_error` |
 | `dialcache_stale_recovery_value_age_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `outcome` | Actual return-time age in seconds of a retained value, recorded only for `served` |
@@ -542,14 +544,37 @@ Rust's bounded CPU executor), the envelope and mixed-version rollout.
 ## Confirmed mismatch warnings
 
 Shadow metrics remain bounded and contain no cache ids or values. A use case can
-separately set `shadow.logMismatches: true` to emit one warning after a terminal
-`mismatch` is confirmed. Logging is default-off, does not replace the outcome
-metric, and does not activate shadow work without an enabled shadow-outcome hook.
+separately opt into one warning after a terminal `mismatch` is confirmed.
+Logging is default-off, does not replace the outcome metric, and does not
+activate shadow work without an enabled shadow-outcome hook.
 
-The warning contains stable metadata, the logical cache key capped at 2 KiB,
-and independently generated native-JSON strings for the cached and source
-comparator inputs capped at 8 KiB each. Those fields are value-bearing, and
-truncation is not redaction.
+The warning contains stable metadata and the logical cache key capped at 2 KiB,
+plus what the use case's logging policy selects, such as native-JSON strings for
+the cached and source comparator inputs capped at 8 KiB each. Value-bearing
+fields are not redacted by truncation.
+
+<LanguageContent language="typescript">
+
+The policy can also select the JSON Pointers of the fields that differ, alone or
+with the differing values. Each warning attempt, a confirmed mismatch while
+logging is on, emits one optional `shadowMismatchLogging` event with the
+use-case labels and an `outcome`:
+
+| `outcome` | Meaning |
+| --- | --- |
+| `logged` | Every selected field rendered and the logger returned |
+| `hook_error` | `shadowMismatchDiff` or the built-in diff threw or returned an invalid list |
+| `render_error` | A value had no JSON rendering |
+| `logger_error` | The logger's `warn` threw |
+
+The first failing stage wins. When the outcome is not `logged`, the warning
+carries it as `loggingOutcome`, except for `logger_error`, which the logger never
+received. With logging off nothing is emitted, so the metric never counts
+mismatches; use [Shadow outcomes](#shadow-outcomes) for that. The Prometheus
+and Datadog adapters export it as `dialcache_shadow_mismatch_logging_counter`
+and `dialcache.shadow_mismatch_logging.count`.
+
+</LanguageContent>
 
 See
 [Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging)
@@ -565,6 +590,7 @@ native error type or message:
 | --- | --- |
 | `key_construction` | The cache-key selector or identity construction failed |
 | `config_resolution` | Runtime or layer configuration validation or resolution failed |
+| `config_unknown_field` | A key config carried fields DialCache does not know, which it ignored; TypeScript only |
 | `cache_read` | A process-local read or non-timeout remote read failed |
 | `cache_read_timeout` | A remote read exceeded its effective DialCache deadline |
 | `cache_write` | A process-local or remote cache write failed |
@@ -601,7 +627,7 @@ raw details remain available through the configured logger; not every metric
 error or shadow outcome has a matching log entry.
 
 The explicitly opted-in confirmed-mismatch warning is a separate value-bearing
-log and does not alter the metric schema.
+log. Its outcome metric, where a port has one, carries labels only.
 
 `in_fallback` remains the explicit distinction between cache plumbing and
 application fallback failures.
@@ -623,6 +649,7 @@ Implement `DialCacheMetricsAdapter` and pass it through
 | `coalesced(labels)` | no | One follower that joined request-local or process-scoped work. |
 | `shadowValidation(labels)` | no | One terminal sampled-shadow outcome. This hook must be implemented for shadow jobs to execute. |
 | `observeShadowValueAge(labels, seconds)` | no | Age for shadow match/mismatch verdicts; does not gate admission. |
+| `shadowMismatchLogging(labels)` | no | One confirmed-mismatch warning attempt with a bounded `outcome`; emitted only while mismatch logging is on. |
 | `observeFutureTimestampOffset(labels, seconds)` | no | Positive decoded-frame clock offset; does not change read decisions. |
 | `staleRecovery(labels)` | no | One authorized recovery outcome; omission does not disable recovery. |
 | `observeStaleRecoveryValueAge(labels, seconds)` | no | Return-time age for served recovery only. |
@@ -638,6 +665,7 @@ Implement `DialCacheMetricsAdapter` and pass it through
 The root package exports `DialCacheMetricsAdapter` and every associated label,
 reason, error-kind, layer, scope, and shadow-outcome type, including
 `ShadowValidationMetricLabels`, `ShadowValidationOutcome`,
+`ShadowMismatchLoggingMetricLabels`, `ShadowMismatchLoggingOutcome`,
 `CompressionMetricLabels`, `CompressionOperationMetricLabels`, and
 `CompressionOutcome`, `CacheMissReason`, `MissMetricLabels`,
 `StaleRecoveryMetricLabels`, and `StaleRecoveryOutcome`.

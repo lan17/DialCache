@@ -1,7 +1,7 @@
 # Shadow mismatch paths: name the differing fields in confirmed-mismatch warnings
 
 - **Status:** Accepted
-- **Issue:** none
+- **Issue:** #243, which tracks the work after the TypeScript reference
 - **Pull requests:** #242
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
 - **Supersedes:** the design in pull request #138, which is unmerged; the

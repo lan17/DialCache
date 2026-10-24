@@ -204,6 +204,35 @@ compatible, use a serializer that validates and rejects old shapes, or move to
 a new identity. Mutually incompatible validating readers can continually replace
 each other's values while they overlap.
 
+## Shadow mismatch warnings
+
+`shadow.logMismatches` keeps its meaning in every port and needs no migration.
+
+<LanguageContent language="typescript">
+
+`logMismatches` is now shorthand for
+`shadow.mismatchLogging: { value: true, diff: "values" }` (`false` for both
+leaves off), so a config that sets `logMismatches: true` keeps logging every
+confirmed mismatch and its warnings also carry `cachedValueAgeSeconds`,
+`mismatchPaths`, `mismatchPathCount`, and `diffJson`. The new fields derive from
+the same native-JSON renderings as `cachedValueJson` and `sourceValueJson`, so
+a member those renderings omit stays omitted. They are not cut at the 8 KiB
+value cap, though: for a larger value, `mismatchPaths` and `diffJson` can log
+differing fields past the point where `cachedValueJson` is clipped. To log only
+the previous fields plus `cachedValueAgeSeconds`, write
+`mismatchLogging: { diff: "off" }` beside `logMismatches: true`; to log the
+differing fields without values, set
+`mismatchLogging: { diff: "paths" }` instead. See
+[Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging)
+for how the shorthand and the leaves combine across config layers.
+
+Key configs with fields DialCache does not know now report
+`error="config_unknown_field"` on the error counter with `layer="noop"`, once per
+observed config. Fix misspelled or obsolete fields before alerting on the error
+counter as a whole.
+
+</LanguageContent>
+
 ## Metric migrations
 
 Miss metrics carry a required bounded `reason`: `value_absent`, `expired`,
@@ -238,7 +267,10 @@ Update exhaustive public-union mappings: `tracked_ttl_clamped` is a
 `ShadowValidationOutcome`. Recovery has `served`, `miss`, and
 `deserialization_error` outcomes. Custom `miss` handlers now receive
 `MissMetricLabels`; broader handlers may ignore the additional reason, while
-exact label mappings and direct calls need to include it.
+exact label mappings and direct calls need to include it. `config_unknown_field`
+is a `MetricErrorKind`, and the optional `shadowMismatchLogging` hook reports a
+`ShadowMismatchLoggingOutcome`: `logged`, `hook_error`, `render_error`, or
+`logger_error`.
 
 </LanguageContent>
 

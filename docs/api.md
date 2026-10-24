@@ -174,6 +174,7 @@ uncached.
 | `trackForInvalidation` | `false` | Use watermark-aware Redis reads for this operation |
 | `fallbackTimeoutMs` | `60_000` | Positive safe integer up to `2_147_483_647` ms; `null` disables the source deadline |
 | `shadowComparator` | Node strict deep equality | Synchronous, bounded `(cached, source) => boolean`; must not mutate its inputs |
+| `shadowMismatchDiff` | Built-in JSON diff | Synchronous, bounded `(cached, source) => readonly ShadowMismatchEntry[]`; replaces the paths and diff of [confirmed-mismatch warnings](shadow-validation.md#confirmed-mismatch-logging) |
 | `shouldAttemptStaleRecovery` | Instance policy | Synchronous error classifier; replaces the lower-precedence policy |
 
 `CacheKeySpec` is a string, number, or bigint id, or `{ id, args? }`. Argument
@@ -182,9 +183,11 @@ arguments are omitted. See [Key design](keys.md).
 
 Static defaults, fallback timeout, and stale-recovery classifier are validated
 and captured when registering `cached()` or invoking `getOrLoad()`.
-The comparator is captured then; its execution and synchronous boolean result
-are checked only when shadow comparison runs, with failures reported as
-`comparison_error`.
+The comparator and `shadowMismatchDiff` are captured then. The comparator's
+execution and synchronous boolean result are checked only when shadow
+comparison runs, with failures reported as `comparison_error`; the diff hook
+runs only for a confirmed-mismatch warning that logs a diff, and its failures
+leave that warning's paths and diff `null`.
 Runtime policy is resolved per enabled invocation. These guarantees do not make
 the entire caller-owned options object deeply immutable; keep definitions stable.
 
@@ -202,16 +205,20 @@ overlay. Omission inherits; it does not turn an inherited field off.
 | `remoteReadTimeoutMs` | Instance setting, then `50` | Positive safe-integer milliseconds, at most `2_147_483_647`; cannot be unbounded |
 | `staleOnErrorMaxAgeSec` | Off | Nonnegative safe-integer seconds; `0` disables; positive age must exceed remote TTL and be at most `31_536_000` |
 | `shadow.ramp` | Off | Independent finite percentage from `0` through `100` |
-| `shadow.logMismatches` | `false` | Boolean; controls diagnostic warning output |
+| `shadow.logMismatches` | `false` | Boolean shorthand for both leaves below: `true` stands for `{ value: true, diff: "values" }`, `false` for both off |
+| `shadow.mismatchLogging.value` | `false` | Boolean; the warning includes the JSON of both compared values |
+| `shadow.mismatchLogging.diff` | `"off"` | `"off"`, `"paths"`, or `"values"`; the warning includes the differing fields' pointers, and with `"values"` what each side holds there |
 
 Use `CacheLayer.LOCAL` (`"local"`) and `CacheLayer.REMOTE` (`"remote"`) as map
-keys. `LayerConfig` is a partial map; `ShadowConfig` describes the shadow group.
+keys. `LayerConfig` is a partial map; `ShadowConfig` describes the shadow group,
+and `ShadowMismatchLoggingConfig` its `mismatchLogging` leaves, with
+`ShadowMismatchDiffLevel` naming the three levels.
 Tracked Redis physical retention has a separate one-hour cap.
 
 | Helper | Result |
 | --- | --- |
 | `DialCacheKeyConfig.enabled(ttlSec)` | Sets local and remote TTLs to the supplied value and both ramps to `100`; leaves request-local, shadow, and recovery unselected |
-| `DialCacheKeyConfig.disabled()` | Disables request-local and recovery, sets both serving ramps and shadow ramp to `0`, and disables mismatch logging |
+| `DialCacheKeyConfig.disabled()` | Disables request-local and recovery, sets both serving ramps and shadow ramp to `0`, and turns both mismatch-logging leaves off |
 
 The enabled helper does not create a Redis connection. The disabled helper is
 an invocation policy, not cancellation or eviction. See
@@ -238,15 +245,18 @@ Invalid runtime policy fails open at the affected boundary:
 | Invalid input | Behavior |
 | --- | --- |
 | TTL or serving ramp leaf | Disable that layer with `invalid_ttl` or `invalid_ramp`; record `config_resolution`. Valid layers can continue. Values do not fall back to valid defaults and ramps are not clamped. |
-| Config object, layer-map or shadow shape; `requestLocal`, `coalesce`, or `remoteReadTimeoutMs` | Fail resolution for the whole invocation; record `config_resolution` and `config_error`, then run the loader uncached. |
+| Config object, layer-map, `shadow` or `shadow.mismatchLogging` shape; `requestLocal`, `coalesce`, or `remoteReadTimeoutMs` | Fail resolution for the whole invocation; record `config_resolution` and `config_error`, then run the loader uncached. |
 | `staleOnErrorMaxAgeSec` | Disable recovery and record `config_resolution`; a valid ordinary remote layer remains available. A positive age without a remote TTL is also an error. |
 | `shadow.ramp` | Record remote `config_resolution` and skip shadow work when an eligible Redis path evaluates it; preserve valid serving layers. |
-| `shadow.logMismatches` | Disable mismatch logging while preserving shadow work; record remote `config_resolution` only after the metrics hook, cohort, and capacity gates admit the job. |
+| `shadow.logMismatches`, `shadow.mismatchLogging.value`, or `shadow.mismatchLogging.diff` | Turn an invalid leaf off; an invalid `logMismatches` expands to both leaves off before the leaves written beside it apply. Shadow work continues. Record one remote `config_resolution` only after the metrics hook, cohort, and capacity gates admit the job. |
 
 Validation of layer and shadow leaves depends on traversal: an earlier hit can
-avoid evaluating lower-layer policy. Unknown runtime fields are generally
-ignored, so validate external policy against your application's schema to catch
-misspellings such as `ramp.remtoe`.
+avoid evaluating lower-layer policy. Unknown fields at any level of a static or
+runtime config, such as the misspelled `ramp.remtoe`, are ignored and reported
+once for each config DialCache observes as `config_unknown_field` with
+`layer="noop"`: at `cached()` registration, at each `getOrLoad()` call, and for
+each provider result. The metric does not name the field, so validate external
+policy against your application's schema as well.
 
 The removed `shadowRamp` field is an exception. Static config rejects it with
 `DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"`; a provider result
@@ -296,8 +306,9 @@ See [Coalescing state](coalescing.md#inspecting-process-scoped-flights).
 | `Serializer<T>` | `dump(value)` returns `string \| Buffer`; `load(payload)` returns `T`; either may return a Promise |
 | `JsonSerializer<T>` | Default JSON codec, including top-level undefined support; both methods return Promises |
 
-`CachedValue<Fn>` exposes a function's resolved result type. `ShadowComparator<T>`
-and `StaleRecoveryPredicate` name the corresponding synchronous callbacks.
+`CachedValue<Fn>` exposes a function's resolved result type. `ShadowComparator<T>`,
+`ShadowMismatchDiff<T>`, and `StaleRecoveryPredicate` name the corresponding
+synchronous callbacks, and `ShadowMismatchEntry` is one entry a diff hook returns.
 See [Direct key construction](#constructing-keys-directly) for
 defaults, encoding, and validation, and [Serialization](redis.md#serialization)
 for direct codec behavior, the compile-time guard, and round-trip limitations.
