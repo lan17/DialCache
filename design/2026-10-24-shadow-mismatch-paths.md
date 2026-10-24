@@ -81,8 +81,9 @@ exposes more than `logMismatches: true` exposes today; it adds fields.
 A warning is emitted after a confirmed mismatch when `value` is true or
 `diff` is above `"off"`. It always carries `cacheNamespace`, `useCase`,
 `keyType`, `outcome: "mismatch"`, `cachedValueAgeSeconds` (the age the
-`observeShadowValueAge` metric records) and `cacheKey` (the logical URN,
-2 KiB). Each setting adds:
+`observeShadowValueAge` metric records), `cacheKey` (the logical URN, 2 KiB)
+and, when warning construction failed, `loggingOutcome` (see Failure
+handling). Each setting adds:
 
 | Setting | Fields | Bound |
 | --- | --- | --- |
@@ -153,6 +154,31 @@ The built-in computation:
    `...[truncated]` marker; the rendered `diffJson` is clamped at 8 KiB the
    way `cachedValueJson` is today; and `mismatchPathCount` carries the uncut
    total.
+
+Failure handling. Everything above runs in detached shadow work after the
+verdict, on a job the caller never awaits: the caller already holds its
+result, the Redis hit on a served-hit path or its own source result on a
+ramped-down path, before the shadow job reads anything (C48, C49). The
+verdict and its `shadowValidation` outcome are decided before any warning
+work starts and are never changed by it (C60). A throw anywhere in warning
+construction is caught and degrades to the metadata-only warning, and a
+logger exception is isolated as today. So the rule is fail-open for the
+caller, who is never affected, and fail-closed for exposure, since a failure
+logs less, never more. Whether the diff computation holds the shadow capacity
+slot stays a port detail, as it is today: TypeScript renders after the slot
+is released, Rust holds it through the bounded CPU executor. The caps bound
+the built-in; a hook is user code under the comparator's discipline, so a
+runaway hook costs what a runaway comparator costs.
+
+Each warning attempt, a confirmed mismatch with logging on, emits one
+`shadowMismatchLogging` metric event with the cache labels and an `outcome`:
+`hook_error` when the hook or the built-in walk threw or returned an invalid
+list, `render_error` when a side had no JSON rendering, `logger_error` when
+the logger threw, else `logged`; the first failing stage wins. Logging off
+emits nothing, so the metric never shadows the mismatch count. When the
+outcome is not `logged`, the warning carries it as `loggingOutcome`, so a
+reader sees why fields are null. Invalid logging config stays
+`config_resolution`, carried from #138.
 
 Port shapes: Go `ShadowPolicy.MismatchLogging *MismatchLoggingPolicy` with
 `Value *bool`, `Diff *MismatchDiffLevel` (`off`, `paths`, `values`) and
@@ -240,14 +266,17 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 - **Observation record:** the `mismatchWarning` event in
   [PORTING.md](../formal/guides/PORTING.md#trace-and-observation-contract)
   gains optional `mismatchPathsJson` (the array as one JSON string, keeping
-  fields primitive), `mismatchPathCount` and `diffJson`. Every port's driver
-  records them, and all four `formal-<port>` lanes run. While ports land one
+  fields primitive), `mismatchPathCount`, `diffJson` and `loggingOutcome`,
+  and a `shadowMismatchLogging` event kind with the cache labels and
+  `outcome` joins the table, observed where a fixture lists it. Every port's
+  driver records them, and all four `formal-<port>` lanes run. While ports land one
   at a time, a lane that compares warning fields across ports sees them from
   TypeScript first; if that comparison is strict, the TypeScript driver
   records the new fields only once every port emits them.
 - **Native (B03/X01):** hook execution per port (thenables in TypeScript,
   panics in Go, the bounded CPU executor in Rust, the event loop in Python);
-  which native types each renderer sees; the logger backend.
+  which native types each renderer sees; the logger backend; the exporter
+  names and schema of the `shadowMismatchLogging` metric.
 
 ## Decisions
 
@@ -436,6 +465,26 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   - A third leaf merged independently and OR'd at read time. An explicit
     `value: false` could then never win over an inherited `true`.
 
+### D11. How warning-pipeline failures are observed
+
+- **Choice:** a dedicated `shadowMismatchLogging` metric with the cache
+  labels and `outcome` in `logged | hook_error | render_error | logger_error`,
+  one event per warning attempt, nothing when logging is off, and
+  `loggingOutcome` on the warning when it is not `logged`.
+- **Status:** Open
+- **Rejected:**
+  - Nothing, as today: a null field in a log line. A hook that has thrown
+    for a week is invisible, and a logger that throws is silent.
+  - A new category on the `error` counter. That counter's `in_fallback`
+    semantics describe cache plumbing; a verdict-style outcome metric
+    mirrors how `shadowValidation` and `staleRecovery` already report.
+  - Changing the `shadowValidation` outcome. C60 keeps the warning
+    independent of the outcome metric, and the verdict is decided before any
+    warning work starts.
+  - Truncation as an outcome. It is not a failure and co-occurs with
+    `logged`; `mismatchPathCount` against the list length and the
+    `...[truncated]` marker already show it.
+
 ## Carried decisions
 
 Reviewed and approved by the maintainer on #138; carried unchanged:
@@ -462,18 +511,21 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 
 - **TypeScript:** `config.ts`, `internal/runtime-config.ts`,
   `internal/shadow-log-json.ts`, `dialcache.ts` (hooks, warning assembly,
-  `resolveShadowLogging`), `index.ts` exports for the new config and hook
-  types, `scripts/test-package.mjs`, the shadow and config tests, the formal
-  behavior driver.
+  `resolveShadowLogging`), `metrics.ts` (the `shadowMismatchLogging` hook and
+  its outcome type), `datadog.ts` and `prometheus.ts`, `index.ts` exports for
+  the new config, hook and metric types, `scripts/test-package.mjs`, the
+  shadow, config and exporter tests, the formal behavior driver.
 - **Go:** `policy.go` (leaf lists, resolution, JSON form), `shadow.go`,
-  `metrics.go` details, the operation type and a `MismatchEntry` type,
-  `*_driver_test.go`,
-  `protocol_test.go`, `internal/testsuite/policy_test.go`.
+  `metrics.go` (details, the `shadowMismatchLogging` event kind and its
+  exporter mapping), the operation type and a `MismatchEntry` type,
+  `*_driver_test.go`, `protocol_test.go`, `internal/testsuite/policy_test.go`.
 - **Rust:** `policy.rs`, `shadow.rs`, `observe.rs` (`ShadowMismatchDetails`,
-  `Display`), `operation.rs`, `preview.rs`, `tests/formal/driver.rs`, the
-  protocol-vector tests.
-- **Python:** `config.py`, `cache.py`, `tests/formal/driver.py`,
-  `tests/test_protocol_vectors.py`, `test_config.py`.
+  `Display`, the new `Event` variant), `metrics.rs` exporters,
+  `operation.rs`, `preview.rs`, `tests/formal/driver.rs`, the protocol-vector
+  and exporter tests.
+- **Python:** `config.py`, `cache.py`, the metrics adapters,
+  `tests/formal/driver.py`, `tests/test_protocol_vectors.py`,
+  `test_config.py`.
 - **Formal:** `CONTRACTS.md` (C60 wording, the new row, the page and test
   inventories), `SPEC.md` (mismatch logging rows), `PORTING.md` (observation
   row), `GO-PARITY.md`, `behavioral-scenarios.json` (five fixtures),
@@ -484,7 +536,8 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   fail-closed behavior), the ledgers `source-audit.json` and `go-parity.json`,
   and any course lesson whose citation moves.
 - **Docs:** `shadow-validation.md` (Confirmed mismatch logging),
-  `observability.md` (Confirmed mismatch warnings), `configuration.md`,
+  `observability.md` (Confirmed mismatch warnings, the shadow outcomes
+  section and the Datadog and Prometheus metric tables), `configuration.md`,
   `api.md`, the port READMEs that name `logMismatches`, and `upgrading.md`:
   `shadow.logMismatches` stays and now also logs `mismatchPaths`,
   `mismatchPathCount` and `diffJson`; no config migration is required.
