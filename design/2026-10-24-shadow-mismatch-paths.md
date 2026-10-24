@@ -1,0 +1,394 @@
+# Shadow mismatch paths: name the differing fields in confirmed-mismatch warnings
+
+- **Status:** Proposed
+- **Issue:** none
+- **Pull requests:** none yet
+- **Baseline:** `main` at `b4e4fba`, the commit the record was written against
+- **Supersedes:** the design in pull request #138, which is unmerged; the
+  decisions it carries are listed under [Carried decisions](#carried-decisions)
+
+## Context
+
+Shadow validation compares a sampled cached value with the source and reports
+`match`, `mismatch` or `superseded` as a bounded metric. The only way to learn
+*what* disagreed is `shadow.logMismatches: true`, which logs the logical cache
+key (2 KiB) and the complete native JSON of both values (8 KiB each) after a
+confirmed mismatch. That is all or nothing: a team that wants to know which
+field keeps disagreeing has to put whole records into logs, and for a large
+record the 8 KiB cap usually truncates the dump before the differing field.
+
+The operational questions a mismatch rate raises are structural: is it always
+the same field, is the cache missing a field the source now has, is one list
+longer, or is the difference something JSON cannot show at all, such as a
+`Date` object meeting the ISO string it was decoded to. None of these need the
+values themselves.
+
+Pull request #138 (August 2026) built most of the answer for TypeScript: a
+`mismatchLogging` content group in place of the boolean, a value projector
+hook, and a built-in differ over the native-JSON renderings of both sides
+emitting `{ type, path, value, oldValue }` entries. The maintainer reviewed it
+three times and ended with no remaining findings, but it never merged. It is
+TypeScript-only, it predates the Go, Rust and Python ports, the `typescript/`
+layout move and this record process, and its branch can no longer be rebased.
+Its reviewed decisions are kept; its value-bearing diff is reshaped around a
+paths-only tier it lacked.
+
+Constraints:
+
+- Logging stays default-off, runs only after a confirmed `mismatch`, inside
+  detached shadow work, with bounded CPU; the caller's result is never
+  affected (C60, C50–C54).
+- Every port mirrors the config leaves, the warning fields and the hooks, and
+  the ports' value domains differ (B03): Node deep equality, Go reflection over
+  a portable value domain, Rust `PartialEq` on `T`, Python dict/list.
+- Runtime policy merges leaf-wise and `DialCacheKeyConfig.disabled()` is a
+  complete kill switch, so every new leaf is a boolean the overlay can set.
+- Warning fields reach log pipelines, so a path list is a structured array of
+  strings, not a rendered blob.
+- The replay protocol records the warning as an observation whose extra fields
+  must be JSON primitives
+  ([PORTING.md](../formal/guides/PORTING.md#trace-and-observation-contract)).
+
+## Proposal
+
+The `shadow` group gains a `mismatchLogging` content group with three
+independent default-off leaves, replacing `logMismatches`:
+
+```ts
+shadow: {
+  ramp: 5,
+  mismatchLogging: { paths: true, value: false, diff: false },
+}
+```
+
+A warning is emitted after a confirmed mismatch when at least one leaf is
+true. It always carries `cacheNamespace`, `useCase`, `keyType`,
+`outcome: "mismatch"`, `cachedValueAgeSeconds` (the age the
+`observeShadowValueAge` metric records) and `cacheKey` (the logical URN,
+2 KiB). Each leaf adds:
+
+| Leaf | Fields | Bound |
+| --- | --- | --- |
+| `paths` | `mismatchPaths: string[]`, RFC 6901 JSON Pointers into the compared value; `mismatchPathCount`, the total before the cap | 64 pointers, each 512 bytes |
+| `value` | `cachedValueJson`, `sourceValueJson`: native JSON of each side | 8 KiB each |
+| `diff` | `diffJson`: the entries `{ path, cached, source }` for every reported path, each side resolved from its JSON rendering and omitted where the pointer does not resolve | 8 KiB |
+
+Two per-use-case hooks sit beside `shadowComparator` on `cached()` and
+`getOrLoad()`:
+
+```ts
+dialcache.cached(fetchUser, {
+  useCase: "GetUser",
+  keyType: "user_id",
+  cacheKey: (id) => id,
+  // Optional. Runs once per side after confirmation; its result is what
+  // `value` logs and what the built-in paths and `diff` are computed from.
+  shadowMismatchLogValue: (user) => ({ id: user.id, updatedAt: user.updatedAt }),
+  // Optional. Replaces the built-in path computation; receives the raw
+  // compared values. Absent: the built-in JSON differ runs.
+  shadowMismatchPaths: (cached, source) => [...],
+});
+```
+
+Hooks follow the comparator's discipline: synchronous, deterministic,
+side-effect-free, non-mutating, bounded. A hook that throws, returns a
+promise-like or returns a non-array, or an array with a non-string member,
+logs `null` for the fields it feeds and never falls back to the built-in
+computation.
+
+The built-in path computation:
+
+1. Render each side to native JSON once (the projected value when
+   `shadowMismatchLogValue` is set) and parse it. A side with no rendering
+   (`undefined` at the root, a cycle, a `bigint`, a failed hook) makes
+   `mismatchPaths`, `diffJson` and that side's value field `null`.
+2. Walk both parsed values together. Objects recurse over the union of their
+   member names in UTF-16 code-unit order (the order W02 already prescribes
+   for key arguments); a member present on one side only is reported at its
+   pointer. Arrays of equal length recurse by index; arrays of different
+   length are reported once at the array's own pointer without descending.
+   Any other pair that differs is reported at its pointer. Nesting deeper
+   than 32 levels is reported at the container's pointer without descending.
+3. Roots of different kinds (object against array, container against
+   primitive, primitive against primitive) yield `[""]`. Byte-identical
+   renderings yield `[]`: the difference is outside the logged form, which
+   means a type the rendering erased, a comparator that sees more than JSON,
+   or a field the projector removed.
+4. Pointers are emitted in walk order, the list is cut at 64, each pointer is
+   clamped to 512 bytes with the existing `...[truncated]` marker, and
+   `mismatchPathCount` carries the uncut total.
+
+Port shapes: Go `ShadowPolicy.MismatchLogging *MismatchLoggingPolicy` with
+`Paths`, `Value`, `Diff *bool` and `Operation.MismatchPaths func(cached,
+source T) ([]string, error)`; Rust `ShadowPolicy.mismatch_logging:
+Option<MismatchLogging>` and an `Operation::mismatch_paths(...)` builder,
+where the built-in computation needs `T: Serialize`, so an operation built
+with `with_codec` has paths only through the hook; Python
+`shadow={"mismatch_logging": {"paths": True}}` (camelCase accepted as today)
+and `shadow_mismatch_paths=` beside `shadow_comparator`. Runtime config in
+every port validates each leaf independently: an invalid leaf acts false and
+records one `config_resolution`; unknown fields are ignored and reported as
+`config_unknown_field`; a non-object `mismatchLogging` fails resolution like a
+malformed layer map.
+
+## Out of scope
+
+- A metric for paths. Pointers are unbounded labels. Deferred until log
+  pipeline aggregation proves insufficient; a bounded label derived in
+  `shadowMismatchPaths` is possible without library support.
+- A TypeScript-only leaf type classification that reports `/updatedAt` when a
+  cached ISO string meets a source `Date`. Deferred until real logs show `[]`
+  dominating TypeScript mismatches; a use case can set `shadowMismatchPaths`
+  for it today.
+- Array alignment (longest common subsequence or alignment by an identity
+  field). Rejected for the built-in because it is quadratic in the worst case
+  and needs a per-use-case identity hint; the hook covers it.
+- Aggregating paths inside the library (top paths per window). Pipeline work.
+- A key projector. Deferred as in #138.
+- Failing closed when shadow policy is enabled without a shadow observer
+  (#151). Independent.
+
+## Contract and model changes
+
+- **C60** keeps its obligation and changes its wording: opting in means at
+  least one `mismatchLogging` leaf is true. Its native clause stays: JSON
+  conversion of native values, exact truncation text and the logger backend
+  remain B03/X01.
+- **New obligation** (ID assigned when CONTRACTS.md assigns one): the
+  built-in path computation in the Proposal, as a portable function over JSON
+  values, with the array rule, the root cases, the ordering and the caps.
+  Evidence is a hand-authored `mismatchPathVectors` group in
+  [protocol-vectors.json](../formal/catalogs/protocol-vectors.json), each
+  vector a pair of JSON values with the expected pointers, mapped in
+  `semantic-cases.json` as `protocol/mismatchPathVectors/*` and replayed by
+  every port's protocol-vector test. The function has no relation to kernel
+  state, so it is not modelled in Quint.
+- **Quint:** `kernel/shadow.qnt` keeps `logging: bool`, read as "at least one
+  content leaf is on"; `dialcache-shadow-conformance.qnt` keeps its
+  invariants and regressions, including `invalid-logging-policy`, which the
+  per-leaf validation still satisfies. The fixture encoding moves: the
+  `logPolicy` choices in `formal/replay/features.mjs` and the five fixed
+  scenarios in `behavioral-scenarios.json` that set `logMismatches` set
+  `mismatchLogging.paths` instead. That is a driver fixture change, not a
+  model change.
+- **Observation record:** the `mismatchWarning` event in
+  [PORTING.md](../formal/guides/PORTING.md#trace-and-observation-contract)
+  gains optional `mismatchPathsJson` (the array as one JSON string, keeping
+  fields primitive), `mismatchPathCount` and `diffJson`. Every port's driver
+  records them, and all four `formal-<port>` lanes run.
+- **Native (B03/X01):** hook execution per port (thenables in TypeScript,
+  panics in Go, the bounded CPU executor in Rust, the event loop in Python);
+  which native types each renderer sees; the logger backend.
+
+## Decisions
+
+### D0. Carry the decisions reviewed on #138 unchanged
+
+- **Choice:** the [Carried decisions](#carried-decisions) below are taken as
+  settled; this record does not reopen them.
+- **Status:** Open
+- **Rejected:**
+  - Re-deciding each one here. They were reviewed and approved in #138's
+    threads; relitigating costs a round trip and invites drift.
+
+### D1. Which content leaves exist
+
+- **Choice:** `paths`, `value`, `diff`, each a boolean; `cacheKey` is part of
+  every warning. #138's `key` leaf is dropped.
+- **Status:** Open
+- **Rejected:**
+  - `key`, `value`, `diff` as in #138. The `key` leaf existed only so a
+    warning could name no entity; a cache key is an identifier the
+    application already sends to Redis, and `main` has always logged it. One
+    fewer leaf to merge, kill and mirror.
+  - A single enum (`off | paths | values`). An enum does not merge leaf-wise
+    with the rest of runtime config, and `value` and `paths` are independent
+    choices.
+  - Only `paths` and `value`. The whole-value dump is truncated at 8 KiB, so
+    for a large record `diff` is the only way to see the differing leaves
+    without raising the cap.
+
+### D2. Path encoding
+
+- **Choice:** RFC 6901 JSON Pointer strings (`/profile/email`, `/items/2`,
+  `""` for the root), `~0` and `~1` escaping.
+- **Status:** Open
+- **Rejected:**
+  - Segment arrays `["profile", "email"]` as in #138. Unambiguous but verbose,
+    and log pipelines cannot group by them without flattening.
+  - Dotted paths `profile.email`, `items[2]`. Ambiguous when a key contains
+    `.` or `[`.
+  - JSONPath. Nothing here needs a query language.
+
+### D3. What the built-in computation compares
+
+- **Choice:** the parsed native-JSON renderings of both sides, rendered once
+  each, with `[]` for byte-identical renderings and `[""]` for roots of
+  different kinds.
+- **Status:** Open
+- **Rejected:**
+  - The native values the comparator saw. It would explain every verdict,
+    including a `Date` against its ISO string, but each port's value domain
+    differs (B03), so there is no portable rule or vector, and the diff could
+    expose fields that `toJSON` removes from `value` logging, the leak #138's
+    review closed.
+  - Making the differ the default comparator, with early exit for the
+    verdict. The default verdict would change in every port (C50), and a
+    custom comparator still breaks the unification.
+  - A root sentinel when renderings are identical. `[]` already says it, and
+    `[""]` is kept for a difference the walk cannot descend into.
+
+### D4. Arrays
+
+- **Choice:** equal lengths recurse by index; different lengths report the
+  array's pointer once and do not descend.
+- **Status:** Open
+- **Rejected:**
+  - Index-wise always, as in #138. One inserted element reports every later
+    index; for a 50-element list that is 50 misleading pointers.
+  - Wildcard collapse (`/items/*` once more than K indices differ). Keeps
+    precision for small changes, but K is a magic number and fewer than K
+    shifted elements still report as changed.
+  - Alignment. See Out of scope.
+
+### D5. Walk order
+
+- **Choice:** object members in UTF-16 code-unit order, arrays by index,
+  pointers emitted in walk order.
+- **Status:** Open
+- **Rejected:**
+  - Insertion order. Go map iteration is randomized and Rust's `serde_json`
+    map is ordered by key, so insertion order cannot be matched across ports.
+  - Code-point or byte order. W02 already sorts key arguments by UTF-16 code
+    units, so every port has that comparison; a second ordering is a second
+    thing to get wrong.
+
+### D6. The custom path hook
+
+- **Choice:** `shadowMismatchPaths(cached, source) => string[]` receives the
+  raw compared values; absent means the built-in runs; failure or an invalid
+  result logs `null` and never falls back to the built-in.
+- **Status:** Open
+- **Rejected:**
+  - #138's `shadowMismatchLogDiff` returning arbitrary JSON. Paths are the
+    unit everything else derives from, so the hook returns paths and the
+    library derives `diff`.
+  - Falling back to the built-in when the hook fails. A broken hook would
+    then log more than its author intended.
+  - Passing the projected values. A domain hook may need the fields the
+    projector hides to compute paths, and `diff` is still resolved against the
+    projected renderings.
+  - Dropping invalid members instead of nulling the result. Partial output
+    from a misbehaving hook is a guess.
+
+### D7. How `diff` is produced and logged
+
+- **Choice:** the library resolves each reported pointer against both JSON
+  renderings and logs `diffJson`, one rendered string capped at 8 KiB with
+  entries `{ path, cached, source }`.
+- **Status:** Open
+- **Rejected:**
+  - A separate diff hook. One hook decides where; the library decides what,
+    from the loggable forms only.
+  - A structured array in the log. A byte cap cannot be stated for it, and
+    the observation record needs primitives.
+
+### D8. Portable evidence for the built-in computation
+
+- **Choice:** a hand-authored `mismatchPathVectors` group in
+  `formal/catalogs/protocol-vectors.json`, replayed by every port.
+- **Status:** Open
+- **Rejected:**
+  - Quint-generated vectors. Quint has no recursive types for nested JSON,
+    and the function has no relation to the kernel's state machine.
+  - A generator that computes expected outputs with the TypeScript
+    implementation. The fixture would never catch a TypeScript bug.
+  - Native tests only, as a B03 detail. Four hand-written differs would drift
+    in exactly the cases vectors pin: escaping, ordering, the array rule, the
+    root cases.
+
+### D9. Caps
+
+- **Choice:** 64 pointers, 512 bytes per pointer, depth 32, `diffJson` 8 KiB,
+  `mismatchPathCount` carries the uncut total; a cut list is visible because
+  the count exceeds the length.
+- **Status:** Open
+- **Rejected:**
+  - A byte cap on the path list. The list is structured, and a count is what
+    a pipeline can test.
+  - No depth cap. The walk runs on parsed JSON, so it terminates, but a
+    pathological depth is CPU on the detached budget for no diagnostic value.
+
+## Carried decisions
+
+Reviewed and approved by the maintainer on #138; carried unchanged:
+
+- Runtime reads of the whole `shadow` group, and of each leaf, are
+  own-property reads at every boundary.
+- The differ traverses own members of parsed JSON only; no hostile-intrinsics
+  hardening (the maintainer withdrew that finding).
+- Each side is rendered to JSON exactly once; every logged field derives from
+  that snapshot, so a stateful `toJSON` cannot put into one field what
+  another omits.
+- A side with no rendering fails every field it feeds closed to `null`; no
+  `null → null` entries.
+- Unknown `mismatchLogging` leaves and other unknown key-config fields are
+  ignored and reported once per observed config as `config_unknown_field`;
+  stale `shadow.logMismatches` therefore no longer enables logging and never
+  bypasses the cache. A known leaf with an invalid value acts false with one
+  `config_resolution`; a non-object group fails resolution like a malformed
+  layer map.
+- `value: true` without a projector logs raw JSON.
+- `DialCacheKeyConfig.disabled()` sets every leaf false.
+
+## Impact
+
+- **TypeScript:** `config.ts`, `internal/runtime-config.ts`,
+  `internal/shadow-log-json.ts`, `dialcache.ts` (hooks, warning assembly,
+  `resolveShadowLogging`), `index.ts` exports for the new config and hook
+  types, `scripts/test-package.mjs`, the shadow and config tests, the formal
+  behavior driver.
+- **Go:** `policy.go` (leaf lists, resolution, JSON form), `shadow.go`,
+  `metrics.go` details, the operation type, `*_driver_test.go`,
+  `protocol_test.go`, `internal/testsuite/policy_test.go`.
+- **Rust:** `policy.rs`, `shadow.rs`, `observe.rs` (`ShadowMismatchDetails`,
+  `Display`), `operation.rs`, `preview.rs`, `tests/formal/driver.rs`, the
+  protocol-vector tests.
+- **Python:** `config.py`, `cache.py`, `tests/formal/driver.py`,
+  `tests/test_protocol_vectors.py`, `test_config.py`.
+- **Formal:** `CONTRACTS.md` (C60 wording, the new row, the page and test
+  inventories), `SPEC.md` (mismatch logging rows), `PORTING.md` (observation
+  row), `GO-PARITY.md`, `behavioral-scenarios.json` (five fixtures),
+  `features.mjs` (fixture and `logPolicy` encoding), `semantic-cases.json`
+  (vector mapping and new cases), `protocol-vectors.json` (new group),
+  `mutations.json` and `rust-mutations.json` (M08 and M09 anchors move to the
+  new leaf code; new mutants for the array rule, the root cases and hook
+  fail-closed behavior), the ledgers `source-audit.json` and `go-parity.json`,
+  and any course lesson whose citation moves.
+- **Docs:** `shadow-validation.md` (Confirmed mismatch logging),
+  `observability.md` (Confirmed mismatch warnings), `configuration.md`,
+  `api.md`, the port READMEs that name `logMismatches`, and `upgrading.md`:
+  `shadow.logMismatches` is removed; `logMismatches: true` becomes
+  `mismatchLogging: { value: true }`; a stale field is ignored with a
+  `config_unknown_field` metric, so config stores flip after the library
+  upgrade lands, not before.
+- **Release:** a breaking change in every port, titled with `!` and a
+  `BREAKING CHANGE:` footer.
+
+## Plan
+
+1. One draft pull request, titled for the change, opens with this record as
+   its first commit and stays at the design gate until every decision is
+   confirmed and the record is `Accepted`.
+2. The same pull request then carries the implementation for all four ports,
+   their replay drivers, the vector group, the fixture encoding, contracts,
+   catalogs and docs. The ports cannot follow TypeScript in a later pull
+   request: the shared fixed scenarios and the generated shadow profile
+   encode the logging policy, so a `main` where only TypeScript understands
+   `mismatchLogging` fails the other ports' replay lanes. Validation tier:
+   Full once on the final candidate (Portable behavior), with the mutation
+   lanes covering the moved M08 and M09 anchors.
+
+## Deviations
+
+None.
