@@ -5,8 +5,11 @@ import {
   DialCache,
   DialCacheKey,
   DialCacheKeyConfig,
+  type DialCacheMetricsAdapter,
+  type ErrorMetricLabels,
   type LayerConfig,
   type Serializer,
+  type ShadowMismatchDiffLevel,
 } from "../src/index.js";
 import { deterministicRampSample, deterministicShadowRampSample } from "../src/internal/ramp.js";
 import { FakeRedis } from "./fake-redis.js";
@@ -14,6 +17,42 @@ import { FakeRedis } from "./fake-redis.js";
 const configFor = (ttlSec: Partial<Record<CacheLayer, number>>, ramp: Partial<Record<CacheLayer, number>>) =>
   new DialCacheKeyConfig({ ttlSec, ramp });
 const MAX_CACHE_TTL_SEC = 31_536_000;
+
+function errorRecordingMetrics(): DialCacheMetricsAdapter & { readonly errors: ErrorMetricLabels[] } {
+  const errors: ErrorMetricLabels[] = [];
+  const ignore = (): void => undefined;
+  return {
+    errors,
+    request: ignore,
+    miss: ignore,
+    disabled: ignore,
+    error: (labels) => {
+      errors.push(labels);
+    },
+    invalidation: ignore,
+    observeGet: ignore,
+    observeFallback: ignore,
+    observeSerialization: ignore,
+    observeSize: ignore,
+  };
+}
+
+const unknownFieldError = (useCase: string): ErrorMetricLabels => ({
+  cacheNamespace: "unknownfields",
+  useCase,
+  keyType: "user_id",
+  layer: "noop",
+  error: "config_unknown_field",
+  inFallback: false,
+});
+
+// Unknown fields at every level, which one observed config reports once.
+const configWithUnknownFields = (): DialCacheKeyConfig => new DialCacheKeyConfig({
+  ttl: 60,
+  ttlSec: { [CacheLayer.LOCAL]: 60, edge: 30 },
+  ramp: { [CacheLayer.LOCAL]: 100, edge: 100 },
+  shadow: { ramp: 0, sampleRate: 5, mismatchLogging: { diff: "paths", verbose: true } },
+} as never);
 
 function idForRamp(useCase: string, layer: CacheLayer, ramp: number, enabled: boolean): string {
   for (let index = 0; index < 10_000; index += 1) {
@@ -81,6 +120,62 @@ describe("DialCache runtime config and ramp controls", () => {
     });
   });
 
+  it("clones the supplied mismatchLogging leaves", () => {
+    const suppliedLeaves: { value: boolean; diff: ShadowMismatchDiffLevel } = { value: true, diff: "paths" };
+    const config = new DialCacheKeyConfig({ shadow: { mismatchLogging: suppliedLeaves } });
+
+    suppliedLeaves.value = false;
+    suppliedLeaves.diff = "off";
+
+    expect(config.shadow?.mismatchLogging).not.toBe(suppliedLeaves);
+    expect(config.shadow).toEqual({ mismatchLogging: { value: true, diff: "paths" } });
+  });
+
+  it("keeps only own known shadow and mismatchLogging fields", () => {
+    expect(new DialCacheKeyConfig({
+      shadow: {
+        ramp: 5,
+        sampleRate: 10,
+        mismatchLogging: Object.assign(Object.create({ value: true }) as object, { diff: "paths", verbose: true }),
+      },
+    } as never).shadow).toStrictEqual({ ramp: 5, mismatchLogging: { diff: "paths" } });
+    expect(new DialCacheKeyConfig({
+      shadow: Object.create({ ramp: 100, logMismatches: true, mismatchLogging: { value: true } }) as never,
+    }).shadow).toStrictEqual({});
+    // Leaf values stay unvalidated until static capture or runtime resolution.
+    expect(new DialCacheKeyConfig({
+      shadow: { mismatchLogging: { value: "yes", diff: "full" } },
+    } as never).shadow).toStrictEqual({ mismatchLogging: { value: "yes", diff: "full" } });
+  });
+
+  it("ignores an inherited shadow group in the constructor and the registered default", async () => {
+    const inheritedShadow = { shadow: { ramp: 100, logMismatches: true } };
+    expect(new DialCacheKeyConfig(Object.create(inheritedShadow) as never).shadow).toBeUndefined();
+
+    const observedDefaults: Array<DialCacheKeyConfig | null> = [];
+    const dialcache = new DialCache({
+      cacheConfigProvider: (key) => {
+        observedDefaults.push(key.defaultConfig);
+        return null;
+      },
+    });
+    const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
+      keyType: "user_id",
+      useCase: "InheritedDefaultShadow",
+      cacheKey: (userId) => userId,
+      defaultConfig: Object.assign(Object.create(inheritedShadow) as object, {
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: {},
+      }) as DialCacheKeyConfig,
+    });
+
+    await dialcache.enable(async () => await getUser("123"));
+
+    expect(observedDefaults).toHaveLength(1);
+    expect(observedDefaults[0]?.ttlSec[CacheLayer.LOCAL]).toBe(60);
+    expect(observedDefaults[0]?.shadow).toBeUndefined();
+  });
+
   it("captures an immutable default policy snapshot when the use case is registered", async () => {
     const suppliedDefault = new DialCacheKeyConfig({
       ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
@@ -137,6 +232,36 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(Object.isFrozen(observedDefaults[0]?.ttlSec)).toBe(true);
     expect(Object.isFrozen(observedDefaults[0]?.ramp)).toBe(true);
     expect(Object.isFrozen(observedDefaults[0]?.shadow)).toBe(true);
+  });
+
+  it("captures an immutable mismatchLogging snapshot when the use case is registered", async () => {
+    const suppliedDefault = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+      shadow: { mismatchLogging: { value: true, diff: "paths" } },
+    });
+    const observedDefaults: Array<DialCacheKeyConfig | null> = [];
+    const dialcache = new DialCache({
+      cacheConfigProvider: (key) => {
+        observedDefaults.push(key.defaultConfig);
+        return null;
+      },
+    });
+    const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
+      keyType: "user_id",
+      useCase: "ImmutableRegisteredMismatchLogging",
+      cacheKey: (userId) => userId,
+      defaultConfig: suppliedDefault,
+    });
+
+    const suppliedLeaves = suppliedDefault.shadow?.mismatchLogging as { value?: boolean; diff?: ShadowMismatchDiffLevel };
+    suppliedLeaves.value = false;
+    suppliedLeaves.diff = "off";
+    await dialcache.enable(async () => await getUser("123"));
+
+    const snapshotLeaves = observedDefaults[0]?.shadow?.mismatchLogging;
+    expect(snapshotLeaves).not.toBe(suppliedLeaves);
+    expect(snapshotLeaves).toEqual({ value: true, diff: "paths" });
+    expect(Object.isFrozen(snapshotLeaves)).toBe(true);
   });
 
   it("enables request-local caching without TTL or ramp policy", async () => {
@@ -348,6 +473,21 @@ describe("DialCache runtime config and ramp controls", () => {
       () => new DialCacheKeyConfig({ shadowRamp: 100 } as never),
       'DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"',
     ],
+    [
+      "a null mismatchLogging config",
+      () => new DialCacheKeyConfig({ shadow: { mismatchLogging: null as never } }),
+      "DialCache shadow mismatchLogging config must be an object",
+    ],
+    [
+      "an array mismatchLogging config",
+      () => new DialCacheKeyConfig({ shadow: { mismatchLogging: [] as never } }),
+      "DialCache shadow mismatchLogging config must be an object",
+    ],
+    [
+      "a primitive mismatchLogging config",
+      () => new DialCacheKeyConfig({ shadow: { mismatchLogging: "paths" as never } }),
+      "DialCache shadow mismatchLogging config must be an object",
+    ],
   ])("rejects $0 in the public config constructor", (_name, construct, message) => {
     expect(construct).toThrow(message);
   });
@@ -484,6 +624,42 @@ describe("DialCache runtime config and ramp controls", () => {
       "must be a boolean",
     ],
     [
+      "wrong-type shadow mismatchLogging value",
+      new DialCacheKeyConfig({ shadow: { mismatchLogging: { value: "true" as unknown as boolean } } }),
+      TypeError,
+      "shadow.mismatchLogging.value must be a boolean",
+    ],
+    [
+      "a null shadow mismatchLogging value",
+      new DialCacheKeyConfig({ shadow: { mismatchLogging: { value: null as unknown as boolean } } }),
+      TypeError,
+      "shadow.mismatchLogging.value must be a boolean",
+    ],
+    [
+      "an unknown shadow mismatchLogging diff level",
+      new DialCacheKeyConfig({ shadow: { mismatchLogging: { diff: "full" as unknown as ShadowMismatchDiffLevel } } }),
+      TypeError,
+      'shadow.mismatchLogging.diff must be "off", "paths" or "values"',
+    ],
+    [
+      "wrong-type shadow mismatchLogging diff",
+      new DialCacheKeyConfig({ shadow: { mismatchLogging: { diff: true as unknown as ShadowMismatchDiffLevel } } }),
+      TypeError,
+      'shadow.mismatchLogging.diff must be "off", "paths" or "values"',
+    ],
+    [
+      "a null shadow mismatchLogging group",
+      { ttlSec: {}, ramp: {}, shadow: { mismatchLogging: null } } as unknown as DialCacheKeyConfig,
+      TypeError,
+      "shadow mismatchLogging config must be an object",
+    ],
+    [
+      "an array shadow mismatchLogging group",
+      { ttlSec: {}, ramp: {}, shadow: { mismatchLogging: [] } } as unknown as DialCacheKeyConfig,
+      TypeError,
+      "shadow mismatchLogging config must be an object",
+    ],
+    [
       "wrong-type stale-on-error max age",
       new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: "3600" as unknown as number }),
       TypeError,
@@ -578,6 +754,8 @@ describe("DialCache runtime config and ramp controls", () => {
     ["the removed shadowRamp field", { ttlSec: {}, ramp: {}, shadowRamp: 100 }],
     ["a null requestLocal value", { ttlSec: {}, ramp: {}, requestLocal: null }],
     ["a null coalesce value", { ttlSec: {}, ramp: {}, coalesce: null }],
+    ["a null mismatchLogging group", { ttlSec: {}, ramp: {}, shadow: { mismatchLogging: null } }],
+    ["an array mismatchLogging group", { ttlSec: {}, ramp: {}, shadow: { mismatchLogging: [] } }],
   ] as const)("fails open instead of inheriting defaults when the provider returns %s", async (_name, runtimeConfig) => {
     const cacheConfigProvider = vi.fn(async () => runtimeConfig as unknown as DialCacheKeyConfig);
     const dialcache = new DialCache({ cacheConfigProvider });
@@ -603,10 +781,13 @@ describe("DialCache runtime config and ramp controls", () => {
       staleOnErrorMaxAgeSec: 0,
       shadow: {
         ramp: 0,
-        logMismatches: false,
+        mismatchLogging: { value: false, diff: "off" },
       },
       ramp: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 0 },
     }));
+    // Both leaves are written, so neither can inherit a default leaf through
+    // the leaf-wise merge, and the shorthand is not needed.
+    expect(DialCacheKeyConfig.disabled().shadow).not.toHaveProperty("logMismatches");
     // disabled() must not pin coalescing off: a disabled() baseline ramped up
     // at runtime should coalesce again unless explicitly opted out.
     expect(DialCacheKeyConfig.disabled().coalesce).toBeUndefined();
@@ -1095,6 +1276,115 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(calls).toBe(1);
     expect(redis.getCalls).toBe(0);
     expect(redis.setCalls).toBe(0);
+  });
+
+  it("reports config_unknown_field once when cached() registers a defaultConfig with unknown fields", async () => {
+    const metrics = errorRecordingMetrics();
+    const dialcache = new DialCache({ namespace: "unknownfields", metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "UnknownDefaultFields",
+      cacheKey: (userId) => userId,
+      defaultConfig: configWithUnknownFields(),
+    });
+
+    expect(metrics.errors).toEqual([unknownFieldError("UnknownDefaultFields")]);
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // The unknown fields are ignored, and the known local policy still caches.
+    expect(second).toBe(first);
+    expect(calls).toBe(1);
+    expect(metrics.errors).toEqual([unknownFieldError("UnknownDefaultFields")]);
+  });
+
+  it("reports config_unknown_field for a getOrLoad defaultConfig on every call", async () => {
+    const metrics = errorRecordingMetrics();
+    const dialcache = new DialCache({ namespace: "unknownfields", metrics });
+    let calls = 0;
+    const options = {
+      keyType: "user_id",
+      useCase: "UnknownGetOrLoadDefaultFields",
+      key: "123",
+      defaultConfig: configWithUnknownFields(),
+    } as const;
+
+    const first = await dialcache.enable(async () =>
+      await dialcache.getOrLoad(async () => ({ calls: ++calls }), options),
+    );
+    const second = await dialcache.enable(async () =>
+      await dialcache.getOrLoad(async () => ({ calls: ++calls }), options),
+    );
+
+    expect(second).toBe(first);
+    expect(calls).toBe(1);
+    expect(metrics.errors).toEqual([
+      unknownFieldError("UnknownGetOrLoadDefaultFields"),
+      unknownFieldError("UnknownGetOrLoadDefaultFields"),
+    ]);
+  });
+
+  it("reports config_unknown_field once per provider result with unknown fields", async () => {
+    const metrics = errorRecordingMetrics();
+    const cacheConfigProvider = vi.fn(async () => configWithUnknownFields());
+    const dialcache = new DialCache({ namespace: "unknownfields", metrics, cacheConfigProvider });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "UnknownProviderFields",
+      cacheKey: (userId) => userId,
+    });
+
+    expect(metrics.errors).toEqual([]);
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // The provider's known local policy still applies.
+    expect(second).toBe(first);
+    expect(calls).toBe(1);
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(2);
+    expect(metrics.errors).toEqual([
+      unknownFieldError("UnknownProviderFields"),
+      unknownFieldError("UnknownProviderFields"),
+    ]);
+  });
+
+  it("does not report config_unknown_field for configs with only known fields", async () => {
+    const knownOnly = (): DialCacheKeyConfig => new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+      ramp: { [CacheLayer.LOCAL]: 100 },
+      shadow: { ramp: 0, logMismatches: true, mismatchLogging: { value: false, diff: "paths" } },
+      requestLocal: true,
+      coalesce: true,
+      staleOnErrorMaxAgeSec: 0,
+      remoteReadTimeoutMs: 50,
+    });
+    const metrics = errorRecordingMetrics();
+    const dialcache = new DialCache({
+      namespace: "unknownfields",
+      metrics,
+      cacheConfigProvider: async () => knownOnly(),
+    });
+    const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
+      keyType: "user_id",
+      useCase: "KnownOnlyFields",
+      cacheKey: (userId) => userId,
+      defaultConfig: knownOnly(),
+    });
+
+    await dialcache.enable(async () => await getUser("123"));
+    await dialcache.enable(async () => await getUser("123"));
+    await dialcache.enable(async () => await dialcache.getOrLoad(async () => "value", {
+      keyType: "user_id",
+      useCase: "KnownOnlyGetOrLoadFields",
+      key: "123",
+      defaultConfig: knownOnly(),
+    }));
+
+    expect(metrics.errors).toEqual([]);
   });
 
   it("fails open when the runtime config provider throws", async () => {

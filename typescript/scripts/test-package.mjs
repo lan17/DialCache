@@ -168,6 +168,12 @@ const rootConsumer = `import {
   type Serializer,
   type ShadowComparator,
   type ShadowConfig,
+  type ShadowMismatchDiff,
+  type ShadowMismatchDiffLevel,
+  type ShadowMismatchEntry,
+  type ShadowMismatchLoggingConfig,
+  type ShadowMismatchLoggingMetricLabels,
+  type ShadowMismatchLoggingOutcome,
   type ShadowValidationMetricLabels,
   type ShadowValidationOutcome,
   type StaleRecoveryMetricLabels,
@@ -266,6 +272,10 @@ const shadowMetrics: DialCacheMetricsAdapter = {
     const outcome: ShadowValidationOutcome = labels.outcome;
     void outcome;
   },
+  shadowMismatchLogging: (labels: ShadowMismatchLoggingMetricLabels) => {
+    const outcome: ShadowMismatchLoggingOutcome = labels.outcome;
+    void outcome;
+  },
 };
 const staleMetrics: DialCacheMetricsAdapter = {
   ...metrics,
@@ -296,6 +306,27 @@ const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   dropped: true,
 };
 void shadowOutcomes;
+const shadowMismatchLoggingOutcomes: Readonly<Record<ShadowMismatchLoggingOutcome, true>> = {
+  logged: true,
+  hook_error: true,
+  render_error: true,
+  logger_error: true,
+};
+const shadowMismatchLoggingLabels: ShadowMismatchLoggingMetricLabels = {
+  cacheNamespace: "consumer-shadow-cache",
+  useCase: "Load",
+  keyType: "id",
+  outcome: "hook_error",
+};
+// @ts-expect-error Mismatch-logging outcomes are a bounded metric category.
+const unboundedShadowMismatchLoggingOutcome: ShadowMismatchLoggingOutcome = "skipped";
+const shadowMismatchDiffLevels: Readonly<Record<ShadowMismatchDiffLevel, true>> = {
+  off: true,
+  paths: true,
+  values: true,
+};
+// @ts-expect-error Mismatch diff levels are a bounded public choice.
+const unboundedShadowMismatchDiffLevel: ShadowMismatchDiffLevel = "full";
 const staleRecoveryOutcomes: Readonly<Record<StaleRecoveryOutcome, true>> = {
   served: true,
   miss: true,
@@ -334,11 +365,31 @@ const staleCacheConfig: DialCacheConfig = {
   shouldAttemptStaleRecovery: staleRecoveryPredicate,
 };
 const staleCache = new DialCache(staleCacheConfig);
+const shadowMismatchLogging: ShadowMismatchLoggingConfig = { value: false, diff: "paths" };
 const shadowConfig: ShadowConfig = {
   ramp: 50,
-  logMismatches: true,
+  mismatchLogging: shadowMismatchLogging,
 };
 const shadowKeyConfig = new DialCacheKeyConfig({ shadow: shadowConfig });
+// The shorthand stands for the whole group; leaves written beside it override it.
+const shorthandShadowConfig: ShadowConfig = {
+  ramp: 50,
+  logMismatches: true,
+  mismatchLogging: { value: false },
+};
+const shorthandShadowKeyConfig = new DialCacheKeyConfig({ shadow: shorthandShadowConfig });
+const invalidShadowMismatchLogging: ShadowConfig = {
+  mismatchLogging: {
+    // @ts-expect-error The value leaf is a boolean, not a diff level.
+    value: "values",
+  },
+};
+const shadowMismatchEntry: ShadowMismatchEntry = { path: "/nested/scores/1", cached: 2 };
+const locationOnlyShadowMismatchEntry: ShadowMismatchEntry = { path: "/nickname" };
+// @ts-expect-error Every mismatch entry names its JSON Pointer.
+const shadowMismatchEntryWithoutPath: ShadowMismatchEntry = { cached: 1, source: 2 };
+const stringShadowMismatchDiff: ShadowMismatchDiff<string> = (cachedValue, sourceValue) =>
+  cachedValue === sourceValue ? [] : [{ path: "", cached: cachedValue, source: sourceValue }];
 const staleKeyConfig = new DialCacheKeyConfig({
   ttlSec: { [CacheLayer.REMOTE]: 60 },
   staleOnErrorMaxAgeSec: 300,
@@ -356,6 +407,9 @@ const datadogOptions: DatadogMetricsOptions = {
 };
 const datadogMetrics = createDatadogDialCacheMetrics(datadogOptions);
 const datadogClassAdapter = new DatadogDialCacheMetrics(datadogOptions);
+const datadogCountsShadowMismatchLogging: "shadowMismatchLogging" extends keyof DatadogDialCacheMetrics
+  ? true
+  : false = true;
 // @ts-expect-error The observation type is an explicit, required choice.
 const missingObservationType: DatadogMetricsOptions = { client: dogStatsDClient };
 const cache = new DialCache({ namespace: "consumer-cache", metrics });
@@ -426,6 +480,7 @@ const load = cache.cached(async (id: string) => id, {
   cacheKey: (id) => id,
   fallbackTimeoutMs: 1_000,
   shadowComparator: stringShadowComparator,
+  shadowMismatchDiff: stringShadowMismatchDiff,
   shouldAttemptStaleRecovery: staleRecoveryPredicate,
   defaultConfig: new DialCacheKeyConfig({
     ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
@@ -448,6 +503,8 @@ const inlineAsync: Promise<{ readonly id: string }> = cache.getOrLoad(
   {
     ...inlineOptionsFor("InlineAsync"),
     shadowComparator: (cachedValue, sourceValue) => cachedValue.id === sourceValue.id,
+    shadowMismatchDiff: (cachedValue, sourceValue) =>
+      cachedValue.id === sourceValue.id ? [] : [{ path: "/id", cached: cachedValue.id, source: sourceValue.id }],
     shouldAttemptStaleRecovery: staleRecoveryPredicate,
   },
 );
@@ -536,6 +593,21 @@ cache.cached(async (id: string) => id, {
   // @ts-expect-error Shadow comparators must return a boolean synchronously.
   shadowComparator: async (cachedValue, sourceValue) => cachedValue === sourceValue,
 });
+cache.cached(async (id: string) => id, {
+  ...optionsFor("InvalidAsyncShadowMismatchDiff"),
+  // @ts-expect-error Shadow mismatch diff hooks must return their entries synchronously.
+  shadowMismatchDiff: async (cachedValue, sourceValue) => [{ path: "", cached: cachedValue, source: sourceValue }],
+});
+cache.getOrLoad(async () => "inline", {
+  ...inlineOptionsFor("InvalidInlineAsyncShadowMismatchDiff"),
+  // @ts-expect-error Inline shadow mismatch diff hooks must also return their entries synchronously.
+  shadowMismatchDiff: async () => [],
+});
+cache.cached(async (id: string) => id, {
+  ...optionsFor("InvalidShadowMismatchDiffValueType"),
+  // @ts-expect-error Shadow mismatch diff hooks receive the cached function's resolved value type.
+  shadowMismatchDiff: (cachedValue: number, sourceValue: number) => [{ path: "", cached: cachedValue, source: sourceValue }],
+});
 
 const requestLocalConfig = new DialCacheKeyConfig({ requestLocal: true });
 const uncoalescedConfig = new DialCacheKeyConfig({ coalesce: false });
@@ -607,6 +679,7 @@ const legacyMissingConfigReason: DisabledReason = "missing_config";
 const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
   key_construction: true,
   config_resolution: true,
+  config_unknown_field: true,
   cache_read: true,
   cache_read_timeout: true,
   cache_write: true,
@@ -776,6 +849,16 @@ void coalesceFlag;
 void structuralConfigProvider;
 void shadowCache;
 void shadowKeyConfig;
+void shorthandShadowKeyConfig;
+void invalidShadowMismatchLogging;
+void shadowMismatchLoggingOutcomes;
+void shadowMismatchLoggingLabels;
+void unboundedShadowMismatchLoggingOutcome;
+void shadowMismatchDiffLevels;
+void unboundedShadowMismatchDiffLevel;
+void shadowMismatchEntry;
+void locationOnlyShadowMismatchEntry;
+void shadowMismatchEntryWithoutPath;
 void staleMetrics;
 void staleCache;
 void staleCacheConfig;
@@ -880,6 +963,7 @@ void rootHasNoDeterministicRampSampler;
 void rootHasNoRandomRampSampler;
 void datadogMetrics;
 void datadogClassAdapter;
+void datadogCountsShadowMismatchLogging;
 void missingObservationType;
 void invalidAsyncStaleRecoveryConfig;
 `;
@@ -1255,7 +1339,9 @@ if (
   || esmDisabledOverlay.coalesce !== undefined
   || esmDisabledOverlay.staleOnErrorMaxAgeSec !== 0
   || esmDisabledOverlay.shadow?.ramp !== 0
-  || esmDisabledOverlay.shadow.logMismatches !== false
+  || esmDisabledOverlay.shadow.logMismatches !== undefined
+  || esmDisabledOverlay.shadow.mismatchLogging?.value !== false
+  || esmDisabledOverlay.shadow.mismatchLogging.diff !== "off"
   || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
   || esmDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0
 ) {
@@ -1709,7 +1795,9 @@ if (
   || cjsDisabledOverlay.coalesce !== undefined
   || cjsDisabledOverlay.staleOnErrorMaxAgeSec !== 0
   || cjsDisabledOverlay.shadow?.ramp !== 0
-  || cjsDisabledOverlay.shadow.logMismatches !== false
+  || cjsDisabledOverlay.shadow.logMismatches !== undefined
+  || cjsDisabledOverlay.shadow.mismatchLogging?.value !== false
+  || cjsDisabledOverlay.shadow.mismatchLogging.diff !== "off"
   || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
   || cjsDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0
 ) {

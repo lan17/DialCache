@@ -25,6 +25,17 @@ export type ShadowValidationOutcome =
   | "confirmation_error"
   | "timeout"
   | "dropped";
+/**
+ * Bounded outcomes of one confirmed-mismatch warning attempt. `hook_error`:
+ * the use case's `shadowMismatchDiff` hook or the built-in walk threw or
+ * returned an invalid list. `render_error`: a value had no JSON rendering.
+ * `logger_error`: the logger threw. The first failing stage wins.
+ */
+export type ShadowMismatchLoggingOutcome =
+  | "logged"
+  | "hook_error"
+  | "render_error"
+  | "logger_error";
 /** Bounded terminal outcomes for an attempted stale-on-error Redis recovery. */
 export type StaleRecoveryOutcome =
   | "served"
@@ -52,6 +63,7 @@ export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "in
 export type MetricErrorKind =
   | "key_construction"
   | "config_resolution"
+  | "config_unknown_field"
   | "cache_read"
   | "cache_read_timeout"
   | "cache_write"
@@ -133,6 +145,13 @@ export interface ShadowValidationMetricLabels {
   readonly outcome: ShadowValidationOutcome;
 }
 
+export interface ShadowMismatchLoggingMetricLabels {
+  readonly cacheNamespace: string;
+  readonly useCase: string;
+  readonly keyType: string;
+  readonly outcome: ShadowMismatchLoggingOutcome;
+}
+
 export interface StaleRecoveryMetricLabels {
   readonly cacheNamespace: string;
   readonly useCase: string;
@@ -161,6 +180,12 @@ export interface DialCacheMetricsAdapter {
    * Optional so existing custom adapters keep compiling without changes.
    */
   observeShadowValueAge?(labels: ShadowValidationMetricLabels, seconds: number): void;
+  /**
+   * One event per confirmed-mismatch warning attempt, emitted only when
+   * mismatch logging is on. Optional so existing custom adapters keep
+   * compiling without changes.
+   */
+  shadowMismatchLogging?(labels: ShadowMismatchLoggingMetricLabels): void;
   /**
    * Positive offset in seconds when a decoded Redis frame is dated after the
    * observing process's epoch clock. Serving and initial shadow reads fail

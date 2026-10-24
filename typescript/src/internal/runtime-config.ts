@@ -1,9 +1,11 @@
 import {
   CacheLayer,
   DialCacheKeyConfig,
+  hasUnknownKeyConfigFields,
   type CacheConfigProvider,
   type LayerConfig,
   type ShadowConfig,
+  type ShadowMismatchDiffLevel,
 } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { DisabledReason } from "../metrics.js";
@@ -55,11 +57,15 @@ interface ResolveRemoteLayerConfigOptions {
 export async function fetchKeyConfig(
   configProvider: CacheConfigProvider,
   key: DialCacheKey,
+  onUnknownFields: () => void,
 ): Promise<DialCacheKeyConfig | null> {
   const defaultConfig = key.defaultConfig;
   const runtimeConfig = (await configProvider(key)) as DialCacheKeyConfig | null | undefined;
   if (runtimeConfig === null || runtimeConfig === undefined) {
     return defaultConfig;
+  }
+  if (hasUnknownKeyConfigFields(runtimeConfig)) {
+    onUnknownFields();
   }
   return mergeKeyConfig(defaultConfig, runtimeConfig);
 }
@@ -146,6 +152,90 @@ export function resolveRemoteLayerConfigResult(
   };
 }
 
+/**
+ * Leaves one shadow group writes, before validation; `undefined` is unwritten.
+ * `invalid` marks a malformed shorthand, which still owes one config_resolution.
+ */
+export interface MismatchLoggingLeaves {
+  readonly value?: unknown;
+  readonly diff?: unknown;
+  readonly invalid?: true;
+}
+
+/** The effective mismatch-logging leaves and whether any written input was invalid. */
+export interface MismatchLoggingResolution {
+  readonly value: boolean;
+  readonly diff: ShadowMismatchDiffLevel;
+  readonly invalid: boolean;
+}
+
+const DIFF_LEVELS: readonly unknown[] = ["off", "paths", "values"] satisfies readonly ShadowMismatchDiffLevel[];
+
+/**
+ * Expands one shadow group's `logMismatches` shorthand into the leaves it
+ * stands for, `true` as `{ value: true, diff: "values" }` and `false` as
+ * `{ value: false, diff: "off" }`, then lets the leaves written in the same
+ * group's `mismatchLogging` override them. A malformed shorthand expands to
+ * both leaves off and is marked invalid.
+ */
+export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
+  const shorthand = readOwnUnknown(shadow, "logMismatches");
+  const expanded: MismatchLoggingLeaves = shorthand === undefined
+    ? {}
+    : shorthand === true
+      ? { value: true, diff: "values" }
+      : shorthand === false
+        ? { value: false, diff: "off" }
+        : { value: false, diff: "off", invalid: true };
+  const group = readOwnUnknown(shadow, "mismatchLogging");
+  if (group === undefined) {
+    return expanded;
+  }
+  if (group === null || typeof group !== "object" || Array.isArray(group)) {
+    // Construction, merging and default snapshots reject this shape first.
+    return { value: false, diff: "off", invalid: true };
+  }
+  const value = readOwnUnknown(group, "value");
+  const diff = readOwnUnknown(group, "diff");
+  return {
+    ...expanded,
+    ...(value === undefined ? {} : { value }),
+    ...(diff === undefined ? {} : { diff }),
+  };
+}
+
+/**
+ * Resolves the effective mismatch-logging leaves of one shadow group. Each
+ * leaf validates independently: an omitted leaf is off, an invalid leaf acts
+ * off, and `invalid` reports that the group needs one config_resolution.
+ */
+export function resolveMismatchLogging(shadow: object): MismatchLoggingResolution {
+  const leaves = expandMismatchLogging(shadow);
+  const value = resolveValueLeaf(leaves.value);
+  const diff = resolveDiffLeaf(leaves.diff);
+  return {
+    value: value ?? false,
+    diff: diff ?? "off",
+    invalid: leaves.invalid === true || value === null || diff === null,
+  };
+}
+
+/** `null` marks an invalid leaf. */
+function resolveValueLeaf(leaf: unknown): boolean | null {
+  if (leaf === undefined) {
+    return false;
+  }
+  return typeof leaf === "boolean" ? leaf : null;
+}
+
+/** `null` marks an invalid leaf. */
+function resolveDiffLeaf(leaf: unknown): ShadowMismatchDiffLevel | null {
+  if (leaf === undefined) {
+    return "off";
+  }
+  return DIFF_LEVELS.includes(leaf) ? leaf as ShadowMismatchDiffLevel : null;
+}
+
 function mergeKeyConfig(
   defaultConfig: DialCacheKeyConfig | null,
   runtimeConfig: DialCacheKeyConfig | null | undefined,
@@ -170,7 +260,10 @@ function mergeKeyConfig(
   const staleOnErrorMaxAgeSec = overlay?.staleOnErrorMaxAgeSec !== undefined
     ? overlay.staleOnErrorMaxAgeSec
     : defaultConfig?.staleOnErrorMaxAgeSec;
-  const shadow = mergeShadowConfig(defaultConfig?.shadow, overlay?.shadow);
+  const shadow = mergeShadowConfig(
+    readOwnUnknown(defaultConfig ?? undefined, "shadow") as ShadowConfig | undefined,
+    readOwnUnknown(overlay, "shadow") as ShadowConfig | undefined,
+  );
 
   return new DialCacheKeyConfig({
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
@@ -228,14 +321,31 @@ function mergeShadowConfig(
     return undefined;
   }
 
-  const ramp = overlay?.ramp !== undefined ? overlay.ramp : defaults?.ramp;
-  const logMismatches = overlay?.logMismatches !== undefined
-    ? overlay.logMismatches
-    : defaults?.logMismatches;
+  const overlayRamp = readOwnUnknown(overlay, "ramp");
+  const ramp = overlayRamp !== undefined ? overlayRamp : readOwnUnknown(defaults, "ramp");
+  // Each layer's shorthand expands before the leaf-wise merge, so a runtime
+  // `logMismatches` replaces both inherited leaves while a leaf written beside
+  // it still wins within its own layer.
+  const defaultLeaves = defaults === undefined ? {} : expandMismatchLogging(defaults);
+  const overlayLeaves = overlay === undefined ? {} : expandMismatchLogging(overlay);
+  const value = overlayLeaves.value !== undefined ? overlayLeaves.value : defaultLeaves.value;
+  const diff = overlayLeaves.diff !== undefined ? overlayLeaves.diff : defaultLeaves.diff;
 
   return {
-    ...(ramp === undefined ? {} : { ramp }),
-    ...(logMismatches === undefined ? {} : { logMismatches }),
+    ...(ramp === undefined ? {} : { ramp: ramp as number }),
+    // A malformed runtime shorthand keeps flowing to admission, which records
+    // its config_resolution; its expanded leaves already won the merge.
+    ...(overlayLeaves.invalid === true
+      ? { logMismatches: readOwnUnknown(overlay, "logMismatches") as boolean }
+      : {}),
+    ...(value === undefined && diff === undefined
+      ? {}
+      : {
+          mismatchLogging: {
+            ...(value === undefined ? {} : { value: value as boolean }),
+            ...(diff === undefined ? {} : { diff: diff as ShadowMismatchDiffLevel }),
+          },
+        }),
   };
 }
 
@@ -243,4 +353,20 @@ function assertShadowConfig(config: ShadowConfig | undefined): void {
   if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError("DialCache shadow config must be an object");
   }
+  const mismatchLogging = readOwnUnknown(config, "mismatchLogging");
+  if (
+    mismatchLogging !== undefined
+    && (mismatchLogging === null || typeof mismatchLogging !== "object" || Array.isArray(mismatchLogging))
+  ) {
+    throw new TypeError("DialCache shadow mismatchLogging config must be an object");
+  }
+}
+
+// Own-property reads keep runtime shadow policy immune to inherited values:
+// an inherited leaf must never activate shadow work or put payload data into
+// logs.
+function readOwnUnknown(source: object | undefined, key: string): unknown {
+  return source !== undefined && Object.hasOwn(source, key)
+    ? (source as Record<string, unknown>)[key]
+    : undefined;
 }

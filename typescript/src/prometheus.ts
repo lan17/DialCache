@@ -11,6 +11,7 @@ import type {
   InvalidationMetricLabels,
   MissMetricLabels,
   SerializationMetricLabels,
+  ShadowMismatchLoggingMetricLabels,
   ShadowValidationMetricLabels,
   StaleRecoveryMetricLabels,
 } from "./metrics.js";
@@ -30,7 +31,10 @@ type SerializationLabels = CounterLabels | "operation";
 type InvalidationLabels = "cache_namespace" | "key_type" | "layer";
 type CoalescedLabels = "cache_namespace" | "use_case" | "key_type" | "scope";
 type OutcomeLabels = "cache_namespace" | "use_case" | "key_type" | "outcome";
-type OutcomeMetricLabels = ShadowValidationMetricLabels | StaleRecoveryMetricLabels;
+type OutcomeMetricLabels =
+  | ShadowValidationMetricLabels
+  | ShadowMismatchLoggingMetricLabels
+  | StaleRecoveryMetricLabels;
 type CompressionLabels = CounterLabels | "outcome";
 
 interface BaseCollectorConfig<T extends string> {
@@ -93,6 +97,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly coalescedCounter: Counter<CoalescedLabels>;
   private readonly shadowValidationCounter: Counter<OutcomeLabels>;
   private readonly shadowValueAgeHistogram: Histogram<OutcomeLabels>;
+  private readonly shadowMismatchLoggingCounter: Counter<OutcomeLabels>;
   private readonly futureTimestampOffsetHistogram: Histogram<CounterLabels>;
   private readonly staleRecoveryCounter: Counter<OutcomeLabels>;
   private readonly staleRecoveryValueAgeHistogram: Histogram<OutcomeLabels>;
@@ -119,6 +124,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.coalescedCounter = counter(registry, collectors.coalescedCounter);
     this.shadowValidationCounter = counter(registry, collectors.shadowValidationCounter);
     this.shadowValueAgeHistogram = histogram(registry, collectors.shadowValueAgeHistogram);
+    this.shadowMismatchLoggingCounter = counter(registry, collectors.shadowMismatchLoggingCounter);
     this.futureTimestampOffsetHistogram = histogram(registry, collectors.futureTimestampOffsetHistogram);
     this.staleRecoveryCounter = counter(registry, collectors.staleRecoveryCounter);
     this.staleRecoveryValueAgeHistogram = histogram(registry, collectors.staleRecoveryValueAgeHistogram);
@@ -175,6 +181,10 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
     this.shadowValueAgeHistogram.observe(outcomeLabels(labels), seconds);
+  }
+
+  shadowMismatchLogging(labels: ShadowMismatchLoggingMetricLabels): void {
+    this.shadowMismatchLoggingCounter.inc(outcomeLabels(labels));
   }
 
   observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {
@@ -297,6 +307,12 @@ function collectorConfigs(prefix: string) {
       help: "Age in seconds of the validated Redis value at DialCache shadow verdict time.",
       labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
       buckets: VALUE_AGE_BUCKETS,
+    },
+    shadowMismatchLoggingCounter: {
+      type: "counter",
+      name: `${prefix}dialcache_shadow_mismatch_logging_counter`,
+      help: "DialCache confirmed shadow-mismatch warning outcomes.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
     },
     futureTimestampOffsetHistogram: {
       type: "histogram",

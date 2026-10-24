@@ -23,7 +23,7 @@ export type Recovery = "allow" | "deny" | "error";
 export type EventName = "readContext" | "readAbort" | "request" | "miss" | "disabled" | "error"
   | "coalesced" | "invalidation" | "shadowAge" | "recoveryAge" | "futureOffset"
   | "size" | "storedSize" | "compression" | "get" | "fallback" | "serialization"
-  | "mismatchWarning" | "writeDispatch" | "marker" | "coalescingState";
+  | "mismatchWarning" | "shadowMismatchLogging" | "writeDispatch" | "marker" | "coalescingState";
 export interface ObservedEvent { event: EventName; [field: string]: string | number | boolean | null }
 // JSON-shaped adapter observations deliberately include malformed replies. A
 // strongly typed port can reject these at its adapter boundary instead.
@@ -254,10 +254,10 @@ export class BehaviorDriver {
         },
         observeSerialization: (labels, seconds) => { this.record("serialization", { ...labels, seconds }); noop(); },
         ...(fixture.shadowHook === false ? {} : { shadowValidation: ({ outcome }: { outcome: string }) => { this.observed.shadow.push(outcome); noop(); } }),
-        staleRecovery: ({ outcome }) => { this.observed.recovery.push(outcome); noop(); } },
+        staleRecovery: ({ outcome }) => { this.observed.recovery.push(outcome); noop(); }, shadowMismatchLogging: (labels) => { this.record("shadowMismatchLogging", labels); noop(); } },
       logger: { debug: noop, warn: (message, details) => {
         if (message === "DialCache shadow validation mismatch" && typeof details === "object" && details !== null) {
-          this.record("mismatchWarning", details);
+          this.record("mismatchWarning", sharedWarningFields(details));
         }
         noop();
       }, error: noop },
@@ -526,4 +526,16 @@ export class BehaviorDriver {
     }
     return `unexpected:${String(error)}`;
   }
+}
+
+// Every port compares mismatchWarning events exactly against the shared
+// scenarios, so this driver records only the fields every port emits. The
+// optional mismatchPathsJson, mismatchPathCount, diffJson and loggingOutcome
+// observations join with the last port (design/2026-10-24-shadow-mismatch-paths.md, #243).
+const SHARED_WARNING_FIELDS = [
+  "cacheNamespace", "useCase", "keyType", "outcome", "cacheKey", "cachedValueJson", "sourceValueJson",
+] as const;
+function sharedWarningFields(details: object): Record<string, unknown> {
+  return Object.fromEntries(SHARED_WARNING_FIELDS.filter((field) => Object.hasOwn(details, field))
+    .map((field) => [field, (details as Record<string, unknown>)[field]]));
 }

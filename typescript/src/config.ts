@@ -13,15 +13,98 @@ export type LayerConfig = Partial<Record<CacheLayer, number>>;
 /** Synchronously classifies whether one source rejection may use a retained Redis candidate. */
 export type StaleRecoveryPredicate = (error: unknown) => boolean;
 
+/**
+ * How much of the structural difference a confirmed-mismatch warning logs:
+ * `"off"` nothing, `"paths"` the JSON Pointers of the differing fields, and
+ * `"values"` those pointers with the cached and source values at each one.
+ */
+export type ShadowMismatchDiffLevel = "off" | "paths" | "values";
+
+/**
+ * Content of the one warning emitted per confirmed shadow mismatch. Both
+ * leaves default off, and the warning is emitted only when `value` is true or
+ * `diff` is above `"off"`. Leaves merge independently at runtime, like
+ * cache-layer leaves.
+ */
+export interface ShadowMismatchLoggingConfig {
+  /** Include bounded native-JSON strings for both compared values. */
+  readonly value?: boolean;
+  /** Include the differing fields at this level. */
+  readonly diff?: ShadowMismatchDiffLevel;
+}
+
 /** Per-use-case runtime policy for detached Redis shadow work. */
 export interface ShadowConfig {
   /** Independent stable cohort percentage. Omitted and zero disable shadow work. */
   readonly ramp?: number;
   /**
-   * Emit one warning with the logical key and bounded native-JSON strings for
-   * the compared values for each confirmed mismatch. Defaults to false.
+   * Shorthand for the whole `mismatchLogging` group: `true` stands for
+   * `{ value: true, diff: "values" }` and `false` for
+   * `{ value: false, diff: "off" }`. Leaves written in this same object's
+   * `mismatchLogging` override the expanded values before runtime overlays
+   * merge.
    */
   readonly logMismatches?: boolean;
+  /** Confirmed-mismatch warning content. Omitted leaves default off. */
+  readonly mismatchLogging?: ShadowMismatchLoggingConfig;
+}
+
+interface DialCacheKeyConfigInput {
+  readonly ttlSec?: LayerConfig;
+  readonly ramp?: LayerConfig;
+  readonly shadow?: ShadowConfig;
+  readonly requestLocal?: boolean;
+  readonly coalesce?: boolean;
+  readonly staleOnErrorMaxAgeSec?: number;
+  readonly remoteReadTimeoutMs?: number;
+}
+
+// `satisfies Record<keyof …, true>` fails to compile when an interface gains
+// a field its set is missing, so unknown-field detection stays exhaustive.
+const KEY_CONFIG_FIELDS: readonly string[] = Object.keys({
+  ttlSec: true,
+  ramp: true,
+  shadow: true,
+  requestLocal: true,
+  coalesce: true,
+  staleOnErrorMaxAgeSec: true,
+  remoteReadTimeoutMs: true,
+} as const satisfies Record<keyof DialCacheKeyConfigInput, true>);
+const SHADOW_CONFIG_FIELDS: readonly string[] = Object.keys({
+  ramp: true,
+  logMismatches: true,
+  mismatchLogging: true,
+} as const satisfies Record<keyof ShadowConfig, true>);
+const MISMATCH_LOGGING_FIELDS: readonly string[] = Object.keys({
+  value: true,
+  diff: true,
+} as const satisfies Record<keyof ShadowMismatchLoggingConfig, true>);
+// The removed shadowRamp field fails construction and runtime merging with its
+// own migration error, so it is never also reported as unknown.
+const SCANNED_KEY_CONFIG_FIELDS: readonly string[] = [...KEY_CONFIG_FIELDS, "shadowRamp"];
+const LAYER_FIELDS: readonly string[] = Object.values(CacheLayer);
+const UNKNOWN_KEY_CONFIG_FIELDS = Symbol("DialCacheKeyConfig.unknownFields");
+
+/**
+ * Internal: whether a key config carries own fields DialCache does not know,
+ * at the top level, in a layer map, in `shadow` or in `mismatchLogging`. A
+ * constructed config remembers what its input carried, since construction
+ * keeps known fields only.
+ */
+export function hasUnknownKeyConfigFields(config: unknown): boolean {
+  if (!isConfigObject(config)) {
+    return false;
+  }
+  if (Object.hasOwn(config, UNKNOWN_KEY_CONFIG_FIELDS) && config[UNKNOWN_KEY_CONFIG_FIELDS] === true) {
+    return true;
+  }
+  const shadow = readOwnField(config, "shadow");
+  return hasUnknownOwnFields(config, SCANNED_KEY_CONFIG_FIELDS)
+    || hasUnknownOwnFields(readOwnField(config, "ttlSec"), LAYER_FIELDS)
+    || hasUnknownOwnFields(readOwnField(config, "ramp"), LAYER_FIELDS)
+    || hasUnknownOwnFields(shadow, SHADOW_CONFIG_FIELDS)
+    || (isConfigObject(shadow)
+      && hasUnknownOwnFields(readOwnField(shadow, "mismatchLogging"), MISMATCH_LOGGING_FIELDS));
 }
 
 export class DialCacheKeyConfig {
@@ -59,24 +142,19 @@ export class DialCacheKeyConfig {
    */
   readonly remoteReadTimeoutMs?: number;
 
-  constructor(config: {
-    ttlSec?: LayerConfig;
-    ramp?: LayerConfig;
-    shadow?: ShadowConfig;
-    requestLocal?: boolean;
-    coalesce?: boolean;
-    staleOnErrorMaxAgeSec?: number;
-    remoteReadTimeoutMs?: number;
-  }) {
+  constructor(config: DialCacheKeyConfigInput) {
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
       throw new TypeError("DialCache key config must be an object");
     }
     if (Object.hasOwn(config, "shadowRamp")) {
       throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
     }
+    const hasUnknownFields = hasUnknownKeyConfigFields(config);
     this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
     this.ramp = cloneLayerConfig(config.ramp, "ramp");
-    const shadow = cloneShadowConfig(config.shadow);
+    // Own-property read: an inherited shadow group must not activate shadow
+    // work or put payload data into logs.
+    const shadow = cloneShadowConfig(Object.hasOwn(config, "shadow") ? config.shadow : undefined);
     if (shadow !== undefined) {
       this.shadow = shadow;
     }
@@ -100,6 +178,9 @@ export class DialCacheKeyConfig {
     if (config.remoteReadTimeoutMs !== undefined) {
       assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");
       this.remoteReadTimeoutMs = config.remoteReadTimeoutMs;
+    }
+    if (hasUnknownFields) {
+      Object.defineProperty(this, UNKNOWN_KEY_CONFIG_FIELDS, { value: true });
     }
   }
 
@@ -129,7 +210,13 @@ export class DialCacheKeyConfig {
       staleOnErrorMaxAgeSec: 0,
       shadow: {
         ramp: 0,
-        logMismatches: false,
+        // `Required` keeps this overlay exhaustive: leaves merge
+        // independently, so an omitted leaf would let an inherited one
+        // survive disabled().
+        mismatchLogging: {
+          value: false,
+          diff: "off",
+        } satisfies Required<ShadowMismatchLoggingConfig>,
       },
       ramp: {
         [CacheLayer.LOCAL]: 0,
@@ -156,7 +243,40 @@ function cloneShadowConfig(config: ShadowConfig | undefined): ShadowConfig | und
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError("DialCache shadow config must be an object");
   }
-  return { ...config };
+  const ramp = readOwnField(config, "ramp");
+  const logMismatches = readOwnField(config, "logMismatches");
+  const mismatchLogging = readOwnField(config, "mismatchLogging");
+  return {
+    ...(ramp === undefined ? {} : { ramp }),
+    ...(logMismatches === undefined ? {} : { logMismatches }),
+    ...(mismatchLogging === undefined ? {} : { mismatchLogging: cloneMismatchLoggingConfig(mismatchLogging) }),
+  };
+}
+
+function cloneMismatchLoggingConfig(config: ShadowMismatchLoggingConfig): ShadowMismatchLoggingConfig {
+  if (config === null || typeof config !== "object" || Array.isArray(config)) {
+    throw new TypeError("DialCache shadow mismatchLogging config must be an object");
+  }
+  // Leaf values stay unvalidated, like layer-map leaves, so a malformed
+  // runtime leaf fails open narrowly at resolution.
+  const value = readOwnField(config, "value");
+  const diff = readOwnField(config, "diff");
+  return {
+    ...(value === undefined ? {} : { value }),
+    ...(diff === undefined ? {} : { diff }),
+  };
+}
+
+function isConfigObject(value: unknown): value is Record<PropertyKey, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readOwnField<T extends object, Key extends keyof T>(source: T, key: Key): T[Key] | undefined {
+  return Object.hasOwn(source, key) ? source[key] : undefined;
+}
+
+function hasUnknownOwnFields(value: unknown, knownFields: readonly string[]): boolean {
+  return isConfigObject(value) && Object.keys(value).some((name) => !knownFields.includes(name));
 }
 
 /**

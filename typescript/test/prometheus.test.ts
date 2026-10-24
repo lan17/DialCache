@@ -16,6 +16,7 @@ import {
   type CompressionOutcome,
   type DisabledReason,
   type MetricErrorKind,
+  type ShadowMismatchLoggingOutcome,
   type ShadowValidationOutcome,
   type StaleRecoveryOutcome,
 } from "../src/index.js";
@@ -42,6 +43,7 @@ const CONFIGURED_TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.
 const METRIC_ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   key_construction: true,
   config_resolution: true,
+  config_unknown_field: true,
   cache_read: true,
   cache_read_timeout: true,
   cache_write: true,
@@ -90,6 +92,12 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   confirmation_error: true,
   timeout: true,
   dropped: true,
+};
+const SHADOW_MISMATCH_LOGGING_OUTCOMES: Readonly<Record<ShadowMismatchLoggingOutcome, true>> = {
+  logged: true,
+  hook_error: true,
+  render_error: true,
+  logger_error: true,
 };
 const STALE_RECOVERY_OUTCOMES: Readonly<Record<StaleRecoveryOutcome, true>> = {
   served: true,
@@ -220,6 +228,12 @@ describe("Prometheus metrics adapter", () => {
       },
       42,
     );
+    metrics.shadowMismatchLogging({
+      cacheNamespace: labels.cacheNamespace,
+      useCase: labels.useCase,
+      keyType: labels.keyType,
+      outcome: "logged",
+    });
     metrics.observeFutureTimestampOffset(labels, 0.007);
     metrics.compression({ ...labels, outcome: "compressed" });
     metrics.observeGet(labels, 0.05);
@@ -276,6 +290,10 @@ describe("Prometheus metrics adapter", () => {
         "schema_dialcache_serialization_timer",
         ["cache_namespace", "use_case", "key_type", "layer", "operation"],
         TIMER_BUCKETS,
+      ),
+      counterSchema(
+        "schema_dialcache_shadow_mismatch_logging_counter",
+        ["cache_namespace", "use_case", "key_type", "outcome"],
       ),
       counterSchema(
         "schema_dialcache_shadow_validation_counter",
@@ -508,6 +526,39 @@ describe("Prometheus metrics adapter", () => {
     );
   });
 
+  it("exports every bounded shadow-mismatch-logging outcome without adding cache identity or layer labels", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "mismatch_logging_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusShadowMismatchLogging",
+      keyType: "user_id",
+    } as const;
+    const outcomes = Object.keys(SHADOW_MISMATCH_LOGGING_OUTCOMES) as ShadowMismatchLoggingOutcome[];
+
+    for (const outcome of outcomes) {
+      metrics.shadowMismatchLogging({ ...labels, outcome });
+    }
+
+    for (const outcome of outcomes) {
+      await expect(
+        sumMetric(registry, "mismatch_logging_dialcache_shadow_mismatch_logging_counter", {
+          cache_namespace: labels.cacheNamespace,
+          use_case: labels.useCase,
+          key_type: labels.keyType,
+          outcome,
+        }),
+      ).resolves.toBe(1);
+    }
+
+    const family = ((await registry.getMetricsAsJSON()) as unknown as MetricFamily[]).find(
+      ({ name }) => name === "mismatch_logging_dialcache_shadow_mismatch_logging_counter",
+    );
+    expect(family?.values.map(({ labels: emitted }) => Object.keys(emitted))).toEqual(
+      outcomes.map(() => ["cache_namespace", "use_case", "key_type", "outcome"]),
+    );
+  });
+
   it("exports every bounded stale-recovery outcome without adding cache identity or layer labels", async () => {
     const registry = new Registry();
     const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "stale_" });
@@ -673,6 +724,35 @@ describe("Prometheus metrics adapter", () => {
         key_type: "user_id",
         layer: "remote",
         reason: "watermark_fenced",
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it("reuses a pre-registered current-schema shadow-mismatch-logging collector", async () => {
+    const registry = new Registry();
+    const prefix = "current_mismatch_logging_";
+    const metricName = `${prefix}dialcache_shadow_mismatch_logging_counter`;
+    new Counter({
+      name: metricName,
+      help: "DialCache confirmed shadow-mismatch warning outcomes.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
+      registers: [registry],
+    });
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix });
+
+    metrics.shadowMismatchLogging({
+      cacheNamespace: "users",
+      useCase: "CurrentMismatchLoggingCollector",
+      keyType: "user_id",
+      outcome: "logger_error",
+    });
+
+    await expect(
+      sumMetric(registry, metricName, {
+        cache_namespace: "users",
+        use_case: "CurrentMismatchLoggingCollector",
+        key_type: "user_id",
+        outcome: "logger_error",
       }),
     ).resolves.toBe(1);
   });

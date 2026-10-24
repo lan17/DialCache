@@ -236,13 +236,13 @@
       "id": "M08",
       "case": "C60.invalid-logging-policy",
       "description": "Enable mismatch logging after a malformed runtime logging flag",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.resolveShadowLogging returns true after recording the config_resolution error for a malformed runtime logging flag, and Go go/policy.go ResolvePolicy turns LogMismatches on when the flag is invalid. A malformed logMismatches value therefore enables mismatch logging instead of leaving it off.",
+      "rationale": "TypeScript typescript/src/internal/runtime-config.ts expandMismatchLogging expands a malformed logMismatches shorthand to both mismatch-logging leaves on while still marking it invalid, so DialCache.resolveShadowLogging records the config_resolution error, and Go go/policy.go ResolvePolicy turns LogMismatches on when the flag is invalid. A malformed logMismatches value therefore enables mismatch logging instead of leaving it off.",
       "typescript": {
         "edits": [
           {
-            "path": "typescript/src/dialcache.ts",
-            "before": "this.recordError(key, CacheLayer.REMOTE, \"config_resolution\");\n      return false;\n    }\n    return configuredLogMismatches;",
-            "after": "this.recordError(key, CacheLayer.REMOTE, \"config_resolution\");\n      return true;\n    }\n    return configuredLogMismatches;"
+            "path": "typescript/src/internal/runtime-config.ts",
+            "before": ": { value: false, diff: \"off\", invalid: true };",
+            "after": ": { value: true, diff: \"values\", invalid: true };"
           }
         ],
         "requiredDetections": [
@@ -269,13 +269,13 @@
       "id": "M09",
       "case": "C60.logging-default-off",
       "description": "Enable mismatch logging when its flag is omitted",
-      "rationale": "TypeScript typescript/src/dialcache.ts DialCache.resolveShadowLogging returns true when the runtime logging flag is omitted, and Go go/policy.go ResolvePolicy starts the resolved policy with LogMismatches on. Mismatch logging is therefore enabled by default instead of off.",
+      "rationale": "TypeScript typescript/src/internal/runtime-config.ts resolveMismatchLogging resolves an omitted value leaf to true, so a shadow group that writes neither logMismatches nor mismatchLogging logs whole values, and Go go/policy.go ResolvePolicy starts the resolved policy with LogMismatches on. Mismatch logging is therefore enabled by default instead of off.",
       "typescript": {
         "edits": [
           {
-            "path": "typescript/src/dialcache.ts",
-            "before": "if (configuredLogMismatches === undefined) {\n      return false;",
-            "after": "if (configuredLogMismatches === undefined) {\n      return true;"
+            "path": "typescript/src/internal/runtime-config.ts",
+            "before": "function resolveValueLeaf(leaf: unknown): boolean | null {\n  if (leaf === undefined) {\n    return false;",
+            "after": "function resolveValueLeaf(leaf: unknown): boolean | null {\n  if (leaf === undefined) {\n    return true;"
           }
         ],
         "requiredDetections": [
@@ -2071,6 +2071,39 @@
             "path": "go/redis_adapter.go",
             "before": "future_buffer_ms > 31536000000",
             "after": "future_buffer_ms >= 31536000000"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M65",
+      "case": "C60.logging-enabled",
+      "description": "Leave mismatch logging off when its flag is true",
+      "rationale": "TypeScript typescript/src/internal/runtime-config.ts expandMismatchLogging expands a true logMismatches shorthand to both mismatch-logging leaves off, and Go go/policy.go ResolvePolicy discards a valid true flag. Enabling mismatch logging with the flag therefore emits no warning for a confirmed mismatch.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/runtime-config.ts",
+            "before": "? { value: true, diff: \"values\" }",
+            "after": "? { value: false, diff: \"off\" }"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/policy.go",
+            "before": "flag, valid := v.(bool)\n",
+            "after": "flag, valid := v.(bool)\n\t\t\tflag = false\n"
           }
         ],
         "requiredDetections": [

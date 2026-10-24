@@ -74,3 +74,4 @@ per port, detections, the challenges mapped to it);
 | `M62` | C54.read-ownership | Release shadow capacity at bounded read failure before the raw adapter operation settles | generated, portable | generated, portable | - | `shadow-read-deadline-releases-raw-capacity` |
 | `M63` | C38.marker-transition | Move an invalidation cutoff backwards when an older request arrives | generated, portable | generated, portable | - | `invalidation-transition-cutoff-moves-backwards` |
 | `M64` | C39.numeric-limits | Reject the maximum supported invalidation buffer | generated, portable | generated, portable | - | `invalidation-transition-inclusive-buffer-limit` |
+| `M65` | C60.logging-enabled | Leave mismatch logging off when its flag is true | ordinary, generated, portable | generated, portable | - | none |
