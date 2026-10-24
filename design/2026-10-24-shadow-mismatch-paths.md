@@ -174,10 +174,10 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 - A metric for paths. Pointers are unbounded labels. Deferred until log
   pipeline aggregation proves insufficient; a bounded label derived in
-  `shadowMismatchPaths` is possible without library support.
+  `shadowMismatchDiff` is possible without library support.
 - A TypeScript-only leaf type classification that reports `/updatedAt` when a
   cached ISO string meets a source `Date`. Deferred until real logs show `[]`
-  dominating TypeScript mismatches; a use case can set `shadowMismatchPaths`
+  dominating TypeScript mismatches; a use case can set `shadowMismatchDiff`
   for it today.
 - Array alignment (longest common subsequence or alignment by an identity
   field). Rejected for the built-in because it is quadratic in the worst case
@@ -207,7 +207,7 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   conversion of native values, exact truncation text and the logger backend
   remain B03/X01.
 - **New obligation** (ID assigned when CONTRACTS.md assigns one): the
-  built-in path computation in the Proposal, as a portable function over JSON
+  built-in computation in the Proposal, as a portable function over JSON
   values, with the array rule, the root cases, the ordering and the caps.
   Evidence is a hand-authored `mismatchPathVectors` group in
   [protocol-vectors.json](../formal/catalogs/protocol-vectors.json), each
