@@ -55,7 +55,8 @@ made, are in [HISTORY.md](./HISTORY.md).
 `make formal-check` is the Quint evidence lane: typechecks and bounded runs of
 every scheduled model, the public regressions and the model mutation challenges.
 It produces nothing the port lanes consume, so the hosted workflow runs it as a
-`check-models` job beside generation; only the aggregate waits for it.
+`check-models` job beside generation, in `full` mode only; only the aggregate
+waits for it.
 `make formal-generate` runs `node formal/tools/witnesses.mjs evaluate --profile all`
 immediately after generation, before any port replays. That shared,
 language-neutral step is the sole producer of `.formal-traces/go-parity-witnesses/`;
@@ -100,14 +101,31 @@ peaks near 1.7 GiB. Results do not depend on that number: every process has
 its own seed, inputs and output paths, so the corpus, the fixtures and the
 challenge report are identical for any worker count.
 
-A behavior, model, or replay change requires full validation of its current
-inputs before merge. The default PR workflow runs faster checks; it does not
-enforce this full-validation requirement. The manual full workflow can target a
-PR branch. Its model check and symbolic jobs run separately from corpus
-generation. Its weekly run validates the selected `main` revision and includes
-exploration; a manual run can enable the `exploration` option. The aggregate
-gate requires exploration when selected or scheduled. Each PR body should
-identify the revision and completed local or hosted validation.
+A behavior, model or replay change requires hosted validation of its current
+inputs before merge, at the tier those inputs need. The manual workflow,
+`formal-full.yaml`, takes a `mode` input, and each mode adds to the previous
+one. `replay` generates the corpus, completes every port replay and runs the
+symbolic lane, about 15 minutes. `mutations` adds the TypeScript, Go and Rust mutation campaigns,
+about 50 minutes. `full`, the default, adds `check-models` with the
+model-fault campaign, about two and a half hours. Port, replay-driver and
+regression-only changes need `replay`, or `mutations` when they edit a file a
+catalogued mutant rewrites. A change to a model's transitions, invariants or
+challenges, the kernel library or the Quint toolchain needs `full`, because
+those are the inputs the campaign reads; so does a change under
+`formal/tools/`, which runs it. The `generate` job restores the
+corpus from a cache keyed on every generation input: the models,
+`formal/replay/`, `formal/tools/`, `formal/generated/`, the catalogs other
+than the three review ledgers, the committed fixtures, the Quint pin, the
+`Makefile` and the package manifests. An entry is saved under the branch that
+generated it and is visible to that branch and, from `main`, to every branch,
+until seven days pass without a restore. A run whose inputs match such an
+entry skips generation; any other run, and every weekly run, regenerates. The
+default PR workflow runs faster checks; it does not enforce this requirement.
+The weekly run validates the selected `main` revision in `full` mode and
+includes exploration; a manual run can enable the `exploration` option. The
+aggregate gate requires exploration when selected or scheduled, requires each
+lane the mode selects, and requires the other lanes to have been skipped. Each
+PR body should identify the revision, the mode and the run.
 
 ## Reading a completion report
 

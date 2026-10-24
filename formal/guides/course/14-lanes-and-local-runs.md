@@ -34,19 +34,25 @@ for any branch. Its jobs are the six stages of lesson 1 as separate lanes:
 - `symbolic` (`make model-check` with Apalache) and, when selected,
   `exploration` with a fresh seed.
 
-Parity and mutation lanes wait only for `generate`; the aggregate
-`formal-full` requires every lane. A behavior, model or replay change needs
-this workflow green on its branch before merge, and the PR body says which
-run.
+Parity and mutation lanes wait only for `generate`. A `mode` input selects the
+lanes, and each mode adds to the one before it: `replay` runs `generate`, the
+four parity lanes and `symbolic`, about 15 minutes, restoring the corpus from a
+cache when no generation input changed; `mutations` adds the three mutation lanes;
+`full`, the default and the weekly run, adds `check-models`. The aggregate
+`formal-full` requires every selected lane to pass and every other lane to be
+skipped, so a run cannot pass as a stronger mode than it ran. A behavior, model
+or replay change needs the mode its inputs require green on its branch before
+merge ([../VALIDATION.md](../VALIDATION.md#choosing-a-run) says which), and
+the PR body names the run and its mode.
 
 Locally you rarely need all of it. Match the target to the edit:
 
 | You changed | Run before pushing | About |
 | --- | --- | --- |
 | Prose in a guide or this course | `make audit`, `corepack pnpm docs:check`; re-key a reviewed guide (lesson 13) | 3 s + 2 s |
-| A model or kernel module | `quint test` on the model, `node formal/tools/generate-artifacts.mjs --write`, `make audit`, `make differential`; then `make formal-check` and the full workflow | minutes locally; `formal-check` is long |
-| A replay module or a driver | `make smoke`, then `make formal-generate` and `make formal-<port>` | 30 s for smoke once Rust is built |
-| A port's library code | `make check-<port>`, `make smoke` | minutes |
+| A model or kernel module | `quint test` on the model, `node formal/tools/generate-artifacts.mjs --write`, `make audit`, `make differential`; then `make formal-check` and the workflow in `full` mode | minutes locally; `formal-check` is long |
+| A replay module or a driver | `make smoke`, then `make formal-generate` and `make formal-<port>`; then the workflow in `replay` mode | 30 s for smoke once Rust is built |
+| A port's library code | `make check-<port>`, `make smoke`; then the workflow in `replay` mode | minutes |
 
 Two habits keep this cheap. Keep `.formal-traces/` as the only place generated
 corpora and reports go; nothing there is committed. And read a red lane from
@@ -60,8 +66,9 @@ command, so the step name tells you which lesson's check fired.
   to 90: the `differential` job on pull requests.
 - **[formal-full.yaml](../../../.github/workflows/formal-full.yaml)**: the job
   list (`exploration`, `check-models`, `generate`, the four parity jobs,
-  `symbolic`, the three mutation lanes with their merge jobs, `formal-full`)
-  and the `timeout-minutes` budget on each.
+  `symbolic`, the three mutation lanes with their merge jobs, `formal-full`),
+  the `mode` input that selects the lanes, and the `timeout-minutes` budget on
+  each.
 - **[validation.mjs](../../tools/validation.mjs)**, lines 11 to 12: `check` and
   `formal` as lists of other targets. Line 195: the five checks of `audit`.
   Lines 197 to 201: its fixture, style (`check-style.mjs`), course, read-view

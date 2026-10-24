@@ -217,7 +217,7 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "51b0808c1983de972421a15994bf1090bd20ca3a832a28d1a88dfc5ccc29951d",
+      "sha256": "b52155b4505aca801509f0a624ce20dfcf9fd7e3f9c687ed72ab748e7bcf6420",
       "entries": [
         {"title":"Maintainer guide","contracts":["B01"]},
         {"title":"Validation","contracts":["B01"]},
@@ -1084,7 +1084,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "c4fdfa3808b4126c605cda04a51fa3041ff1ebb72ea2ea2e93ad7e86823cf994",
+      "sha256": "8c3930f2938792bd470f8f7c862a5ecfe6c0cb2c5a43c587ca0a515d96f7424b",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1108,7 +1108,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "baca2abd313c0bcccce5e95d384d1cce7d60982a12fe192fee7680f143acd7a7",
+      "sha256": "378e920719b033ff0e713d8a0932c216922684aad14a2c0f06af23db1c6c093d",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},
@@ -1376,7 +1376,7 @@
     },
     {
       "path": "formal/guides/GLOSSARY.md",
-      "sha256": "916d6eddcc7ccb71c249480f02a5f385ceea3f8b6aab8ebb37f62ba5b8709ed5",
+      "sha256": "1ba5aab3a8a514bb4e6905fb4cfd9a4ba3908be0e13d0d88db361cfdbecc79c4",
       "entries": [
         {"title":"Glossary"},
         {"title":"Specification and replay"},
@@ -1696,7 +1696,7 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "4930ebe0a168dbb1988f04f2e8afd1f027f3d9b2131084c3794a15a3a6454c2f",
+      "sha256": "afc44715faa7df1512aa8ab1d013521319e97e9ce75725aa20b292459504b2bc",
       "entries": [
         {"title":"Validation and evidence"},
         {"title":"Prerequisites"},

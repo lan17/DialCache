@@ -280,16 +280,21 @@ flowchart LR
   not a completion claim. They take up to about half an hour.
 - **Full formal verification**
   ([formal-full.yaml](../.github/workflows/formal-full.yaml)) runs weekly on
-  `main` and on demand for any branch. The parity and mutation lanes wait only
-  for `generate`, each mutation lane merges its shards, and the aggregate
-  requires every lane and keeps a summary artifact for 90 days. The scheduled
-  run takes about two and a half hours, and its wall clock is set by the
-  `check-models` job.
+  `main` and on demand for any branch. A `mode` input selects the lanes, and
+  each mode adds to the one before it: `replay` runs `generate`, the four
+  parity lanes and `symbolic`, about 15 minutes; `mutations` adds the three
+  mutation lanes, about 50 minutes; `full`, the default and the weekly mode,
+  adds `check-models`, about two and a half hours, with its wall clock set by
+  that job. The parity and mutation lanes wait only for `generate`, each
+  mutation lane merges its shards, and the aggregate requires every selected
+  lane to pass and every other lane to be skipped. It keeps a summary artifact
+  for 90 days.
 
 The pull request lanes are fast checks. A behavior, model or replay change
-requires the full workflow on its branch before merge, and the PR body records
-which run. [VALIDATION.md](./guides/VALIDATION.md) explains how to choose a run
-and how to read the reports.
+requires this workflow on its branch before merge, in the mode
+[VALIDATION.md](./guides/VALIDATION.md#choosing-a-run) assigns to its inputs,
+and the PR body records the run and its mode. VALIDATION.md also explains how
+to read the reports.
 
 ## Where things are
 

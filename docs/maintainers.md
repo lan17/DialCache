@@ -43,10 +43,16 @@ for setup, reports and single-history reproduction.
 
 Pull requests run fast native/smoke checks and real integrations. Changes to
 model or generator inputs also trigger fresh Quint artifact recomputation.
-Complete exploration and mutation measurement run through the manual and
-weekly full-validation workflow, using the same Make targets as local runs.
-Run full validation for changes to behavior, models or replay tooling before
-merge, and before release or accepting another port. A scheduled result applies
+Complete replay, mutation measurement and exploration run through the manual
+and weekly formal workflow, using the same Make targets as local runs. Its
+`mode` input selects `replay` (the generated corpus in every port, about 15
+minutes), `mutations` (plus the port mutation campaigns, about 50 minutes) or
+`full` (plus the model checks and the model-fault campaign, about two and a
+half hours). Before merge, run `replay` for changes to port behavior or a
+replay driver, and `mutations` when the change also edits a file a catalogued
+mutant rewrites. Run `full` for changes to a model's transitions, invariants
+or challenges, the kernel library, `formal/tools/` or the Quint toolchain, and
+before a release or before accepting another port. A scheduled result applies
 to its recorded revision; it does not validate a later PR head. A smoke pass
 does not establish full conformance.
 
