@@ -268,17 +268,16 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   every port's protocol-vector test. The function has no relation to kernel
   state, so it is not modelled in Quint. The completion inventory requires
   every port to replay every vector, so the group and the row land with the
-  last port (Plan); until then the TypeScript differ is pinned by native
-  tests.
+  last port (Plan step 4); until then the TypeScript differ is pinned by
+  native tests.
 - **Quint:** `kernel/shadow.qnt` keeps `logging: bool`, read as "`value` is
   true or `diff` is above `off`"; `dialcache-shadow-conformance.qnt` keeps its
   invariants and regressions, including `invalid-logging-policy`, which the
   per-leaf validation still satisfies. The `logPolicy` choices in
   `formal/replay/features.mjs` and the five fixed scenarios in
   `behavioral-scenarios.json` keep `logMismatches`, which stays valid, so the
-  shared corpus needs no change while the ports catch up; the pull request
-  that completes the last port adds choices and scenarios for each `diff`
-  level and for `value`, so the corpus exercises both leaves and the
+  shared corpus needs no change while the ports catch up; with the last port,
+  #242 adds choices and scenarios for each `diff` level and for `value`, so the corpus exercises both leaves and the
   shorthand's expansion. That is a driver fixture change, not a model change.
 - **Observation record:** the `mismatchWarning` event in
   [PORTING.md](../formal/guides/PORTING.md#trace-and-observation-contract)
@@ -583,10 +582,12 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   `api.md`, the port READMEs that name `logMismatches`, and `upgrading.md`:
   `shadow.logMismatches` stays and now also logs `mismatchPaths`,
   `mismatchPathCount` and `diffJson`; no config migration is required.
-- **Release:** additive for TypeScript, Go and Python. Breaking for Rust,
-  where `ShadowPolicy` gains a public field and existing struct literals stop
-  compiling; the title keeps `!` and the `BREAKING CHANGE:` footer names
-  that.
+- **Release:** additive for TypeScript, Go and Python. Rust's `ShadowPolicy`
+  gains a public field, so existing struct literals stop compiling. The pull
+  request still carries neither `!` nor a `BREAKING CHANGE:` footer, at the
+  maintainer's request in session on 2026-10-24: "yes lets drop it and not
+  use `!` in description since i dont want to increment major version right
+  now". The Rust entry in `docs/upgrading.md` names the change.
 
 ## Plan
 
@@ -599,13 +600,17 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
    that pin the differ. The shared corpus keeps `logMismatches`, which stays
    valid in every port, so the other ports keep passing. Tier: Replay and
    Mutations, since M08 and M09 anchor on the moved logging code.
-3. Go, Rust and Python each follow in their own pull request against the
-   TypeScript semantics, with their drivers and docs. Tier: Replay and
-   Mutations each.
-4. The pull request that completes the last port adds the vector group, its
-   `semantic-cases.json` mapping and the new contract row, and re-encodes the
-   `logPolicy` choices and scenarios for each `diff` level and for `value`.
-   Tier: Full (Portable behavior).
+3. Once the maintainer is satisfied with the TypeScript reference, #242 also
+   carries Go, Rust and Python against the TypeScript semantics, with their
+   drivers and docs. This replaced one pull request per port on 2026-10-24,
+   in session: "we should just implement these ports in same pr once we are
+   satsified ok with typescript".
+4. With the last port, #242 adds the vector group, its `semantic-cases.json`
+   mapping and the new contract row; re-encodes the `logPolicy` choices and
+   scenarios for each `diff` level and for `value`; records the new
+   observation fields in every driver; and catalogues mutants for the
+   built-in computation (the array rule, the root cases) and for the hook's
+   fail-closed behavior in every port. Tier: Full (Portable behavior).
 
 ## Deviations
 
