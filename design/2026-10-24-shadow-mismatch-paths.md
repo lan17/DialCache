@@ -68,15 +68,29 @@ shadow: {
 shadow: { ramp: 5, logMismatches: true }
 ```
 
-`logMismatches` is expansion, not a third leaf: where it appears, in a
+`logMismatches` is expansion, not a third leaf: it sets a baseline for the
+group, and the leaves beside it are the exceptions. Where it appears, in a
 default config or a runtime overlay, `true` expands to
-`{ value: true, diff: "values" }` and `false` to `{ value: false, diff: "off" }`
-before the ordinary leaf-wise merge runs. An explicit leaf in the same object
-wins over the expansion, so `{ logMismatches: true, mismatchLogging: { value: false } }`
-logs the diff without the whole-value dumps. An invalid value expands to both
-leaves off with one `config_resolution`, as today. Everything `diff` logs
-derives from the renderings that `value` logs (D3), so the shorthand never
-exposes more than `logMismatches: true` exposes today; it adds fields.
+`{ value: true, diff: "values" }` and `false` to `{ value: false, diff: "off" }`,
+then any leaf written in the same object overrides its expanded value, and
+only then does the ordinary leaf-wise merge run, runtime over defaults. The
+rule has no special case for `false`:
+
+| Written | Effective |
+| --- | --- |
+| `{ logMismatches: true, mismatchLogging: { value: false } }` | `{ value: false, diff: "values" }` |
+| `{ logMismatches: false, mismatchLogging: { diff: "paths" } }` | `{ value: false, diff: "paths" }` |
+| default `mismatchLogging: { diff: "paths" }`, runtime `logMismatches: false` | both off: the overlay's expanded leaves win by layer order |
+| default `mismatchLogging: { value: false }`, runtime `logMismatches: true` | `{ value: true, diff: "values" }`: the runtime baseline overrides the default leaf |
+
+A dominant `false`, a kill switch that beats leaves written beside it, was
+not chosen: it would be asymmetric with `true`, it would make the second row
+a silently dead config, and the kill switches exist already,
+`DialCacheKeyConfig.disabled()` and a runtime overlay carrying
+`logMismatches: false` with no leaves beside it. An invalid value expands to
+both leaves off with one `config_resolution`, as today. Everything `diff`
+logs derives from the renderings that `value` logs (D3), so the shorthand
+never exposes more than `logMismatches: true` exposes today; it adds fields.
 
 A warning is emitted after a confirmed mismatch when `value` is true or
 `diff` is above `"off"`. It always carries `cacheNamespace`, `useCase`,
@@ -464,6 +478,10 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
     existing configs without a change.
   - A third leaf merged independently and OR'd at read time. An explicit
     `value: false` could then never win over an inherited `true`.
+  - A `false` that beats leaves written beside it. Asymmetric with `true`,
+    and `{ logMismatches: false, mismatchLogging: { diff: "paths" } }` would
+    be a silently dead config; `disabled()` and a bare `logMismatches: false`
+    overlay are the kill switches.
 
 ### D11. How warning-pipeline failures are observed
 
