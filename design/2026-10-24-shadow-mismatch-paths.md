@@ -38,7 +38,7 @@ Constraints:
 - Logging stays default-off, runs only after a confirmed `mismatch`, inside
   detached shadow work, with bounded CPU; the caller's result is never
   affected (C60, C50–C54).
-- Every port mirrors the config leaves, the warning fields and the hooks, and
+- Every port mirrors the config leaves, the warning fields and the hook, and
   the ports' value domains differ (B03): Node deep equality, Go reflection over
   a portable value domain, Rust `PartialEq` on `T`, Python dict/list.
 - Runtime policy merges leaf-wise and `DialCacheKeyConfig.disabled()` is a
@@ -231,12 +231,12 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   and needs a per-use-case identity hint; the hook covers it.
 - Aggregating paths inside the library (top paths per window). Pipeline work.
 - A value projector hook, #138's `shadowMismatchLogValue`, which redacted
-  values in code before `value` and `diff` logged them. Deferred: `paths` is
-  the value-free tier and `diff` narrows values to the differing leaves, and
-  an optional hook is additive later. Reopen for a use case that needs the
-  differing values logged while the same values carry data that `paths`
-  cannot express; a `toJSON` on the value class or a wrapping logger covers
-  it meanwhile.
+  values in code before `value` and `diff` logged them. Deferred:
+  `diff: "paths"` is the value-free level, `diff: "values"` narrows values to
+  the differing leaves, and an optional hook is additive later. Reopen for a
+  use case that needs the differing values logged while the same values carry
+  data that a path list cannot express; a `toJSON` on the value class or a
+  wrapping logger covers it meanwhile.
 - A textual diff of the two renderings. It reads well and pinpoints a change
   inside a long string, but it cannot be aggregated by field, it is a
   presentation of two strings `value` already logs, and pinning it across
@@ -325,9 +325,10 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   - `value` and a boolean `diff` only, logging the paths inside `diffJson`.
     The paths-only mode is the one a cache of user data can leave on in
     production; without it, value-free logging moves back into code.
-  - Only `paths` and `value`. The whole-value dump is truncated at 8 KiB, so
-    for a large record `diff` is the only way to see the differing leaves
-    without raising the cap.
+  - A `diff` level without `"values"`, so `off | paths` beside `value`. The
+    whole-value dump is truncated at 8 KiB, so for a large record the
+    `"values"` level is the only way to see the differing leaves without
+    raising the cap.
 
 ### D2. Path encoding
 
@@ -344,8 +345,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 ### D3. What the built-in computation compares
 
 - **Choice:** the parsed native-JSON renderings of both sides, rendered once
-  each, with `[]` for byte-identical renderings and `[""]` for roots of
-  different kinds.
+  each, with no entries for byte-identical renderings and one entry at `""`
+  for roots of different kinds.
 - **Status:** Open
 - **Rejected:**
   - The native values the comparator saw. It would explain every verdict,
@@ -356,8 +357,9 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   - Making the differ the default comparator, with early exit for the
     verdict. The default verdict would change in every port (C50), and a
     custom comparator still breaks the unification.
-  - A root sentinel when renderings are identical. `[]` already says it, and
-    `[""]` is kept for a difference the walk cannot descend into.
+  - A root sentinel when renderings are identical. An empty `mismatchPaths`
+    already says it, and the root entry is kept for a difference the walk
+    cannot descend into.
 
 ### D4. Arrays
 
@@ -375,7 +377,7 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 ### D5. Walk order
 
 - **Choice:** object members in UTF-16 code-unit order, arrays by index,
-  pointers emitted in walk order.
+  entries emitted in walk order.
 - **Status:** Open
 - **Rejected:**
   - Insertion order. Go map iteration is randomized and Rust's `serde_json`
@@ -401,14 +403,14 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
     a type without a JSON rendering; values that ride along with the walk or
     the hook need none of it.
   - #138's `shadowMismatchLogDiff` returning arbitrary JSON. A required
-    `path` and optional sides keep the output bounded and let `paths` derive
-    from the same list.
+    `path` and optional sides keep the output bounded and let `mismatchPaths`
+    derive from the same list.
   - Falling back to the built-in when the hook fails. A broken hook would
     then log more than its author intended.
   - Dropping invalid members instead of nulling the result. Partial output
     from a misbehaving hook is a guess.
 
-### D7. How `paths` and `diff` relate
+### D7. What each `diff` level logs
 
 - **Choice:** two projections of one entry list. `mismatchPaths` is the
   entries' paths as strings; `diffJson` is the entries with their values as
@@ -528,7 +530,7 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 ## Impact
 
 - **TypeScript:** `config.ts`, `internal/runtime-config.ts`,
-  `internal/shadow-log-json.ts`, `dialcache.ts` (hooks, warning assembly,
+  `internal/shadow-log-json.ts`, `dialcache.ts` (the hook, warning assembly,
   `resolveShadowLogging`), `metrics.ts` (the `shadowMismatchLogging` hook and
   its outcome type), `datadog.ts` and `prometheus.ts`, `index.ts` exports for
   the new config, hook and metric types, `scripts/test-package.mjs`, the
@@ -550,8 +552,9 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   `features.mjs` (fixture and `logPolicy` encoding), `semantic-cases.json`
   (vector mapping and new cases), `protocol-vectors.json` (new group),
   `mutations.json` and `rust-mutations.json` (M08 and M09 anchors move to the
-  new leaf code; new mutants for the array rule, the root cases and hook
-  fail-closed behavior), the ledgers `source-audit.json` and `go-parity.json`,
+  new leaf code; new mutants for the array rule, the root cases, the
+  shorthand expansion and hook fail-closed behavior), the ledgers
+  `source-audit.json` and `go-parity.json`,
   and any course lesson whose citation moves.
 - **Docs:** `shadow-validation.md` (Confirmed mismatch logging),
   `observability.md` (Confirmed mismatch warnings, the shadow outcomes
@@ -569,7 +572,8 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 1. #242 opens with this record as its first commit and stays at the design
    gate until every decision is confirmed and the record is `Accepted`.
 2. #242 then carries the TypeScript reference: the leaves and the shorthand,
-   the built-in differ, the hook, the warning fields, the TypeScript replay
+   the built-in differ, the hook, the warning fields, the
+   `shadowMismatchLogging` metric and its exporters, the TypeScript replay
    driver, C60's wording, the TypeScript docs and catalogs, and native tests
    that pin the differ. The shared corpus keeps `logMismatches`, which stays
    valid in every port, so the other ports keep passing. Tier: Replay and
