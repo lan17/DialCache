@@ -81,11 +81,10 @@ names the issue's design under Supersedes.
 
 A record written after its work merged starts as `Implemented`. It lists the
 contract IDs that now state the behavior, and marks a decision `Confirmed` only
-where the issue or pull request shows a maintainer approving it. An unmerged
-pull request opened before records existed, such as #219, gets its record the
-same way: `Accepted` when every decision is `Confirmed`, `Proposed` otherwise.
-Its implementation stays, and only its `Open` decisions stop at the design
-gate.
+where the issue or pull request shows a maintainer approving it. A pull
+request opened before records existed, such as #219, needs no record: its
+review checks the decisions in its issue, and an unconfirmed one is a question
+for the maintainer.
 
 ## Take a record from proposal to merge
 
