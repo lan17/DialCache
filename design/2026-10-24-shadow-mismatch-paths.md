@@ -85,9 +85,13 @@ true. It always carries `cacheNamespace`, `useCase`, `keyType`,
 
 | Leaf | Fields | Bound |
 | --- | --- | --- |
-| `paths` | `mismatchPaths: string[]`, RFC 6901 JSON Pointers into the compared value; `mismatchPathCount`, the total before the cap | 64 pointers, each 512 bytes |
+| `paths` | `mismatchPaths: string[]`, RFC 6901 JSON Pointers into the compared value; `mismatchPathCount`, the total before the cap | 64 entries, each pointer 512 bytes |
 | `value` | `cachedValueJson`, `sourceValueJson`: native JSON of each side | 8 KiB each |
-| `diff` | `diffJson`: the entries `{ path, cached, source }` for every reported path, each side resolved from its JSON rendering and omitted where the pointer does not resolve | 8 KiB |
+| `diff` | `diffJson`: the same entries with their `cached` and `source` values, each side clamped to 1 KiB; a side absent from the entry is omitted | 8 KiB |
+
+`paths` and `diff` are two projections of one list of entries
+`{ path, cached?, source? }`, computed once by the built-in walk or returned
+by the hook, so they cannot disagree.
 
 One per-use-case hook sits beside `shadowComparator` on `cached()` and
 `getOrLoad()`:
@@ -97,19 +101,29 @@ dialcache.cached(fetchUser, {
   useCase: "GetUser",
   keyType: "user_id",
   cacheKey: (id) => id,
-  // Optional. Replaces the built-in path computation; receives the compared
-  // values. Absent: the built-in JSON differ runs.
-  shadowMismatchPaths: (cached, source) => [...],
+  // Optional. Replaces the built-in computation; receives the compared
+  // values and returns the entries. Absent: the built-in JSON differ runs.
+  shadowMismatchDiff: (cached, source) => [
+    { path: "/profile/email", cached: cached.profile.email, source: source.profile.email },
+    { path: "/roles" },
+  ],
 });
 ```
 
-The hook follows the comparator's discipline: synchronous, deterministic,
-side-effect-free, non-mutating, bounded. A hook that throws, returns a
-promise-like or returns a non-array, or an array with a non-string member,
-logs `null` for `mismatchPaths` and `diffJson` and never falls back to the
-built-in computation.
+Each entry names a path; its `cached` and `source` sides are optional, so a
+hook that only knows where the values differ returns paths alone, and an
+entry for a field present on one side carries one side. The hook follows the
+comparator's discipline: synchronous, deterministic, side-effect-free,
+non-mutating, bounded. A hook that throws, returns a promise-like, returns a
+non-array, or returns a member without a string `path` logs `null` for
+`mismatchPaths` and `diffJson` and never falls back to the built-in
+computation. A hook value with no JSON rendering makes `diffJson` `null`
+while `mismatchPaths` stays, since the paths are still valid and logging
+less is the safe direction. Hook values are the use case's own code, like
+the comparator: the built-in's guarantee that nothing in `diffJson` exceeds
+what `value` logs applies to the built-in only.
 
-The built-in path computation:
+The built-in computation:
 
 1. Render each side to native JSON once and parse it. A side with no
    rendering (`undefined` at the root, a cycle, a `bigint`) makes
@@ -121,24 +135,34 @@ The built-in path computation:
    length are reported once at the array's own pointer without descending.
    Any other pair that differs is reported at its pointer. Nesting deeper
    than 32 levels is reported at the container's pointer without descending.
+   Each entry carries the two values at its pointer as the walk holds them:
+   one side when the member exists on one side only, the whole containers
+   for an array-length or depth entry.
 3. Roots of different kinds (object against array, container against
-   primitive, primitive against primitive) yield `[""]`. Byte-identical
-   renderings yield `[]`: the difference is outside the logged form, which
+   primitive, primitive against primitive) yield one entry at `""` carrying
+   both roots. Byte-identical renderings yield no entries, so
+   `mismatchPaths` is `[]`: the difference is outside the logged form, which
    means a type the rendering erased or a comparator that sees more than
    JSON.
-4. Pointers are emitted in walk order, the list is cut at 64, each pointer is
-   clamped to 512 bytes with the existing `...[truncated]` marker, and
-   `mismatchPathCount` carries the uncut total.
+4. Entries are emitted in walk order and the list is cut at 64; each pointer
+   is clamped to 512 bytes and each value side to 1 KiB with the existing
+   `...[truncated]` marker; the rendered `diffJson` is clamped at 8 KiB the
+   way `cachedValueJson` is today; and `mismatchPathCount` carries the uncut
+   total.
 
 Port shapes: Go `ShadowPolicy.MismatchLogging *MismatchLoggingPolicy` with
-`Paths`, `Value`, `Diff *bool` and `Operation.MismatchPaths func(cached,
-source T) ([]string, error)`; Rust `ShadowPolicy.mismatch_logging:
-Option<MismatchLogging>` and an `Operation::mismatch_paths(...)` builder,
-where the built-in computation needs `T: Serialize`, so an operation built
-with `with_codec` has paths only through the hook, and the existing
-`Operation::preview` stays as the renderer for such types; Python
+`Paths`, `Value`, `Diff *bool` and `Operation.MismatchDiff func(cached,
+source T) ([]MismatchEntry, error)`, with `MismatchEntry{Path string;
+Cached, Source any}` and the port's absence convention for an omitted side;
+Rust `ShadowPolicy.mismatch_logging: Option<MismatchLogging>` and an
+`Operation::mismatch_diff(...)` builder returning `Vec<MismatchEntry>` with
+`Option<serde_json::Value>` sides, where the built-in computation needs
+`T: Serialize`, so an operation built with `with_codec` has entries only
+through the hook, and the existing `Operation::preview` stays as the
+renderer for such types; Python
 `shadow={"mismatch_logging": {"paths": True}}` (camelCase accepted as today)
-and `shadow_mismatch_paths=` beside `shadow_comparator`. Runtime config in
+and `shadow_mismatch_diff=` beside `shadow_comparator`, returning a list of
+dicts. Runtime config in
 every port validates each leaf independently: an invalid leaf acts false and
 records one `config_resolution`; unknown fields are ignored and reported as
 `config_unknown_field`; a non-object `mismatchLogging` fails resolution like a
@@ -166,6 +190,12 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   differing values logged while the same values carry data that `paths`
   cannot express; a `toJSON` on the value class or a wrapping logger covers
   it meanwhile.
+- A textual diff of the two renderings. It reads well and pinpoints a change
+  inside a long string, but it cannot be aggregated by field, it is a
+  presentation of two strings `value` already logs, and pinning it across
+  ports would need byte-identical pretty-printing and a fully specified
+  line-diff algorithm. A later refinement of `diff` entries can trim the
+  common prefix and suffix of long string leaves instead.
 - A key projector. Deferred as in #138.
 - Failing closed when shadow policy is enabled without a shadow observer
   (#151). Independent.
@@ -181,7 +211,9 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   values, with the array rule, the root cases, the ordering and the caps.
   Evidence is a hand-authored `mismatchPathVectors` group in
   [protocol-vectors.json](../formal/catalogs/protocol-vectors.json), each
-  vector a pair of JSON values with the expected pointers, mapped in
+  vector a pair of JSON values with the expected entries, paths and values
+  compared as parsed JSON so each port's string rendering stays a B03
+  detail, mapped in
   `semantic-cases.json` as `protocol/mismatchPathVectors/*` and replayed by
   every port's protocol-vector test. The function has no relation to kernel
   state, so it is not modelled in Quint. The completion inventory requires
@@ -293,30 +325,46 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
     units, so every port has that comparison; a second ordering is a second
     thing to get wrong.
 
-### D6. The custom path hook
+### D6. The custom hook
 
-- **Choice:** `shadowMismatchPaths(cached, source) => string[]` receives the
-  raw compared values; absent means the built-in runs; failure or an invalid
-  result logs `null` and never falls back to the built-in.
+- **Choice:** `shadowMismatchDiff(cached, source)` receives the compared
+  values and returns entries `{ path, cached?, source? }`; absent means the
+  built-in runs; a throw, a promise-like, a non-array or a member without a
+  string `path` logs `null` for both `mismatchPaths` and `diffJson` and never
+  falls back to the built-in; a value with no JSON rendering nulls `diffJson`
+  alone.
 - **Status:** Open
 - **Rejected:**
-  - #138's `shadowMismatchLogDiff` returning arbitrary JSON. Paths are the
-    unit everything else derives from, so the hook returns paths and the
-    library derives `diff`.
+  - `shadowMismatchPaths(cached, source) => string[]`, with the library
+    resolving each pointer against the JSON renderings to produce `diff`.
+    Rejected 2026-10-24: resolution meant unescaping, index parsing and
+    unresolvable pointers in four ports, and could never produce values for
+    a type without a JSON rendering; values that ride along with the walk or
+    the hook need none of it.
+  - #138's `shadowMismatchLogDiff` returning arbitrary JSON. A required
+    `path` and optional sides keep the output bounded and let `paths` derive
+    from the same list.
   - Falling back to the built-in when the hook fails. A broken hook would
     then log more than its author intended.
   - Dropping invalid members instead of nulling the result. Partial output
     from a misbehaving hook is a guess.
 
-### D7. How `diff` is produced and logged
+### D7. How `paths` and `diff` relate
 
-- **Choice:** the library resolves each reported pointer against both JSON
-  renderings and logs `diffJson`, one rendered string capped at 8 KiB with
-  entries `{ path, cached, source }`.
+- **Choice:** two projections of one entry list. `mismatchPaths` is the
+  entries' paths as strings; `diffJson` is the entries with their values as
+  one rendered string capped at 8 KiB. The built-in attaches both values to
+  each entry as the walk emits it; the hook supplies its own. The leaves are
+  independent: `{ paths: true, diff: true, value: false }` logs where and
+  what without the whole-value dumps.
 - **Status:** Open
 - **Rejected:**
-  - A separate diff hook. One hook decides where; the library decides what,
-    from the loggable forms only.
+  - Dropping `diff` from the first version as too complex. Considered
+    2026-10-24: the complexity was pointer resolution, which this shape
+    removes, and the truncation case, values past the 8 KiB `value` cap, is
+    what `diff` exists for.
+  - A separate diff hook beside a paths hook. One list decides where and
+    what, so the two fields cannot disagree.
   - A structured array in the log. A byte cap cannot be stated for it, and
     the observation record needs primitives.
 
@@ -336,9 +384,9 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 ### D9. Caps
 
-- **Choice:** 64 pointers, 512 bytes per pointer, depth 32, `diffJson` 8 KiB,
-  `mismatchPathCount` carries the uncut total; a cut list is visible because
-  the count exceeds the length.
+- **Choice:** 64 entries, 512 bytes per pointer, 1 KiB per value side, depth
+  32, `diffJson` 8 KiB, `mismatchPathCount` carries the uncut total; a cut
+  list is visible because the count exceeds the length.
 - **Status:** Open
 - **Rejected:**
   - A byte cap on the path list. The list is structured, and a count is what
@@ -400,7 +448,8 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   types, `scripts/test-package.mjs`, the shadow and config tests, the formal
   behavior driver.
 - **Go:** `policy.go` (leaf lists, resolution, JSON form), `shadow.go`,
-  `metrics.go` details, the operation type, `*_driver_test.go`,
+  `metrics.go` details, the operation type and a `MismatchEntry` type,
+  `*_driver_test.go`,
   `protocol_test.go`, `internal/testsuite/policy_test.go`.
 - **Rust:** `policy.rs`, `shadow.rs`, `observe.rs` (`ShadowMismatchDetails`,
   `Display`), `operation.rs`, `preview.rs`, `tests/formal/driver.rs`, the
