@@ -42,7 +42,7 @@ Constraints:
   the ports' value domains differ (B03): Node deep equality, Go reflection over
   a portable value domain, Rust `PartialEq` on `T`, Python dict/list.
 - Runtime policy merges leaf-wise and `DialCacheKeyConfig.disabled()` is a
-  complete kill switch, so every new leaf is a boolean the overlay can set.
+  complete kill switch, so every new leaf is a scalar the overlay can set.
 - Warning fields reach log pipelines, so a path list is a structured array of
   strings, not a rendered blob.
 - `shadow.logMismatches: true` is live in at least one consumer's dynamic
@@ -54,44 +54,48 @@ Constraints:
 
 ## Proposal
 
-The `shadow` group gains a `mismatchLogging` content group with three
-independent default-off leaves. `logMismatches` stays as the one-flag
-shorthand for every leaf:
+The `shadow` group gains a `mismatchLogging` content group with two
+independent default-off leaves: `value`, a boolean, and `diff`, an ordered
+level `"off" | "paths" | "values"`. `logMismatches` stays as the one-flag
+shorthand for the maximal setting:
 
 ```ts
 shadow: {
   ramp: 5,
-  mismatchLogging: { paths: true, value: false, diff: false },
+  mismatchLogging: { diff: "paths", value: false },
 }
-// Equivalent to mismatchLogging: { paths: true, value: true, diff: true }:
+// Equivalent to mismatchLogging: { diff: "values", value: true }:
 shadow: { ramp: 5, logMismatches: true }
 ```
 
-`logMismatches` is expansion, not a fourth leaf: where it appears, in a
-default config or a runtime overlay, `true` expands to every leaf true and
-`false` to every leaf false before the ordinary leaf-wise merge runs. An
-explicit leaf in the same object wins over the expansion, so
-`{ logMismatches: true, mismatchLogging: { value: false } }` logs paths and
-`diff` without values. An invalid value expands to every leaf false with one
-`config_resolution`, as today. Every leaf derives from the renderings that
-`value` logs (D3), so the shorthand never exposes more than
-`logMismatches: true` exposes today; it adds fields.
+`logMismatches` is expansion, not a third leaf: where it appears, in a
+default config or a runtime overlay, `true` expands to
+`{ value: true, diff: "values" }` and `false` to `{ value: false, diff: "off" }`
+before the ordinary leaf-wise merge runs. An explicit leaf in the same object
+wins over the expansion, so `{ logMismatches: true, mismatchLogging: { value: false } }`
+logs the diff without the whole-value dumps. An invalid value expands to both
+leaves off with one `config_resolution`, as today. Everything `diff` logs
+derives from the renderings that `value` logs (D3), so the shorthand never
+exposes more than `logMismatches: true` exposes today; it adds fields.
 
-A warning is emitted after a confirmed mismatch when at least one leaf is
-true. It always carries `cacheNamespace`, `useCase`, `keyType`,
-`outcome: "mismatch"`, `cachedValueAgeSeconds` (the age the
+A warning is emitted after a confirmed mismatch when `value` is true or
+`diff` is above `"off"`. It always carries `cacheNamespace`, `useCase`,
+`keyType`, `outcome: "mismatch"`, `cachedValueAgeSeconds` (the age the
 `observeShadowValueAge` metric records) and `cacheKey` (the logical URN,
-2 KiB). Each leaf adds:
+2 KiB). Each setting adds:
 
-| Leaf | Fields | Bound |
+| Setting | Fields | Bound |
 | --- | --- | --- |
-| `paths` | `mismatchPaths: string[]`, RFC 6901 JSON Pointers into the compared value; `mismatchPathCount`, the total before the cap | 64 entries, each pointer 512 bytes |
-| `value` | `cachedValueJson`, `sourceValueJson`: native JSON of each side | 8 KiB each |
-| `diff` | `diffJson`: the same entries with their `cached` and `source` values, each side clamped to 1 KiB; a side absent from the entry is omitted | 8 KiB |
+| `diff: "paths"` | `mismatchPaths: string[]`, RFC 6901 JSON Pointers into the compared value; `mismatchPathCount`, the total before the cap | 64 entries, each pointer 512 bytes |
+| `diff: "values"` | The `"paths"` fields, plus `diffJson`: the same entries with their `cached` and `source` values, each side clamped to 1 KiB; a side absent from the entry is omitted | 8 KiB |
+| `value: true` | `cachedValueJson`, `sourceValueJson`: native JSON of each side | 8 KiB each |
 
-`paths` and `diff` are two projections of one list of entries
+The two `diff` levels are projections of one list of entries
 `{ path, cached?, source? }`, computed once by the built-in walk or returned
-by the hook, so they cannot disagree.
+by the hook, so they cannot disagree: `"paths"` logs the paths, `"values"`
+adds the entries with their values. The levels are an exposure ladder:
+`"paths"` is what a cache of user data can leave on in production,
+`"values"` is what an investigation turns on.
 
 One per-use-case hook sits beside `shadowComparator` on `cached()` and
 `getOrLoad()`:
@@ -151,19 +155,22 @@ The built-in computation:
    total.
 
 Port shapes: Go `ShadowPolicy.MismatchLogging *MismatchLoggingPolicy` with
-`Paths`, `Value`, `Diff *bool` and `Operation.MismatchDiff func(cached,
+`Value *bool`, `Diff *MismatchDiffLevel` (`off`, `paths`, `values`) and
+`Operation.MismatchDiff func(cached,
 source T) ([]MismatchEntry, error)`, with `MismatchEntry{Path string;
 Cached, Source any}` and the port's absence convention for an omitted side;
-Rust `ShadowPolicy.mismatch_logging: Option<MismatchLogging>` and an
-`Operation::mismatch_diff(...)` builder returning `Vec<MismatchEntry>` with
+Rust `ShadowPolicy.mismatch_logging: Option<MismatchLogging>` with
+`value: Option<bool>` and `diff: Option<MismatchDiff>`, an enum of the three
+levels, and an `Operation::mismatch_diff(...)` builder returning
+`Vec<MismatchEntry>` with
 `Option<serde_json::Value>` sides, where the built-in computation needs
 `T: Serialize`, so an operation built with `with_codec` has entries only
 through the hook, and the existing `Operation::preview` stays as the
 renderer for such types; Python
-`shadow={"mismatch_logging": {"paths": True}}` (camelCase accepted as today)
-and `shadow_mismatch_diff=` beside `shadow_comparator`, returning a list of
-dicts. Runtime config in
-every port validates each leaf independently: an invalid leaf acts false and
+`shadow={"mismatch_logging": {"diff": "paths"}}` (camelCase accepted as
+today) and `shadow_mismatch_diff=` beside `shadow_comparator`, returning a
+list of dicts. Runtime config in every port validates each leaf
+independently: an invalid leaf acts off (`value: false`, `diff: "off"`) and
 records one `config_resolution`; unknown fields are ignored and reported as
 `config_unknown_field`; a non-object `mismatchLogging` fails resolution like a
 malformed layer map. `logMismatches` keeps its type in every port (Go
@@ -202,8 +209,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 ## Contract and model changes
 
-- **C60** keeps its obligation and changes its wording: opting in means at
-  least one `mismatchLogging` leaf is true. Its native clause stays: JSON
+- **C60** keeps its obligation and changes its wording: opting in means
+  `value` is true or `diff` is above `"off"`. Its native clause stays: JSON
   conversion of native values, exact truncation text and the logger backend
   remain B03/X01.
 - **New obligation** (ID assigned when CONTRACTS.md assigns one): the
@@ -220,16 +227,16 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   every port to replay every vector, so the group and the row land with the
   last port (Plan); until then the TypeScript differ is pinned by native
   tests.
-- **Quint:** `kernel/shadow.qnt` keeps `logging: bool`, read as "at least one
-  content leaf is on"; `dialcache-shadow-conformance.qnt` keeps its
+- **Quint:** `kernel/shadow.qnt` keeps `logging: bool`, read as "`value` is
+  true or `diff` is above `off`"; `dialcache-shadow-conformance.qnt` keeps its
   invariants and regressions, including `invalid-logging-policy`, which the
   per-leaf validation still satisfies. The `logPolicy` choices in
   `formal/replay/features.mjs` and the five fixed scenarios in
   `behavioral-scenarios.json` keep `logMismatches`, which stays valid, so the
   shared corpus needs no change while the ports catch up; the pull request
-  that completes the last port adds per-leaf choices and scenarios so the
-  corpus exercises the leaves and the shorthand's expansion. That is a driver
-  fixture change, not a model change.
+  that completes the last port adds choices and scenarios for each `diff`
+  level and for `value`, so the corpus exercises both leaves and the
+  shorthand's expansion. That is a driver fixture change, not a model change.
 - **Observation record:** the `mismatchWarning` event in
   [PORTING.md](../formal/guides/PORTING.md#trace-and-observation-contract)
   gains optional `mismatchPathsJson` (the array as one JSON string, keeping
@@ -255,17 +262,26 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 ### D1. Which content leaves exist
 
-- **Choice:** `paths`, `value`, `diff`, each a boolean; `cacheKey` is part of
-  every warning. #138's `key` leaf is dropped.
+- **Choice:** `value`, a boolean, and `diff`, an ordered level
+  `"off" | "paths" | "values"`; `cacheKey` is part of every warning. #138's
+  `key` leaf is dropped. The cost accepted: a string leaf among boolean and
+  numeric ones, so each port carries a three-value type with its validation.
 - **Status:** Open
 - **Rejected:**
   - `key`, `value`, `diff` as in #138. The `key` leaf existed only so a
     warning could name no entity; a cache key is an identifier the
     application already sends to Redis, and `main` has always logged it. One
     fewer leaf to merge, kill and mirror.
-  - A single enum (`off | paths | values`). An enum does not merge leaf-wise
-    with the rest of runtime config, and `value` and `paths` are independent
-    choices.
+  - Three booleans, `paths`, `value` and `diff`, this record's first shape.
+    Rejected 2026-10-24: `paths` and `diff` are an exposure ladder, which an
+    ordered level states directly, and `{ paths: false, diff: true }` was a
+    state with no purpose.
+  - A single level for the whole group (`off | paths | values | everything`).
+    `value` and the diff level are independent choices: an investigation may
+    want the whole values with or without the structural list.
+  - `value` and a boolean `diff` only, logging the paths inside `diffJson`.
+    The paths-only mode is the one a cache of user data can leave on in
+    production; without it, value-free logging moves back into code.
   - Only `paths` and `value`. The whole-value dump is truncated at 8 KiB, so
     for a large record `diff` is the only way to see the differing leaves
     without raising the cap.
@@ -353,10 +369,11 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 - **Choice:** two projections of one entry list. `mismatchPaths` is the
   entries' paths as strings; `diffJson` is the entries with their values as
-  one rendered string capped at 8 KiB. The built-in attaches both values to
-  each entry as the walk emits it; the hook supplies its own. The leaves are
-  independent: `{ paths: true, diff: true, value: false }` logs where and
-  what without the whole-value dumps.
+  one rendered string capped at 8 KiB; `diff: "paths"` logs the first and
+  `diff: "values"` both. The built-in attaches both values to each entry as
+  the walk emits it; the hook supplies its own. The leaves are independent:
+  `{ diff: "values", value: false }` logs where and what without the
+  whole-value dumps.
 - **Status:** Open
 - **Rejected:**
   - Dropping `diff` from the first version as too complex. Considered
@@ -396,8 +413,9 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 ### D10. What happens to `shadow.logMismatches`
 
-- **Choice:** it stays, permanently, as the one-flag shorthand for every
-  content leaf, with the expansion semantics in the Proposal. The convention
+- **Choice:** it stays, permanently, as the one-flag shorthand for the
+  maximal setting, `{ value: true, diff: "values" }`, with the expansion
+  semantics in the Proposal. The convention
   against aliases and shims covers unused API; this field is live in a
   consumer's config store, and the shorthand is a coarse control with a
   defined meaning, not a deprecated path. A record that adds a leaf decides
@@ -434,11 +452,11 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 - Unknown `mismatchLogging` leaves and other unknown key-config fields are
   ignored and reported once per observed config as `config_unknown_field`.
   (#138 applied this to `shadow.logMismatches` itself; D10 keeps that field
-  instead.) A known leaf with an invalid value acts false with one
+  instead.) A known leaf with an invalid value acts off with one
   `config_resolution`; a non-object group fails resolution like a malformed
   layer map.
 - `value: true` logs raw JSON.
-- `DialCacheKeyConfig.disabled()` sets every leaf false.
+- `DialCacheKeyConfig.disabled()` sets `value: false` and `diff: "off"`.
 
 ## Impact
 
@@ -490,8 +508,8 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
    Mutations each.
 4. The pull request that completes the last port adds the vector group, its
    `semantic-cases.json` mapping and the new contract row, and re-encodes the
-   `logPolicy` choices and scenarios per leaf. Tier: Full (Portable
-   behavior).
+   `logPolicy` choices and scenarios for each `diff` level and for `value`.
+   Tier: Full (Portable behavior).
 
 ## Deviations
 
