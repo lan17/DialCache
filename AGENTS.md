@@ -19,8 +19,8 @@ Classify before editing, because the type sets the design record, the steps and 
 | Public API | Public names added, renamed, exported or removed | When every port must mirror it, or it reshapes how one port's callers construct the cache or call its operations | Replay; Mutations if the mutant rule fires |
 | Docs | Guides, READMEs, examples, doc comments | None | PR CI |
 | Refactor or move | Structure changes; behavior, public API and the driver contract (action names, choice encodings, observation fields) unchanged | None | PR CI; Replay if port source, a `.qnt` file or a replay driver changes; Mutations if the mutant rule fires; Full with exploration for a move |
-| Formal infrastructure | `formal/tools/`, shared `formal/replay/` code, the kernel library, the replay protocol and observation records, catalog schemas, gates | When it changes how conformance is established | Full |
-| Tooling | Dependencies, workflows, `Makefile`, `scripts/`, toolchain pins | None | PR CI; Full if a Quint or language toolchain pin changes |
+| Formal infrastructure | `formal/tools/`, shared `formal/replay/` code, the kernel library, the replay protocol and observation records, catalog schemas, and the completion and witness gates in `formal/tools/` | When it changes how conformance is established | Full |
+| Tooling | Dependencies, workflows (`formal-full.yaml`'s lane selection and aggregate included), `Makefile`, `scripts/`, toolchain pins | None | PR CI; Full if a Quint or language toolchain pin changes |
 | New port | Another language implementation | Required | Full |
 | Release | Versions and publication | None | Maintainer only |
 
@@ -29,16 +29,19 @@ Classify before editing, because the type sets the design record, the steps and 
 - Branch from `main`. When the change builds on an open PR, name that PR in the record's Plan and
   the description, and ask whether to wait for its merge or stack on its branch.
 - Deliver the type asked for, and propose adjacent work in the PR description or an issue.
-- **PR CI:** every check on the head commit passes. Nothing on GitHub enforces this: the ruleset
+- A change of any type that reverses a decision made in an earlier record, issue or pull request
+  needs a record, and stops at the design gate.
+- **PR CI:** every check on the head commit passes. Nothing on GitHub enforces this. The ruleset
   requires only the `test` check and one approval, and the maintainer merges through an admin
-  bypass, so `quint`, `differential (1)` to `(4)`, `Build documentation` and `Validate PR title`
+  bypass. So `quint`, `differential (1)` to `(4)`, `Build documentation` and `Validate PR title`
   can be red at merge.
 - **Replay:** PR CI plus a green run of `formal-full.yaml` in `replay` mode on the same commit:
   `gh workflow run formal-full.yaml --ref <branch> -f mode=replay`. It generates the corpus, every
-  history the models produce from their fixed seeds, or restores the corpus an earlier run on the
-  same branch or on `main` saved from identical generation inputs, and replays it in all four
-  ports; about 15 minutes. Exported Quint regressions join the corpus, so the ports must pass
-  them; a challenge, or a regression generation does not export, runs only in Full. Read a run with
+  history the models produce from their fixed seeds, or restores the corpus an earlier run saved
+  from identical generation inputs on the same branch or on `main`. Then it replays the corpus in
+  all four ports beside the symbolic lane; about 15 minutes. Exported Quint regressions join the
+  corpus, so the ports must pass them; a challenge, or a regression that generation does not
+  export, runs only in Full. Read a run with
   `gh run list --workflow formal-full.yaml --branch <branch> --json databaseId,displayTitle,headSha,status,conclusion`;
   `gh pr checks` omits it.
 - **Mutations:** Replay plus the TypeScript, Go and Rust mutation campaigns (`-f mode=mutations`),
@@ -53,7 +56,8 @@ Classify before editing, because the type sets the design record, the steps and 
   `formal/catalogs/mutations.json` or `rust-mutations.json` names, or edits those catalogs. PR CI
   matches only the `before` anchors; only the mutation lanes compile and measure each mutant.
 - **Replay driver:** code that replays generated histories: `typescript/test/formal/`, the Go
-  `*_driver_test.go` and `*_replay_test.go` files, `rust/tests/formal/` and `python/tests/formal/`.
+  `*_driver_test.go` and `*_replay_test.go` files with `go/replay_coordinator_test.go` and
+  `go/local_clock_profile_test.go`, `rust/tests/formal/` and `python/tests/formal/`.
 
 ### Stop at the gates
 

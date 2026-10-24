@@ -73,9 +73,9 @@ The rounded boxes are the maintainer's. A **gate** is a decision only he makes. 
 asks in its session if he is present. Otherwise it pushes its work as a draft pull request, lists
 the open questions in the description and stops.
 
-A pull request is ready for review when every step of its type is done, any design record is
-current, the required validation has passed on the head commit or on an earlier commit that covers
-it, and no questions remain open. Until then it stays a draft.
+A pull request is ready for review when every step of its type is done and any design record is
+current. The required validation has passed on the head commit, or on an earlier commit that
+covers it, and no questions remain open. Until then it stays a draft.
 
 ## How much validation a change needs
 

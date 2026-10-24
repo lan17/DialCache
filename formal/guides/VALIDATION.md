@@ -104,14 +104,15 @@ challenge report are identical for any worker count.
 A behavior, model or replay change requires hosted validation of its current
 inputs before merge, at the tier those inputs need. The manual workflow,
 `formal-full.yaml`, takes a `mode` input, and each mode adds to the previous
-one. `replay` generates the corpus and completes every port replay, about 15
-minutes. `mutations` adds the TypeScript, Go and Rust mutation campaigns,
+one. `replay` generates the corpus, completes every port replay and runs the
+symbolic lane, about 15 minutes. `mutations` adds the TypeScript, Go and Rust mutation campaigns,
 about 50 minutes. `full`, the default, adds `check-models` with the
 model-fault campaign, about two and a half hours. Port, replay-driver and
 regression-only changes need `replay`, or `mutations` when they edit a file a
 catalogued mutant rewrites. A change to a model's transitions, invariants or
 challenges, the kernel library or the Quint toolchain needs `full`, because
-those are the only inputs the campaign reads. The `generate` job restores the
+those are the inputs the campaign reads; so does a change under
+`formal/tools/`, which runs it. The `generate` job restores the
 corpus from a cache keyed on every generation input: the models,
 `formal/replay/`, `formal/tools/`, `formal/generated/`, the catalogs other
 than the three review ledgers, the committed fixtures, the Quint pin, the

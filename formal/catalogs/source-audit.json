@@ -1084,7 +1084,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "c4fdfa3808b4126c605cda04a51fa3041ff1ebb72ea2ea2e93ad7e86823cf994",
+      "sha256": "8c3930f2938792bd470f8f7c862a5ecfe6c0cb2c5a43c587ca0a515d96f7424b",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1376,7 +1376,7 @@
     },
     {
       "path": "formal/guides/GLOSSARY.md",
-      "sha256": "916d6eddcc7ccb71c249480f02a5f385ceea3f8b6aab8ebb37f62ba5b8709ed5",
+      "sha256": "1ba5aab3a8a514bb4e6905fb4cfd9a4ba3908be0e13d0d88db361cfdbecc79c4",
       "entries": [
         {"title":"Glossary"},
         {"title":"Specification and replay"},
@@ -1696,7 +1696,7 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "01d42120da856677923e1a52664a34edc04fee0b88d6104ca804cae372bff235",
+      "sha256": "afc44715faa7df1512aa8ab1d013521319e97e9ce75725aa20b292459504b2bc",
       "entries": [
         {"title":"Validation and evidence"},
         {"title":"Prerequisites"},

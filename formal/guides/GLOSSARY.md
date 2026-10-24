@@ -37,7 +37,7 @@ One committed named history per conformance profile, `formal/generated/<profile>
 
 ### Lane
 
-One validation pipeline run as its own make target and hosted CI job: the Quint evidence lane (`formal-check`), generation (`formal-generate`), the per-port parity lanes (`formal-ts`, `formal-go`, `formal-rust`, `formal-python`), the mutation lanes, and the differential, symbolic, exploration, smoke, audit and integration lanes. Parity and mutation lanes depend only on the generated corpus and witness evidence, so they run in parallel; the aggregate requires every lane. Owner: [VALIDATION.md](./VALIDATION.md)
+One validation pipeline run as its own make target and hosted CI job: the Quint evidence lane (`formal-check`), generation (`formal-generate`), the per-port parity lanes (`formal-ts`, `formal-go`, `formal-rust`, `formal-python`), the mutation lanes, and the differential, symbolic, exploration, smoke, audit and integration lanes. Parity and mutation lanes depend only on the generated corpus and witness evidence, so they run in parallel; the aggregate requires every lane the workflow's `mode` selects and requires the others to be skipped. Owner: [VALIDATION.md](./VALIDATION.md)
 
 ### ITF (Informal Trace Format)
 

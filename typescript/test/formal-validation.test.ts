@@ -634,7 +634,7 @@ describe("full formal workflow shape", () => {
     const restore = steps.find(step => step.uses?.startsWith("actions/cache/restore@"))!;
     const save = steps.find(step => step.uses?.startsWith("actions/cache/save@"))!;
     expect(restore.id).toBe("corpus");
-    expect(restore.with).toEqual({ path: ".formal-traces", key: "formal-traces-$" + "{{ hashFiles('formal/models/**', 'formal/replay/**', 'formal/tools/**', 'formal/generated/**', 'formal/catalogs/**', '!formal/catalogs/source-audit.json', '!formal/catalogs/go-parity.json', '!formal/catalogs/feature-coverage.json', 'typescript/test/fixtures/**', '.github/actions/setup-quint/**', 'Makefile', 'package.json', 'pnpm-lock.yaml') }}" });
+    expect(restore.with).toEqual({ path: ".formal-traces", key: "formal-traces-$" + "{{ hashFiles('formal/models/**', 'formal/replay/**', 'formal/tools/**', 'formal/generated/**', 'formal/catalogs/**', '!formal/**/*.md', '!formal/catalogs/style-allowlist.json', '!formal/catalogs/source-audit.json', '!formal/catalogs/go-parity.json', '!formal/catalogs/feature-coverage.json', 'typescript/test/fixtures/**', '.github/actions/setup-quint/**', 'Makefile', 'package.json', 'pnpm-lock.yaml') }}" });
     const generate = steps.find(step => step.run === "make formal-generate")!;
     // The weekly run regenerates on a hit so a fresh toolchain re-exports the committed artifacts.
     expect(generate.if).toBe("steps.corpus.outputs.cache-hit != 'true' || github.event_name == 'schedule'");

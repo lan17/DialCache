@@ -38,8 +38,8 @@ Three other things a real change would carry. The differential (lesson 12)
 replays the reference corpus through the new text and your 11 regressions
 through the old; both directions agree, so no `behaviorVersion` bump. A
 semantic case cites the run under `quintReplays` with a reviewed scope. And
-the pull request names the full-workflow run that replayed it in all four
-ports.
+the pull request names the `formal-full.yaml` run, in `replay` mode or
+stronger, that replayed it in all four ports.
 
 ## See it in the repo
 
