@@ -16,6 +16,7 @@ by-task view; this index is the by-kind view it lacks. Read
 
 ## Tooling guides: how to do the work
 
+- [course/README.md](./course/README.md): seventeen ten-minute lessons that walk down the tree from the models to the CI lanes, one idea and one exercise each; start here if you are new.
 - [WALKTHROUGH.md](./WALKTHROUGH.md): one rule followed from a named Quint regression into every port.
 - [AUTHORING.md](./AUTHORING.md): reading and extending the models; the composition lint, challenges, native mutants and exported regressions.
 - [PORTING.md](./PORTING.md): what a new language port supplies; driver, transport, observation contract and completion gates.

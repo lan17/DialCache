@@ -10,6 +10,13 @@ The audit separates three questions:
 
 Mappings record the reviewed semantic obligations of each declaration, including assertions that share an obligation with another test. They do not promise one formal transition per assertion, equivalence between two test programs, exhaustive interleavings, or identical APIs in every language. A public documentation section can contain several independent prose clauses; assigning that section contract IDs does not prove every clause is formalized or consistent with its executable evidence. Navigation, examples, installation, and release tooling use the binding/deployment dispositions. Reviewing changed prose remains necessary even when the inventory check passes.
 
+The course under [course/](./course/README.md) is outside this ledger on
+purpose: its lessons are didactic, not normative, and the guides they link to
+are the reviewed text. Their freshness is checked mechanically instead, by
+[check-course.mjs](../tools/check-course.mjs) in the `audit` lane: every line
+citation must still name a symbol on those lines and every quoted inventory
+count must match `execution.mjs`.
+
 ## Keeping the audit current
 
 Run:

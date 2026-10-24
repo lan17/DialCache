@@ -103,6 +103,13 @@ pnpm-lock.yaml          # Shared workspace dependency lockfile
   `formal/guides/AUTHORING.md` and preserve discovered bugs as deterministic regressions.
   Extend formal infrastructure when it closes a concrete coverage gap, corrects
   misleading evidence, or makes tests easier to author, understand or run.
+- The course under `formal/guides/course/` cites files by line and quotes
+  command output, so it drifts. A change under `formal/`, the port drivers or
+  the replay protocol that moves what a lesson points at, changes a quoted
+  output, or changes how a learner would do the task updates the affected
+  lesson in the same PR. `make audit` (`check-course.mjs`) names a citation or
+  count that moved; reread the rest of that lesson by hand, since only a reader
+  can tell when the idea moved.
 
 ## Validation
 
