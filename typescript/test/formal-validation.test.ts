@@ -509,8 +509,8 @@ describe("full formal workflow shape", () => {
     const downloadsOf = (job: Job) => job.steps.filter(step => step.uses?.startsWith("actions/download-artifact")).map(step => step.with);
     const matrixShard = "$" + "{{ matrix.shard }}";
     // A shard runs the baselines, then its slice of the catalog strictly in sequence; on the slow
-    // runner class a TypeScript mutant costs about 2 minutes and a Go mutant about 3.5 (run
-    // 35335831285 measured 200-208 s per Go mutant on that class), and one hung
+    // runner class a TypeScript mutant costs about 2 minutes and a Go mutant about 4.5 (run
+    // 40146831443 measured about 270 s per Go mutant on that class), and one hung
     // cohort adds its own bound (the 540 s vitest spawn timeout, the 480 s go test timeout) before
     // the shard fails. The matrix must keep every shard inside the job timeout, so growing the
     // catalog fails here until the matrix grows. The shard count in the matrix and in MUTATION_SHARD
@@ -519,7 +519,7 @@ describe("full formal workflow shape", () => {
     const baselineMinutes = 4;
     const table = [
       { lane: "typescript-mutations", language: "ts", output: ".formal-traces/semantic", artifact: "typescript-semantic", timeout: 40, shards: 6, slowMinutesPerMutant: 2, hungCohortMinutes: 9, go: undefined },
-      { lane: "go-mutations", language: "go", output: ".formal-traces/go-semantic", artifact: "go-semantic", timeout: 40, shards: 10, slowMinutesPerMutant: 3.5, hungCohortMinutes: 8, go: { go: "true" } },
+      { lane: "go-mutations", language: "go", output: ".formal-traces/go-semantic", artifact: "go-semantic", timeout: 40, shards: 15, slowMinutesPerMutant: 4.5, hungCohortMinutes: 8, go: { go: "true" } },
     ];
     for (const { lane, language, output, artifact, timeout, shards, slowMinutesPerMutant, hungCohortMinutes, go } of table) {
       const job = jobs[lane]!;

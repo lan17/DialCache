@@ -257,7 +257,7 @@ flowchart LR
   SY["symbolic<br/>make model-check"]
   EX["exploration<br/>make explore"]
   GE --> TSP["typescript-parity<br/>make formal-ts"] & GOP["go-parity<br/>make formal-go"] & RSP["rust-parity<br/>make formal-rust"] & PYP["python-parity<br/>make formal-python"]
-  GE --> TSM["typescript-mutations, 6 shards<br/>make mutations-ts"] & GOM["go-mutations, 10 shards<br/>make mutations-go"] & RSM["rust-mutations, 3 shards<br/>make mutations-rust"]
+  GE --> TSM["typescript-mutations, 6 shards<br/>make mutations-ts"] & GOM["go-mutations, 15 shards<br/>make mutations-go"] & RSM["rust-mutations, 4 shards<br/>make mutations-rust"]
   TSM --> TSMM["typescript-mutations-merge<br/>make mutations-merge-ts"]
   GOM --> GOMM["go-mutations-merge<br/>make mutations-merge-go"]
   RSM --> RSMM["rust-mutations-merge<br/>make mutations-merge-rust"]
