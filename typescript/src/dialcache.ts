@@ -57,6 +57,7 @@ import {
   type ShadowMismatchLogContent,
   type ShadowMismatchLogPlan,
 } from "./internal/shadow-log-json.js";
+import { fulfills, isPromiseLike } from "./internal/thenable.js";
 
 type CacheKeyArgs = Record<string, string | number | boolean | bigint | null | undefined>;
 type Id = string | number | bigint;
@@ -950,7 +951,7 @@ export class DialCache {
       // The public contract is synchronous. Consume an accidental rejecting
       // thenable without awaiting it, and fail closed without delaying the
       // original source rejection.
-      void settleUnexpectedThenable(result);
+      void fulfills(result);
       this.logger.warn("DialCache stale recovery predicate returned a non-boolean; recovery was denied");
       return false;
     }
@@ -1229,7 +1230,7 @@ export class DialCache {
           try {
             const result: unknown = plan.comparator(cachedValue, sourceValue);
             if (typeof result !== "boolean") {
-              await settleUnexpectedThenable(result);
+              await fulfills(result);
               if (abandonIfExpired()) {
                 return "timeout";
               }
@@ -1809,33 +1810,14 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
 /**
  * Runs an injected observer in isolation and reports whether it succeeded:
  * `false` when it throws, and for a returned promise-like, a promise of whether
- * it resolved. Observer failures never produce unhandled rejections.
+ * it fulfilled. Observer failures never produce unhandled rejections.
  */
 function callObserver(record: () => unknown): boolean | Promise<boolean> {
   try {
     const result = record();
-    if (
-      result !== null
-      && (typeof result === "object" || typeof result === "function")
-      && typeof (result as { readonly then?: unknown }).then === "function"
-    ) {
-      return fulfills(result as PromiseLike<unknown>);
-    }
-    return true;
+    return isPromiseLike(result) ? fulfills(result) : true;
   } catch {
     // Injected observers must not affect cache correctness or application fallbacks.
-    return false;
-  }
-}
-
-// `await` adopts a promise-like through the intrinsic Promise, so neither a
-// replaced own `then` nor a global `Promise` replaced after load can skip the
-// handler.
-async function fulfills(value: PromiseLike<unknown>): Promise<boolean> {
-  try {
-    await value;
-    return true;
-  } catch {
     return false;
   }
 }
@@ -1893,16 +1875,4 @@ function redisPayloadsEqual(left: RedisCachePayload, right: RedisCachePayload): 
     return typeof right === "string" && left.equals(Buffer.from(right, "utf8"));
   }
   return Buffer.isBuffer(right) && right.equals(Buffer.from(left, "utf8"));
-}
-
-async function settleUnexpectedThenable(value: unknown): Promise<void> {
-  if (value === null || (typeof value !== "object" && typeof value !== "function")) {
-    return;
-  }
-  try {
-    await Promise.resolve(value);
-  } catch {
-    // Synchronous extension points may accidentally return a rejected thenable;
-    // consume it without letting that rejection affect cache control flow.
-  }
 }

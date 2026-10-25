@@ -1,4 +1,5 @@
 import type { ShadowMismatchDiffLevel } from "../config.js";
+import { fulfills, isPromiseLike } from "./thenable.js";
 
 export const SHADOW_LOG_KEY_MAX_BYTES = 2 * 1024;
 export const SHADOW_LOG_VALUE_MAX_BYTES = 8 * 1024;
@@ -233,7 +234,8 @@ function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff 
         names.push(name);
       }
     }
-    names.sort(compareUtf16CodeUnits);
+    // The default sort order is UTF-16 code units.
+    names.sort();
     for (const name of names) {
       const memberPath = `${path}/${escapePointerToken(name)}`;
       if (!Object.hasOwn(rightMembers, name)) {
@@ -297,10 +299,6 @@ function jsonKind(value: JsonValue): "array" | "object" | "primitive" {
   return value !== null && typeof value === "object" ? "object" : "primitive";
 }
 
-function compareUtf16CodeUnits(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
 function escapePointerToken(name: string): string {
   return name.replaceAll("~", "~0").replaceAll("/", "~1");
 }
@@ -321,7 +319,7 @@ function runShadowMismatchHook(
     if (isPromiseLike(result)) {
       // The contract is synchronous. Consume an accidental rejecting
       // thenable without awaiting it, and fail closed.
-      void absorbRejection(result);
+      void fulfills(result);
       return null;
     }
     if (!Array.isArray(result)) {
@@ -352,22 +350,6 @@ function runShadowMismatchHook(
   } catch {
     return null;
   }
-}
-
-// `await` adopts through the intrinsic Promise, so neither a replaced own
-// `then` nor a replaced global `Promise` can skip the handler.
-async function absorbRejection(value: PromiseLike<unknown>): Promise<void> {
-  try {
-    await value;
-  } catch {
-    // The hook already failed closed.
-  }
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return value !== null
-    && (typeof value === "object" || typeof value === "function")
-    && typeof (value as { readonly then?: unknown }).then === "function";
 }
 
 /**

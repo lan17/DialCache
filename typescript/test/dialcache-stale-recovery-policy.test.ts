@@ -228,6 +228,14 @@ describe("DialCache stale-recovery error policy", () => {
       name: "returns a thenable",
       predicate: vi.fn(() => Promise.resolve(true)) as unknown as StaleRecoveryPredicate,
     },
+    {
+      name: "returns an object whose then getter throws",
+      predicate: vi.fn(() => ({
+        get then(): never {
+          throw new Error("then getter failed");
+        },
+      })) as unknown as StaleRecoveryPredicate,
+    },
   ])("fails closed and preserves the source rejection when the predicate $name", async ({ predicate }) => {
     const useCase = `DefensiveStaleRecoveryPolicy${predicate.name}`;
     const sourceError = new Error("source unavailable");
