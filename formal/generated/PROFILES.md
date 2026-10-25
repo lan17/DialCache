@@ -20,7 +20,7 @@ fields and the observation record; [PORTING.md](../guides/PORTING.md) explains w
 | [scope](#scope) | [dialcache-scope-conformance.qnt](../models/dialcache-scope-conformance.qnt) | 7 | 256 | 14 | 26 |
 | [recovery](#recovery) | [dialcache-recovery-conformance.qnt](../models/dialcache-recovery-conformance.qnt) | 14 | 512 | 31 | 47 |
 | [policy](#policy) | [dialcache-policy-conformance.qnt](../models/dialcache-policy-conformance.qnt) | 12 | 512 | 33 | 51 |
-| [shadow](#shadow) | [dialcache-shadow-conformance.qnt](../models/dialcache-shadow-conformance.qnt) | 20 | 1024 | 40 | 77 |
+| [shadow](#shadow) | [dialcache-shadow-conformance.qnt](../models/dialcache-shadow-conformance.qnt) | 21 | 1024 | 59 | 111 |
 | [admission](#admission) | [dialcache-admission-conformance.qnt](../models/dialcache-admission-conformance.qnt) | 8 | 128 | 9 | 19 |
 | [layers](#layers) | [dialcache-layers-conformance.qnt](../models/dialcache-layers-conformance.qnt) | 8 | 512 | 17 | 27 |
 | [independent](#independent) | [dialcache-independent-conformance.qnt](../models/dialcache-independent-conformance.qnt) | 11 | 512 | 15 | 18 |
@@ -266,29 +266,32 @@ The coordinator sends an empty fixture; see [core.mjs](../replay/core.mjs) for w
 | | |
 | --- | --- |
 | Model | [formal/models/dialcache-shadow-conformance.qnt](../models/dialcache-shadow-conformance.qnt) |
-| Version | 3, inputs `explicit-v1` |
+| Version | 4, inputs `explicit-v1` |
 | Smoke trace | [shadow-smoke.itf.json](./shadow-smoke.itf.json) |
 | Ports claiming it | typescript, go, rust, python |
-| Generation | 1024 sampled histories of at most 60 steps from 4096 samples; 14 scheduled invariants; 40 exported regressions |
-| Required witnesses | 77 labels in [coverage-witnesses.json](../catalogs/coverage-witnesses.json) |
+| Generation | 1024 sampled histories of at most 60 steps from 4096 samples; 20 scheduled invariants; 59 exported regressions |
+| Required witnesses | 111 labels in [coverage-witnesses.json](../catalogs/coverage-witnesses.json) |
 
 ### Fixture, by init choice
 
 | Init choice | Fixture |
 | --- | --- |
-| 0 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 1 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"equal","observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 2 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"unequal","observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 3 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"error","observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 4 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"logMismatches":true}},"tracked":true,"shadowHook":true,"observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 5 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"logMismatches":true}},"tracked":true,"shadowHook":true,"comparator":"equal","observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 6 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"logMismatches":true}},"tracked":true,"shadowHook":true,"comparator":"unequal","observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 7 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"logMismatches":true}},"tracked":true,"shadowHook":true,"comparator":"error","observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 8 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":false,"observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 9 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"equal","comparisonMs":10,"observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 10 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"error","comparisonMs":10,"observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 11 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"sourceWorkMs":9,"observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
-| 12 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"sourceWorkMs":10,"observe":["shadowAge","mismatchWarning","coalesced","error","futureOffset"]}` |
+| 0 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 1 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"equal","observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 2 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"unequal","observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 3 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"error","observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 4 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"logMismatches":true}},"tracked":true,"shadowHook":true,"observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 5 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"logMismatches":true}},"tracked":true,"shadowHook":true,"comparator":"equal","observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 6 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"logMismatches":true}},"tracked":true,"shadowHook":true,"comparator":"unequal","observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 7 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"logMismatches":true}},"tracked":true,"shadowHook":true,"comparator":"error","observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 8 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":false,"observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 9 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"equal","comparisonMs":10,"observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 10 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"comparator":"error","comparisonMs":10,"observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 11 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"sourceWorkMs":9,"observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 12 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"shadowHook":true,"sourceWorkMs":10,"observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 13 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"logMismatches":true}},"tracked":true,"shadowHook":true,"mismatchDiff":"error","observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 14 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"mismatchLogging":{"diff":"paths"}}},"tracked":true,"shadowHook":true,"observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
+| 15 | `{"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100,"mismatchLogging":{"value":false}}},"tracked":true,"shadowHook":true,"observe":["shadowAge","mismatchWarning","shadowMismatchLogging","coalesced","error","futureOffset"]}` |
 
 ### Setup commands
 
@@ -299,7 +302,7 @@ The coordinator sends an empty fixture; see [core.mjs](../replay/core.mjs) for w
 | Action | Choices | Driver commands |
 | --- | --- | --- |
 | `beginCall` | none | `{"op":"begin"}` |
-| `resolveLoader` | 1, 2 | 1 → `{"op":"resolve","loader":0,"value":1}`<br>2 → `{"op":"resolve","loader":0,"value":2}`<br>every decoding reads `observation.loaders` (the count so far at the step; shown with one so far) |
+| `resolveLoader` | 1, 2, 12 | 1 → `{"op":"resolve","loader":0,"value":1}`<br>2 → `{"op":"resolve","loader":0,"value":2}`<br>12 → `{"op":"resolve","loader":0,"unrenderable":true}`<br>every decoding reads `observation.loaders` (the count so far at the step; shown with one so far) |
 | `rejectLoader` | none | `{"op":"reject","loader":0}`<br>every decoding reads `observation.loaders` (the count so far at the step; shown with one so far) |
 | `releaseRead` | none | `{"op":"release","effect":"read","index":0}`<br>every decoding reads `observation.reads` (the count so far at the step; shown with one so far) |
 | `releaseLoad` | none | `{"op":"release","effect":"load","index":0}`<br>every decoding reads `observation.loads` (the count so far at the step; shown with one so far) |
@@ -314,10 +317,11 @@ The coordinator sends an empty fixture; see [core.mjs](../replay/core.mjs) for w
 | `loadFault` | 0, 1 | 0 → `{"op":"faults","value":{"load":false}}`<br>1 → `{"op":"faults","value":{"load":true}}` |
 | `dumpFault` | 0, 1 | 0 → `{"op":"faults","value":{"dump":false}}`<br>1 → `{"op":"faults","value":{"dump":true}}` |
 | `writeFault` | 0, 1 | 0 → `{"op":"faults","value":{"write":false}}`<br>1 → `{"op":"faults","value":{"write":true}}` |
+| `loggerFault` | 0, 1 | 0 → `{"op":"faults","value":{"logger":false}}`<br>1 → `{"op":"faults","value":{"logger":true}}` |
 | `rollbackWall` | none | `{"op":"shiftWall","ms":-1000}` |
 | `advanceWall` | 1, 60000 | 1 → `{"op":"shiftWall","ms":1}`<br>60000 → `{"op":"shiftWall","ms":60000}` |
 | `shadowPolicy` | 0..2 | 0 → `{"op":"policy","value":{"shadow":{"ramp":100}}}`<br>1 → `{"op":"policy","value":{"shadow":{"ramp":0}}}`<br>2 → `{"op":"policy","value":{"shadow":{"ramp":101}}}` |
-| `logPolicy` | 0..2 | 0 → `{"op":"policy","value":{"shadow":{"logMismatches":false}}}`<br>1 → `{"op":"policy","value":{"shadow":{"logMismatches":true}}}`<br>2 → `{"op":"policy","value":{"shadow":{"logMismatches":"invalid"}}}` |
+| `logPolicy` | 0..10 | 0 → `{"op":"policy","value":{"shadow":{"logMismatches":false}}}`<br>1 → `{"op":"policy","value":{"shadow":{"logMismatches":true}}}`<br>2 → `{"op":"policy","value":{"shadow":{"logMismatches":"invalid"}}}`<br>3 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"diff":"paths"}}}}`<br>4 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"diff":"values"}}}}`<br>5 → `{"op":"policy","value":{"shadow":{"logMismatches":false,"mismatchLogging":{"value":true}}}}`<br>6 → `{"op":"policy","value":{"shadow":{"logMismatches":true,"mismatchLogging":{"value":false}}}}`<br>7 → `{"op":"policy","value":{"shadow":{"logMismatches":false,"mismatchLogging":{"diff":"paths"}}}}`<br>8 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"value":true,"diff":"invalid"}}}}`<br>9 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"value":"invalid","diff":"paths"}}}}`<br>10 → `{"op":"policy","value":{"shadow":{"logMismatches":"invalid","mismatchLogging":{"diff":"values"}}}}` |
 
 ### Observation channels
 
