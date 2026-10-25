@@ -2,7 +2,7 @@
 
 - **Status:** Proposed
 - **Issue:** none
-- **Pull requests:** {this record's draft pull request}
+- **Pull requests:** #244
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
 - **Supersedes:** none. It restates the unknown-field rule of #138, which never
   merged, as a change of its own. #242's D14 keeps its choice: that pull
