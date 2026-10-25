@@ -57,7 +57,7 @@ interface ResolveRemoteLayerConfigOptions {
 export async function fetchKeyConfig(
   configProvider: CacheConfigProvider,
   key: DialCacheKey,
-  onUnknownFields: () => void,
+  onUnknownFields?: () => void,
 ): Promise<DialCacheKeyConfig | null> {
   const defaultConfig = key.defaultConfig;
   const runtimeConfig = (await configProvider(key)) as DialCacheKeyConfig | null | undefined;
@@ -65,7 +65,7 @@ export async function fetchKeyConfig(
     return defaultConfig;
   }
   if (hasUnknownKeyConfigFields(runtimeConfig)) {
-    onUnknownFields();
+    onUnknownFields?.();
   }
   return mergeKeyConfig(defaultConfig, runtimeConfig);
 }

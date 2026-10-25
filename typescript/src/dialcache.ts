@@ -454,7 +454,6 @@ export class DialCache {
    * shared by reference and must be treated as immutable.
    */
   getOrLoad<Value>(load: () => Awaitable<Value>, options: GetOrLoadOptions<Value>): Promise<Value> {
-    const hasUnknownDefaultFields = hasUnknownKeyConfigFields(options.defaultConfig);
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
@@ -464,7 +463,9 @@ export class DialCache {
       this.staleRecoveryPredicate,
     );
     this.assertUseCaseIsNotReserved(options.useCase);
-    if (hasUnknownDefaultFields) {
+    // Disabled calls stay pass-through, so only an enabled call observes the
+    // inline default config.
+    if (this.isEnabled() && hasUnknownKeyConfigFields(options.defaultConfig)) {
       this.recordUnknownConfigFields(options);
     }
 
