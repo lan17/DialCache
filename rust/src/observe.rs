@@ -159,8 +159,9 @@ str_enum! {
         /// or failed; `mismatch_paths`, `mismatch_path_count` and `diff_json`
         /// are unavailable.
         HookError => "hook_error",
-        /// A compared value had no JSON rendering, or the operation has no
-        /// renderer for a requested field; the fields it feeds are unavailable.
+        /// A compared value had no JSON rendering, the operation has no
+        /// renderer for a requested field, or the bounded CPU executor
+        /// rejected the warning's work; the fields it feeds are unavailable.
         RenderError => "render_error",
         /// The logger panicked while receiving the warning.
         LoggerError => "logger_error",
