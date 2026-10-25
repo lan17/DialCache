@@ -84,8 +84,7 @@ inherits all fields. Nested local/remote maps and `shadow` leaves merge separate
 Within each config, `shadow.logMismatches` first expands to the
 `shadow.mismatchLogging` leaves it stands for, and leaves written beside it win;
 the [mismatch logging table](shadow-validation.md#confirmed-mismatch-logging)
-shows the result for each combination. Unknown fields are ignored and reported
-as `config_unknown_field`.
+shows the result for each combination.
 
 </LanguageContent>
 

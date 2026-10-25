@@ -236,11 +236,6 @@ Datadog adapter's new `shadow_mismatch_logging.count` metric is its longest
 name, which lowers the longest valid Datadog namespace from 175 to 170
 characters.
 
-Key configs with fields DialCache does not know now report
-`error="config_unknown_field"` on the error counter with `layer="noop"`, once per
-observed config. Fix misspelled or obsolete fields before alerting on the error
-counter as a whole.
-
 </LanguageContent>
 
 ## Metric migrations
@@ -277,10 +272,9 @@ Update exhaustive public-union mappings: `tracked_ttl_clamped` is a
 `ShadowValidationOutcome`. Recovery has `served`, `miss`, and
 `deserialization_error` outcomes. Custom `miss` handlers now receive
 `MissMetricLabels`; broader handlers may ignore the additional reason, while
-exact label mappings and direct calls need to include it. `config_unknown_field`
-is a `MetricErrorKind`, and the optional `shadowMismatchLogging` hook reports a
-`ShadowMismatchLoggingOutcome`: `logged`, `hook_error`, `render_error`, or
-`logger_error`.
+exact label mappings and direct calls need to include it. The optional
+`shadowMismatchLogging` hook reports a `ShadowMismatchLoggingOutcome`: `logged`,
+`hook_error`, `render_error`, or `logger_error`.
 
 </LanguageContent>
 

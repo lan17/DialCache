@@ -252,13 +252,9 @@ Invalid runtime policy fails open at the affected boundary:
 | `shadow.logMismatches`, `shadow.mismatchLogging.value`, or `shadow.mismatchLogging.diff` | Turn an invalid leaf off; an invalid `logMismatches` expands to both leaves off before the leaves written beside it apply. Shadow work continues. Record one remote `config_resolution` only after the metrics hook, cohort, and capacity gates admit the job. |
 
 Validation of layer and shadow leaves depends on traversal: an earlier hit can
-avoid evaluating lower-layer policy. Unknown fields at any level of a static or
-runtime config, such as the misspelled `ramp.remtoe`, are ignored and reported
-once for each config DialCache observes as `config_unknown_field` with
-`layer="noop"`: at `cached()` registration, at each enabled `getOrLoad()` call,
-and for each provider result other than the key's own `defaultConfig`, which
-was already observed. The metric does not name the field, so validate
-external policy against your application's schema as well.
+avoid evaluating lower-layer policy. Unknown runtime fields are generally
+ignored, so validate external policy against your application's schema to catch
+misspellings such as `ramp.remtoe`.
 
 The removed `shadowRamp` field is an exception. Static config rejects it with
 `DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"`; a provider result

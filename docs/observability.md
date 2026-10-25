@@ -594,7 +594,6 @@ native error type or message:
 | --- | --- |
 | `key_construction` | The cache-key selector or identity construction failed |
 | `config_resolution` | Runtime or layer configuration validation or resolution failed |
-| `config_unknown_field` | A key config carried fields DialCache does not know, which it ignored; TypeScript only |
 | `cache_read` | A process-local read or non-timeout remote read failed |
 | `cache_read_timeout` | A remote read exceeded its effective DialCache deadline |
 | `cache_write` | A process-local or remote cache write failed |

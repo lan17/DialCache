@@ -220,9 +220,8 @@ today) and `shadow_mismatch_diff=` beside `shadow_comparator`, returning a
 list of dicts. Runtime config in every port validates each leaf
 independently: an invalid leaf acts off (`value: false`, `diff: "off"`), and
 one `config_resolution` per call covers every invalid leaf and shorthand;
-unknown fields are ignored and reported as
-`config_unknown_field`; a non-object `mismatchLogging` fails resolution like a
-malformed layer map. `logMismatches` keeps its type in every port (Go
+unknown fields are ignored, as on `main` (D14); a non-object `mismatchLogging`
+fails resolution like a malformed layer map. `logMismatches` keeps its type in every port (Go
 `LogMismatches *bool`, Rust `log_mismatches: Option<bool>`, Python
 `log_mismatches` or `logMismatches`) and expands before the leaves merge.
 
@@ -664,6 +663,29 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   - A separate outcome such as `absent`. It adds a metric label for ordinary
     data, and the entry at `""` with one side already says what happened.
 
+### D14. This change adds no unknown-field reporting
+
+- **Choice:** unknown key-config fields stay ignored, as on `main`, and
+  `config_unknown_field` is not added. The maintainer wants strict validation
+  instead: a runtime config that fails validation is rejected as a whole, an
+  error metric is recorded, and the call runs uncached, as one invariant in
+  every port. That rule replaces both the ignored unknown fields and the
+  per-leaf fail-open for every config field, so it gets its own design record
+  and pull request. Until it lands, this change's leaves follow the per-leaf
+  rules above.
+- **Status:** Confirmed 2026-10-24, in session: "no typo checking, we should
+  just do strcit checking for the config and if it fails it fails and we emit
+  an error metrics and turn teh cache off. we should maintain this behavior
+  and invariant in the whole library", with "New record + separate PR" chosen
+  for where it lands.
+- **Rejected:**
+  - The carried #138 rule (see Carried decisions): ignore unknown fields and
+    report each observed config as `config_unknown_field`. A misspelled field
+    still has no effect, so the report only says that config ran wrong, and
+    cheap reporting needed a per-config marker on every construction.
+  - Strict validation inside this pull request. It changes every config field
+    and every port, well beyond mismatch paths.
+
 ## Carried decisions
 
 Reviewed and approved by the maintainer on #138; carried unchanged:
@@ -681,7 +703,8 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 - Unknown `mismatchLogging` leaves and other unknown key-config fields are
   ignored and reported once per observed config as `config_unknown_field`.
   (#138 applied this to `shadow.logMismatches` itself; D10 keeps that field
-  instead.) A known leaf with an invalid value acts off with one
+  instead.) D14 drops the reporting: unknown fields stay ignored, as on
+  `main`, until strict runtime validation replaces both. A known leaf with an invalid value acts off with one
   `config_resolution`; a non-object group fails resolution like a malformed
   layer map.
 - `value: true` logs raw JSON.
