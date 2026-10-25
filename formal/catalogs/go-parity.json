@@ -8,11 +8,11 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "efbe6bad6eb6e6bf78feaa49e3f402887601ec9be75a0b9c682cb4464caaad06",
+    "semanticCasesSha256": "252390acc79bddd47b0ceab4fa561623e7d639d4b13c74d12fe5894e7bb5aac4",
     "executionSha256": "902d236dd903a93c1df5d0135b3bbec63833b6f352783214b933b620fad0fe2b",
     "sourceAuditDispositionsSha256": "831a47f68c338b4f745057848da892aa4d13a61b06c96e9eb9c6c9a3076e457c",
     "featureCoverageSha256": "9065e0aaa3157529c986e873da700e3adef8aabb63608e061ddc73c646cdc8dc",
-    "coverageWitnessesSha256": "9c1843db1e26df3202cf24b9d47a9f103523f520d0d78620b9fb5d3f4690282d",
+    "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
   "inventory": {
@@ -23,17 +23,17 @@
     "sourceFiles": 28,
     "sourceDeclarations": 879,
     "casesWithScheduledChecks": 272,
-    "requiredWitnesses": 531,
+    "requiredWitnesses": 535,
     "casesWithQuintRegressionReplay": 198,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 259,
-    "scheduledRegressions": 487,
+    "scheduledRegressions": 489,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 374,
-    "exportedRegressionHistories": 377
+    "caseReferencedWitnesses": 378,
+    "exportedRegressionHistories": 379
   },
   "cases": [
     {
