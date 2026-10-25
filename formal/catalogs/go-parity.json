@@ -8,32 +8,32 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "f5f7ee357201b343eb00f8f9c783c92af0d722709137edc0f55e0a52b3cdec0a",
-    "executionSha256": "29a412f87329347840f000ea44a6e95332464c0b01b92b4e41c615af3c9157cd",
-    "sourceAuditDispositionsSha256": "40e8a4b2e82c2c78d07b60dc70454e0b8257bffdbd699c75c5da2a6fc813e249",
-    "featureCoverageSha256": "487804a31ff7e3fd32f3b8cc19d698475f201bb747ae27b76d217d6200083a1a",
-    "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
-    "profilesSha256": "9df8285820e4fff65f6a7753885bbb192c09f3f476eac8f9c98d130454ae1a28"
+    "semanticCasesSha256": "efbe6bad6eb6e6bf78feaa49e3f402887601ec9be75a0b9c682cb4464caaad06",
+    "executionSha256": "902d236dd903a93c1df5d0135b3bbec63833b6f352783214b933b620fad0fe2b",
+    "sourceAuditDispositionsSha256": "831a47f68c338b4f745057848da892aa4d13a61b06c96e9eb9c6c9a3076e457c",
+    "featureCoverageSha256": "9065e0aaa3157529c986e873da700e3adef8aabb63608e061ddc73c646cdc8dc",
+    "coverageWitnessesSha256": "9c1843db1e26df3202cf24b9d47a9f103523f520d0d78620b9fb5d3f4690282d",
+    "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
   "inventory": {
-    "behavioralCases": 244,
-    "withRequiredGeneratedWitnesses": 244,
+    "behavioralCases": 249,
+    "withRequiredGeneratedWitnesses": 249,
     "withoutRequiredGeneratedWitnesses": [],
-    "wireCases": 22,
+    "wireCases": 23,
     "sourceFiles": 28,
     "sourceDeclarations": 879,
-    "casesWithScheduledChecks": 266,
-    "requiredWitnesses": 497,
-    "casesWithQuintRegressionReplay": 192,
+    "casesWithScheduledChecks": 272,
+    "requiredWitnesses": 531,
+    "casesWithQuintRegressionReplay": 198,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
-    "scheduledInvariants": 253,
-    "scheduledRegressions": 468,
+    "scheduledInvariants": 259,
+    "scheduledRegressions": 487,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 343,
-    "exportedRegressionHistories": 358
+    "caseReferencedWitnesses": 374,
+    "exportedRegressionHistories": 377
   },
   "cases": [
     {
@@ -2957,6 +2957,78 @@
       },
       "kind": "portable-behavior",
       "gaps": []
+    },
+    {
+      "id": "C60.warning-field-groups",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "C60.shorthand-table",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "C60.invalid-input-isolation",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "C60.logging-outcomes",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "C60.outcome-precedence",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "W10.mismatch-paths",
+      "kind": "wire-protocol",
+      "group": "wire-protocol",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
     },
     {
       "id": "C40.fenced-candidate",

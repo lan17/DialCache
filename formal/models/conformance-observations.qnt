@@ -15,6 +15,8 @@ module conformance_observations {
   pure val VALUE_FALSE = 7
   pure val VALUE_ZERO = 8
   pure val VALUE_EMPTY_STRING = 9
+  // A source result with no JSON rendering (D13; the shadow profile's).
+  pure val VALUE_UNRENDERABLE = 12
 
   pure val values = List(
     VALUE_ONE, VALUE_TWO, VALUE_ABSENT, VALUE_NULL,

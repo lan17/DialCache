@@ -10,10 +10,7 @@ import { shadowLayersProfile } from "./profiles/shadow-layers.mjs";
 import { sourceBudgetsProfile } from "./profiles/source-budgets.mjs";
 import { shadowReadDeadlinesProfile } from "./profiles/shadow-read-deadlines.mjs";
 import { darkLayersProfile } from "./profiles/dark-layers.mjs";
-const settle = (op) => ({
-  ...(op === "resolve" ? { choices: [1, 2] } : {}),
-  input: (choice, o) => op === "resolve" ? { op, loader: o.loaders - 1, value: choice } : { op, loader: o.loaders - 1 },
-});
+const rejectLatest = { input: (_, o) => ({ op: "reject", loader: o.loaders - 1 }) };
 // Portable success codes reserve 0/3/4 for pending/source-error/deadline.
 export const successValues = [1, 2, undefined, null, false, 0, ""];
 const resolveValue = (maxSources) => ({
@@ -43,6 +40,26 @@ const policyOverlays = overlays.concat(overlays.map((overlay) => ({ ...overlay, 
 ]);
 const layerPolicies = [{}, { requestLocal: false }, { ramp: { local: 0 } },
   { ramp: { remote: 0 } }, { ramp: { local: 0, remote: 0 } }, { requestLocal: false, ramp: { local: 0, remote: 0 } }];
+// The shadow profile's default logging inputs by init fixture, and its
+// runtime logging overlays by logPolicy choice (choices 6 and 7 are the first
+// two rows of the shorthand table; "invalid" has the wrong type for any leaf).
+const shadowDefaultLogging = (choice) => (choice >= 4 && choice < 8) || choice === 13 ? { logMismatches: true }
+  : choice === 14 ? { mismatchLogging: { diff: "paths" } } : choice === 15 ? { mismatchLogging: { value: false } } : {};
+const shadowLogOverlays = [
+  { logMismatches: false }, { logMismatches: true }, { logMismatches: "invalid" },
+  { mismatchLogging: { diff: "paths" } }, { mismatchLogging: { diff: "values" } },
+  { logMismatches: false, mismatchLogging: { value: true } }, { logMismatches: true, mismatchLogging: { value: false } },
+  { logMismatches: false, mismatchLogging: { diff: "paths" } }, { mismatchLogging: { value: true, diff: "invalid" } },
+  { mismatchLogging: { value: "invalid", diff: "paths" } }, { logMismatches: "invalid", mismatchLogging: { diff: "values" } },
+];
+// Choice 12 settles the source with the driver's value that has no JSON
+// rendering (D13); the caller observes it as { unrenderable: true }.
+const UNRENDERABLE = 12;
+const shadowResolve = {
+  choices: [1, 2, UNRENDERABLE],
+  input: (choice, o) => choice === UNRENDERABLE ? { op: "resolve", loader: o.loaders - 1, unrenderable: true }
+    : { op: "resolve", loader: o.loaders - 1, value: choice },
+};
 const shadowSeed = { choices: [1, 2, 3, 4, 5, 6, 7, 8], input: (choice) => choice <= 2
     ? { op: "seed", value: choice } : choice === 7 ? { op: "seed", payloadText: JSON.stringify("café") }
     : choice === 8 ? { op: "seed", payloadHex: "22636166c3a922" } : choice === 6 ? { op: "seed", payloadText: " 1" }
@@ -178,26 +195,27 @@ export const profiles = {
     },
   },
   shadow: {
-    explicitInputs: true, diagnosticFutureOffsets: true,
-    diagnosticAge: "shadowAge", diagnosticConfigErrors: true, initChoices: Array.from({ length: 13 }, (_, i) => i),
+    explicitInputs: true, diagnosticFutureOffsets: true, diagnosticWarnings: true,
+    diagnosticAge: "shadowAge", diagnosticConfigErrors: true, initChoices: Array.from({ length: 16 }, (_, i) => i),
     fixture: (choice) => ({ policy: { ttlSec: { remote: 60 }, ramp: { remote: 0 },
-        shadow: { ramp: 100, ...(choice < 4 || choice >= 8 ? {} : { logMismatches: true }) } }, tracked: true, shadowHook: choice !== 8,
+        shadow: { ramp: 100, ...shadowDefaultLogging(choice) } }, tracked: true, shadowHook: choice !== 8,
       ...(choice % 4 === 0 || choice >= 11 ? {} : { comparator: ["equal", "unequal", "error"][choice === 10 ? 2 : choice % 4 - 1] }),
       ...(choice === 9 || choice === 10 ? { comparisonMs: 10 } : {}),
-      ...(choice >= 11 ? { sourceWorkMs: choice === 11 ? 9 : 10 } : {}),
-      observe: ["shadowAge", "mismatchWarning", "coalesced", "error", "futureOffset"] }),
+      ...(choice === 11 || choice === 12 ? { sourceWorkMs: choice === 11 ? 9 : 10 } : {}),
+      ...(choice === 13 ? { mismatchDiff: "error" } : {}),
+      observe: ["shadowAge", "mismatchWarning", "shadowMismatchLogging", "coalesced", "error", "futureOffset"] }),
     setup: [{ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } }],
     actions: {
-      beginCall: { input: () => ({ op: "begin" }) }, resolveLoader: settle("resolve"), rejectLoader: settle("reject"),
+      beginCall: { input: () => ({ op: "begin" }) }, resolveLoader: shadowResolve, rejectLoader: rejectLatest,
       releaseRead: release("read"), releaseLoad: release("load"), releaseDump: release("dump"), releaseWrite: release("write"),
       advance: advance([1, 10]), seed: shadowSeed, reencode: shadowSeed,
       seedUnicode: { ...shadowSeed, choices: [7, 8] },
       invalidate: { choices: [0, 20], input: (choice) => ({ op: "invalidate", futureBufferMs: choice }) },
-      readFault: fault("read"), loadFault: fault("load"), dumpFault: fault("dump"), writeFault: fault("write"),
+      readFault: fault("read"), loadFault: fault("load"), dumpFault: fault("dump"), writeFault: fault("write"), loggerFault: fault("logger"),
       rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) },
       advanceWall: { choices: [1, 60000], input: choice => ({ op: "shiftWall", ms: choice }) },
       shadowPolicy: { choices: [0, 1, 2], input: (choice) => ({ op: "policy", value: { shadow: { ramp: [100, 0, 101][choice] } } }) },
-      logPolicy: { choices: [0, 1, 2], input: (choice) => ({ op: "policy", value: { shadow: { logMismatches: choice === 2 ? "invalid" : choice === 1 } } }) },
+      logPolicy: { choices: shadowLogOverlays.map((_, i) => i), input: (choice) => ({ op: "policy", value: { shadow: shadowLogOverlays[choice] } }) },
     },
   },
 };
@@ -215,7 +233,7 @@ function observation(raw, context) {
     return [key, item.map((entry) => {
         if (key === "calls" || key === "writeTtls") {
           const integer = itfInteger(entry, context);
-          if (key === "calls" && (integer < 0 || integer > 9 && integer !== 11))
+          if (key === "calls" && (integer < 0 || integer > 9 && integer !== 11 && integer !== UNRENDERABLE))
             throw new Error(`${context}: unsupported caller outcome`);
           return integer;
         }
@@ -226,10 +244,17 @@ function observation(raw, context) {
   }));
   return result;
 }
-function diagnostics(raw, context, configErrors = false, futureOffsets = false, inspect = false) {
+// The warning content lists a profile asserts only with diagnosticWarnings. A
+// profile whose drivers never log a mismatch may carry them, empty, or not at
+// all (a trace generated before they existed), so the differential compares
+// it across both texts.
+const warningContentFields = ["loggingOutcomes", "mismatchWarnings"];
+function diagnostics(raw, context, configErrors = false, futureOffsets = false, inspect = false, warningContent = false) {
   const value = record(raw, context);
-  const fields = ["ages", "coalesced", "fallbackErrors", "warnings", ...(configErrors ? ["configErrors"] : []), ...(futureOffsets ? ["futureOffsets"] : []), ...(inspect ? ["inspections"] : [])];
-  if (Object.keys(value).sort().join() !== fields.sort().join() || !Array.isArray(value.ages))
+  const fields = ["ages", "coalesced", "fallbackErrors", "warnings", ...(configErrors ? ["configErrors"] : []), ...(futureOffsets ? ["futureOffsets"] : []),
+    ...(inspect ? ["inspections"] : []), ...(warningContent ? warningContentFields : [])];
+  const carried = Object.keys(value).filter(key => warningContent || !warningContentFields.includes(key) || !Array.isArray(value[key]) || value[key].length > 0);
+  if (carried.sort().join() !== fields.sort().join() || !Array.isArray(value.ages))
     throw new Error(`${context}: invalid diagnostics`);
   const labels = (items, allowed) => {
     if (!Array.isArray(items) || items.some(item => typeof item !== "string" || !allowed.includes(item)))
@@ -260,8 +285,35 @@ function diagnostics(raw, context, configErrors = false, futureOffsets = false, 
         activeFollowers: itfInteger(entry.activeFollowers, context), oldestLeaderAgeMs: age === -1 ? null : age };
     });
   })() : [];
-  return { ...(inspect ? { inspections } : {}), ...(futureOffsets ? { futureOffsets: offsets } : {}), ...(configErrors ? { configErrors: itfInteger(value.configErrors, context) } : {}), warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
+  return { ...(inspect ? { inspections } : {}), ...(futureOffsets ? { futureOffsets: offsets } : {}), ...(configErrors ? { configErrors: itfInteger(value.configErrors, context) } : {}),
+    ...(warningContent ? { mismatchWarnings: mismatchWarnings(value.mismatchWarnings, context), loggingOutcomes: labels(value.loggingOutcomes, loggingOutcomes) } : {}),
+    warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
     coalesced: labels(value.coalesced, ["process", "request_local"]), fallbackErrors: labels(value.fallbackErrors, ["noop", "local", "remote", "request_local"]) };
+}
+// One confirmed-mismatch warning's content as the shadow profile predicts it
+// (D12), in the record the projection builds from a driver's event: the age in
+// seconds, each value field and entry side as a value code (-1 left out, 0
+// null), the diff level whose fields it carries and whether they are null, the
+// uncut count, the paths, the entries (at `values`) and the failure it names.
+const loggingOutcomes = ["logged", "hook_error", "render_error", "logger_error"];
+const warningFields = "ageMs,cachedValue,count,diff,diffNull,entries,loggingOutcome,paths,sourceValue";
+function mismatchWarnings(raw, context) {
+  if (!Array.isArray(raw)) throw new Error(`${context}: missing mismatch warnings`);
+  return raw.map(item => {
+    const warning = record(item, context);
+    if (Object.keys(warning).sort().join() !== warningFields || !Array.isArray(warning.paths) || !Array.isArray(warning.entries)
+      || !["off", "paths", "values"].includes(warning.diff) || typeof warning.diffNull !== "boolean"
+      || !["", "hook_error", "render_error"].includes(warning.loggingOutcome) || warning.paths.some(path => typeof path !== "string"))
+      throw new Error(`${context}: invalid mismatch warning`);
+    return { ageSeconds: itfInteger(warning.ageMs, context) / 1000, cachedValue: itfSignedInteger(warning.cachedValue, context),
+      sourceValue: itfSignedInteger(warning.sourceValue, context), diff: warning.diff, diffNull: warning.diffNull,
+      count: itfInteger(warning.count, context), paths: warning.paths, entries: warning.entries.map(raw => {
+        const entry = record(raw, context);
+        if (Object.keys(entry).sort().join() !== "cached,path,source" || typeof entry.path !== "string")
+          throw new Error(`${context}: invalid mismatch entry`);
+        return { path: entry.path, cached: itfSignedInteger(entry.cached, context), source: itfSignedInteger(entry.source, context) };
+      }), loggingOutcome: warning.loggingOutcome };
+  });
 }
 function readIO(raw, context, callCount) {
   const value = record(raw, context);
@@ -315,7 +367,8 @@ export function parseTrace(raw, path, profile) {
         ...(profile.compressionIO ? { compression: compressionIO(record(state.s, context).compression, context) } : {}),
         ...(profile.markerIO ? { markers: markerIO(record(state.s, context).markers, context) } : {}),
         ...(profile.readIO ? { io: readIO(record(state.s, context).io, context, expected.calls.length) } : {}),
-        ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context, profile.diagnosticConfigErrors, profile.diagnosticFutureOffsets, profile.diagnosticInspections) }) };
+        ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context, profile.diagnosticConfigErrors,
+          profile.diagnosticFutureOffsets, profile.diagnosticInspections, profile.diagnosticWarnings) }) };
     }) };
 }
 function valueCode(value) {
@@ -334,7 +387,52 @@ function valueCode(value) {
     return 11;
   if (typeof v === "object" && v.absent === true)
     return 5;
+  if (typeof v === "object" && v.unrenderable === true)
+    return UNRENDERABLE;
   return 10;
+}
+// A logged JSON value as the shadow profile's value code: its decoded values
+// (`1`, `2`, `"café"` as 3) and the portable scalars.
+function jsonCode(value) {
+  const codes = [[1, 1], [2, 2], ["café", 3], [null, 6], [false, 7], [0, 8], ["", 9]];
+  const found = codes.find(([json]) => json === value);
+  assertObservedDomain(found !== undefined, { value }, { value: "a value the shadow profile logs" });
+  return found[1];
+}
+function parsedField(text, field) {
+  if (typeof text !== "string") throw new Error(`Invalid actual ${field} shape`);
+  try { return JSON.parse(text); }
+  catch { return assertObservedDomain(false, { [field]: text }, { [field]: "JSON text" }); }
+}
+// A value field or an entry side: -1 when left out, 0 when logged as null.
+const sideCode = (holder, side, parse) => !Object.hasOwn(holder, side) ? -1
+  : holder[side] === null && parse ? 0 : jsonCode(parse ? parsedField(holder[side], side) : holder[side]);
+// A driver's mismatchWarning event as the shadow profile's warning record: the
+// diff level is the most detailed diff field it carries; the paths, the count
+// and diffJson are null together or not at all, and diffJson's entries carry
+// the same paths as mismatchPathsJson (the comparison checks both).
+function projectWarning(event) {
+  const has = field => Object.hasOwn(event, field);
+  if (typeof event.cachedValueAgeSeconds !== "number")
+    throw new Error("Missing actual warning age");
+  const diff = has("diffJson") ? "values" : has("mismatchPathsJson") ? "paths" : "off";
+  const diffNull = has("mismatchPathsJson") && event.mismatchPathsJson === null;
+  assertObservedDomain(has("mismatchPathsJson") === has("mismatchPathCount") && (diff !== "values" || has("mismatchPathsJson"))
+    && (diff === "off" || ((event.mismatchPathCount === null) === diffNull && (diff !== "values" || (event.diffJson === null) === diffNull))),
+  { mismatchPathsJson: event.mismatchPathsJson, mismatchPathCount: event.mismatchPathCount, diffJson: event.diffJson },
+  { diffFields: "carried together and null together" });
+  const listed = diff !== "off" && !diffNull;
+  const paths = listed ? parsedField(event.mismatchPathsJson, "mismatchPathsJson") : [];
+  const entries = listed && diff === "values" ? parsedField(event.diffJson, "diffJson") : [];
+  assertObservedDomain(Array.isArray(paths) && paths.every(path => typeof path === "string") && Array.isArray(entries)
+    && entries.every(entry => entry !== null && typeof entry === "object" && typeof entry.path === "string"
+      && Object.keys(entry).every(key => ["path", "cached", "source"].includes(key)))
+    && (!listed || Number.isSafeInteger(event.mismatchPathCount)),
+  { mismatchPathsJson: event.mismatchPathsJson, diffJson: event.diffJson }, { diffFields: "paths, entries and an integer count" });
+  return { ageSeconds: event.cachedValueAgeSeconds, cachedValue: sideCode(event, "cachedValueJson", true), sourceValue: sideCode(event, "sourceValueJson", true),
+    diff, diffNull, count: listed ? event.mismatchPathCount : 0, paths,
+    entries: entries.map(entry => ({ path: entry.path, cached: sideCode(entry, "cached", false), source: sideCode(entry, "source", false) })),
+    loggingOutcome: event.loggingOutcome ?? "" };
 }
 function project(o) {
   return { ...o, calls: o.calls.map((c) => c.status === "pending" ? 0
@@ -443,7 +541,7 @@ function projectBaseObservation(profile, observed) {
   const ages = [];
   const futureOffsets = [];
   let warnings = 0, configErrors = 0;
-  const coalesced = [], fallbackErrors = [], inspections = [];
+  const coalesced = [], fallbackErrors = [], inspections = [], mismatchWarnings = [], loggingOutcomes = [];
   const outcomes = profile.diagnosticAge === "shadowAge" ? observed.shadow.filter(x => x === "match" || x === "mismatch")
     : observed.recovery.filter(x => x === "served");
   for (const event of events) {
@@ -495,6 +593,12 @@ function projectBaseObservation(profile, observed) {
     else if (event.event === "mismatchWarning") {
       assert.deepEqual(event.outcome, "mismatch");
       warnings++;
+      if (profile.diagnosticWarnings) mismatchWarnings.push(projectWarning(event));
+    }
+    else if (event.event === "shadowMismatchLogging" && profile.diagnosticWarnings) {
+      if (typeof event.outcome !== "string")
+        throw new Error("Invalid actual mismatch logging outcome shape");
+      loggingOutcomes.push(event.outcome);
     }
     else {
       assert.deepEqual(event.event, profile.diagnosticAge);
@@ -504,7 +608,8 @@ function projectBaseObservation(profile, observed) {
       ages.push(event.seconds);
     }
   }
-  return { o: project(base), d: { warnings, ages, coalesced, fallbackErrors, ...(profile.diagnosticInspections ? { inspections } : {}), ...(profile.diagnosticFutureOffsets ? { futureOffsets } : {}), ...(profile.diagnosticConfigErrors ? { configErrors } : {}) } };
+  return { o: project(base), d: { warnings, ages, coalesced, fallbackErrors, ...(profile.diagnosticInspections ? { inspections } : {}), ...(profile.diagnosticFutureOffsets ? { futureOffsets } : {}), ...(profile.diagnosticConfigErrors ? { configErrors } : {}),
+    ...(profile.diagnosticWarnings ? { mismatchWarnings, loggingOutcomes } : {}) } };
 }
 export function expectedObservation(step) { return { o: step.expected, ...(step.policyErrors === undefined ? {} : { policyErrors: step.policyErrors }), ...(step.diagnostics === undefined ? {} : { d: step.diagnostics }), ...(step.io === undefined ? {} : { io: step.io }), ...(step.markers === undefined ? {} : { markers: step.markers }), ...(step.compression === undefined ? {} : { compression: step.compression }) }; }
 export function featureInput(profile, action, choice, observed, environment) { const binding = profile.actions[action]; if (!binding || (binding.choices ? !binding.choices.includes(choice) : choice !== -1 && choice !== 0))

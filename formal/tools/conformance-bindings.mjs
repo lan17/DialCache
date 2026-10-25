@@ -8,6 +8,7 @@ const protocolTitles = {
   invalidTimestampVectors: 'rejects timestamp: ', envelopeVectors: 'handles payload envelope: ',
   compressedDecodeVectors: 'decodes compressed payload: ', compressionWriteVectors: 'selects compression representation: ',
   durationVectors: 'bounds physical duration: ', rampVectors: 'assigns deterministic cohort: ',
+  mismatchPathVectors: 'computes mismatch paths: ',
 };
 export const protocolGoRoots = {
   keyVectors: 'TestProtocolKeys', invalidKeyVectors: 'TestProtocolKeys', frameVectors: 'TestProtocolFrames',
@@ -16,6 +17,7 @@ export const protocolGoRoots = {
   normalizeArgsVectors: 'TestProtocolRemainingVectors', invalidTimestampVectors: 'TestProtocolRemainingVectors',
   envelopeVectors: 'TestProtocolRemainingVectors', compressedDecodeVectors: 'TestProtocolRemainingVectors',
   compressionWriteVectors: 'TestProtocolRemainingVectors', durationVectors: 'TestProtocolRemainingVectors',
+  mismatchPathVectors: 'TestProtocolRemainingVectors',
 };
 const goName = name => {
   if (!name || /[^\x20-\x7e]/.test(name) || name.includes('#')) throw new Error('Unsupported Go fixture test name');

@@ -299,7 +299,7 @@
         {"title":"Capacity, deadlines, and detachment","contracts":["C54","E03"]},
         {"title":"Consistency modes and race boundaries","contracts":["C36","C51"]},
         {"title":"Command amplification","contracts":["C49","C51","C52"]},
-        {"title":"Confirmed mismatch logging","contracts":["C60","B03","X01"]},
+        {"title":"Confirmed mismatch logging","contracts":["C60","W10","B03","X01"]},
         {"title":"Metrics and shutdown","contracts":["C57","C58","C59","E03"]}
       ]
     },
@@ -1086,22 +1086,22 @@
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
         {"title":"catches user JSON hook failures","contracts":["C30","B03"]},
         {"title":"byte-clamps keys and JSON without splitting UTF-8 sequences","contracts":["X01"]},
-        {"title":"computes the expected entries for $name","contracts":["C60","X01"]},
-        {"title":"renders the expected diff fields for $name","contracts":["C60","X01"]},
-        {"title":"walks own members whose names collide with Object.prototype","contracts":["C60","B03"]},
-        {"title":"compares only own members in a depth-capped pair","contracts":["C60","B03"]},
-        {"title":"cuts the entries at 64 in walk order and counts every difference","contracts":["C60","X01"]},
-        {"title":"clamps each pointer to 512 bytes without splitting UTF-8 sequences","contracts":["X01"]},
-        {"title":"replaces each side over 1 KiB with its clamped JSON text","contracts":["X01"]},
-        {"title":"caps the walk at 32 reference tokens however deep the difference lies","contracts":["C60","X01"]},
-        {"title":"compares equal containers past the depth cap regardless of member order and depth","contracts":["C60","X01"]},
+        {"title":"computes the expected entries for $name","contracts":["W10","C60","X01"]},
+        {"title":"renders the expected diff fields for $name","contracts":["W10","C60","X01"]},
+        {"title":"walks own members whose names collide with Object.prototype","contracts":["W10","C60","B03"]},
+        {"title":"compares only own members in a depth-capped pair","contracts":["W10","C60","B03"]},
+        {"title":"cuts the entries at 64 in walk order and counts every difference","contracts":["W10","C60","X01"]},
+        {"title":"clamps each pointer to 512 bytes without splitting UTF-8 sequences","contracts":["W10","X01"]},
+        {"title":"replaces each side over 1 KiB with its clamped JSON text","contracts":["W10","X01"]},
+        {"title":"caps the walk at 32 reference tokens however deep the difference lies","contracts":["W10","C60","X01"]},
+        {"title":"compares equal containers past the depth cap regardless of member order and depth","contracts":["W10","C60","X01"]},
         {"title":"renders exactly the fields requested by %s","contracts":["C60"]},
         {"title":"renders no entries for byte-identical renderings","contracts":["C60","B03"]},
         {"title":"renders no entries for the documented Date row","contracts":["C60","B03"]},
-        {"title":"reports the source whole at the root for the documented undefined row","contracts":["C60","B03"]},
+        {"title":"reports the source whole at the root for the documented undefined row","contracts":["W10","C60","B03"]},
         {"title":"renders no entries for a Date against its ISO string","contracts":["C60","B03"]},
         {"title":"nulls the fields fed by a root %s with render_error","contracts":["B03","X01"]},
-        {"title":"reports an absent root as one side at the root pointer, not as a render failure","contracts":["C60","B03"]},
+        {"title":"reports an absent root as one side at the root pointer, not as a render failure","contracts":["W10","C60","B03"]},
         {"title":"runs each side's toJSON once for every field it feeds","contracts":["C60","B03"]},
         {"title":"clamps diffJson to 8 KiB with the truncation marker","contracts":["X01"]},
         {"title":"clamps each built-in diffJson side to 1 KiB","contracts":["X01"]},
@@ -1198,7 +1198,7 @@
     },
     {
       "path": "formal/guides/BEHAVIOR.md",
-      "sha256": "5d6cb8d7e779cb99e6a60f6ea553b524d49c7a42b79a74f912a90ff44c5bafe8",
+      "sha256": "bc641a7437f698c7bd7bb716265c1f1cfa55dac859bea7546567a62c1e81512a",
       "entries": [
         {"title":"Portable behavioral scenarios and generated profiles"},
         {"title":"Scenario format"},
@@ -1325,7 +1325,7 @@
     },
     {
       "path": "formal/guides/CONTRACTS.md",
-      "sha256": "913819051269fdf3c4290766dbb4cef627ecbdb2358a84281b4945175016b1c0",
+      "sha256": "0831b85daf6cce8ee6ce7ee0863a2fdcab03c7b6ffb82a21ca7c1c55f4500fe3",
       "entries": [
         {"title":"Portable contract inventory"},
         {"title":"Where the boundary lies"},
@@ -1413,6 +1413,7 @@
           "W07",
           "W08",
           "W09",
+          "W10",
           "E01",
           "E02",
           "E03",
@@ -1428,7 +1429,7 @@
     },
     {
       "path": "formal/guides/FEATURE-COVERAGE.md",
-      "sha256": "8368ec455fa600c89821853926ca1c5025ba18bb6dacdc6d6a34794d9ade8afb",
+      "sha256": "a4bb78f80bff5982db8622802884c80e3ec3cec845fa10559c59591c2231fb19",
       "entries": [
         {"title":"DialCache features and known behavioral corners"},
         {"title":"What is accounted for"},
@@ -1550,7 +1551,7 @@
     },
     {
       "path": "formal/guides/PORTING.md",
-      "sha256": "342cfd680eeba31a57c7cc790693fb21d56e358e20ce105a6a6ce28a9e511a7e",
+      "sha256": "6776bac80d3be84e53ca17b3ee7ef917e4f66008bbb94aea4166bf85727df6e4",
       "entries": [
         {"title":"Implementing another DialCache port"},
         {"title":"What a port supplies"},
@@ -1643,7 +1644,7 @@
     },
     {
       "path": "formal/guides/SPEC.md",
-      "sha256": "0dde0303a4aacc5eb6c181ab3f5fa219fa22f0d258a615f3dc1f85c67713a280",
+      "sha256": "d20e81545e58e181dc0632d90a8dbf90704d13b2f6a72212d78adb31085a5932",
       "entries": [
         {"title":"DialCache behavioral specification"},
         {"title":"Definition ownership and executable connections"},

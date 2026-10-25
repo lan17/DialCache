@@ -526,6 +526,7 @@
         "C58",
         "C59",
         "C60",
+        "W10",
         "X01"
       ],
       "cases": [
@@ -546,7 +547,13 @@
         "C58.request-follower-trail",
         "C58.late-rejection-not-recounted",
         "C59.compression-read-telemetry",
-        "C60.logging-explicit-off"
+        "C60.logging-explicit-off",
+        "C60.warning-field-groups",
+        "C60.shorthand-table",
+        "C60.invalid-input-isolation",
+        "C60.logging-outcomes",
+        "C60.outcome-precedence",
+        "W10.mismatch-paths"
       ],
       "nativeCases": [
         "X01.prometheus-schema",

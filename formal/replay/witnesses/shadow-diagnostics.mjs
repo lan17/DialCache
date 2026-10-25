@@ -6,6 +6,15 @@ const resolve = command("resolveLoader", 2), load = command("releaseLoad");
 const rollback = command("rollbackWall");
 const mismatch = { calls: [2], reads: 2, loads: 1, writes: 0, comparisons: 1, shadow: ["mismatch"] };
 const futureShadow = [{ layer: "remote_shadow", offsetMs: 1000 }];
+// A confirmed mismatch at C0 age 0 (the regressions' confirmMismatch) and the
+// warnings it logs: neither value field nor diff field to start from.
+const confirm = value => [seed, begin, read, command("resolveLoader", value), load, read];
+const logPolicy = choice => command("logPolicy", choice);
+const omitted = { ageMs: 0, cachedValue: -1, sourceValue: -1, diff: "off", diffNull: false, count: 0, paths: [], entries: [], loggingOutcome: "" };
+const everything = { ...omitted, cachedValue: 1, sourceValue: 2, diff: "values", count: 1, paths: [""], entries: [{ path: "", cached: 1, source: 2 }] };
+const failedDiff = (sourceValue, loggingOutcome) => ({ ...omitted, cachedValue: 1, sourceValue, diff: "values", diffNull: true, loggingOutcome });
+const warned = (step, warning, outcome, more = {}) => check(step, { shadow: ["mismatch"] },
+  { mismatchWarnings: [warning], loggingOutcomes: [outcome], ...more });
 
 export const shadowDiagnosticsWitnessRules = [
   rule("omitted-shadow-logging-keeps-mismatch-metrics-only", "omittedLoggingKeepsMismatchMetricsOnlyTest",
@@ -32,6 +41,26 @@ export const shadowDiagnosticsWitnessRules = [
     check(4, { calls: [4], shadow: ["timeout"], reads: 1 }, { futureOffsets: [] }),
     check(5, { calls: [4], shadow: ["timeout"], reads: 1, loads: 0, dumps: 0, writes: 0 },
       { futureOffsets: [{ layer: "remote_shadow", offsetMs: 990 }] })),
+  // The record's shorthand table, one rule per row.
+  rule("shorthand-true-with-value-false-logs-diff-only", "trueShorthandWithValueFalseLogsDiffOnlyTest",
+    [init(0), logPolicy(6), ...confirm(2)], warned(7, { ...everything, cachedValue: -1, sourceValue: -1 }, "logged", { configErrors: 0 })),
+  rule("shorthand-false-with-diff-paths-logs-paths-only", "falseShorthandWithDiffPathsLogsPathsOnlyTest",
+    [init(0), logPolicy(7), ...confirm(2)], warned(7, { ...omitted, diff: "paths", count: 1, paths: [""] }, "logged", { configErrors: 0 })),
+  rule("runtime-false-shorthand-overrides-default-diff", "runtimeFalseShorthandOverridesDefaultDiffTest",
+    [init(14), logPolicy(0), ...confirm(2)],
+    check(7, { shadow: ["mismatch"] }, { warnings: 0, ages: [0], mismatchWarnings: [], loggingOutcomes: [], configErrors: 0 })),
+  rule("runtime-true-shorthand-overrides-default-value", "runtimeTrueShorthandOverridesDefaultValueTest",
+    [init(15), logPolicy(1), ...confirm(2)], warned(7, everything, "logged")),
+  // Each failure outcome, and all three together.
+  rule("hook-error-nulls-diff-fields", "hookErrorNullsDiffFieldsTest",
+    [init(13), ...confirm(2)], warned(6, failedDiff(2, "hook_error"), "hook_error")),
+  rule("render-error-nulls-unrenderable-source", "renderErrorNullsUnrenderableSourceTest",
+    [init(4), ...confirm(12)], check(6, { calls: [12], shadow: ["mismatch"] },
+      { mismatchWarnings: [failedDiff(0, "render_error")], loggingOutcomes: ["render_error"] })),
+  rule("logger-error-still-delivers-warning", "loggerErrorStillDeliversWarningTest",
+    [init(4), command("loggerFault", 1), ...confirm(2)], warned(7, everything, "logger_error")),
+  rule("hook-error-outranks-both-failures", "hookErrorOutranksBothFailuresTest",
+    [init(13), command("loggerFault", 1), ...confirm(12)], warned(7, failedDiff(0, "hook_error"), "hook_error")),
 ];
 
 export function shadowDiagnosticsWitnesses(histories, recorder) {

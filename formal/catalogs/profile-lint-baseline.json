@@ -127,12 +127,17 @@
         "serving::invalidate",
         "shadow::advanceHeld",
         "shadow::beginDark",
+        "shadow::decoderOf",
         "shadow::latestLoad",
         "shadow::latestRead",
+        "shadow::mergeLogging",
+        "shadow::readerOf",
+        "shadow::recordVerdictInputs",
         "shadow::releaseDump",
         "shadow::releaseLoad",
-        "shadow::releaseRead",
+        "shadow::releaseReadWithLogger",
         "shadow::releaseWrite",
+        "shadow::resolveLogging",
         "shadow::settleHeld"
       ],
       "compositionViolations": 0

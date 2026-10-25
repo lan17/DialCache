@@ -43,20 +43,20 @@ Every scenario/trace gets a fresh default cache instance and empty Redis environ
 - `request`, `miss`, `disabled`, `error`, `coalesced`, `invalidation`: public bounded metadata. Operational events use `cacheNamespace`, `useCase`, `keyType`, and `layer` as applicable; miss/disabled events add `reason`, errors add `error`/`inFallback`, and coalescing uses `scope`.
 - `shadowAge`, `recoveryAge`, `futureOffset`, `get`, `fallback`, `serialization`: actual observations with `seconds`; serialization adds `operation`, and verdict ages add `outcome`.
 - `size`, `storedSize`: observed `bytes`. `compression` carries its actual `outcome`.
-- `mismatchWarning`: fields supplied to the public logger for a confirmed-mismatch warning. The scalar fixtures do not prescribe a general host-language JSON conversion algorithm or truncation implementation.
+- `mismatchWarning`: fields supplied to the public logger for a confirmed-mismatch warning, each recorded exactly when the warning carries it; the `mismatchPaths` array is recorded as one JSON string, `mismatchPathsJson`. `shadowMismatchLogging`: the one logging outcome of each warning attempt, with the cache labels and no layer. The shadow profile compares paths, entries and value fields as parsed JSON, so the scalar fixtures do not prescribe a general host-language JSON conversion algorithm or truncation implementation.
 - `marker`: an explicit environment probe of the tracked watermark's cutoff and remaining physical TTL. Cutoffs are milliseconds relative to the fixture wall origin; absence is `cutoffMs: -1`. TTL uses Redis's `-2` absent and `-1` persistent values. This controlled adapter observation supplements real-server integration evidence.
 
 Names are a trace vocabulary, not required language method names. All selected events are compared after every input, including steps that expect none. The [source audit](./TEST-AUDIT.md) explains the typescript/test/doc obligations these probes cover.
 
 ## Fixture
 
-`policy` uses the existing configuration vocabulary: `ttlSec` and `ramp` with `local`/`remote` leaves, `requestLocal`, `coalesce`, `staleOnErrorMaxAgeSec`, `remoteReadTimeoutMs`, and `shadow.ramp`. Omitted fields have DialCache's documented defaults; TTL without a ramp enables that layer fully. Runtime overlays initially omit all leaves.
+`policy` uses the existing configuration vocabulary: `ttlSec` and `ramp` with `local`/`remote` leaves, `requestLocal`, `coalesce`, `staleOnErrorMaxAgeSec`, `remoteReadTimeoutMs`, `shadow.ramp`, and the mismatch-logging inputs `shadow.logMismatches` and `shadow.mismatchLogging` with its `value` and `diff` leaves. Omitted fields have DialCache's documented defaults; TTL without a ramp enables that layer fully. Runtime overlays initially omit all leaves.
 
-Other fixture fields are `tracked` (default false), `fallbackTimeoutMs` (fixture default 10, null disables, `"default"` omits the operation override to exercise the library's 60-second default), `readTimeoutMs` (fixture default 50; `"default"` omits the adapter option to exercise the library default), `localMaxSize` (default 10,000), `shadowMaxInFlight` (default 1), and `recovery` (`allow`, `deny`, `error`, or default timeout-only classification). An operation can override the instance classifier with `begin.recovery`. Optional `comparator` supplies `equal`, `unequal`, or `error`; omitted comparison uses ordinary value equality. Optional `comparisonMs` makes that external callback consume the specified elapsed time before returning or failing, without delivering timers. These are controlled callback outcomes, not an expression language. `shadowHook: false` omits the required outcome observer; `observerFailure: true` makes installed observers fail; `remote: false` omits the Redis adapter. `probeSourceScope: true` records whether caching is enabled when each actual source invocation begins. Shadow/recovery hooks always record terminal diagnostic outcomes. Optional `observe` selects additional public events (see below); it does not change policy or execution. Compression writes are disabled; existing compressed entries can be seeded to check decoding and recovery. Envelope interoperability is also covered separately by protocol vectors.
+Other fixture fields are `tracked` (default false), `fallbackTimeoutMs` (fixture default 10, null disables, `"default"` omits the operation override to exercise the library's 60-second default), `readTimeoutMs` (fixture default 50; `"default"` omits the adapter option to exercise the library default), `localMaxSize` (default 10,000), `shadowMaxInFlight` (default 1), and `recovery` (`allow`, `deny`, `error`, or default timeout-only classification). An operation can override the instance classifier with `begin.recovery`. Optional `comparator` supplies `equal`, `unequal`, or `error`; omitted comparison uses ordinary value equality. Optional `comparisonMs` makes that external callback consume the specified elapsed time before returning or failing, without delivering timers. These are controlled callback outcomes, not an expression language. `shadowHook: false` omits the required outcome observer; `mismatchDiff: "error"` installs a `shadowMismatchDiff` hook that throws; `observerFailure: true` makes installed observers fail, and the `logger` fault makes only the logger fail after it receives a call; `remote: false` omits the Redis adapter. `probeSourceScope: true` records whether caching is enabled when each actual source invocation begins. Shadow/recovery hooks always record terminal diagnostic outcomes. Optional `observe` selects additional public events (see below); it does not change policy or execution. Compression writes are disabled; existing compressed entries can be seeded to check decoding and recovery. Envelope interoperability is also covered separately by protocol vectors.
 
 Optional `sourceWorkMs` consumes that many milliseconds of elapsed external work inside each actual source invocation before it returns its unresolved fixture gate. Wall and elapsed clocks advance together; no timers or scheduled cache work run during this segment. This supplies a schedule in which the dark-shadow budget can expire before its deferred job starts, while the source remains independently settleable. Ports provide the same external callback/executor ordering through their controlled environment; neither expected observations nor private cache state select when the job runs. The default is zero work.
 
-Keys use namespace `urn`, key type `id`, use case `Behavior`, and ID `1` unless an input overrides `useCase` or `key`. The fixture value domain is JSON scalars (numbers, strings, booleans, null) plus an absent value. The test serializer uses JSON for scalars and the unquoted literal `undefined` for absence. An omitted input value denotes absence, represented in observations by `{"absent": true}`; the ordinary string `"undefined"` stays a string and cannot be mistaken for it. A port may use an option/unit value or its own fixture sentinel. This custom serializer tests cacheability without prescribing a language's JSON API or reference identity.
+Keys use namespace `urn`, key type `id`, use case `Behavior`, and ID `1` unless an input overrides `useCase` or `key`. The fixture value domain is JSON scalars (numbers, strings, booleans, null) plus an absent value, and, for the shadow profile's sources, one value with no JSON rendering (`resolve` with `unrenderable: true`), which a caller observes as `{"unrenderable": true}`. The test serializer uses JSON for scalars and the unquoted literal `undefined` for absence. An omitted input value denotes absence, represented in observations by `{"absent": true}`; the ordinary string `"undefined"` stays a string and cannot be mistaken for it. A port may use an option/unit value or its own fixture sentinel. This custom serializer tests cacheability without prescribing a language's JSON API or reference identity.
 
 Wall time starts at `2026-09-08T12:00:00Z`; monotonic time starts at zero. Elapsed time advances through `advance` or configured external source/comparison work; `shiftWall` changes application wall time independently, preserving monotonic time and Redis physical expiry. Local entries use monotonic age; frame age and watermark proposals use application wall time. The fake Redis expiration clock advances with elapsed time independently of application wall-clock steps. Tracked reads atomically acquire a value and watermark. Watermarks remain available through the trace. A native write's frame timestamp is captured when the adapter receives it, before any held transport completion.
 
@@ -134,7 +134,8 @@ trace, the step, the action and both observations.
 Caller observations encode pending as 0, fixture values 1 and 2 as 1 and 2, a source
 error as 3 and a deadline error as 4. Codes 5 to 9 are the absent, `null`, `false`,
 zero and empty-string values the scope and policy profiles generate; 11 is the text
-`"undefined"`, distinct from absent; 10 is invalid. Other outcomes fail replay. The
+`"undefined"`, distinct from absent; 12 is the shadow profile's source value with no
+JSON rendering (D13); 10 is invalid. Other outcomes fail replay. The
 generated profiles compare error categories; the fixed scenarios compare logical
 error identity. The effects model keeps the version-2 codes of its own contract, 0
 pending, 1 value, 2 source error and 3 timeout; its composed text records the shared
@@ -163,7 +164,12 @@ as an intended input-domain expansion.
   after unit conversion. Recovery records an age only after a successful retained
   decode; shadow records the original C0 age at a match or confirmed-mismatch
   verdict, clamped to zero after a wall rollback, and warns only for a confirmed
-  mismatch whose admitted policy enabled logging. `coalesced` records request or
+  mismatch whose admission captured either logging leaf on. Shadow also records
+  `mismatchWarnings`, each warning's content (its age, both value fields as value
+  codes, -1 left out and 0 null, the diff level whose fields it carries and whether
+  they are null, the uncut count, the paths, the entries at `values` and the failure
+  it names), and `loggingOutcomes`, one per warning; dark-layers and
+  shadow-read-deadlines carry both empty and the parser accepts them absent. `coalesced` records request or
   process scope labels; `fallbackErrors` records the layer a failed source is
   attributed to, failures later recovered as stale included. Scope fixtures assert one
   trail for shared failures and no cache-error trail for disabled pass-through work.
@@ -252,10 +258,14 @@ as an intended input-domain expansion.
   read while the caller stays pending, and the caller's later settlement or timer
   gives its deadline error; these fixtures observe after overdue timers are
   delivered, and intermediate native timer ordering is outside their bounds. Timer
-  delivery is not required for elapsed-time rejection. Malformed logging keeps
-  comparison active with warnings disabled, and a job admitted under it records a
-  configuration error and captures logging off; later runtime changes do not rewrite
-  an admitted job's policy.
+  delivery is not required for elapsed-time rejection. A malformed logging input
+  keeps comparison active with that leaf off, a valid leaf beside it on, and a job
+  admitted under it records one configuration error; later runtime changes do not
+  rewrite an admitted job's leaves. Fixture 13 installs the throwing diff hook,
+  fixtures 14 and 15 write default leaves, `logPolicy` writes the overlays of the
+  shorthand table and the invalid inputs, `loggerFault` fails the logger, and the
+  source value with no rendering is offered only while no job could fill with it, so
+  every failure outcome is reached alone and combined.
 - **admission.** Caller reads and all decoding are held; a successful read acquires
   C0 and completing its decode considers shadow admission under the flight's accepted
   policy; coalesced followers share one admission; a detached source runs with caching
