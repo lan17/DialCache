@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
+import weakref
 
 import pytest
 from formal.executor import Executor
@@ -573,6 +575,38 @@ def test_records_no_outcome_while_a_returned_future_never_settles(executor):
 
     assert harness.outcomes("shadowValidation") == ["mismatch"]
     assert len(harness.logger.warnings()) == 1
+    assert harness.logging_events() == []
+
+
+class Watched(dict):
+    """A compared value the test can watch for collection."""
+
+
+def test_holds_no_compared_value_while_a_returned_future_never_settles(executor):
+    harness = Harness(executor, logger=Logger(executor.future))
+    source = Watched(SOURCE)
+    watched = weakref.ref(source)
+
+    assert harness.get({"log_mismatches": True}, source=source) == CACHED
+    del source
+    gc.collect()
+
+    assert len(harness.logger.warnings()) == 1
+    assert harness.logging_events() == []
+    assert watched() is None
+
+
+def test_frees_the_capacity_slot_before_a_returned_future_settles(executor):
+    harness = Harness(executor, logger=Logger(executor.future), shadow_max_in_flight=1)
+
+    harness.get({"log_mismatches": True}, key="first")
+    harness.get({"log_mismatches": True}, key="second")
+
+    assert harness.outcomes("shadowValidation") == ["mismatch", "mismatch"]
+    assert [details["cacheKey"] for details in harness.logger.warnings()] == [
+        warning({}, key="first")["cacheKey"],
+        warning({}, key="second")["cacheKey"],
+    ]
     assert harness.logging_events() == []
 
 

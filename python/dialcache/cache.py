@@ -1211,9 +1211,9 @@ class DialCache:
             self._emit("shadowAge", self._labels(key), outcome=outcome, seconds=age)
         if outcome == "mismatch" and plan is not None and "compared" in details:
             cached, value = details.pop("compared")
-            await self._warn_shadow_mismatch(key, op, plan, cached, value, age)
+            self._warn_shadow_mismatch(key, op, plan, cached, value, age)
 
-    async def _warn_shadow_mismatch(
+    def _warn_shadow_mismatch(
         self, key: Key, op: _Operation, plan: MismatchLogPlan, cached: Any, source: Any, age: float | None
     ) -> None:
         """Emit the confirmed-mismatch warning and its one shadowMismatchLogging event.
@@ -1241,13 +1241,20 @@ class DialCache:
         if failure is not None:
             # An earlier failure wins whatever the logger does.
             self._emit("shadowMismatchLogging", self._labels(key), outcome=failure)
-        outcome = "logged"
         if inspect.isawaitable(delivered):
-            try:
-                await _call_dependency(lambda: delivered)
-            except Exception:
-                outcome = "logger_error"
-        if failure is None:
+            # Awaited in a task of its own that holds only the key, so a
+            # logger that never settles retains neither compared value.
+            self._spawn(self._settle_shadow_warning(key, delivered, failure is None))
+        elif failure is None:
+            self._emit("shadowMismatchLogging", self._labels(key), outcome="logged")
+
+    async def _settle_shadow_warning(self, key: Key, delivered: Awaitable[Any], record: bool) -> None:
+        outcome = "logged"
+        try:
+            await _call_dependency(lambda: delivered)
+        except Exception:
+            outcome = "logger_error"
+        if record:
             self._emit("shadowMismatchLogging", self._labels(key), outcome=outcome)
 
     @staticmethod
