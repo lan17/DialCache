@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -542,6 +543,45 @@ func TestBuiltInMismatchWalkCaps(t *testing.T) {
 			t.Fatalf("equal deep containers reported %d entries", count)
 		}
 	})
+}
+
+func TestBuiltInMismatchWalkBuildsOnlyRetainedPointers(t *testing.T) {
+	// A chain of member names above a wide object and a long array makes every
+	// pointer below it long. Half their members and elements are equal, and all
+	// but 64 of the differing ones fall past the cut. Lengthening the names must
+	// cost only the retained pointers, never a copy of the prefix per visited
+	// member or element, which would take over a gigabyte here.
+	walk := func(nameBytes int) (allocated uint64, prefixBytes int) {
+		name := strings.Repeat("k", nameBytes)
+		side := func(differing float64) any {
+			members, items := map[string]any{}, make([]any, 5_000)
+			for index := range items {
+				value := float64(index%2) * differing
+				members[fmt.Sprintf("m%04d", index)], items[index] = value, value
+			}
+			var value any = map[string]any{"items": items, "members": members}
+			for level := 0; level < 30; level++ {
+				value = map[string]any{name: value}
+			}
+			return value
+		}
+		cached, source := side(1), side(2)
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		entries, count := walkJSON(cached, source)
+		runtime.ReadMemStats(&after)
+		prefix := strings.Repeat("/"+name, 30)
+		if count != 5_000 || len(entries) != shadowMismatchMaxEntries || entries[0].Path != prefix+"/items/1" || entries[63].Path != prefix+"/items/127" {
+			t.Fatalf("walk under %d-byte names: %d entries, count %d", nameBytes, len(entries), count)
+		}
+		return after.TotalAlloc - before.TotalAlloc, len(prefix)
+	}
+	shortAllocated, shortPrefix := walk(1)
+	longAllocated, longPrefix := walk(4096)
+	retained := uint64(shadowMismatchMaxEntries * (longPrefix - shortPrefix))
+	if longAllocated > shortAllocated+2*retained {
+		t.Fatalf("lengthening the pointers by %d bytes allocated %d more bytes, want at most %d", longPrefix-shortPrefix, longAllocated-shortAllocated, 2*retained)
+	}
 }
 
 var (

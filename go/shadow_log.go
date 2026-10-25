@@ -175,40 +175,49 @@ func kindOfJSON(value any) jsonKind {
 // order and are cut at shadowMismatchMaxEntries; count is the uncut total.
 func walkJSON(cached, source any) (entries []MismatchEntry, count int) {
 	entries = []MismatchEntry{}
-	report := func(entry MismatchEntry) {
+	// pointer holds the escaped reference tokens down to the pair being walked:
+	// each container appends a child's token and cuts it off again. Only a
+	// retained entry copies it into a string, so a member that compares equal or
+	// falls past the cut never copies its ancestors' tokens, and a deep chain of
+	// long names keeps the walk linear in the renderings.
+	var pointer []byte
+	report := func(cachedSide, sourceSide any) {
 		count++
 		if len(entries) < shadowMismatchMaxEntries {
-			entries = append(entries, entry)
+			entries = append(entries, MismatchEntry{Path: string(pointer), Cached: cachedSide, Source: sourceSide})
 		}
 	}
-	var walk func(left, right any, path string, depth int)
-	walk = func(left, right any, path string, depth int) {
+	var walk func(left, right any, depth int)
+	walk = func(left, right any, depth int) {
 		kind := kindOfJSON(left)
 		if kind != kindOfJSON(right) {
-			report(MismatchEntry{Path: path, Cached: left, Source: right})
+			report(left, right)
 			return
 		}
 		if kind == jsonPrimitive {
 			if left != right {
-				report(MismatchEntry{Path: path, Cached: left, Source: right})
+				report(left, right)
 			}
 			return
 		}
 		if depth >= shadowMismatchMaxDepth {
 			if !jsonValuesEqual(left, right) {
-				report(MismatchEntry{Path: path, Cached: left, Source: right})
+				report(left, right)
 			}
 			return
 		}
+		parent := len(pointer)
 		if kind == jsonArray {
 			leftItems, rightItems := left.([]any), right.([]any)
 			if len(leftItems) != len(rightItems) {
-				report(MismatchEntry{Path: path, Cached: left, Source: right})
+				report(left, right)
 				return
 			}
 			for index := range leftItems {
-				walk(leftItems[index], rightItems[index], path+"/"+strconv.Itoa(index), depth+1)
+				pointer = strconv.AppendInt(append(pointer[:parent], '/'), int64(index), 10)
+				walk(leftItems[index], rightItems[index], depth+1)
 			}
+			pointer = pointer[:parent]
 			return
 		}
 		leftMembers, rightMembers := left.(map[string]any), right.(map[string]any)
@@ -223,20 +232,21 @@ func walkJSON(cached, source any) (entries []MismatchEntry, count int) {
 		}
 		sort.Slice(names, func(i, j int) bool { return utf16Less(names[i], names[j]) })
 		for _, name := range names {
-			memberPath := path + "/" + escapePointerToken(name)
+			pointer = append(append(pointer[:parent], '/'), escapePointerToken(name)...)
 			leftMember, inLeft := leftMembers[name]
 			rightMember, inRight := rightMembers[name]
 			switch {
 			case !inRight:
-				report(MismatchEntry{Path: memberPath, Cached: leftMember, Source: Absent})
+				report(leftMember, Absent)
 			case !inLeft:
-				report(MismatchEntry{Path: memberPath, Cached: Absent, Source: rightMember})
+				report(Absent, rightMember)
 			default:
-				walk(leftMember, rightMember, memberPath, depth+1)
+				walk(leftMember, rightMember, depth+1)
 			}
 		}
+		pointer = pointer[:parent]
 	}
-	walk(cached, source, "", 0)
+	walk(cached, source, 0)
 	return entries, count
 }
 
