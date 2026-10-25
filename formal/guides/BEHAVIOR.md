@@ -263,9 +263,9 @@ as an intended input-domain expansion.
   admitted under it records one configuration error; later runtime changes do not
   rewrite an admitted job's leaves. Fixture 13 installs the throwing diff hook,
   fixtures 14 and 15 write default leaves, `logPolicy` writes the overlays of the
-  shorthand table and the invalid inputs, `loggerFault` fails the logger, and the
-  source value with no rendering is offered only while no job could fill with it, so
-  every failure outcome is reached alone and combined.
+  shorthand table, the invalid inputs and each leaf written off, `loggerFault` fails
+  the logger, and the source value with no rendering is offered only while no job
+  could fill with it, so every failure outcome is reached alone and combined.
 - **admission.** Caller reads and all decoding are held; a successful read acquires
   C0 and completing its decode considers shadow admission under the flight's accepted
   policy; coalesced followers share one admission; a detached source runs with caching

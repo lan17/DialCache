@@ -84,6 +84,26 @@ describe("shadow warning witness labels", () => {
     expect(labels(row3)).not.toContain("shorthand-row:3");
   });
 
+  it("requires a leaf written off over an inherited enabled leaf, and the other leaf kept", () => {
+    const diffOff = statesOf("runtimeOffDiffOverridesDefaultDiffTest");
+    expect(labels(diffOff)).toContain("written-off-leaf:diff");
+    // The diff fields the inherited `values` leaf would have logged.
+    finalDiagnostics(diffOff).mismatchWarnings = [finalWarning(statesOf("runtimeTrueShorthandOverridesDefaultValueTest"))];
+    expect(labels(diffOff)).not.toContain("written-off-leaf:diff");
+    // The same warning under fixture 0, whose defaults inherit nothing.
+    const uninherited = statesOf("runtimeOffDiffOverridesDefaultDiffTest");
+    uninherited[0]!.input.choice = integer(0);
+    expect(labels(uninherited)).not.toContain("written-off-leaf:diff");
+    const valueFalse = statesOf("runtimeFalseValueOverridesDefaultValueTest");
+    expect(labels(valueFalse)).toContain("written-off-leaf:value");
+    finalWarning(valueFalse).cachedValue = integer(1);
+    finalWarning(valueFalse).sourceValue = integer(2);
+    expect(labels(valueFalse)).not.toContain("written-off-leaf:value");
+    const unwrittenOverlay = statesOf("runtimeFalseValueOverridesDefaultValueTest");
+    unwrittenOverlay.find(state => state.input.name === "logPolicy")!.input.choice = integer(4);
+    expect(labels(unwrittenOverlay)).not.toContain("written-off-leaf:value");
+  });
+
   it("requires the logged content beside a logger failure", () => {
     const states = statesOf("loggerErrorStillDeliversWarningTest");
     expect(labels(states)).toContain("logger-error-keeps-warning-content");
@@ -197,6 +217,19 @@ describe("shadow warning regressions replayed in TypeScript", () => {
     for (const state of states.slice(resolved)) state.s.o.calls = [integer(2)];
     await expect(replayThroughCoordinator("shadow", write("rendered", states))).rejects.toThrow(/expected[\s\S]*actual/);
   });
+
+  const writtenOff = [["runtimeOffDiffOverridesDefaultDiffTest", 11], ["runtimeFalseValueOverridesDefaultValueTest", 12]] as const;
+  for (const [regression, choice] of writtenOff) {
+    it(`detects an inherited leaf that won over logPolicy ${choice}`, async () => {
+      // logPolicy 1 writes nothing off over the same default: an implementation
+      // that read the written-off leaf as unwritten logs what it logs.
+      const states = statesOf(regression);
+      const overlay = states.find(state => state.input.name === "logPolicy")!;
+      expect(overlay.input.choice).toEqual(integer(choice));
+      overlay.input.choice = integer(1);
+      await expect(replayThroughCoordinator("shadow", write(`inherited${choice}`, states))).rejects.toThrow(/expected[\s\S]*actual/);
+    });
+  }
 
   it("detects a diff hook that did not run where the history says it threw", async () => {
     // Fixture 4 is fixture 13 without the hook: the same calls and verdicts.

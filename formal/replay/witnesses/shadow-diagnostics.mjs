@@ -51,6 +51,11 @@ export const shadowDiagnosticsWitnessRules = [
     check(7, { shadow: ["mismatch"] }, { warnings: 0, ages: [0], mismatchWarnings: [], loggingOutcomes: [], configErrors: 0 })),
   rule("runtime-true-shorthand-overrides-default-value", "runtimeTrueShorthandOverridesDefaultValueTest",
     [init(15), logPolicy(1), ...confirm(2)], warned(7, everything, "logged")),
+  // A leaf the runtime overlay writes off, over the logMismatches default.
+  rule("runtime-off-diff-overrides-default-diff", "runtimeOffDiffOverridesDefaultDiffTest",
+    [init(4), logPolicy(11), ...confirm(2)], warned(7, { ...omitted, cachedValue: 1, sourceValue: 2 }, "logged", { configErrors: 0 })),
+  rule("runtime-false-value-overrides-default-value", "runtimeFalseValueOverridesDefaultValueTest",
+    [init(4), logPolicy(12), ...confirm(2)], warned(7, { ...everything, cachedValue: -1, sourceValue: -1 }, "logged", { configErrors: 0 })),
   // Each failure outcome, and all three together.
   rule("hook-error-nulls-diff-fields", "hookErrorNullsDiffFieldsTest",
     [init(13), ...confirm(2)], warned(6, failedDiff(2, "hook_error"), "hook_error")),

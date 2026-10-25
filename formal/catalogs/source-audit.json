@@ -1198,7 +1198,7 @@
     },
     {
       "path": "formal/guides/BEHAVIOR.md",
-      "sha256": "bc641a7437f698c7bd7bb716265c1f1cfa55dac859bea7546567a62c1e81512a",
+      "sha256": "0a9404acd450a011913db08bcb6170f7023e069f3e8ee5ed127f116e96274b43",
       "entries": [
         {"title":"Portable behavioral scenarios and generated profiles"},
         {"title":"Scenario format"},
@@ -1325,7 +1325,7 @@
     },
     {
       "path": "formal/guides/CONTRACTS.md",
-      "sha256": "0831b85daf6cce8ee6ce7ee0863a2fdcab03c7b6ffb82a21ca7c1c55f4500fe3",
+      "sha256": "eacdb1b51a787d72377aa18c0995a7bfc58896aadaf3669ecaaed6bf6da56e99",
       "entries": [
         {"title":"Portable contract inventory"},
         {"title":"Where the boundary lies"},
@@ -1551,7 +1551,7 @@
     },
     {
       "path": "formal/guides/PORTING.md",
-      "sha256": "6776bac80d3be84e53ca17b3ee7ef917e4f66008bbb94aea4166bf85727df6e4",
+      "sha256": "fe6b5b4ca77793a8e660fe328571db1c0dacdebc78f0262dccacc5bb1af02508",
       "entries": [
         {"title":"Implementing another DialCache port"},
         {"title":"What a port supplies"},

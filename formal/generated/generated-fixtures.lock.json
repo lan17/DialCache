@@ -6,7 +6,7 @@
     "seed": "0xd1a1ca"
   },
   "inputs": {
-    "formal/catalogs/fixture-recipes.json": "e1c88673ceea533da4f8071fb571894dfa37de3d73c49fea75766704e21a937e",
+    "formal/catalogs/fixture-recipes.json": "fb4940c57748c8b1d09b6c47176b0a0f6957be0abb9ac1f1cd6fe8a27f0b254f",
     "formal/models/cache-contract.qnt": "fabf5cf46d24d62cee8cbd88ff7233a965b4d038b622b18b92760a9cbd387a35",
     "formal/models/cache-rules.qnt": "ae2a1748e911402c6818e8294265764e06d18d050a89219df7d55faa83fb06e5",
     "formal/models/cohort-boundaries.qnt": "700f0b9ee734f2511b3c7f10138b9636cef93bc1045b653479a05be1766e3407",
@@ -24,7 +24,7 @@
     "formal/models/dialcache-recovery-read-conformance.qnt": "199bc6c93d74d228c4df500eda8d838970670cb038ba396838d9ba59690d7434",
     "formal/models/dialcache-runtime-boundaries-conformance.qnt": "dc761bf9cf65b91382477ead6d2596582089512c0405300e813ab6c909079c96",
     "formal/models/dialcache-scope-conformance.qnt": "1f8817b882b5f8c4d37aecf82d2b4ae1f87f1dc5fd55bfdd94bf4841b6b1fddd",
-    "formal/models/dialcache-shadow-conformance.qnt": "a2073f07620b252418126e139e9b9ef35d484408b705ebda5d8d2c04472529e0",
+    "formal/models/dialcache-shadow-conformance.qnt": "6e39aa26148f4db00992c8384f28da00a281780b9fb8e298406c1a27ea13e270",
     "formal/models/dialcache-shadow-layers-conformance.qnt": "1844262e3692cf3e1030deee522ad13abe2e65dbc9e95c92b99d9b30ca927101",
     "formal/models/dialcache-shadow-read-deadlines-conformance.qnt": "6956b66b291ddf4eedf1c06f8e42baa4332107d15a0869b5bcfb4e7759f07ae5",
     "formal/models/dialcache-source-budgets-conformance.qnt": "d2e01cc2cf6caed229e289c727a2bbc7e99b7d9557a9e94223cc399732dd20b1",
@@ -85,7 +85,7 @@
     "typescript/test/fixtures/local-failure-witnesses.json": "fcf62b450d17edf4429870d6d9bc4d5727199b7fa7a6a4cbf8030546e06b962b",
     "typescript/test/fixtures/recovery-admission-witnesses.json": "716f0e2f79497b05edaf4e8efaf03e9a762a4b7e0f47fd1aa87c3f1b126b9736",
     "typescript/test/fixtures/recovery-read-witnesses.json": "522601141e82571a3f0cdd84607247a576eea9ccb24491cd2b89a7073ee7bdac",
-    "typescript/test/fixtures/shadow-diagnostics-witnesses.json": "76bbcc0f16cd575001f9696ecb72121daef492b7805b3c0cad9a5f247347fef2",
+    "typescript/test/fixtures/shadow-diagnostics-witnesses.json": "017a40619cdb1e73139cbb828c369af08bf02fc0156325b32534e1d7a1d58a05",
     "typescript/test/fixtures/shadow-layers-witnesses.json": "93db73aa85c9772450f12396b6903d1d09acfd5a5638373fd09654e2e0351813",
     "typescript/test/fixtures/source-budgets-witnesses.json": "7eba7bd5b61abc4b1e7b69f8b90b1a93f1b4ceb553ddce9355973daa38168b5c",
     "typescript/test/fixtures/policy-witnesses.json": "ddd1bb653a0c8c1bba3e27e34c0f81516fae45091fe09e23d6f547e5748dc135",

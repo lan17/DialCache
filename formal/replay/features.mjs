@@ -42,7 +42,8 @@ const layerPolicies = [{}, { requestLocal: false }, { ramp: { local: 0 } },
   { ramp: { remote: 0 } }, { ramp: { local: 0, remote: 0 } }, { requestLocal: false, ramp: { local: 0, remote: 0 } }];
 // The shadow profile's default logging inputs by init fixture, and its
 // runtime logging overlays by logPolicy choice (choices 6 and 7 are the first
-// two rows of the shorthand table; "invalid" has the wrong type for any leaf).
+// two rows of the shorthand table, choices 11 and 12 write one leaf off;
+// "invalid" has the wrong type for any leaf).
 const shadowDefaultLogging = (choice) => (choice >= 4 && choice < 8) || choice === 13 ? { logMismatches: true }
   : choice === 14 ? { mismatchLogging: { diff: "paths" } } : choice === 15 ? { mismatchLogging: { value: false } } : {};
 const shadowLogOverlays = [
@@ -51,6 +52,7 @@ const shadowLogOverlays = [
   { logMismatches: false, mismatchLogging: { value: true } }, { logMismatches: true, mismatchLogging: { value: false } },
   { logMismatches: false, mismatchLogging: { diff: "paths" } }, { mismatchLogging: { value: true, diff: "invalid" } },
   { mismatchLogging: { value: "invalid", diff: "paths" } }, { logMismatches: "invalid", mismatchLogging: { diff: "values" } },
+  { mismatchLogging: { diff: "off" } }, { mismatchLogging: { value: false } },
 ];
 // Choice 12 settles the source with the driver's value that has no JSON
 // rendering (D13); the caller observes it as { unrenderable: true }.
