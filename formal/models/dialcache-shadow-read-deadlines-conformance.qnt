@@ -31,11 +31,14 @@ module dialcache_shadow_read_deadlines_conformance {
   }
   pure val DARK: Resolution = { layers: { request: false, local: false, remote: false }, coalesce: true }
   pure val TTLS: Ttls = { localMs: 0, freshMs: TTL, retentionMs: TTL }
-  pure val SHADOW: Shadow::Shadowing = { hook: true, selected: true, capacity: 1, budgetMs: SOURCE_BUDGET, logging: Shadow::LOGGING_OFF, diffHook: false }
+  pure val SHADOW: Shadow::Shadowing = {
+    hook: true, selected: true, capacity: 1, budgetMs: SOURCE_BUDGET, logging: Shadow::LOGGING_OFF, diffHook: false
+  }
   pure def call(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }
 
   type Channel = {
-    configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str], futureOffsets: List[Diagnostics::FutureOffset],
+    configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str],
+    futureOffsets: List[Diagnostics::FutureOffset],
     mismatchWarnings: List[Shadow::MismatchWarning], loggingOutcomes: List[str]
   }
   type State = {

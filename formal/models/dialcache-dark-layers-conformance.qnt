@@ -66,8 +66,9 @@ module dialcache_dark_layers_conformance {
   }
 
   type Channel = {
-    inspections: List[Flights::Inspection], configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str],
-    futureOffsets: List[Diagnostics::FutureOffset], mismatchWarnings: List[Shadow::MismatchWarning], loggingOutcomes: List[str]
+    inspections: List[Flights::Inspection], configErrors: int, warnings: int, ages: List[int],
+    coalesced: List[str], fallbackErrors: List[str], futureOffsets: List[Diagnostics::FutureOffset],
+    mismatchWarnings: List[Shadow::MismatchWarning], loggingOutcomes: List[str]
   }
   type State = {
     o: Observation, d: Channel, io: RemoteIO::IO,
@@ -110,7 +111,10 @@ module dialcache_dark_layers_conformance {
   }
   pure def selectedFor(choice: int): bool = choice != DARK_ALL_NO_SHADOW
   pure def shadowing(selected: bool): Shadow::Shadowing =
-    { hook: true, selected: selected, capacity: JOB_CAPACITY, budgetMs: SOURCE_BUDGET_MS, logging: Shadow::LOGGING_OFF, diffHook: false }
+    {
+      hook: true, selected: selected, capacity: JOB_CAPACITY, budgetMs: SOURCE_BUDGET_MS,
+      logging: Shadow::LOGGING_OFF, diffHook: false
+    }
   pure def instance(context: int): int = if (context == 2 or context == 4) 1 else 0
   pure def call(choice: int): Call =
     { instance: instance(choice / KEYS), key: choice % KEYS, context: choice / KEYS, enabled: true, keyFailed: false }
@@ -131,8 +135,8 @@ module dialcache_dark_layers_conformance {
 
   pure val INITIAL: State = {
     o: empty, d: {
-      inspections: List(), configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List(),
-      mismatchWarnings: List(), loggingOutcomes: List()
+      inspections: List(), configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(),
+      futureOffsets: List(), mismatchWarnings: List(), loggingOutcomes: List()
     },
     io: RemoteIO::NO_IO,
     now: 0, skew: WALL_ORIGIN_MS, remoteAvailable: true, tracked: true, capacity: KEYS,

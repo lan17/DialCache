@@ -229,7 +229,8 @@ module shadow {
   pure def dropped(state: Jobs[r]): Jobs[r] =
     { o: { shadow: state.o.shadow.append("dropped"), ...state.o }, ...state }
   // A pending job, the shadow policy's mismatch logging and diff hook captured.
-  pure def newJob(source: int, dark: bool, cached: int, stamp: int, fence: int, ttls: Ttls, phase: int, shadowing: Shadowing): Job = {
+  pure def newJob(source: int, dark: bool, cached: int, stamp: int, fence: int, ttls: Ttls, phase: int,
+      shadowing: Shadowing): Job = {
     source: source, dark: dark, cached: cached, stamp: stamp, fence: fence, ttls: ttls, phase: phase, timedOut: false,
     logging: shadowing.logging, diffHook: shadowing.diffHook
   }
@@ -255,7 +256,9 @@ module shadow {
     if (not(admits(shadowing))) state
     else if (busy(state, who.instance, who.key, shadowing.capacity)) dropped(state)
     else admit(Serving::startDetachedSource(state, layout, who),
-      newJob(state.sources.length(), false, cached, state.created.nth(who.key), NO_FENCE, ttls, WAITING_SOURCE, shadowing), shadowing.budgetMs)
+      newJob(state.sources.length(), false, cached, state.created.nth(who.key), NO_FENCE, ttls, WAITING_SOURCE,
+        shadowing),
+      shadowing.budgetMs)
   // Admission beside the release judged once (`serving::layeredRelease`), on
   // the released state: the atomic lifecycle, where a dark job's C0 read is
   // made here. A served hit admits a served job (`admitServed`); a miss whose
@@ -286,7 +289,8 @@ module shadow {
           if (c0.failed) { o: { shadow: read.o.shadow.append("redis_error"), ...read.o }, ...read }
           else admit(read,
             newJob(state.sources.length() - 1, true, acquired(c0), state.created.nth(call.key),
-              Remote::fenceFor(state, call.key, layout.operationsPerEntity, c0.visible), ttls, WAITING_SOURCE, shadowing),
+              Remote::fenceFor(state, call.key, layout.operationsPerEntity, c0.visible), ttls, WAITING_SOURCE,
+              shadowing),
             shadowing.budgetMs)
         }
       | _ => state
@@ -559,7 +563,8 @@ module shadow {
     else match judged.decision.outcome {
       | Starts => if (not(judged.open) or judged.effective.layers.remote) state
         else if (busy(state, call.instance, call.key, shadowing.capacity)) dropped(state)
-        else admit(state, newJob(state.sources.length() - 1, true, NO_VALUE, 0, NO_FENCE, ttls, READING_C0, shadowing), shadowing.budgetMs)
+        else admit(state, newJob(state.sources.length() - 1, true, NO_VALUE, 0, NO_FENCE, ttls, READING_C0, shadowing),
+          shadowing.budgetMs)
       // The remote layer is unobserved at a held release: nothing serves from
       // it here, so no served job is admitted at this step.
       | _ => state
@@ -656,7 +661,8 @@ module shadow {
   // logger failed after receiving it, else `logged`.
   pure def loggingOutcomeOf(warning: MismatchWarning, loggerFailed: bool): str =
     if (warning.loggingOutcome != "") warning.loggingOutcome else if (loggerFailed) "logger_error" else "logged"
-  pure def recordMismatchWarning(state: DiagnosedShadowed[r, q], warning: MismatchWarning, outcome: str): DiagnosedShadowed[r, q] = {
+  pure def recordMismatchWarning(state: DiagnosedShadowed[r, q], warning: MismatchWarning,
+      outcome: str): DiagnosedShadowed[r, q] = {
     val counted = Diagnostics::recordWarning(state)
     {
       d: {
@@ -673,7 +679,8 @@ module shadow {
   // admission opt in (`logs`), its content judged by `warningOf` and its one
   // logging outcome by `loggingOutcomeOf` under the logger's failure input.
   // A timed-out job reports no label and so no verdict.
-  pure def recordVerdict(before: DiagnosedShadowed[r, q], after: DiagnosedShadowed[r, q], job: Job, loggerFailed: bool): DiagnosedShadowed[r, q] = {
+  pure def recordVerdict(before: DiagnosedShadowed[r, q], after: DiagnosedShadowed[r, q], job: Job,
+      loggerFailed: bool): DiagnosedShadowed[r, q] = {
     val labels = after.o.shadow
     val outcome = if (labels.length() > before.o.shadow.length()) labels.nth(labels.length() - 1) else ""
     if (outcome != "match" and outcome != "mismatch") after
@@ -704,7 +711,8 @@ module shadow {
     recordVerdict(measured, settleJobRead(measured, layout, read, failed), job, loggerFailed)
   }
   // A profile whose logger never fails.
-  pure def releaseRead(state: DiagnosedShadowed[r, q], layout: Serving::Layout, read: int, failed: bool): DiagnosedShadowed[r, q] =
+  pure def releaseRead(state: DiagnosedShadowed[r, q], layout: Serving::Layout, read: int,
+      failed: bool): DiagnosedShadowed[r, q] =
     releaseReadWithLogger(state, layout, read, failed, false)
   // Opt-in record for a profile's own properties, never read by the
   // traversal: what each verdict saw, in verdict order (parallel to `d.ages`):
@@ -712,7 +720,8 @@ module shadow {
   // value, the source's result and whether the logger failed.
   type Verdict = { outcome: str, logging: Logging, diffHook: bool, cached: int, result: int, loggerFailed: bool }
   pure def recordVerdictInputs(before: DiagnosedShadowed[{ verdicts: List[Verdict] | r }, q],
-      after: DiagnosedShadowed[{ verdicts: List[Verdict] | r }, q], job: Job, loggerFailed: bool): DiagnosedShadowed[{ verdicts: List[Verdict] | r }, q] =
+      after: DiagnosedShadowed[{ verdicts: List[Verdict] | r }, q], job: Job,
+      loggerFailed: bool): DiagnosedShadowed[{ verdicts: List[Verdict] | r }, q] =
     if (after.d.ages.length() == before.d.ages.length()) after
     else {
       verdicts: after.verdicts.append({
