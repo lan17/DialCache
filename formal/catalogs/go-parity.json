@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "f5f7ee357201b343eb00f8f9c783c92af0d722709137edc0f55e0a52b3cdec0a",
     "executionSha256": "29a412f87329347840f000ea44a6e95332464c0b01b92b4e41c615af3c9157cd",
-    "sourceAuditDispositionsSha256": "23a5c3c7c0fb4ac72f437276244b40d81eb3bb0f98b3a164bde7da59e13bdacb",
+    "sourceAuditDispositionsSha256": "fcc44abfb14d7995942fcfaa8d35fc1abc86a71390cea2d61a8a1bcc5f9e71ea",
     "featureCoverageSha256": "487804a31ff7e3fd32f3b8cc19d698475f201bb747ae27b76d217d6200083a1a",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "9df8285820e4fff65f6a7753885bbb192c09f3f476eac8f9c98d130454ae1a28"
@@ -21,7 +21,7 @@
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
-    "sourceDeclarations": 882,
+    "sourceDeclarations": 883,
     "casesWithScheduledChecks": 266,
     "requiredWitnesses": 497,
     "casesWithQuintRegressionReplay": 192,
@@ -3424,7 +3424,7 @@
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "a1024e5e0d33ff312c6c5d044690ebab5fcd4feef545b053118d5f58fcf33011",
+      "sha256": "9e74f1e19138ae903502329a5dab85e23b2239554a1c2a9307c344d00133e0e7",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -4037,7 +4037,7 @@
     },
     {
       "path": "typescript/src/internal/shadow-log-json.ts",
-      "sha256": "dae331f8fb66ef8544d885d77ee2c5fa9764264d4455559176bf076166e10c16",
+      "sha256": "9a1ced7cb4eb918df19cd30e7a9d26c76174d26ef73254d04a709a5d693293ae",
       "candidateGoFiles": [
         "go/metrics.go",
         "go/codec.go"

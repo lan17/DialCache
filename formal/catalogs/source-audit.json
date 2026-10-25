@@ -758,7 +758,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "a802630b2cea24dee738a880253d38305cc7e8878d36a343596f8379c950dac9",
+      "sha256": "bd6ebd1a39be1f6ade79f953062126ffb9f9d12b4c8714ad07b47981e31486c8",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -781,6 +781,7 @@
         {"title":"logs a cached undefined negative-cache entry as an absent side, not a render failure","contracts":["C60","B03"]},
         {"title":"logs hook paths without rendering values at diff paths, even for a bigint source value","contracts":["C60","B03"]},
         {"title":"records $outcome and leaves the caller unaffected when the logger $name","contracts":["C30","C60"]},
+        {"title":"records $outcome when an async logger $name after the global Promise was replaced","contracts":["C30","C60"]},
         {"title":"records $outcome rather than logger_error when $name and the logger $loggerFailure","contracts":["C30","C60"]},
         {"title":"records $outcome at once when $name while the logger's promise is still pending","contracts":["C30","C60"]},
         {"title":"records no logging outcome while a logger's promise never settles","contracts":["C30","C60"]},
