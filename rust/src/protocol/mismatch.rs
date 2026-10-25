@@ -1,6 +1,8 @@
 //! The built-in confirmed-mismatch difference: a walk over two JSON values
 //! that reports RFC 6901 pointers with the sides found there.
 
+use std::fmt::Write;
+
 use serde_json::Value;
 
 use crate::identity::compare_utf16;
@@ -124,45 +126,90 @@ struct RawEntry<'a> {
     source: Option<&'a Value>,
 }
 
+/// One unescaped reference token of the pointer to the walk's position.
+#[derive(Clone, Copy)]
+enum Token<'a> {
+    Index(usize),
+    Name(&'a str),
+}
+
 struct Walk<'a> {
     entries: Vec<RawEntry<'a>>,
     count: u64,
+    /// The pointer to the current position, as tokens, so descending costs
+    /// no copy of the prefix.
+    tokens: Vec<Token<'a>>,
 }
 
 impl<'a> Walk<'a> {
-    fn report(&mut self, path: &str, cached: Option<&'a Value>, source: Option<&'a Value>) {
+    fn report(&mut self, cached: Option<&'a Value>, source: Option<&'a Value>) {
         self.count += 1;
         if self.entries.len() < SHADOW_MISMATCH_MAX_ENTRIES {
             self.entries.push(RawEntry {
-                path: path.to_string(),
+                path: self.pointer(),
                 cached,
                 source,
             });
         }
     }
 
-    fn walk(&mut self, left: &'a Value, right: &'a Value, path: &str, depth: usize) {
+    /// The escaped pointer to the current position, built only as far as
+    /// [`SHADOW_MISMATCH_PATH_MAX_BYTES`] reads: past the cap it stops at a
+    /// character boundary, and that prefix clamps as the whole pointer would.
+    /// So a retained entry costs at most the cap, however long and deep the
+    /// member names above it.
+    fn pointer(&self) -> String {
+        let mut pointer = String::new();
+        for token in &self.tokens {
+            if pointer.len() > SHADOW_MISMATCH_PATH_MAX_BYTES {
+                break;
+            }
+            pointer.push('/');
+            match *token {
+                Token::Index(index) => {
+                    let _ = write!(pointer, "{index}");
+                }
+                Token::Name(name) => {
+                    for c in name.chars() {
+                        if pointer.len() > SHADOW_MISMATCH_PATH_MAX_BYTES {
+                            break;
+                        }
+                        match c {
+                            '~' => pointer.push_str("~0"),
+                            '/' => pointer.push_str("~1"),
+                            c => pointer.push(c),
+                        }
+                    }
+                }
+            }
+        }
+        pointer
+    }
+
+    fn walk(&mut self, left: &'a Value, right: &'a Value) {
         let kind = Kind::of(left);
         if kind != Kind::of(right) || kind == Kind::Primitive {
             if !primitives_equal(left, right) {
-                self.report(path, Some(left), Some(right));
+                self.report(Some(left), Some(right));
             }
             return;
         }
-        if depth >= SHADOW_MISMATCH_MAX_DEPTH {
+        if self.tokens.len() >= SHADOW_MISMATCH_MAX_DEPTH {
             if !json_values_equal(left, right) {
-                self.report(path, Some(left), Some(right));
+                self.report(Some(left), Some(right));
             }
             return;
         }
         match (left, right) {
             (Value::Array(left_items), Value::Array(right_items)) => {
                 if left_items.len() != right_items.len() {
-                    self.report(path, Some(left), Some(right));
+                    self.report(Some(left), Some(right));
                     return;
                 }
                 for (index, (l, r)) in left_items.iter().zip(right_items).enumerate() {
-                    self.walk(l, r, &format!("{path}/{index}"), depth + 1);
+                    self.tokens.push(Token::Index(index));
+                    self.walk(l, r);
+                    self.tokens.pop();
                 }
             }
             (Value::Object(left_members), Value::Object(right_members)) => {
@@ -174,11 +221,12 @@ impl<'a> Walk<'a> {
                 );
                 names.sort_by(|a, b| compare_utf16(a, b));
                 for name in names {
-                    let member_path = format!("{path}/{}", escape_pointer_token(name));
+                    self.tokens.push(Token::Name(name));
                     match (left_members.get(name), right_members.get(name)) {
-                        (Some(l), Some(r)) => self.walk(l, r, &member_path, depth + 1),
-                        (l, r) => self.report(&member_path, l, r),
+                        (Some(l), Some(r)) => self.walk(l, r),
+                        (l, r) => self.report(l, r),
                     }
+                    self.tokens.pop();
                 }
             }
             _ => unreachable!("both values share a container kind"),
@@ -190,8 +238,9 @@ fn walk_json<'a>(cached: &'a Value, source: &'a Value) -> Walk<'a> {
     let mut walk = Walk {
         entries: Vec::new(),
         count: 0,
+        tokens: Vec::new(),
     };
-    walk.walk(cached, source, "", 0);
+    walk.walk(cached, source);
     walk
 }
 
@@ -252,8 +301,4 @@ fn json_values_equal(cached: &Value, source: &Value) -> bool {
         }
     }
     true
-}
-
-fn escape_pointer_token(name: &str) -> String {
-    name.replace('~', "~0").replace('/', "~1")
 }
