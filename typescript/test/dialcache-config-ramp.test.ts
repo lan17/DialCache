@@ -1300,7 +1300,7 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(metrics.errors).toEqual([unknownFieldError("UnknownDefaultFields")]);
   });
 
-  it("reports config_unknown_field for a getOrLoad defaultConfig on every call", async () => {
+  it("reports config_unknown_field for a getOrLoad defaultConfig on every enabled call", async () => {
     const metrics = errorRecordingMetrics();
     const dialcache = new DialCache({ namespace: "unknownfields", metrics });
     let calls = 0;
@@ -1318,8 +1318,11 @@ describe("DialCache runtime config and ramp controls", () => {
       await dialcache.getOrLoad(async () => ({ calls: ++calls }), options),
     );
 
+    // A disabled call is pass-through and observes no config.
+    await dialcache.getOrLoad(async () => ({ calls: ++calls }), options);
+
     expect(second).toBe(first);
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
     expect(metrics.errors).toEqual([
       unknownFieldError("UnknownGetOrLoadDefaultFields"),
       unknownFieldError("UnknownGetOrLoadDefaultFields"),

@@ -876,6 +876,74 @@ describe("DialCache Redis shadow confirmation", () => {
     }
   });
 
+  it.each([
+    {
+      diff: "paths" as const,
+      fields: {
+        mismatchPaths: ["/plan", "/profile/locale", "/profile/timezone", "/roles"],
+        mismatchPathCount: 4,
+      },
+    },
+    {
+      diff: "values" as const,
+      fields: {
+        mismatchPaths: ["/plan", "/profile/locale", "/profile/timezone", "/roles"],
+        mismatchPathCount: 4,
+        diffJson: '[{"path":"/plan","cached":"free","source":"pro"},'
+          + '{"path":"/profile/locale","cached":"en-US","source":"en-GB"},'
+          + '{"path":"/profile/timezone","source":"Europe/London"},'
+          + '{"path":"/roles","cached":["viewer"],"source":["viewer","editor"]}]',
+      },
+    },
+  ])("logs the documented GetUser example at diff $diff", async ({ diff, fields }) => {
+    // docs/shadow-validation.md shows these exact warnings; keep them in step.
+    const cached = {
+      id: "u_123",
+      email: "ana@example.com",
+      plan: "free",
+      roles: ["viewer"],
+      profile: { name: "Ana", locale: "en-US" },
+    };
+    const source = {
+      id: "u_123",
+      email: "ana@example.com",
+      plan: "pro",
+      roles: ["viewer", "editor"],
+      profile: { name: "Ana", locale: "en-GB", timezone: "Europe/London" },
+    };
+    const payload = JSON.stringify(cached);
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      namespace: "users-api",
+      logger: { debug: () => undefined, error: () => undefined, warn },
+    });
+    const getUser = dialcache.cached(async (_userId: string) => source, {
+      keyType: "user_id",
+      useCase: "GetUser",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteConfig(100, 100, { mismatchLogging: { diff } }),
+    });
+
+    await expect(dialcache.enable(async () => await getUser("u_123"))).resolves.toEqual(cached);
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    const warning = {
+      cacheNamespace: "users-api",
+      useCase: "GetUser",
+      keyType: "user_id",
+      outcome: "mismatch",
+      cachedValueAgeSeconds: metrics.shadowAgeEvents[0]!.seconds,
+      cacheKey: "{users-api:user_id:u_123}#GetUser",
+      ...fields,
+    };
+    expect(warn).toHaveBeenCalledExactlyOnceWith("DialCache shadow validation mismatch", warning);
+    // The page shows the fields in this order.
+    expect(Object.keys(warn.mock.calls[0]![1] as object)).toEqual(Object.keys(warning));
+  });
+
   it("emits one logged event per confirmed mismatch after its verdict and none for a match", async () => {
     const useCase = "ShadowMismatchLoggingOrder";
     const matching = JSON.stringify({ id: "a", version: 1 });

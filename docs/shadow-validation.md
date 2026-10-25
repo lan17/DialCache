@@ -422,6 +422,55 @@ object with these fields:
 | `sourceValueJson` | `value: true` | Native JSON of the raw source value | 8 KiB |
 | `loggingOutcome` | After a failure | `"hook_error"` or `"render_error"`: why fields are `null` | |
 
+For example, take the `GetUser` use case configured above, with
+`mismatchLogging: { diff: "paths" }` added to its shadow policy. It has this
+user cached, and the source has changed it since:
+
+```ts
+// Decoded from Redis
+const cached = { id: "u_123", email: "ana@example.com", plan: "free",
+  roles: ["viewer"], profile: { name: "Ana", locale: "en-US" } };
+// Returned by the source
+const source = { id: "u_123", email: "ana@example.com", plan: "pro",
+  roles: ["viewer", "editor"],
+  profile: { name: "Ana", locale: "en-GB", timezone: "Europe/London" } };
+```
+
+After the mismatch is confirmed, DialCache makes this call to the configured
+logger:
+
+```ts
+logger.warn("DialCache shadow validation mismatch", {
+  cacheNamespace: "users-api",
+  useCase: "GetUser",
+  keyType: "user_id",
+  outcome: "mismatch",
+  cachedValueAgeSeconds: 42.5, // varies
+  cacheKey: "{users-api:user_id:u_123}#GetUser",
+  mismatchPaths: ["/plan", "/profile/locale", "/profile/timezone", "/roles"],
+  mismatchPathCount: 4,
+});
+```
+
+`/id`, `/email`, and `/profile/name` match, so they are absent. The paths follow
+member names in UTF-16 order, not the order the object was written in, so
+`/roles` comes after `/profile`. Only the source has `/profile/timezone`, and
+`/roles` changed length, so that array is reported once, whole, rather than
+element by element. With `diff: "values"` the same warning also carries
+`diffJson`, shown formatted here; the logged string is compact:
+
+```json
+[
+  { "path": "/plan", "cached": "free", "source": "pro" },
+  { "path": "/profile/locale", "cached": "en-US", "source": "en-GB" },
+  { "path": "/profile/timezone", "source": "Europe/London" },
+  { "path": "/roles", "cached": ["viewer"], "source": ["viewer", "editor"] }
+]
+```
+
+The `/profile/timezone` entry carries `source` alone because the cached value
+has no such member.
+
 The paths come from the native JSON of both values: each side is rendered once
 with `JSON.stringify`, not the Redis serializer, and every field above derives
 from that rendering, so a member that `toJSON` leaves out of `cachedValueJson`
@@ -444,6 +493,21 @@ member order and number precision beyond a double: the comparator saw a
 difference that native JSON does not show, such as a `Date` against its ISO
 string. A side longer than 1 KiB appears in `diffJson` as its clipped JSON text.
 Clipped fields end with `...[truncated]` inside their cap.
+
+Each smaller pair below shows one rule; the last is a mismatch with no paths:
+
+| Cached | Source | `mismatchPaths` | Why |
+| --- | --- | --- | --- |
+| `{"plan":"free"}` | `{"plan":"pro"}` | `["/plan"]` | A changed field |
+| `{"tags":["a","b"]}` | `{"tags":["a","c"]}` | `["/tags/1"]` | Same length, so elements are compared by index |
+| `{"tags":["a","b"]}` | `{"tags":["a","x","b"]}` | `["/tags"]` | Different length: the whole array, once |
+| `{"name":"Ana"}` | `{"name":"Ana","nickname":"A"}` | `["/nickname"]` | Only the source has it, so its `diffJson` entry carries `source` alone |
+| `{"name":"Ana","nickname":"A"}` | `{"name":"Ana"}` | `["/nickname"]` | Only the cache has it, as after the source stops returning a field; its `diffJson` entry carries `cached` alone |
+| `{"count":1}` | `{"count":"1"}` | `["/count"]` | A number against a string |
+| `{"address":{"city":"Paris"}}` | `{"address":null}` | `["/address"]` | An object against `null` is reported whole |
+| `{"a/b":1,"m~n":1}` | `{"a/b":2,"m~n":2}` | `["/a~1b","/m~0n"]` | RFC 6901 escapes `/` as `~1` and `~` as `~0` |
+| `["a","b"]` | `{"items":["a","b"]}` | `[""]` | Roots of different kinds, at the root pointer |
+| `{"at":"2026-10-24T00:00:00.000Z"}` | `{ at: new Date("2026-10-24T00:00:00.000Z") }` | `[]` | The JSON serializer stored the `Date` as this string. The default comparator tells a string from a `Date`, but both render to the same JSON, so no path differs |
 
 `shadowMismatchDiff`, set beside `shadowComparator`, replaces the computation
 for one use case. It receives the compared values and returns the entries; a

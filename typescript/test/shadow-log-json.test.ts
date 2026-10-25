@@ -298,6 +298,84 @@ const MISMATCH_PATH_VECTORS: readonly MismatchPathVector[] = [
       {"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/values", "cached": [1], "source": [2]}
     ],
     "count": 7
+  },
+  {
+    "name": "documented example: a user record at four differing fields",
+    "cached": {"id": "u_123", "email": "ana@example.com", "plan": "free", "roles": ["viewer"], "profile": {"name": "Ana", "locale": "en-US"}},
+    "source": {"id": "u_123", "email": "ana@example.com", "plan": "pro", "roles": ["viewer", "editor"], "profile": {"name": "Ana", "locale": "en-GB", "timezone": "Europe/London"}},
+    "entries": [
+      {"path": "/plan", "cached": "free", "source": "pro"},
+      {"path": "/profile/locale", "cached": "en-US", "source": "en-GB"},
+      {"path": "/profile/timezone", "source": "Europe/London"},
+      {"path": "/roles", "cached": ["viewer"], "source": ["viewer", "editor"]}
+    ],
+    "count": 4
+  },
+  {
+    "name": "documented example: a changed field",
+    "cached": {"plan": "free"},
+    "source": {"plan": "pro"},
+    "entries": [{"path": "/plan", "cached": "free", "source": "pro"}],
+    "count": 1
+  },
+  {
+    "name": "documented example: an element changed in place",
+    "cached": {"tags": ["a", "b"]},
+    "source": {"tags": ["a", "c"]},
+    "entries": [{"path": "/tags/1", "cached": "b", "source": "c"}],
+    "count": 1
+  },
+  {
+    "name": "documented example: an element inserted",
+    "cached": {"tags": ["a", "b"]},
+    "source": {"tags": ["a", "x", "b"]},
+    "entries": [{"path": "/tags", "cached": ["a", "b"], "source": ["a", "x", "b"]}],
+    "count": 1
+  },
+  {
+    "name": "documented example: a field only the source has",
+    "cached": {"name": "Ana"},
+    "source": {"name": "Ana", "nickname": "A"},
+    "entries": [{"path": "/nickname", "source": "A"}],
+    "count": 1
+  },
+  {
+    "name": "documented example: a field only the cache has",
+    "cached": {"name": "Ana", "nickname": "A"},
+    "source": {"name": "Ana"},
+    "entries": [{"path": "/nickname", "cached": "A"}],
+    "count": 1
+  },
+  {
+    "name": "documented example: a field changing type",
+    "cached": {"count": 1},
+    "source": {"count": "1"},
+    "entries": [{"path": "/count", "cached": 1, "source": "1"}],
+    "count": 1
+  },
+  {
+    "name": "documented example: an object replaced by null",
+    "cached": {"address": {"city": "Paris"}},
+    "source": {"address": null},
+    "entries": [{"path": "/address", "cached": {"city": "Paris"}, "source": null}],
+    "count": 1
+  },
+  {
+    "name": "documented example: member names with escaped characters",
+    "cached": {"a/b": 1, "m~n": 1},
+    "source": {"a/b": 2, "m~n": 2},
+    "entries": [
+      {"path": "/a~1b", "cached": 1, "source": 2},
+      {"path": "/m~0n", "cached": 1, "source": 2}
+    ],
+    "count": 2
+  },
+  {
+    "name": "documented example: roots of different kinds",
+    "cached": ["a", "b"],
+    "source": {"items": ["a", "b"]},
+    "entries": [{"path": "", "cached": ["a", "b"], "source": {"items": ["a", "b"]}}],
+    "count": 1
   }
 ];
 
@@ -513,6 +591,19 @@ describe("shadow mismatch log JSON", () => {
       });
       expect(renderShadowMismatchLog(VALUES_ONLY, new Map([["a", 1]]), {})).toStrictEqual({
         fields: noEntries,
+        failure: null,
+      });
+    });
+
+    it("renders no entries for the documented Date row", () => {
+      // docs/shadow-validation.md: the JSON serializer stored the Date as this
+      // string, and the source returns the Date itself.
+      expect(renderShadowMismatchLog(
+        VALUES_ONLY,
+        { at: "2026-10-24T00:00:00.000Z" },
+        { at: new Date("2026-10-24T00:00:00.000Z") },
+      )).toStrictEqual({
+        fields: { mismatchPaths: [], mismatchPathCount: 0, diffJson: "[]" },
         failure: null,
       });
     });

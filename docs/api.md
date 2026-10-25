@@ -254,9 +254,9 @@ Validation of layer and shadow leaves depends on traversal: an earlier hit can
 avoid evaluating lower-layer policy. Unknown fields at any level of a static or
 runtime config, such as the misspelled `ramp.remtoe`, are ignored and reported
 once for each config DialCache observes as `config_unknown_field` with
-`layer="noop"`: at `cached()` registration, at each `getOrLoad()` call, and for
-each provider result. The metric does not name the field, so validate external
-policy against your application's schema as well.
+`layer="noop"`: at `cached()` registration, at each enabled `getOrLoad()` call,
+and for each provider result. The metric does not name the field, so validate
+external policy against your application's schema as well.
 
 The removed `shadowRamp` field is an exception. Static config rejects it with
 `DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"`; a provider result
