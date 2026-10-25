@@ -320,6 +320,223 @@
         "generated",
         "portable"
       ]
+    },
+    {
+      "id": "M15",
+      "case": "W10.mismatch-paths",
+      "description": "Walk arrays of different length over their common prefix instead of reporting them once at the array pointer",
+      "typescriptMutation": "M66",
+      "edits": [
+        {
+          "path": "rust/src/protocol/mismatch.rs",
+          "before": "                if left_items.len() != right_items.len() {\n                    self.report(Some(left), Some(right));\n                    return;\n                }\n                for (index, (l, r)) in left_items.iter().zip(right_items).enumerate() {",
+          "after": "                for (index, (l, r)) in left_items.iter().zip(right_items).enumerate() {"
+        }
+      ],
+      "requiredDetections": [
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "portable"
+      ]
+    },
+    {
+      "id": "M16",
+      "case": "W10.mismatch-paths",
+      "description": "Report nothing for a pair of values of different JSON kinds, roots included",
+      "typescriptMutation": "M67",
+      "edits": [
+        {
+          "path": "rust/src/protocol/mismatch.rs",
+          "before": "        if kind != Kind::of(right) || kind == Kind::Primitive {\n            if !primitives_equal(left, right) {",
+          "after": "        if kind != Kind::of(right) {\n            return;\n        }\n        if kind == Kind::Primitive {\n            if !primitives_equal(left, right) {"
+        }
+      ],
+      "requiredDetections": [
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "portable"
+      ]
+    },
+    {
+      "id": "M17",
+      "case": "W10.mismatch-paths",
+      "description": "Treat an absent compared value as a value with no JSON rendering",
+      "typescriptMutation": "M68",
+      "edits": [
+        {
+          "path": "rust/src/shadow_log.rs",
+          "before": "        Some(Rendering::Absent) => Some(None),",
+          "after": "        Some(Rendering::Absent) => None,"
+        }
+      ],
+      "requiredDetections": [
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "portable"
+      ]
+    },
+    {
+      "id": "M18",
+      "case": "C60.logging-outcomes",
+      "description": "Fall back to the built-in walk when the mismatch diff hook fails",
+      "typescriptMutation": "M69",
+      "edits": [
+        {
+          "path": "rust/src/shadow_log.rs",
+          "before": "            let entries = run_hook(hook, cached, source, with_values);\n            diff_failed = entries.is_none();\n            entries\n",
+          "after": "            let entries = run_hook(hook, cached, source, with_values);\n            diff_failed = entries.is_none();\n            entries.or_else(|| {\n                let json = json.filter(|_| !render_failed)?;\n                let side = |value: &StoredValue| match json.full(value) {\n                    Rendering::Json(text) => Some(Some(text)),\n                    Rendering::Absent => Some(None),\n                    Rendering::Failed => None,\n                };\n                let (cached, source) = (side(cached)?, side(source)?);\n                diff_rendered(cached.as_deref(), source.as_deref(), with_values).ok()\n            })\n"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M19",
+      "case": "C60.outcome-precedence",
+      "description": "Run the mismatch diff hook when diff is off",
+      "typescriptMutation": "M70",
+      "edits": [
+        {
+          "path": "rust/src/shadow_log.rs",
+          "before": "    let diff = (plan.diff != MismatchDiff::Off).then(|| {",
+          "after": "    if let (MismatchDiff::Off, Some(hook)) = (plan.diff, &renderers.hook) {\n        diff_failed = run_hook(hook, cached, source, false).is_none();\n    }\n    let diff = (plan.diff != MismatchDiff::Off).then(|| {"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M20",
+      "case": "C60.shorthand-table",
+      "description": "Treat a mismatch-logging leaf written off as unwritten",
+      "typescriptMutation": "M71",
+      "edits": [
+        {
+          "path": "rust/src/policy.rs",
+          "before": "        if let Some(value) = group.get(\"value\") {\n            leaves.value = Some(value.clone());\n        }\n        if let Some(diff) = group.get(\"diff\") {\n            leaves.diff = Some(diff.clone());\n        }",
+          "after": "        if let Some(value) = group.get(\"value\").filter(|value| **value != Value::Bool(false)) {\n            leaves.value = Some(value.clone());\n        }\n        if let Some(diff) = group.get(\"diff\").filter(|diff| diff.as_str() != Some(\"off\")) {\n            leaves.diff = Some(diff.clone());\n        }"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M21",
+      "case": "C60.outcome-precedence",
+      "description": "Report render_error over hook_error when both fail",
+      "typescriptMutation": "M72",
+      "edits": [
+        {
+          "path": "rust/src/shadow_log.rs",
+          "before": "        failure: if diff_failed {\n            Some(ShadowMismatchLoggingOutcome::HookError)\n        } else if render_failed {\n            Some(ShadowMismatchLoggingOutcome::RenderError)\n        }",
+          "after": "        failure: if render_failed {\n            Some(ShadowMismatchLoggingOutcome::RenderError)\n        } else if diff_failed {\n            Some(ShadowMismatchLoggingOutcome::HookError)\n        }"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M22",
+      "case": "C60.outcome-precedence",
+      "description": "Report logger_error over a warning construction failure when the logger also fails",
+      "typescriptMutation": "M73",
+      "edits": [
+        {
+          "path": "rust/src/shadow.rs",
+          "before": "        let outcome = content.failure.unwrap_or(if delivered {",
+          "after": "        let outcome = (if delivered { content.failure } else { None }).unwrap_or(if delivered {"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M23",
+      "case": "C60.logging-outcomes",
+      "description": "Emit a mismatch warning when both mismatch-logging leaves are off",
+      "typescriptMutation": "M74",
+      "edits": [
+        {
+          "path": "rust/src/policy.rs",
+          "before": "        self.mismatch_value || self.mismatch_diff != MismatchDiff::Off\n    }",
+          "after": "        true\n    }"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M24",
+      "case": "C60.invalid-input-isolation",
+      "description": "Resolve an invalid diff leaf to values instead of off",
+      "typescriptMutation": "M76",
+      "edits": [
+        {
+          "path": "rust/src/policy.rs",
+          "before": "        diff: diff.unwrap_or(MismatchDiff::Off),",
+          "after": "        diff: diff.unwrap_or(MismatchDiff::Values),"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
     }
   ]
 }

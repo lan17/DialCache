@@ -2111,6 +2111,366 @@
           "portable"
         ]
       }
+    },
+    {
+      "id": "M66",
+      "case": "W10.mismatch-paths",
+      "description": "Walk arrays of different length over their common prefix instead of reporting them once at the array pointer",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts walkJson, Go go/shadow_log.go walkJSON and Rust rust/src/protocol/mismatch.rs Walk::walk drop the array rule's length check and recurse by index over the shorter array. Arrays of different length are therefore reported at the differing indices of their common prefix, and an inserted or appended element is not reported at all, instead of one entry at the array's own pointer carrying both arrays. The model's values are scalars, so only the mismatchPathVectors group and the native vector tests reach the rule.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/shadow-log-json.ts",
+            "before": "      if (leftItems.length !== rightItems.length) {\n        report({ path, cached: left, source: right });\n        return;\n      }\n      for (let index = 0; index < leftItems.length; index += 1) {",
+            "after": "      for (let index = 0; index < Math.min(leftItems.length, rightItems.length); index += 1) {"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow_log.go",
+            "before": "\t\t\tif len(leftItems) != len(rightItems) {\n\t\t\t\treport(left, right)\n\t\t\t\treturn\n\t\t\t}\n\t\t\tfor index := range leftItems {",
+            "after": "\t\t\tfor index := range min(len(leftItems), len(rightItems)) {"
+          }
+        ],
+        "requiredDetections": [
+          "fixed",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M67",
+      "case": "W10.mismatch-paths",
+      "description": "Report nothing for a pair of values of different JSON kinds, roots included",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts walkJson, Go go/shadow_log.go walkJSON and Rust rust/src/protocol/mismatch.rs Walk::walk return without reporting when the two values at a pointer are of different kinds (object, array or primitive). Roots of different kinds therefore yield no entry instead of one entry at \"\" carrying both roots, and a member that changes kind is not reported. Primitives of different JSON types share the primitive kind, so the model's scalars never reach the rule; the mismatchPathVectors group and the native vector tests do.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/shadow-log-json.ts",
+            "before": "    if (kind !== jsonKind(right) || kind === \"primitive\") {\n      if (left !== right) {",
+            "after": "    if (kind !== jsonKind(right)) {\n      return;\n    }\n    if (kind === \"primitive\") {\n      if (left !== right) {"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow_log.go",
+            "before": "\t\tif kind != kindOfJSON(right) {\n\t\t\treport(left, right)\n\t\t\treturn\n\t\t}",
+            "after": "\t\tif kind != kindOfJSON(right) {\n\t\t\treturn\n\t\t}"
+          }
+        ],
+        "requiredDetections": [
+          "fixed",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M68",
+      "case": "W10.mismatch-paths",
+      "description": "Treat an absent compared value as a value with no JSON rendering",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog counts any side without a rendering as a render failure, the top-level undefined included; Go go/shadow_log.go renderRoot reports an Absent root as failed; Rust rust/src/shadow_log.rs rendered_side maps the absent marker to a side with no rendering. An absent side against a present one therefore logs null difference fields with render_error instead of one entry at \"\" carrying the present side (D13). TypeScript and Go also fail the value fields this way, while Rust's value fields keep their absent handling. The shadow profile has no absent value, so only the absent-side vectors reach the rule.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/shadow-log-json.ts",
+            "before": "    && ((cachedJson === null && cachedValue !== undefined) || (sourceJson === null && sourceValue !== undefined));",
+            "after": "    && (cachedJson === null || sourceJson === null);"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow_log.go",
+            "before": "func renderRoot(value any) (encoded []byte, failed bool) {\n\tif IsAbsent(value) {\n\t\treturn nil, false",
+            "after": "func renderRoot(value any) (encoded []byte, failed bool) {\n\tif IsAbsent(value) {\n\t\treturn nil, true"
+          }
+        ],
+        "requiredDetections": [
+          "fixed",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M69",
+      "case": "C60.logging-outcomes",
+      "description": "Fall back to the built-in walk when the mismatch diff hook fails",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log keep the hook_error outcome when the shadowMismatchDiff hook fails but then walk both renderings, unless a rendering already failed, and log the walk's paths, count and entries. The warning therefore carries difference fields the use case's hook did not produce instead of null ones (D6). Each port renders the sides for the fallback itself, since with a hook and value off the warning renders neither.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/shadow-log-json.ts",
+            "before": "      diff = runShadowMismatchHook(hook, cachedValue, sourceValue);\n      diffFailed = diff === null;",
+            "after": "      diff = runShadowMismatchHook(hook, cachedValue, sourceValue);\n      diffFailed = diff === null;\n      if (diff === null && !renderFailed) {\n        diff = walkRenderedJson(renderJson(cachedValue), renderJson(sourceValue));\n      }"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow_log.go",
+            "before": "\t\t\tentries, count, computed = runMismatchHook(hook)\n\t\t\tdiffFailed = !computed",
+            "after": "\t\t\tentries, count, computed = runMismatchHook(hook)\n\t\t\tdiffFailed = !computed\n\t\t\tif !computed && !renderFailed {\n\t\t\t\tcachedRendering, _ := renderRoot(cached)\n\t\t\t\tsourceRendering, _ := renderRoot(source)\n\t\t\t\tentries, count, computed = walkRenderedJSON(cachedRendering, sourceRendering)\n\t\t\t}"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M70",
+      "case": "C60.outcome-precedence",
+      "description": "Run the mismatch diff hook when diff is off",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log call the shadowMismatchDiff hook when the captured diff leaf is off and record its failure as the warning's failure. A warning that logs only the value fields therefore reports hook_error from a hook that should never have run, outranking the render_error or logged outcome it owes.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/shadow-log-json.ts",
+            "before": "  let diffFields: ShadowMismatchLogFields = {};\n  if (plan.diff !== \"off\") {",
+            "after": "  let diffFields: ShadowMismatchLogFields = {};\n  if (plan.diff === \"off\" && hook !== undefined) {\n    diffFailed = runShadowMismatchHook(hook, cachedValue, sourceValue) === null;\n  }\n  if (plan.diff !== \"off\") {"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow_log.go",
+            "before": "\tif diff.on() {\n\t\twithValues := diff == MismatchDiffValues",
+            "after": "\tif !diff.on() && hook != nil {\n\t\t_, _, computed := runMismatchHook(hook)\n\t\tdiffFailed = !computed\n\t}\n\tif diff.on() {\n\t\twithValues := diff == MismatchDiffValues"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M71",
+      "case": "C60.shorthand-table",
+      "description": "Treat a mismatch-logging leaf written off as unwritten",
+      "rationale": "TypeScript typescript/src/internal/runtime-config.ts expandMismatchLogging, Go go/policy.go expandMismatchLogging and Rust rust/src/policy.rs expand_mismatch_logging ignore a mismatchLogging value leaf written false and a diff leaf written \"off\", as if the group did not write them. A runtime leaf written off therefore falls through to the inherited leaf instead of replacing it, and a leaf written off beside a true logMismatches no longer overrides what the shorthand stands for.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/runtime-config.ts",
+            "before": "  const value = written.value !== undefined ? written.value : expanded.value;\n  const diff = written.diff !== undefined ? written.diff : expanded.diff;",
+            "after": "  const value = written.value !== undefined && written.value !== false ? written.value : expanded.value;\n  const diff = written.diff !== undefined && written.diff !== \"off\" ? written.diff : expanded.diff;"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/policy.go",
+            "before": "\tif v, present := optionalLeaf(group, \"value\"); present {\n\t\tleaves.value = v\n\t}\n\tif v, present := optionalLeaf(group, \"diff\"); present {\n\t\tleaves.diff = v\n\t}",
+            "after": "\tif v, present := optionalLeaf(group, \"value\"); present && v != false {\n\t\tleaves.value = v\n\t}\n\tif v, present := optionalLeaf(group, \"diff\"); present && v != \"off\" && v != MismatchDiffOff {\n\t\tleaves.diff = v\n\t}"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M72",
+      "case": "C60.outcome-precedence",
+      "description": "Report render_error over hook_error when both fail",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log check the render failure before the difference-computation failure when they name the warning's failure. A failing shadowMismatchDiff hook beside a side with no JSON rendering therefore reports render_error, as the warning's loggingOutcome and the shadowMismatchLogging event, instead of hook_error.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/shadow-log-json.ts",
+            "before": "    failure: diffFailed ? \"hook_error\" : renderFailed ? \"render_error\" : null,",
+            "after": "    failure: renderFailed ? \"render_error\" : diffFailed ? \"hook_error\" : null,"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow_log.go",
+            "before": "\tcase diffFailed:\n\t\tfailure = shadowLogHookError\n\tcase renderFailed:\n\t\tfailure = shadowLogRenderError",
+            "after": "\tcase renderFailed:\n\t\tfailure = shadowLogRenderError\n\tcase diffFailed:\n\t\tfailure = shadowLogHookError"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M73",
+      "case": "C60.outcome-precedence",
+      "description": "Report logger_error over a warning construction failure when the logger also fails",
+      "rationale": "TypeScript typescript/src/dialcache.ts warnShadowMismatch, Go go/shadow.go warnShadowMismatch and Rust rust/src/shadow.rs log_shadow_mismatch let a failed logger decide the shadowMismatchLogging outcome before the construction failure the warning names. A warning whose hook failed or whose side had no rendering therefore records logger_error when the logger also fails, instead of hook_error or render_error; the warning's own loggingOutcome field is unchanged.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/dialcache.ts",
+            "before": "    if (failure !== null) {\n      recordOutcome(failure);\n    } else if (typeof delivered === \"boolean\") {",
+            "after": "    if (failure !== null && delivered !== false) {\n      recordOutcome(failure);\n    } else if (typeof delivered === \"boolean\") {"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow.go",
+            "before": "\toutcome := failure\n\tif outcome == \"\" {\n\t\toutcome = \"logged\"\n\t\tif !delivered {\n\t\t\toutcome = \"logger_error\"\n\t\t}\n\t}",
+            "after": "\toutcome := failure\n\tif !delivered {\n\t\toutcome = \"logger_error\"\n\t} else if outcome == \"\" {\n\t\toutcome = \"logged\"\n\t}"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M74",
+      "case": "C60.logging-outcomes",
+      "description": "Emit a mismatch warning when both mismatch-logging leaves are off",
+      "rationale": "TypeScript typescript/src/dialcache.ts resolveShadowLogging returns a log plan whatever the leaves, Go go/policy.go ResolvedShadow.logsMismatches and Rust rust/src/policy.rs ResolvedShadow::logs_mismatches report true. Every confirmed mismatch therefore emits a metadata-only warning and a logged shadowMismatchLogging event, even when value is false and diff is off, instead of nothing.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/dialcache.ts",
+            "before": "    return value || diff !== \"off\" ? { value, diff } : null;",
+            "after": "    return { value, diff };"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/policy.go",
+            "before": "func (s ResolvedShadow) logsMismatches() bool { return s.LogValue || s.LogDiff.on() }",
+            "after": "func (s ResolvedShadow) logsMismatches() bool { return true }"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M75",
+      "case": "C60.warning-field-groups",
+      "description": "Log the difference entries with their values at diff paths",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog and Go go/shadow_log.go renderShadowMismatchLog treat every diff level above off as values, so a warning at diff paths also carries diffJson with each entry's cached and source sides. The paths level, which a cache of user data can leave on in production, therefore logs values. Rust has no twin: its ShadowMismatchDiffDetails carries the level, and a diff_json at paths is not a field the driver or a logger reads.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/shadow-log-json.ts",
+            "before": "    const withValues = plan.diff === \"values\";",
+            "after": "    const withValues = plan.diff === \"values\" || plan.diff === \"paths\";"
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/shadow_log.go",
+            "before": "\t\twithValues := diff == MismatchDiffValues",
+            "after": "\t\twithValues := diff.on()"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
+    },
+    {
+      "id": "M76",
+      "case": "C60.invalid-input-isolation",
+      "description": "Resolve an invalid diff leaf to values instead of off",
+      "rationale": "TypeScript typescript/src/internal/runtime-config.ts resolveMismatchLogging, Go go/policy.go resolveDiffLeaf and Rust rust/src/policy.rs resolve_mismatch_logging resolve a diff leaf of the wrong type or an unknown level to values while still recording its config_resolution. An invalid diff leaf therefore turns on the most exposing level instead of acting off, beside a valid value leaf or alone. Go's static ParsePolicy rejects an invalid level before resolution, so only a runtime overlay reaches the edit.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "typescript/src/internal/runtime-config.ts",
+            "before": "    diff: diff ?? \"off\",",
+            "after": "    diff: diff ?? \"values\","
+          }
+        ],
+        "requiredDetections": [
+          "ordinary",
+          "generated",
+          "portable"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/policy.go",
+            "before": "\tif !level.valid() {\n\t\treturn MismatchDiffOff, false",
+            "after": "\tif !level.valid() {\n\t\treturn MismatchDiffValues, false"
+          }
+        ],
+        "requiredDetections": [
+          "generated",
+          "portable"
+        ]
+      }
     }
   ]
 }
