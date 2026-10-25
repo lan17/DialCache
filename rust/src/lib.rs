@@ -40,6 +40,8 @@ pub mod runtime;
 mod scope;
 mod shadow;
 mod shadow_log;
+#[cfg(test)]
+mod shadow_log_tests;
 #[cfg(feature = "test-util")]
 pub mod testing;
 mod use_case;
