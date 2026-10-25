@@ -2,7 +2,7 @@
 
 - **Status:** Proposed
 - **Issue:** none; requested in a maintainer session
-- **Pull requests:** none yet
+- **Pull requests:** [#246](https://github.com/lan17/DialCache/pull/246)
 - **Baseline:** `main` at `b4e4fba3d979e3b70f569b576062d2bfd892075c`
 - **Supersedes:** none
 
