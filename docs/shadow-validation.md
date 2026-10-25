@@ -519,9 +519,13 @@ The logger receives `LogEvent::ShadowMismatch` with `ShadowMismatchDetails`:
 `cached_value_age_seconds`, `cache_key`, a `diff` group present when `diff` is
 above `Off` (`mismatch_paths`, `mismatch_path_count` and, at `Values`,
 `diff_json`), a `values` group present when `value` is on
-(`cached_value_json`, `source_value_json`), and `logging_outcome`. Inside a
-requested group, `None` marks an unavailable field. The default `Display`
-writes the fields in the order of the table and leaves unavailable ones out.
+(`cached_value_json`, `source_value_json`), and `logging_outcome`. When the
+content work does not complete, as when the CPU executor rejects it, both
+groups are `None` whatever the leaves request, and `logging_outcome` is
+`RenderError`.
+Inside a present group, `None` marks an unavailable field. The default
+`Display` writes the fields in the order of the table and leaves unavailable
+ones out.
 
 </LanguageContent>
 
@@ -725,8 +729,9 @@ render.
 Rendering, the walk, `preview`, and the hook run through the bounded CPU
 executor after confirmation and hold the job's shadow capacity until they
 finish; they can run on a worker thread. When the executor rejects the work,
-the warning keeps its metadata and carries `render_error`. On one Apple-silicon
-Mac, a 6.3 MB map of 150,000 entries took about 0.09 seconds per warning at
+or the work panics or is dropped, the warning keeps its metadata, both field
+groups are `None`, and it carries `render_error`. On one Apple-silicon Mac, a
+6.3 MB map of 150,000 entries took about 0.09 seconds per warning at
 `MismatchDiff::Paths` in a release build, against 0.006 seconds for the value
 fields alone.
 
