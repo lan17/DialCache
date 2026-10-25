@@ -55,9 +55,9 @@ export interface ShadowMismatchLogFields {
 }
 
 /**
- * The first failing stage of warning construction: the difference computation
- * (hook or built-in walk), then JSON rendering. `null` when every requested
- * field rendered.
+ * Why warning construction failed: `hook_error` for the difference computation
+ * (hook or built-in walk), which ranks above `render_error` for JSON rendering.
+ * `null` when every requested field rendered.
  */
 export type ShadowMismatchLogFailure = "hook_error" | "render_error";
 

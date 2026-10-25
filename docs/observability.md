@@ -571,11 +571,12 @@ use-case labels and an `outcome`:
 | `render_error` | A value had no JSON rendering |
 | `logger_error` | The logger's `warn` threw, or the promise it returned rejected |
 
-The first failing stage wins. When the outcome is not `logged`, the warning
-carries it as `loggingOutcome`, except for `logger_error`, which the logger never
-received. For a logger that returns a promise, the event waits for that promise,
-and one that never settles emits nothing. With logging off nothing is emitted, so the metric never counts
-mismatches; use [Shadow outcomes](#shadow-outcomes) for that. The Prometheus
+When several fail, `hook_error` ranks above `render_error`, which ranks above
+`logger_error`. When the outcome is not `logged`, the warning carries it as
+`loggingOutcome`, except for `logger_error`, which the logger never received.
+For a logger that returns a promise, the event waits for that promise, and one
+that never settles emits nothing. With logging off nothing is emitted, so the
+metric never counts mismatches; use [Shadow outcomes](#shadow-outcomes) for that. The Prometheus
 and Datadog adapters export it as `dialcache_shadow_mismatch_logging_counter`
 and `dialcache.shadow_mismatch_logging.count`.
 

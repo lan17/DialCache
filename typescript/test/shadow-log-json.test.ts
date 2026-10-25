@@ -492,6 +492,19 @@ describe("shadow mismatch log JSON", () => {
       expect(JSON.parse(fields.diffJson!)).toStrictEqual(entries);
     });
 
+    it("compares only own members in a depth-capped pair", () => {
+      const nest = (leaf: string): JsonValue => JSON.parse(`${'{"a":'.repeat(32)}${leaf}${"}".repeat(32)}`) as JsonValue;
+      const cached = nest('{"__proto__":{}}');
+      const source = nest('{"b":{}}');
+      const entries = [{ path: "/a".repeat(32), cached: JSON.parse('{"__proto__":{}}') as JsonValue, source: { b: {} } }];
+
+      expect(diffShadowMismatchJson(cached, source)).toStrictEqual({ entries, count: 1 });
+      const { fields, failure } = renderShadowMismatchLog(VALUES_ONLY, cached, source);
+      expect(failure).toBeNull();
+      expect(fields.mismatchPaths).toStrictEqual(["/a".repeat(32)]);
+      expect(JSON.parse(fields.diffJson!)).toStrictEqual(JSON.parse(JSON.stringify(entries)));
+    });
+
     it("cuts the entries at 64 in walk order and counts every difference", () => {
       const cached: Record<string, JsonValue> = {};
       const source: Record<string, JsonValue> = {};
