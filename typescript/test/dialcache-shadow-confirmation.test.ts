@@ -1216,6 +1216,47 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
   });
 
+  it("passes an absent cached side to shadowMismatchDiff as the raw undefined", async () => {
+    const useCase = "ShadowMismatchAbsentCachedHookInput";
+    // The default JSON serializer's stored form of a top-level undefined.
+    const payload = "__dialcache_json_undefined_v1__";
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
+    const hookInputs: unknown[][] = [];
+    const getUser = dialcache.cached(async (): Promise<{ id: string } | undefined> => ({ id: "123" }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { mismatchLogging: { diff: "values" } })),
+      cacheKey: () => "123",
+      shadowMismatchDiff: (cached, source) => {
+        hookInputs.push([cached, source]);
+        return [{ path: "", source }];
+      },
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toBeUndefined();
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    // D13: the hook receives the raw values, so an absent side stays
+    // undefined rather than becoming JSON null.
+    expect(hookInputs).toStrictEqual([[undefined, { id: "123" }]]);
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, {
+        mismatchPaths: [""],
+        mismatchPathCount: 1,
+        diffJson: '[{"path":"","source":{"id":"123"}}]',
+      }),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
   it("logs hook paths without rendering values at diff paths, even for a bigint source value", async () => {
     const useCase = "ShadowMismatchBigintHookPaths";
     const payload = JSON.stringify({ id: "123", version: 1 });
@@ -1274,7 +1315,7 @@ describe("DialCache Redis shadow confirmation", () => {
       outcome: "logged",
     },
     {
-      name: "returns a rejected promise whose own then is replaced",
+      name: "returns a rejected native promise whose own then, but not its constructor, is replaced",
       useCase: "ShadowMismatchLoggerReplacedThen",
       warn: () => {
         const rejected = Promise.reject(new Error("logger transport unavailable"));
