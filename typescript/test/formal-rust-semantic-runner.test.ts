@@ -154,6 +154,11 @@ describe("Rust fault catalog", () => {
       expect(entry.requiredDetections, entry.id).toContain("portable");
       expect(entry.requiredDetections.some(cohort => ["generated", "fixed"].includes(cohort)), entry.id).toBe(true);
       expect(entry.requiredDetections.every(cohort => ["generated", "fixed", "portable"].includes(cohort)), entry.id).toBe(true);
+      // Only those vector-only rules may trade generated for fixed: the twin of
+      // a mutant the generated histories must detect keeps that requirement.
+      if (counterpart.typescript.requiredDetections.includes("generated")) {
+        expect(entry.requiredDetections, entry.id).toContain("generated");
+      }
     }
   });
 
