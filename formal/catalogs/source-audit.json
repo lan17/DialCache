@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "f2ee03fc1db3af0342ecc0853f1bda8c20a7b731af10b042c113a6fc2610a0e4",
+      "sha256": "56919457cf39c3287f4a77fb2b7ee7c7fbafeece77778df2547c8b04ddaccf38",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -767,7 +767,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "3e518e34b1bd77578f46153c714d4354883fb71eacc8109d3c88a53eae6d5982",
+      "sha256": "5f60f3fc7872c74f09110b73764be521dad3ab64524246168172039838adf025",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -787,6 +787,7 @@
         {"title":"logs shadowMismatchDiff entries in place of the built-in walk through %s()","contracts":["C60"]},
         {"title":"logs null diff fields and hook_error without touching the verdict when the hook $name","contracts":["C30","C60"]},
         {"title":"logs render_error with null source and diff fields for a bigint source value under $name","contracts":["C60","B03"]},
+        {"title":"logs a cached undefined negative-cache entry as an absent side, not a render failure","contracts":["C60","B03"]},
         {"title":"logs hook paths without rendering values at diff paths, even for a bigint source value","contracts":["C60","B03"]},
         {"title":"records $outcome and leaves the caller unaffected when the logger $name","contracts":["C30","C60"]},
         {"title":"records $outcome rather than logger_error when $name and the logger throws","contracts":["C30","C60"]},
@@ -1085,7 +1086,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "067a573fcc185924ed2a5167fb1e351c4316c449a1eef2b7d74b3d8b5142fe9e",
+      "sha256": "b682ea22a049fc6e197e4331c25bf5f91bdd6d7aae6ac77fb33cc52cbf0b0664",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1101,8 +1102,10 @@
         {"title":"renders exactly the fields requested by %s","contracts":["C60"]},
         {"title":"renders no entries for byte-identical renderings","contracts":["C60","B03"]},
         {"title":"renders no entries for the documented Date row","contracts":["C60","B03"]},
+        {"title":"reports the source whole at the root for the documented undefined row","contracts":["C60","B03"]},
         {"title":"renders no entries for a Date against its ISO string","contracts":["C60","B03"]},
         {"title":"nulls the fields fed by a root %s with render_error","contracts":["B03","X01"]},
+        {"title":"reports an absent root as one side at the root pointer, not as a render failure","contracts":["C60","B03"]},
         {"title":"runs each side's toJSON once for every field it feeds","contracts":["C60","B03"]},
         {"title":"clamps diffJson to 8 KiB with the truncation marker","contracts":["X01"]},
         {"title":"clamps each built-in diffJson side to 1 KiB","contracts":["X01"]},
