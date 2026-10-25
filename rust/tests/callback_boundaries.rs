@@ -206,6 +206,7 @@ fn synchronous_shadow_source_panic_is_a_source_error_and_releases_capacity() {
                 .policy(Policy::default().remote_ttl_sec(60).shadow(ShadowPolicy {
                     ramp: Some(100.0),
                     log_mismatches: None,
+                    mismatch_logging: None,
                 }));
             cache
                 .get_or_load(
@@ -255,6 +256,7 @@ fn dark_shadow_distinguishes_its_deadline_from_application_timeout_errors() {
                         .shadow(ShadowPolicy {
                             ramp: Some(100.0),
                             log_mismatches: None,
+                            mismatch_logging: None,
                         }),
                 )
                 .budget(dialcache::SourceBudget::Millis(5));

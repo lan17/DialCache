@@ -7,7 +7,7 @@ use std::time::Duration;
 use futures::future::BoxFuture;
 use parking_lot::Mutex;
 
-use crate::observe::ShadowOutcome;
+use crate::observe::{ShadowMismatchLoggingOutcome, ShadowOutcome};
 use crate::protocol::{compress_payload, CompressionConfig};
 use crate::testing::{StepRuntime, TestExecutor, WALL_EPOCH_MS};
 use crate::*;
@@ -104,6 +104,7 @@ fn operation(decodes: &Arc<AtomicUsize>, shadow: bool) -> Operation<String> {
         policy = policy.remote_ramp(0.0).shadow(ShadowPolicy {
             ramp: Some(100.0),
             log_mismatches: None,
+            mismatch_logging: None,
         });
     }
     Operation::with_codec(
@@ -335,12 +336,29 @@ async fn large_codec_phases_allow_an_independent_short_timer_to_progress() {
     }
 }
 
+/// Warnings, and the logging outcomes the observer received.
 #[derive(Default)]
-struct Logs(Mutex<Vec<ShadowMismatchDetails>>);
+struct Logs(
+    Mutex<Vec<ShadowMismatchDetails>>,
+    Mutex<Vec<ShadowMismatchLoggingOutcome>>,
+);
 impl Logger for Logs {
     fn log(&self, event: &LogEvent) {
         if let LogEvent::ShadowMismatch(details) = event {
             self.0.lock().push(details.clone());
+        }
+    }
+}
+/// Forwards outcomes to the event recorder and logging outcomes to the logs.
+struct Both(Arc<Events>, Arc<Logs>);
+impl Observer for Both {
+    fn observes_shadow_outcomes(&self) -> bool {
+        true
+    }
+    fn observe(&self, event: &Event) {
+        self.0.observe(event);
+        if let Event::ShadowMismatchLogging { outcome, .. } = event {
+            self.1 .1.lock().push(*outcome);
         }
     }
 }
@@ -362,7 +380,7 @@ fn preview_setup() -> (
     let cache = DialCache::builder()
         .clock_arc(executor.clock.clone())
         .runtime_arc(runtime.clone())
-        .observer_arc(events.clone())
+        .observer(Both(events.clone(), logs.clone()))
         .logger_arc(logs.clone())
         .remote(SnapshotRemote {
             result: ReadResult::Hit(Frame {
@@ -387,6 +405,7 @@ fn preview_call(
         let policy = Policy::default().remote_ttl_sec(60).shadow(ShadowPolicy {
             ramp: Some(100.0),
             log_mismatches: Some(true),
+            mismatch_logging: None,
         });
         let result = if registered {
             let use_case = cache
@@ -434,11 +453,17 @@ fn both_default_apis_prepare_bounded_previews_without_holding_the_caller() {
         assert!(cache.core.state.lock().shadows.is_empty());
         let messages = logs.0.lock();
         assert_eq!(messages.len(), 1);
+        let values = messages[0].values.as_ref().unwrap();
         assert_eq!(
-            messages[0].cached_value_json,
+            values.cached_value_json,
             crate::preview::json_preview(&"é".repeat(10_000))
         );
-        assert_eq!(messages[0].source_value_json.as_deref(), Some("\"source\""));
+        assert_eq!(values.source_value_json.as_deref(), Some("\"source\""));
+        // The shorthand also logs the difference, here between the roots.
+        let diff = messages[0].diff.as_ref().unwrap();
+        assert_eq!(diff.mismatch_paths, Some(vec![String::new()]));
+        assert_eq!(diff.mismatch_path_count, Some(1));
+        assert_eq!(messages[0].logging_outcome, None);
         assert_eq!(
             *events.0.lock(),
             vec![ShadowOutcome::Mismatch, ShadowOutcome::Dropped]
@@ -456,8 +481,17 @@ fn rejected_preview_cpu_work_still_logs_the_confirmed_mismatch() {
     assert!(cache.core.state.lock().shadows.is_empty());
     let messages = logs.0.lock();
     assert_eq!(messages.len(), 1);
-    assert!(messages[0].cached_value_json.is_none());
-    assert!(messages[0].source_value_json.is_none());
+    // The metadata warning remains, and its outcome says why it has no fields.
+    assert_eq!(messages[0].diff, None);
+    assert_eq!(messages[0].values, None);
+    assert_eq!(
+        messages[0].logging_outcome,
+        Some(ShadowMismatchLoggingOutcome::RenderError)
+    );
+    assert_eq!(
+        *logs.1.lock(),
+        vec![ShadowMismatchLoggingOutcome::RenderError]
+    );
 }
 
 #[test]
@@ -482,10 +516,15 @@ fn custom_preview_failures_are_isolated_per_value_and_success_is_clamped() {
         executor.drain();
         let messages = logs.0.lock();
         assert_eq!(messages.len(), 1);
-        assert!(messages[0].cached_value_json.is_none());
+        let values = messages[0].values.as_ref().unwrap();
+        assert!(values.cached_value_json.is_none());
         assert_eq!(
-            messages[0].source_value_json,
+            values.source_value_json,
             Some(crate::preview::preview_value(&"🙂".repeat(10_000)))
+        );
+        assert_eq!(
+            messages[0].logging_outcome,
+            Some(ShadowMismatchLoggingOutcome::RenderError)
         );
         assert!(cache.core.state.lock().shadows.is_empty());
     }

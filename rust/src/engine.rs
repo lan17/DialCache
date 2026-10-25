@@ -67,8 +67,10 @@ impl Core {
         }
     }
 
-    pub(crate) fn log(&self, event: LogEvent) {
-        let _ = catch_unwind(AssertUnwindSafe(|| self.logger.log(&event)));
+    /// Deliver a log event; `false` when the logger panicked. Logger
+    /// failures never change results.
+    pub(crate) fn log(&self, event: LogEvent) -> bool {
+        catch_unwind(AssertUnwindSafe(|| self.logger.log(&event))).is_ok()
     }
 
     pub(crate) fn shadow_hook_enabled(&self) -> bool {

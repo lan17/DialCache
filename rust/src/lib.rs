@@ -39,6 +39,7 @@ pub mod remote;
 pub mod runtime;
 mod scope;
 mod shadow;
+mod shadow_log;
 #[cfg(feature = "test-util")]
 pub mod testing;
 mod use_case;
@@ -59,10 +60,17 @@ pub use error::{BoxError, ConfigError, Error, FallbackTimeout, RemoteReadTimeout
 pub use identity::{normalize_args, ArgValue, Identity, IdentityError, IntoKeyId, Keys};
 pub use local::{LocalEntry, LocalRead, LocalStore, LruLocalStore, StoredValue};
 pub use metrics::MetricKind;
-pub use observe::{Event, Labels, LogEvent, LogLevel, Logger, Observer, ShadowMismatchDetails};
-pub use operation::{Comparator, Operation, Preview, RecoveryPredicate, SourceBudget};
+pub use observe::{
+    Event, Labels, LogEvent, LogLevel, Logger, Observer, ShadowMismatchDetails,
+    ShadowMismatchDiffDetails, ShadowMismatchValueDetails,
+};
+pub use operation::{
+    Comparator, MismatchDiffHook, MismatchEntry, Operation, Preview, RecoveryPredicate,
+    SourceBudget,
+};
 pub use policy::{
-    Policy, PolicyDefaults, PolicyError, ResolvedPolicy, RuntimePolicy, ShadowPolicy,
+    MismatchDiff, MismatchLogging, Policy, PolicyDefaults, PolicyError, ResolvedPolicy,
+    RuntimePolicy, ShadowPolicy,
 };
 #[cfg(feature = "redis")]
 pub use redis::{

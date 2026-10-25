@@ -1,8 +1,10 @@
 //! The portable wire protocol: frames, envelopes, text conversion and
-//! duration/timestamp domains (W04–W08 in `formal/guides/CONTRACTS.md`).
+//! duration/timestamp domains (W04–W08 in `formal/guides/CONTRACTS.md`),
+//! and the built-in confirmed-mismatch difference over JSON values.
 
 mod envelope;
 mod frame;
+mod mismatch;
 mod text;
 
 pub use envelope::{
@@ -14,4 +16,6 @@ pub use frame::{
     ceil_supported_cache_ttl_ms, decode_frame, encode_frame, normalize_read_result,
     parse_watermark, read_result_from_untrusted_json, validate_timestamp_ms, ProtocolError,
 };
+pub(crate) use mismatch::{bound_entry, diff_rendered};
+pub use mismatch::{diff_shadow_mismatch_json, MismatchJsonDiff};
 pub use text::replacement_utf8;

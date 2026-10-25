@@ -7,7 +7,8 @@ use std::sync::Arc;
 use dialcache::datadog::{metric_suffix, DatadogError};
 use dialcache::observe::{
     CoalescingScope, CompressionOperation, CompressionOutcome, DisabledReason, ErrorKind, Labels,
-    Layer, MissReason, OutcomeLabels, RecoveryOutcome, SerializationOperation, ShadowOutcome,
+    Layer, MissReason, OutcomeLabels, RecoveryOutcome, SerializationOperation,
+    ShadowMismatchLoggingOutcome, ShadowOutcome,
 };
 use dialcache::{
     DatadogObserver, DatadogOptions, DogStatsdClient, Event, MetricKind, ObservationMetricType,
@@ -67,6 +68,10 @@ fn metric_test_event(kind: MetricKind) -> Event {
             labels: outcome(),
             outcome: ShadowOutcome::Mismatch,
             seconds: 0.25,
+        },
+        MetricKind::ShadowMismatchLogging => Event::ShadowMismatchLogging {
+            labels: outcome(),
+            outcome: ShadowMismatchLoggingOutcome::Logged,
         },
         MetricKind::FutureTimestampOffset => Event::FutureTimestampOffset {
             labels: base(),
@@ -179,7 +184,7 @@ fn datadog_metric_names_units_and_labels() {
     assert!(observer.observes_shadow_outcomes());
 
     // (kind, suffix, method, value), copied from go/metrics_test.go.
-    let cases: [(MetricKind, &str, &str, f64); 19] = [
+    let cases: [(MetricKind, &str, &str, f64); 20] = [
         (MetricKind::Request, "request.count", "increment", 1.0),
         (MetricKind::Miss, "miss.count", "increment", 1.0),
         (MetricKind::Disabled, "disabled.count", "increment", 1.0),
@@ -202,6 +207,12 @@ fn datadog_metric_names_units_and_labels() {
             "shadow.value_age",
             "distribution",
             0.25,
+        ),
+        (
+            MetricKind::ShadowMismatchLogging,
+            "shadow_mismatch_logging.count",
+            "increment",
+            1.0,
         ),
         (
             MetricKind::FutureTimestampOffset,
@@ -349,17 +360,25 @@ fn datadog_rejects_invalid_namespaces_and_long_names() {
         Some(DatadogError::InvalidNamespace(String::new())),
         "accepted explicitly empty namespace"
     );
-    // The longest suffix, "stale_recovery.value_age", is 24 characters; with
-    // the dot a 175-character namespace reaches exactly 200 and 176 exceeds it.
-    let longest = "stale_recovery.value_age";
-    assert_eq!(longest.len(), 24);
-    let fits = "a".repeat(175);
+    // The longest suffix, "shadow_mismatch_logging.count", is 29 characters;
+    // with the dot a 170-character namespace reaches exactly 200 and 171
+    // exceeds it.
+    let longest = "shadow_mismatch_logging.count";
+    assert_eq!(longest.len(), 29);
+    assert_eq!(
+        MetricKind::ALL
+            .iter()
+            .map(|kind| metric_suffix(*kind).len())
+            .max(),
+        Some(longest.len())
+    );
+    let fits = "a".repeat(170);
     DatadogObserver::new(
         RecordingClient::default(),
         DatadogOptions::new(ObservationMetricType::Distribution).namespace(fits.clone()),
     )
     .expect("200-character name fits");
-    let overflow = "a".repeat(176);
+    let overflow = "a".repeat(171);
     let error = DatadogObserver::new(
         RecordingClient::default(),
         DatadogOptions::new(ObservationMetricType::Distribution).namespace(overflow.clone()),
@@ -404,7 +423,7 @@ mod prometheus_exporter {
     const OUTCOME: &[&str] = &["cache_namespace", "use_case", "key_type", "outcome"];
 
     /// Copied from go/metrics_prometheus.go PrometheusCollectorSchemas, in order.
-    const EXPECTED: [Expected; 19] = [
+    const EXPECTED: [Expected; 20] = [
         Expected {
             kind: "disabled",
             name: "dialcache_disabled_counter",
@@ -467,6 +486,13 @@ mod prometheus_exporter {
             help: "Age in seconds of the validated Redis value at DialCache shadow verdict time.",
             labels: OUTCOME,
             buckets: AGE,
+        },
+        Expected {
+            kind: "shadowMismatchLogging",
+            name: "dialcache_shadow_mismatch_logging_counter",
+            help: "DialCache confirmed shadow-mismatch warning outcomes.",
+            labels: OUTCOME,
+            buckets: &[],
         },
         Expected {
             kind: "futureTimestampOffset",
@@ -556,7 +582,7 @@ mod prometheus_exporter {
     fn wire_schema_matches_the_reference_table() {
         for prefix in ["", "svc_"] {
             let actual: Vec<CollectorSchema> = schemas(prefix);
-            assert_eq!(actual.len(), 19);
+            assert_eq!(actual.len(), 20);
             for (schema, expected) in actual.iter().zip(EXPECTED.iter()) {
                 assert_eq!(schema.kind.as_str(), expected.kind);
                 assert_eq!(schema.name, format!("{prefix}{}", expected.name));
@@ -591,7 +617,7 @@ mod prometheus_exporter {
             observer.observe(&metric_test_event(kind));
         }
         let families = registry.gather();
-        assert_eq!(families.len(), 19);
+        assert_eq!(families.len(), 20);
         for expected in EXPECTED.iter() {
             let name = format!("scrape_{}", expected.name);
             let family = families

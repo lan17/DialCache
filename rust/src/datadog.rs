@@ -101,6 +101,7 @@ pub fn metric_suffix(kind: MetricKind) -> &'static str {
         MetricKind::Coalesced => "coalesced.count",
         MetricKind::ShadowValidation => "shadow.count",
         MetricKind::ShadowValueAge => "shadow.value_age",
+        MetricKind::ShadowMismatchLogging => "shadow_mismatch_logging.count",
         MetricKind::FutureTimestampOffset => "future_timestamp_offset",
         MetricKind::StaleRecovery => "stale_recovery.count",
         MetricKind::StaleRecoveryValueAge => "stale_recovery.value_age",

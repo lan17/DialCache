@@ -149,6 +149,25 @@ str_enum! {
 }
 
 str_enum! {
+    /// Outcomes of one confirmed-mismatch warning attempt. When more than one
+    /// failure occurs, `hook_error` ranks above `render_error`, which ranks
+    /// above `logger_error`.
+    ShadowMismatchLoggingOutcome {
+        /// Every requested field was built and the logger returned.
+        Logged => "logged",
+        /// The operation's `mismatch_diff` hook or the built-in walk panicked
+        /// or failed; `mismatch_paths`, `mismatch_path_count` and `diff_json`
+        /// are unavailable.
+        HookError => "hook_error",
+        /// A compared value had no JSON rendering, or the operation has no
+        /// renderer for a requested field; the fields it feeds are unavailable.
+        RenderError => "render_error",
+        /// The logger panicked while receiving the warning.
+        LoggerError => "logger_error",
+    }
+}
+
+str_enum! {
     /// Terminal outcomes of stale-on-error recovery.
     RecoveryOutcome {
         /// A retained stale frame passed the return-time age check and
@@ -305,6 +324,14 @@ pub enum Event {
         /// Observing wall clock minus the frame's `created_at_ms`, never negative.
         seconds: f64,
     },
+    /// One confirmed-mismatch warning attempt, emitted after the warning and
+    /// only while mismatch logging is on.
+    ShadowMismatchLogging {
+        /// The identity the job validated.
+        labels: OutcomeLabels,
+        /// Whether the warning was built and delivered, or why not.
+        outcome: ShadowMismatchLoggingOutcome,
+    },
     /// Positive offset in seconds of a frame dated after the observing clock.
     FutureTimestampOffset {
         /// The layer whose read decoded the frame.
@@ -422,7 +449,11 @@ pub trait Observer: Send + Sync + 'static {
 }
 
 /// Bounded details of one confirmed shadow mismatch warning.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// A field group is `None` when its leaf is off. Inside a requested group a
+/// `None` field is unavailable: [`logging_outcome`](Self::logging_outcome)
+/// names the failure, or, without one, the value was absent.
+#[derive(Debug, Clone, PartialEq)]
 pub struct ShadowMismatchDetails {
     /// The instance namespace of the mismatching identity.
     pub namespace: Arc<str>,
@@ -430,11 +461,46 @@ pub struct ShadowMismatchDetails {
     pub use_case: Arc<str>,
     /// The entity type of the mismatching identity.
     pub key_type: Arc<str>,
+    /// Age of the cached value at the verdict, as [`Event::ShadowValueAge`]
+    /// records it.
+    pub cached_value_age_seconds: f64,
     /// The logical key, bounded to 2 KiB of UTF-8.
     pub cache_key: String,
-    /// JSON preview of the cached value, bounded to 8 KiB; absent when unavailable.
+    /// The difference fields; `None` when `diff` is off or construction failed.
+    pub diff: Option<ShadowMismatchDiffDetails>,
+    /// The JSON of both values; `None` when `value` is off or construction failed.
+    pub values: Option<ShadowMismatchValueDetails>,
+    /// Why requested fields are unavailable; `None` when every one was built.
+    /// Only [`ShadowMismatchLoggingOutcome::HookError`] and
+    /// [`ShadowMismatchLoggingOutcome::RenderError`] appear here.
+    pub logging_outcome: Option<ShadowMismatchLoggingOutcome>,
+}
+
+/// The difference fields of a confirmed-mismatch warning, present when
+/// `mismatch_logging.diff` is above [`MismatchDiff::Off`](crate::policy::MismatchDiff::Off).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowMismatchDiffDetails {
+    /// The effective level: [`Paths`](crate::policy::MismatchDiff::Paths) or
+    /// [`Values`](crate::policy::MismatchDiff::Values).
+    pub level: crate::policy::MismatchDiff,
+    /// RFC 6901 JSON Pointers of the differing fields in walk order, at most
+    /// 64, each bounded to 512 bytes; `None` when the hook or walk failed.
+    pub mismatch_paths: Option<Vec<String>>,
+    /// The number of differences before the cut to 64; `None` with `mismatch_paths`.
+    pub mismatch_path_count: Option<u64>,
+    /// At level `Values`, the entries as a JSON array of `{path, cached,
+    /// source}` objects, each side bounded to 1 KiB and the whole to 8 KiB;
+    /// `None` at level `Paths` and when unavailable.
+    pub diff_json: Option<String>,
+}
+
+/// The whole-value fields of a confirmed-mismatch warning, present when
+/// `mismatch_logging.value` is on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShadowMismatchValueDetails {
+    /// JSON of the decoded cached value, bounded to 8 KiB; `None` when unavailable.
     pub cached_value_json: Option<String>,
-    /// JSON preview of the source value, bounded to 8 KiB; absent when unavailable.
+    /// JSON of the source value, bounded to 8 KiB; `None` when unavailable.
     pub source_value_json: Option<String>,
 }
 
@@ -483,7 +549,7 @@ pub enum LogEvent {
     /// A shadow job's clean-miss fill failed while preparing or writing the payload.
     ShadowFillFailed(BoxError),
     /// A confirmed shadow mismatch, logged only when the resolved policy's
-    /// `log_mismatches` is true.
+    /// mismatch-logging `value` is on or its `diff` is above `off`.
     ShadowMismatch(ShadowMismatchDetails),
     /// An explicit invalidation failed; the same error is returned to the caller.
     InvalidationFailed(BoxError),
@@ -540,13 +606,30 @@ impl fmt::Display for LogEvent {
                 write!(f, "Error populating Redis from DialCache shadow work: {e}")
             }
             LogEvent::ShadowMismatch(d) => {
-                write!(f, "DialCache shadow validation mismatch: namespace={} useCase={} keyType={} cacheKey={}",
-                    d.namespace, d.use_case, d.key_type, d.cache_key)?;
-                if let Some(value) = &d.cached_value_json {
-                    write!(f, " cachedValue={value}")?;
+                write!(f, "DialCache shadow validation mismatch: namespace={} useCase={} keyType={} cachedValueAgeSeconds={} cacheKey={}",
+                    d.namespace, d.use_case, d.key_type, d.cached_value_age_seconds, d.cache_key)?;
+                // Unavailable fields are left out; loggingOutcome says why.
+                if let Some(diff) = &d.diff {
+                    if let (Some(paths), Some(count)) =
+                        (&diff.mismatch_paths, diff.mismatch_path_count)
+                    {
+                        let paths = serde_json::to_string(paths).map_err(|_| fmt::Error)?;
+                        write!(f, " mismatchPaths={paths} mismatchPathCount={count}")?;
+                    }
+                    if let Some(json) = &diff.diff_json {
+                        write!(f, " diffJson={json}")?;
+                    }
                 }
-                if let Some(value) = &d.source_value_json {
-                    write!(f, " sourceValue={value}")?;
+                if let Some(values) = &d.values {
+                    if let Some(value) = &values.cached_value_json {
+                        write!(f, " cachedValue={value}")?;
+                    }
+                    if let Some(value) = &values.source_value_json {
+                        write!(f, " sourceValue={value}")?;
+                    }
+                }
+                if let Some(outcome) = d.logging_outcome {
+                    write!(f, " loggingOutcome={outcome}")?;
                 }
                 Ok(())
             }
