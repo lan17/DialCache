@@ -1003,6 +1003,43 @@ describe("DialCache Redis shadow confirmation", () => {
     }
   });
 
+  it.each([
+    ["null", null],
+    ["a string", "paths"],
+    ["an object", { path: "/version" }],
+  ])("rejects %s as shadowMismatchDiff where each API captures it", async (_label, hook) => {
+    const dialcache = new DialCache();
+    const invalidHook = hook as unknown as ShadowMismatchDiff<MismatchRecord>;
+    const source = async (): Promise<MismatchRecord> => mismatchSourceRecord;
+    const getOrLoadOptions = {
+      keyType: "user_id",
+      useCase: "InvalidGetOrLoadShadowMismatchDiff",
+      key: "123",
+      shadowMismatchDiff: invalidHook,
+    } as const;
+
+    expect(() =>
+      dialcache.cached(source, {
+        keyType: "user_id",
+        useCase: "InvalidCachedShadowMismatchDiff",
+        cacheKey: () => "123",
+        shadowMismatchDiff: invalidHook,
+      }),
+    ).toThrow(new TypeError("DialCache shadowMismatchDiff must be a function"));
+    // The rejected registration leaves the use case free for a valid one.
+    expect(() =>
+      dialcache.cached(source, {
+        keyType: "user_id",
+        useCase: "InvalidCachedShadowMismatchDiff",
+        cacheKey: () => "123",
+        shadowMismatchDiff: () => [],
+      }),
+    ).not.toThrow();
+    expect(() => dialcache.getOrLoad(source, getOrLoadOptions)).toThrow(TypeError);
+    await expect(dialcache.enable(async () => await dialcache.getOrLoad(source, getOrLoadOptions)))
+      .rejects.toThrow(TypeError);
+  });
+
   it.each(["cached", "getOrLoad"] as const)(
     "logs shadowMismatchDiff entries in place of the built-in walk through %s()",
     async (api) => {

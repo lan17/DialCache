@@ -168,8 +168,9 @@ interface CacheOperationOptionsBase<Value> {
   readonly shadowComparator?: ShadowComparator<Value>;
   /**
    * Replaces the built-in JSON difference computation behind
-   * `mismatchPaths` and `diffJson` in confirmed-mismatch warnings. This is
-   * stable use-case behavior, not runtime rollout configuration.
+   * `mismatchPaths` and `diffJson` in confirmed-mismatch warnings. Must be a
+   * synchronous function. This is stable use-case behavior, not runtime
+   * rollout configuration.
    */
   readonly shadowMismatchDiff?: ShadowMismatchDiff<Value>;
   /**
@@ -419,7 +420,7 @@ export class DialCache {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
-    const shadowMismatchDiff = options.shadowMismatchDiff;
+    const shadowMismatchDiff = resolveShadowMismatchDiff(options.shadowMismatchDiff);
     const staleRecoveryPredicate = resolveStaleRecoveryPredicate(
       options.shouldAttemptStaleRecovery,
       this.staleRecoveryPredicate,
@@ -454,7 +455,7 @@ export class DialCache {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
-    const shadowMismatchDiff = options.shadowMismatchDiff;
+    const shadowMismatchDiff = resolveShadowMismatchDiff(options.shadowMismatchDiff);
     const staleRecoveryPredicate = resolveStaleRecoveryPredicate(
       options.shouldAttemptStaleRecovery,
       this.staleRecoveryPredicate,
@@ -1843,6 +1844,15 @@ function resolveShadowComparator<Value>(
   comparator: ShadowComparator<Value> | undefined,
 ): ShadowComparator<Value> {
   return comparator ?? isDeepStrictEqual;
+}
+
+function resolveShadowMismatchDiff<Value>(
+  hook: ShadowMismatchDiff<Value> | undefined,
+): ShadowMismatchDiff<Value> | undefined {
+  if (hook !== undefined && typeof hook !== "function") {
+    throw new TypeError("DialCache shadowMismatchDiff must be a function");
+  }
+  return hook;
 }
 
 function resolveStaleRecoveryPredicate(
