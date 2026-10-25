@@ -84,5 +84,5 @@ per port, detections, the challenges mapped to it);
 | `M72` | C60.outcome-precedence | Report render_error over hook_error when both fail | ordinary, generated, portable | generated, portable | generated, portable | `shadow-logging-render-error-outranks-hook-error` |
 | `M73` | C60.outcome-precedence | Report logger_error over a warning construction failure when the logger also fails | ordinary, generated, portable | generated, portable | generated, portable | `shadow-logging-logger-error-outranks-construction` |
 | `M74` | C60.logging-outcomes | Emit a mismatch warning when both mismatch-logging leaves are off | ordinary, generated, portable | generated, portable | generated, fixed, portable | `shadow-warning-with-logging-off` |
-| `M75` | C60.warning-field-groups | Log the difference entries with their values at diff paths | ordinary, generated, portable | generated, portable | - | `shadow-warning-paths-carry-entries` |
+| `M75` | C60.warning-field-groups | Log the difference entries with their values at diff paths | ordinary, generated, portable | generated, portable | generated, fixed, portable | `shadow-warning-paths-carry-entries` |
 | `M76` | C60.invalid-input-isolation | Resolve an invalid diff leaf to values instead of off | ordinary, generated, portable | generated, portable | generated, portable | `shadow-logging-invalid-diff-leaf-acts-values` |

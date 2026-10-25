@@ -538,6 +538,29 @@
         "generated",
         "portable"
       ]
+    },
+    {
+      "id": "M25",
+      "case": "C60.warning-field-groups",
+      "description": "Log the difference entries with their values at diff paths",
+      "typescriptMutation": "M75",
+      "edits": [
+        {
+          "path": "rust/src/shadow_log.rs",
+          "before": "        let with_values = plan.diff == MismatchDiff::Values;",
+          "after": "        let with_values = plan.diff != MismatchDiff::Off;"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
     }
   ]
 }
