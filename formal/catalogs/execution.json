@@ -1780,7 +1780,7 @@
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "invariant": "capturedLoggingFollowsLayers",
       "before": "      else { value: \"false\", diff: DIFF_OFF }\n    {",
-      "after": "      else { value: \"true\", diff: DIFF_VALUES }\n    {",
+      "after": "      else if (written.shorthand == \"false\") { value: \"false\", diff: DIFF_OFF }\n      else { value: \"true\", diff: DIFF_VALUES }\n    {",
       "reproducer": {
         "kind": "exported-regression",
         "run": "invalidLoggingKeepsComparisonWithoutWarningTest",
