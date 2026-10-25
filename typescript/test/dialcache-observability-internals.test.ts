@@ -253,19 +253,41 @@ describe("DialCache observability internal compatibility paths", () => {
   });
 
   it("resolves every merged combination of shorthand and leaves as each layer expanded first", async () => {
-    // The recorded rule, written out independently of the merge: expand each
-    // layer, merge leaf by leaf, and let an invalid runtime shorthand still owe
-    // one config_resolution. Defaults stay valid, as registration guarantees.
-    const expectedLeaves = (defaultShadow: object | undefined, runtimeShadow: object | undefined) => {
-      const inherited = defaultShadow === undefined ? {} : expandMismatchLogging(defaultShadow);
-      const written = runtimeShadow === undefined ? {} : expandMismatchLogging(runtimeShadow);
-      return resolveMismatchLogging({
-        ...(written.invalid === true ? { logMismatches: "invalid" } : {}),
-        mismatchLogging: {
-          value: written.value !== undefined ? written.value : inherited.value,
-          diff: written.diff !== undefined ? written.diff : inherited.diff,
-        },
-      });
+    // The recorded rule, written out without the code under test: a written
+    // shorthand stands for both leaves (true: value on and diff "values"; false
+    // or malformed: both off), a leaf written beside it wins within its own
+    // layer, the runtime layer wins per leaf, an omitted leaf is off, an invalid
+    // leaf acts off, and an invalid input owes one config_resolution. Defaults
+    // stay valid, as registration guarantees.
+    type Layer = { readonly logMismatches?: unknown; readonly mismatchLogging?: { readonly value?: unknown; readonly diff?: unknown } };
+    const layerLeaves = (shadow: Layer | undefined): { value?: unknown; diff?: unknown } => {
+      const leaves: { value?: unknown; diff?: unknown } = {};
+      if (shadow?.logMismatches !== undefined) {
+        leaves.value = shadow.logMismatches === true;
+        leaves.diff = shadow.logMismatches === true ? "values" : "off";
+      }
+      if (shadow?.mismatchLogging?.value !== undefined) {
+        leaves.value = shadow.mismatchLogging.value;
+      }
+      if (shadow?.mismatchLogging?.diff !== undefined) {
+        leaves.diff = shadow.mismatchLogging.diff;
+      }
+      return leaves;
+    };
+    const expectedLeaves = (defaultShadow: Layer | undefined, runtimeShadow: Layer | undefined) => {
+      const inherited = layerLeaves(defaultShadow);
+      const written = layerLeaves(runtimeShadow);
+      const value = written.value !== undefined ? written.value : inherited.value;
+      const diff = written.diff !== undefined ? written.diff : inherited.diff;
+      const validValue = value === undefined || typeof value === "boolean";
+      const validDiff = diff === undefined || diff === "off" || diff === "paths" || diff === "values";
+      const malformedShorthand = runtimeShadow?.logMismatches !== undefined
+        && typeof runtimeShadow.logMismatches !== "boolean";
+      return {
+        value: validValue && value === true,
+        diff: validDiff && diff !== undefined ? diff : "off",
+        invalid: malformedShorthand || !validValue || !validDiff,
+      };
     };
     const ABSENT = Symbol("absent");
     const OWN_UNDEFINED = Symbol("own undefined");
