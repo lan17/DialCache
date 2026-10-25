@@ -220,8 +220,8 @@ a member those renderings omit stays omitted. They are not cut at the 8 KiB
 value cap, though: for a larger value, `mismatchPaths` and `diffJson` can log
 differing fields past the point where `cachedValueJson` is clipped. Computing
 them parses and walks both renderings in full, so each confirmed mismatch costs
-more CPU in proportion to the values' size, and a warning can carry up to about
-40 KiB more than before. To log only the previous fields plus
+more CPU and memory in proportion to the values' size, and a warning can carry
+up to about 40 KiB more than before. To log only the previous fields plus
 `cachedValueAgeSeconds`, write `mismatchLogging: { diff: "off" }` beside
 `logMismatches: true`. To log the differing fields without values, replace
 `logMismatches` with `mismatchLogging: { diff: "paths" }`: a leaf written beside

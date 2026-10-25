@@ -826,9 +826,10 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 
 ## Deviations
 
-- **2026-10-24, #242:** the built-in computation's CPU is linear in the
-  rendered size of both values: the uncut `mismatchPathCount` (D9) needs a
-  full parse and walk, and the caps bound only the output. The Constraints'
+- **2026-10-24, #242:** the built-in computation's CPU and transient memory
+  grow with the rendered size of both values, linearly apart from sorting each
+  object's member names: the uncut `mismatchPathCount` (D9) needs a full parse
+  and walk, which holds both parsed trees, and the caps bound only the output. The Constraints'
   "with bounded CPU" and the Proposal's "The caps bound the built-in" do not
   describe this. Review measured about 86 ms per warning on a 5.6 MB value,
   against 13 ms for the value fields alone. `docs/upgrading.md` and
