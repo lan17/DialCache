@@ -306,6 +306,8 @@ pub(crate) fn render_mismatch_log(
                         }
                     }
                 }
+                // A side without a rendering, or an operation without JSON
+                // (lan17/DialCache#245 tracks a renderer for those).
                 _ => {
                     render_failed = true;
                     None

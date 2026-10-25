@@ -162,6 +162,8 @@ impl<T: Send + Sync + 'static> Operation<T> {
     /// their value fields need a [`preview`](Self::preview) and their
     /// difference fields a [`mismatch_diff`](Self::mismatch_diff) hook, and a
     /// field logged without one is unavailable with a `render_error` outcome.
+    /// A JSON renderer for such operations is tracked in
+    /// <https://github.com/lan17/DialCache/issues/245>.
     pub fn with_codec(
         identity: Identity,
         codec: Arc<dyn Codec<T>>,

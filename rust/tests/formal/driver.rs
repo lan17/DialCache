@@ -1607,7 +1607,7 @@ impl Logger for DriverLogger {
                 Value::from(details.cache_key.as_str()),
             );
             // Until every port emits the new warning fields, the shared
-            // corpus compares only the fields all ports share.
+            // corpus compares only the fields all ports share (#243).
             let values = details.values.as_ref();
             fields.insert(
                 "cachedValueJson".to_string(),
