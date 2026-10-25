@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "f5f7ee357201b343eb00f8f9c783c92af0d722709137edc0f55e0a52b3cdec0a",
     "executionSha256": "29a412f87329347840f000ea44a6e95332464c0b01b92b4e41c615af3c9157cd",
-    "sourceAuditDispositionsSha256": "fcc44abfb14d7995942fcfaa8d35fc1abc86a71390cea2d61a8a1bcc5f9e71ea",
+    "sourceAuditDispositionsSha256": "40e8a4b2e82c2c78d07b60dc70454e0b8257bffdbd699c75c5da2a6fc813e249",
     "featureCoverageSha256": "487804a31ff7e3fd32f3b8cc19d698475f201bb747ae27b76d217d6200083a1a",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "9df8285820e4fff65f6a7753885bbb192c09f3f476eac8f9c98d130454ae1a28"
@@ -20,8 +20,8 @@
     "withRequiredGeneratedWitnesses": 244,
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
-    "sourceFiles": 27,
-    "sourceDeclarations": 883,
+    "sourceFiles": 28,
+    "sourceDeclarations": 879,
     "casesWithScheduledChecks": 266,
     "requiredWitnesses": 497,
     "casesWithQuintRegressionReplay": 192,
@@ -3424,7 +3424,7 @@
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "9e74f1e19138ae903502329a5dab85e23b2239554a1c2a9307c344d00133e0e7",
+      "sha256": "a970f8a32c50cef6a2f882268816465fa8447c5040352799f24038f27ff19bb8",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -4037,7 +4037,7 @@
     },
     {
       "path": "typescript/src/internal/shadow-log-json.ts",
-      "sha256": "9a1ced7cb4eb918df19cd30e7a9d26c76174d26ef73254d04a709a5d693293ae",
+      "sha256": "b73fc7757703d9710a53f561185f48760576679eac4da496c4d78a39200454e2",
       "candidateGoFiles": [
         "go/metrics.go",
         "go/codec.go"
@@ -4066,6 +4066,36 @@
               "appendJSON"
             ],
             "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+          }
+        ]
+      }
+    },
+    {
+      "path": "typescript/src/internal/thenable.ts",
+      "sha256": "894db398dcedff94e195a272d21caee4eed2d95917a1d1d4e499599104dc8491",
+      "candidateGoFiles": [
+        "go/deadline.go",
+        "go/metrics.go"
+      ],
+      "mappingReview": {
+        "status": "reviewed-mapping-not-execution",
+        "rationale": "TypeScript application callbacks under a synchronous contract (comparators, the stale recovery predicate, the mismatch hook) and observers (loggers, metrics adapters) can still return a promise-like; isPromiseLike detects one and settles awaits it so a rejection is consumed and observer outcomes can wait for settlement. Go callbacks and observers are synchronous calls with no settlement to observe: callSafely turns a callback panic into CallbackPanicError, and isolatedLogger and FailureIsolatedObserver recover a logger or observer panic, which are the Go counterparts of a rejected promise.",
+        "goBindings": [
+          {
+            "path": "go/deadline.go",
+            "symbols": [
+              "callSafely"
+            ],
+            "sha256": "4c96942152e994adc4171e4d30de2de8be83ab6b3a33ed62793cc86819ce2b97"
+          },
+          {
+            "path": "go/metrics.go",
+            "symbols": [
+              "isolatedLogger",
+              "FailureIsolatedLogger",
+              "FailureIsolatedObserver"
+            ],
+            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
           }
         ]
       }

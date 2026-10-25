@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "593d369e81961df0980f7617a652b7dbb67de890dfe07d2ccb5c5ec08036dd36",
+      "sha256": "206537fd46179fb5c50ef26552e85c70774648f6095a5e1db10ec823c67fe69b",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -914,7 +914,7 @@
     },
     {
       "path": "typescript/test/dialcache-stale-recovery-policy.test.ts",
-      "sha256": "0cd3257da5c88748802579c663b3c5e3bad13a53fadb8e1ed448a1b2a92a65e8",
+      "sha256": "aba1c3da6a6a542bdb53d20a3a4fb6c804b18d2370dfa7774f45160c005ab3b3",
       "entries": [
         {"title":"validates the instance predicate at construction","contracts":["B01"]},
         {"title":"validates use-case predicates when each API captures them","contracts":["B01"]},
