@@ -198,8 +198,9 @@ mod absent {
     }
 }
 
-/// What builds the fields: the operation's JSON rendering, its value preview
-/// and its difference hook.
+/// What builds the fields: the operation's JSON rendering, present only
+/// while it keeps its default preview, a preview set in its place, and its
+/// difference hook.
 #[derive(Clone, Default)]
 pub(crate) struct Renderers {
     pub json: Option<JsonRender>,
@@ -319,7 +320,8 @@ pub(crate) fn render_mismatch_log(
                 }
                 // A side without a rendering, or a warning without JSON: an
                 // operation built with a codec (lan17/DialCache#245 tracks a
-                // renderer for those) or one whose preview replaces its JSON.
+                // renderer for those), or one whose preview replaces its JSON
+                // or was set to `None`.
                 _ => {
                     render_failed = true;
                     None

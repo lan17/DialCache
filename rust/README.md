@@ -226,14 +226,16 @@ Mismatch logging is opt-in, confirmed and bounded. `ShadowPolicy::mismatch_loggi
 chooses the warning's content: `value` logs the JSON of both values, and
 `diff` at `MismatchDiff::Paths` logs RFC 6901 pointers to the differing
 fields, which `MismatchDiff::Values` extends with what each side holds there;
-`log_mismatches: Some(true)` is shorthand for both. Values built with
-`Operation::new` or `register` are compared through their `serde` JSON. A
+`log_mismatches: Some(true)` is shorthand for both. Values are compared with
+`PartialEq` or the operation's comparator; only the logged fields derive from
+the values' `serde` JSON, which `Operation::new` and `register` render. A
 `with_codec` or `register_custom` operation has none, so it logs value fields
 through its `preview` and differences through its `mismatch_diff` hook. A
-`preview` replaces the JSON for the whole warning on any operation, so the
-differences of an operation with one also come only from the hook. The differences
-are computed over each value's whole rendering, so their cost grows with the
-value's size. Rendering and hooks run through the bounded CPU executor after
+`preview` you set replaces the JSON for the whole warning, so the differences
+of an operation with one also come only from the hook; setting `preview` to
+`None` logs no values and leaves the differences to the hook as well. The
+differences are computed over each value's whole rendering, so their cost
+grows with the value's size. Rendering and hooks run through the bounded CPU executor after
 confirmation; they may run on a worker thread. A failure leaves the field
 unavailable and names its cause in the warning, and every warning attempt
 emits one `ShadowMismatchLogging` event with its outcome. Queue rejection

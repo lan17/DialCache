@@ -21,6 +21,8 @@ mod formal;
 mod frame_vectors;
 #[path = "formal/key_vectors.rs"]
 mod key_vectors;
+#[path = "formal/mismatch_vectors.rs"]
+mod mismatch_vectors;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -344,6 +346,7 @@ impl Run {
                 "envelopeVectors" => frame_vectors::check_envelope_vector,
                 "compressedDecodeVectors" => frame_vectors::check_compressed_decode_vector,
                 "compressionWriteVectors" => frame_vectors::check_compression_write_vector,
+                "mismatchPathVectors" => mismatch_vectors::check_mismatch_path_vector,
                 other => return Err(format!("unknown protocol vector group {other}")),
             };
             for vector in vectors {

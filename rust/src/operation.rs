@@ -48,7 +48,7 @@ pub type Comparator<T> = Arc<dyn Fn(&T, &T) -> bool + Send + Sync>;
 /// Renders the text a confirmed-mismatch warning logs for a value when
 /// `mismatch_logging.value` is on, in place of the value's JSON. `None`, or a
 /// panic, logs the field as unavailable with a `render_error` outcome. A
-/// preview replaces the JSON for the whole warning, so the built-in
+/// preview you set replaces the JSON for the whole warning, so the built-in
 /// difference computation never reads what it leaves out: difference fields
 /// then come only from a [`MismatchDiffHook`]. Runs through
 /// [`Runtime::spawn_blocking`](crate::Runtime::spawn_blocking) after mismatch
@@ -99,20 +99,59 @@ pub struct Operation<T> {
     /// Per-operation stale-recovery classifier. `None` defers to the
     /// instance's, which by default admits only the source deadline error.
     pub should_recover: Option<RecoveryPredicate>,
-    /// Renders the value fields of mismatch warnings in place of the
-    /// value's JSON, and so also turns off the built-in difference
-    /// computation; see [`Preview`]. `None` uses the JSON rendering of an
-    /// operation built with [`new`](Operation::new); an operation built with
-    /// [`with_codec`](Operation::with_codec) has no JSON rendering, so its
-    /// value fields need a preview.
+    /// Renders the value fields of mismatch warnings; see [`Preview`].
+    /// [`new`](Operation::new) sets the values' JSON rendering, which also
+    /// feeds the built-in difference computation. A closure you set replaces
+    /// that JSON for the whole warning, so difference fields then come only
+    /// from a [`mismatch_diff`](Self::mismatch_diff) hook. `None` logs no
+    /// values and leaves the operation without a JSON rendering, as one built
+    /// with [`with_codec`](Operation::with_codec) is: a requested value field
+    /// is unavailable with a `render_error` outcome, and so are difference
+    /// fields without a hook.
     pub preview: Option<Preview<T>>,
     /// Replaces the built-in difference computation of mismatch warnings.
     /// `None` runs the built-in walk over the values' JSON, which only an
-    /// operation built with [`new`](Operation::new) and without a
+    /// operation built with [`new`](Operation::new) that keeps its default
     /// [`preview`](Self::preview) has.
     pub mismatch_diff: Option<MismatchDiffHook<T>>,
-    /// The JSON rendering captured where `T: Serialize` is known.
-    pub(crate) json: Option<JsonRender>,
+    /// The JSON rendering captured where `T: Serialize` is known, and the
+    /// default preview that stands for it.
+    pub(crate) json: Option<JsonDefault<T>>,
+}
+
+/// The JSON rendering of an operation built where `T: Serialize` is known,
+/// with the default [`Preview`] installed for it. The rendering applies while
+/// `Operation::preview` still holds that preview, recognized by `Arc`
+/// identity: a closure set in its place replaces the JSON, and `None` removes
+/// it.
+pub(crate) struct JsonDefault<T> {
+    render: JsonRender,
+    preview: Preview<T>,
+}
+
+impl<T: Serialize + Send + Sync + 'static> JsonDefault<T> {
+    pub(crate) fn new() -> Self {
+        JsonDefault {
+            render: JsonRender::of::<T>(),
+            preview: Arc::new(crate::preview::json_preview::<T>),
+        }
+    }
+}
+
+impl<T> JsonDefault<T> {
+    /// The default preview, to install as `Operation::preview`.
+    pub(crate) fn preview(&self) -> Preview<T> {
+        self.preview.clone()
+    }
+}
+
+impl<T> Clone for JsonDefault<T> {
+    fn clone(&self) -> Self {
+        JsonDefault {
+            render: self.render,
+            preview: self.preview.clone(),
+        }
+    }
 }
 
 impl<T> Clone for Operation<T> {
@@ -126,7 +165,7 @@ impl<T> Clone for Operation<T> {
             should_recover: self.should_recover.clone(),
             preview: self.preview.clone(),
             mismatch_diff: self.mismatch_diff.clone(),
-            json: self.json,
+            json: self.json.clone(),
         }
     }
 }
@@ -143,11 +182,13 @@ impl<T> std::fmt::Debug for Operation<T> {
 
 impl<T: Serialize + DeserializeOwned + PartialEq + Send + Sync + 'static> Operation<T> {
     /// An operation using the JSON codec, `PartialEq` shadow comparison and
-    /// the values' JSON for mismatch warnings: their value fields and the
-    /// built-in difference computation. The JSON rendering stays when the
-    /// codec or comparator is replaced afterwards; a
-    /// [`preview`](Self::preview) replaces it.
+    /// the values' JSON for mismatch warnings: its default
+    /// [`preview`](Self::preview) logs that JSON as the value fields, and the
+    /// built-in difference computation walks it. The JSON rendering stays
+    /// when the codec or comparator is replaced afterwards; a preview you set
+    /// replaces it, and `None` in place of the default removes it.
     pub fn new(identity: Identity) -> Self {
+        let json = JsonDefault::new();
         Operation {
             identity,
             policy: Policy::default(),
@@ -155,9 +196,9 @@ impl<T: Serialize + DeserializeOwned + PartialEq + Send + Sync + 'static> Operat
             codec: Arc::new(JsonCodec),
             comparator: Arc::new(|a: &T, b: &T| a == b),
             should_recover: None,
-            preview: None,
+            preview: Some(json.preview()),
             mismatch_diff: None,
-            json: Some(JsonRender::of::<T>()),
+            json: Some(json),
         }
     }
 }
@@ -235,7 +276,14 @@ impl<T: Send + Sync + 'static> Operation<T> {
     pub(crate) fn erase(self) -> (Identity, Arc<OperationMetadata>) {
         let codec = self.codec;
         let comparator = self.comparator;
-        let preview = self.preview;
+        // The default preview stands for the JSON rendering. Any other
+        // preview replaces it, and `None` leaves the operation without one.
+        let (preview, json) = match (self.preview, self.json) {
+            (Some(preview), Some(json)) if Arc::ptr_eq(&preview, &json.preview) => {
+                (None, Some(json.render))
+            }
+            (preview, _) => (preview, None),
+        };
         let mismatch_diff = self.mismatch_diff;
         let metadata = OperationMetadata {
             value_type: TypeId::of::<T>(),
@@ -262,7 +310,7 @@ impl<T: Send + Sync + 'static> Operation<T> {
                     }
                 }) as ErasedMismatchDiff
             }),
-            json: self.json,
+            json,
         };
         (self.identity, Arc::new(metadata))
     }
@@ -289,6 +337,7 @@ pub(crate) struct OperationMetadata {
     pub should_recover: Option<RecoveryPredicate>,
     pub preview: Option<ErasedPreview>,
     pub mismatch_diff: Option<ErasedMismatchDiff>,
+    /// Present only while the operation keeps its default preview.
     pub json: Option<JsonRender>,
 }
 

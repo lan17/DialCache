@@ -13,12 +13,11 @@ use crate::engine::DialCache;
 use crate::error::{BoxError, ConfigError, Error};
 use crate::identity::{normalize_args, ArgValue, Identity, IntoKeyId};
 use crate::operation::{
-    downcast_value, erase_load, Comparator, ErasedOperation, MismatchDiffHook, MismatchEntry,
-    Operation, OperationMetadata, Preview, RecoveryPredicate, SourceBudget,
+    downcast_value, erase_load, Comparator, ErasedOperation, JsonDefault, MismatchDiffHook,
+    MismatchEntry, Operation, OperationMetadata, Preview, RecoveryPredicate, SourceBudget,
 };
 use crate::policy::Policy;
 use crate::scope::Scope;
-use crate::shadow_log::JsonRender;
 
 /// The key of one call: the entity id and any secondary dimensions.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -275,7 +274,7 @@ where
         self,
         codec: Arc<dyn Codec<T>>,
         comparator: Comparator<T>,
-        json: Option<JsonRender>,
+        json: Option<JsonDefault<T>>,
     ) -> Result<UseCase<Args, T>, ConfigError> {
         let key = self
             .key
@@ -301,7 +300,10 @@ where
             codec,
             comparator,
             should_recover: self.should_recover,
-            preview: self.preview,
+            // Without a preview of its own, a JSON use case keeps the default.
+            preview: self
+                .preview
+                .or_else(|| json.as_ref().map(JsonDefault::preview)),
             mismatch_diff: self.mismatch_diff,
             json,
         }
@@ -347,7 +349,7 @@ where
             .comparator
             .clone()
             .unwrap_or_else(|| Arc::new(|a: &T, b: &T| a == b));
-        self.finish(codec, comparator, Some(JsonRender::of::<T>()))
+        self.finish(codec, comparator, Some(JsonDefault::new()))
     }
 }
 
