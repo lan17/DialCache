@@ -110,6 +110,10 @@ automatically schedule synchronous work on threads.
 The default shadow comparator recursively compares JSON-like values and keeps
 booleans distinct from numbers. Custom native objects may have different
 equality semantics; supply `shadow_comparator` for domain-specific equality.
+`shadow_mismatch_diff` similarly replaces the built-in mismatch-path
+computation of confirmed-mismatch warnings, which the `mismatch_logging` leaves
+enable; see
+[confirmed mismatch logging](../shadow-validation.md#confirmed-mismatch-logging).
 Shadow admission requires a metrics observer for terminal outcomes.
 
 ## Redis and observability
