@@ -3,7 +3,6 @@ package dialcache
 // This driver controls external callbacks and explicit request contexts. No
 // model expectation or private cache field enters any execution method.
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
@@ -1084,7 +1083,7 @@ func behaviorWarningObservation(details obj) obj {
 			fields["mismatchPathsJson"] = nil
 			continue
 		}
-		var encoded bytes.Buffer
+		var encoded strings.Builder
 		encoder := json.NewEncoder(&encoded)
 		encoder.SetEscapeHTML(false)
 		if err := encoder.Encode(value); err != nil {
