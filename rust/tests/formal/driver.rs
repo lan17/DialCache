@@ -7,16 +7,17 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use dialcache::observe::{Event, LogEvent, Logger, Observer};
+use dialcache::observe::{Event, LogEvent, LogLevel, Logger, Observer, ShadowMismatchDetails};
 use dialcache::protocol::{decode_frame, encode_frame, read_result_from_untrusted_json};
 use dialcache::testing::{TestExecutor, VirtualClock};
 use dialcache::{
     BoxError, Codec, DialCache, Error, FallbackTimeout, Identity, InvalidateRequest, LocalEntry,
-    LocalRead, LocalStore, LruLocalStore, Operation, Payload, Policy, ReadContext, ReadRequest,
-    ReadResult, Remote, RuntimePolicy, Scope, SourceBudget, WriteRequest,
+    LocalRead, LocalStore, LruLocalStore, MismatchDiff, MismatchEntry, Operation, Payload, Policy,
+    ReadContext, ReadRequest, ReadResult, Remote, RuntimePolicy, Scope, SourceBudget, WriteRequest,
 };
 use futures::future::BoxFuture;
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{json, Map, Value};
 
 use super::causal::{
@@ -59,11 +60,18 @@ pub struct SourceFailure(pub usize);
 #[error("controlled mutation failure")]
 pub struct MaintenanceFailure;
 
-/// The cached value domain of the histories: JSON primitives plus absence.
+/// The value domain of the histories: JSON primitives, absence, and the
+/// source result that has no JSON rendering.
 #[derive(Debug, Clone)]
 pub enum Val {
+    /// The model's absent value, which mismatch warnings treat as an absent
+    /// side (D13): it serializes as the test-only absent marker.
     Absent,
     Json(Value),
+    /// The `resolve` command's `unrenderable` source result: its
+    /// serialization fails, so warnings report `render_error` for it, and
+    /// the driver knows it by its variant, never through JSON.
+    Unrenderable,
 }
 
 impl Val {
@@ -71,29 +79,45 @@ impl Val {
         Val::Json(value)
     }
 
-    /// The observation encoding: `{absent:true}` for absence, else the primitive.
+    /// The observation encoding: `{absent:true}` for absence,
+    /// `{unrenderable:true}` for the unrenderable result, else the primitive.
     pub fn observed(&self) -> Value {
         match self {
             Val::Absent => json!({ "absent": true }),
             Val::Json(value) => value.clone(),
-        }
-    }
-
-    pub fn json_preview(&self) -> Option<String> {
-        match self {
-            Val::Absent => None,
-            Val::Json(value) => serde_json::to_string(value).ok(),
+            Val::Unrenderable => json!({ "unrenderable": true }),
         }
     }
 }
 
+/// The default comparator: the unrenderable result is unequal to every
+/// decoded cached value.
 impl PartialEq for Val {
     fn eq(&self, other: &Val) -> bool {
         match (self, other) {
-            (Val::Absent, Val::Absent) => true,
+            (Val::Absent, Val::Absent) | (Val::Unrenderable, Val::Unrenderable) => true,
             (Val::Json(a), Val::Json(b)) => json_equal(a, b),
             _ => false,
         }
+    }
+}
+
+/// The JSON warnings render: the operation is built with
+/// [`Operation::new`], so the built-in walk runs over this rendering.
+impl Serialize for Val {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Val::Absent => dialcache::testing::Absent.serialize(serializer),
+            Val::Json(value) => value.serialize(serializer),
+            Val::Unrenderable => Err(serde::ser::Error::custom("controlled unrenderable value")),
+        }
+    }
+}
+
+/// Required by [`Operation::new`]; the driver's codec decodes values itself.
+impl<'de> Deserialize<'de> for Val {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Value::deserialize(deserializer).map(Val::Json)
     }
 }
 
@@ -518,9 +542,13 @@ impl Driver {
                     }
                     "reject"
                 } else {
-                    let value = match input.get("value") {
-                        None => Val::Absent,
-                        Some(value) => Val::from_json(value.clone()),
+                    let value = if input.get("unrenderable") == Some(&Value::Bool(true)) {
+                        Val::Unrenderable
+                    } else {
+                        match input.get("value") {
+                            None => Val::Absent,
+                            Some(value) => Val::from_json(value.clone()),
+                        }
                     };
                     let gate = s.loaders[index].clone();
                     gate.settle(LoaderOutcome::Value(value));
@@ -814,13 +842,19 @@ impl Driver {
                 })
             }
         };
-        let codec: Arc<dyn Codec<Val>> = Arc::new(DriverCodec {
+        // Built with `new`, so warnings render the values' JSON and the
+        // built-in walk runs; the codec and comparator replace the defaults.
+        let mut operation = Operation::<Val>::new(identity)
+            .policy(policy)
+            .budget(self.budget());
+        operation.codec = Arc::new(DriverCodec {
             shared: shared.clone(),
         });
-        let mut operation = Operation::with_codec(identity, codec, comparator)
-            .policy(policy)
-            .budget(self.budget())
-            .preview(|value: &Val| value.json_preview());
+        operation.comparator = Arc::from(comparator);
+        if self.fixture.get("mismatchDiff") == Some(&Value::from("error")) {
+            operation = operation
+                .mismatch_diff(|_: &Val, _: &Val| -> Vec<MismatchEntry> { controlled_panic() });
+        }
         if let Some(mode) = input.get("recovery").and_then(Value::as_str) {
             operation = operation.should_recover(self.classifier(mode));
         }
@@ -1205,6 +1239,8 @@ impl Codec<Val> for DriverCodec {
             Ok(match value {
                 Val::Absent => Payload::text("undefined"),
                 Val::Json(json) => Payload::text(serde_json::to_string(&json)?),
+                // Its dump fails natively; the model never lets it reach a fill.
+                Val::Unrenderable => return Err("controlled unrenderable value".into()),
             })
         })
     }
@@ -1584,48 +1620,74 @@ struct DriverLogger {
     shared: Arc<Mutex<Shared>>,
 }
 
+/// The warning's fields as logged, each present exactly when the warning
+/// carries it; the `mismatchPaths` list crosses the wire as one JSON string so
+/// every observed field stays a primitive (PORTING.md, `mismatchWarning`).
+fn warning_observation(details: &ShadowMismatchDetails) -> Map<String, Value> {
+    let text = |text: &Option<String>| text.clone().map_or(Value::Null, Value::from);
+    let mut fields = Map::new();
+    fields.insert(
+        "cacheNamespace".to_string(),
+        Value::from(details.namespace.as_ref()),
+    );
+    fields.insert(
+        "useCase".to_string(),
+        Value::from(details.use_case.as_ref()),
+    );
+    fields.insert(
+        "keyType".to_string(),
+        Value::from(details.key_type.as_ref()),
+    );
+    fields.insert("outcome".to_string(), Value::from("mismatch"));
+    fields.insert(
+        "cachedValueAgeSeconds".to_string(),
+        Value::from(details.cached_value_age_seconds),
+    );
+    fields.insert(
+        "cacheKey".to_string(),
+        Value::from(details.cache_key.as_str()),
+    );
+    if let Some(diff) = &details.diff {
+        fields.insert(
+            "mismatchPathsJson".to_string(),
+            diff.mismatch_paths.as_ref().map_or(Value::Null, |paths| {
+                Value::from(serde_json::to_string(paths).expect("strings render as JSON"))
+            }),
+        );
+        fields.insert(
+            "mismatchPathCount".to_string(),
+            diff.mismatch_path_count.map_or(Value::Null, Value::from),
+        );
+        if diff.level == MismatchDiff::Values {
+            fields.insert("diffJson".to_string(), text(&diff.diff_json));
+        }
+    }
+    if let Some(values) = &details.values {
+        fields.insert(
+            "cachedValueJson".to_string(),
+            text(&values.cached_value_json),
+        );
+        fields.insert(
+            "sourceValueJson".to_string(),
+            text(&values.source_value_json),
+        );
+    }
+    if let Some(outcome) = details.logging_outcome {
+        fields.insert("loggingOutcome".to_string(), Value::from(outcome.as_str()));
+    }
+    fields
+}
+
 impl Logger for DriverLogger {
+    /// Records the warning, then fails as the history's faults say: every
+    /// call while observers fail, and every warn-level call under
+    /// `faults.logger`, which leaves the metric observers working.
     fn log(&self, event: &LogEvent) {
         let mut s = self.shared.lock();
         if let LogEvent::ShadowMismatch(details) = event {
-            let mut fields = Map::new();
-            fields.insert(
-                "cacheNamespace".to_string(),
-                Value::from(details.namespace.as_ref()),
-            );
-            fields.insert(
-                "useCase".to_string(),
-                Value::from(details.use_case.as_ref()),
-            );
-            fields.insert(
-                "keyType".to_string(),
-                Value::from(details.key_type.as_ref()),
-            );
-            fields.insert("outcome".to_string(), Value::from("mismatch"));
-            fields.insert(
-                "cacheKey".to_string(),
-                Value::from(details.cache_key.as_str()),
-            );
-            // Until every port emits the new warning fields, the shared
-            // corpus compares only the fields all ports share (#243).
-            let values = details.values.as_ref();
-            fields.insert(
-                "cachedValueJson".to_string(),
-                values
-                    .and_then(|values| values.cached_value_json.clone())
-                    .map(Value::from)
-                    .unwrap_or(Value::Null),
-            );
-            fields.insert(
-                "sourceValueJson".to_string(),
-                values
-                    .and_then(|values| values.source_value_json.clone())
-                    .map(Value::from)
-                    .unwrap_or(Value::Null),
-            );
-            s.record("mismatchWarning", fields);
+            s.record("mismatchWarning", warning_observation(details));
         }
-        let fail = s.observer_fails();
+        let fail = s.observer_fails() || (s.fault("logger") && event.level() == LogLevel::Warn);
         drop(s);
         if fail {
             controlled_panic();
