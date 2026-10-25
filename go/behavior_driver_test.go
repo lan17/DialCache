@@ -3,6 +3,7 @@ package dialcache
 // This driver controls external callbacks and explicit request contexts. No
 // model expectation or private cache field enters any execution method.
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
@@ -717,6 +718,11 @@ func (d *behaviorDriver) apply(input obj) error {
 				return comparator == "equal", nil
 			}
 		}
+		if _, hooked := d.fixture["mismatchDiff"]; hooked {
+			operation.MismatchDiff = func(any, any) ([]MismatchEntry, error) {
+				return nil, errors.New("controlled mismatch diff failure")
+			}
+		}
 		call := func(callctx context.Context) error {
 			budget := int64(60000)
 			if operation.SourceTimeout > 0 {
@@ -749,6 +755,8 @@ func (d *behaviorDriver) apply(input obj) error {
 				result = obj{"status": "error", "error": d.classifyError(err)}
 			} else if IsAbsent(value) {
 				result["value"] = obj{"absent": true}
+			} else if value == any(behaviorUnrenderable) {
+				result["value"] = obj{"unrenderable": true}
 			}
 			d.mu.Lock()
 			ba(d.observed["calls"])[index] = result
@@ -784,6 +792,8 @@ func (d *behaviorDriver) apply(input obj) error {
 				d.sourceErrors[index] = &FallbackTimeoutError{}
 			}
 			gate.err = d.sourceErrors[index]
+		} else if bb(input["unrenderable"]) {
+			gate.value = behaviorUnrenderable
 		} else {
 			gate.value = bdefault(input, "value", Absent)
 		}
@@ -1044,25 +1054,62 @@ func (l behaviorLogger) fail() {
 }
 func (l behaviorLogger) Debug(string, any) { l.fail() }
 func (l behaviorLogger) Error(string, any) { l.fail() }
+
+// Warn records a mismatch warning before it fails: the faults command's logger
+// fault makes every Warn panic, the one way a Go logger fails, while Debug,
+// Error and the metric observers keep working.
 func (l behaviorLogger) Warn(message string, details any) {
 	if message == "DialCache shadow validation mismatch" {
-		l.d.record("mismatchWarning", sharedWarningFields(bm(details)))
+		l.d.record("mismatchWarning", behaviorWarningObservation(bm(details)))
 	}
 	l.fail()
+	if l.d.fault("logger") {
+		panic("controlled logger failure")
+	}
 }
 
-// sharedWarningFields keeps the warning fields every port emits, so the
-// mismatch-path fields do not reach the shared expectations before every
-// port records them.
-func sharedWarningFields(details obj) obj {
-	shared := obj{}
-	for _, field := range []string{"cacheNamespace", "useCase", "keyType", "outcome", "cacheKey", "cachedValueJson", "sourceValueJson"} {
-		if value, present := details[field]; present {
-			shared[field] = value
+// behaviorWarningObservation is the warning's fields as logged, each present
+// exactly when the warning carries it. The mismatchPaths slice crosses the wire
+// as one compact JSON string, so every observed field stays a primitive
+// (PORTING.md, mismatchWarning); only an untyped nil, the library's failed
+// field, is recorded as null.
+func behaviorWarningObservation(details obj) obj {
+	fields := obj{}
+	for name, value := range details {
+		if name != "mismatchPaths" {
+			fields[name] = value
+			continue
 		}
+		if value == nil {
+			fields["mismatchPathsJson"] = nil
+			continue
+		}
+		var encoded bytes.Buffer
+		encoder := json.NewEncoder(&encoded)
+		encoder.SetEscapeHTML(false)
+		if err := encoder.Encode(value); err != nil {
+			// Not JSON, so the shared projection rejects it as observed.
+			fields["mismatchPathsJson"] = "unencodable mismatchPaths: " + err.Error()
+			continue
+		}
+		fields["mismatchPathsJson"] = strings.TrimSuffix(encoded.String(), "\n")
 	}
-	return shared
+	return fields
 }
+
+// behaviorUnrenderable is the source result with no JSON rendering (D13): its
+// MarshalJSON fails, so every JSON rendering of it fails, the driver codec's
+// included. The driver knows it by identity and observes a call that returns
+// it as {"unrenderable": true}. The method has a value receiver because the
+// library renders a struct through encoding/json after dereferencing it, and
+// the struct is not zero-size, so the pointer is distinct from every other.
+type behaviorUnrenderableValue struct{ name string }
+
+func (behaviorUnrenderableValue) MarshalJSON() ([]byte, error) {
+	return nil, errors.New("controlled unrenderable value")
+}
+
+var behaviorUnrenderable = &behaviorUnrenderableValue{name: "unrenderable"}
 
 func (r behaviorRemote) Read(ctx context.Context, key, watermark string) (ReadResult, error) {
 	d := r.d
