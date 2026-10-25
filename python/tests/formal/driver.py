@@ -189,11 +189,30 @@ class Logger:
             and args[0] == "DialCache shadow validation mismatch: %s"
             and isinstance(args[1], dict)
         ):
-            self.owner.record("mismatchWarning", **args[1])
+            self.owner.record("mismatchWarning", **shared_warning_fields(args[1]))
         if self.owner.fixture.get("observerFailure") or self.owner.faults.get("observer"):
             raise RuntimeError("Controlled observer failure")
 
     debug = error = warning
+
+
+# Every port compares mismatchWarning events exactly against the shared
+# scenarios, so this driver records only the fields every port emits. The
+# optional mismatchPathsJson, mismatchPathCount, diffJson and loggingOutcome
+# observations join with the last port (design/2026-10-24-shadow-mismatch-paths.md, #243).
+SHARED_WARNING_FIELDS = (
+    "cacheNamespace",
+    "useCase",
+    "keyType",
+    "outcome",
+    "cacheKey",
+    "cachedValueJson",
+    "sourceValueJson",
+)
+
+
+def shared_warning_fields(details):
+    return {field: details[field] for field in SHARED_WARNING_FIELDS if field in details}
 
 
 class Serializer:
