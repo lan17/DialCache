@@ -1,6 +1,6 @@
 # Shadow mismatch paths: name the differing fields in confirmed-mismatch warnings
 
-- **Status:** Accepted
+- **Status:** Proposed
 - **Issue:** #243, which tracks the work after the TypeScript reference
 - **Pull requests:** #242
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
@@ -148,8 +148,9 @@ renderings behind `value` contain applies to the built-in only.
 The built-in computation:
 
 1. Render each side to native JSON once and parse it. A side with no
-   rendering (`undefined` at the root, a cycle, a `bigint`) makes
-   `mismatchPaths`, `diffJson` and that side's value field `null`.
+   rendering (a cycle, a `bigint`) makes `mismatchPaths`, `diffJson` and
+   that side's value field `null`. An absent side, the top-level undefined
+   marker a negative-cache entry stores, is not a rendering failure (D13).
 2. Walk both parsed values together. Objects recurse over the union of their
    member names in UTF-16 code-unit order (the order W02 already prescribes
    for key arguments); a member present on one side only is reported at its
@@ -162,7 +163,9 @@ The built-in computation:
    for an array-length or depth entry.
 3. Roots of different kinds (object against array, container against
    primitive, primitive against primitive) yield one entry at `""` carrying
-   both roots. Byte-identical renderings yield no entries, so
+   both roots. An absent root against a present one yields one entry at
+   `""` carrying only the present side (D13). Byte-identical renderings
+   yield no entries, so
    `mismatchPaths` is `[]`: the difference is outside the logged form, which
    means a type the rendering erased or a comparator that sees more than
    JSON.
@@ -190,7 +193,8 @@ runaway hook costs what a runaway comparator costs.
 Each warning attempt, a confirmed mismatch with logging on, emits one
 `shadowMismatchLogging` metric event with the cache labels and an `outcome`:
 `hook_error` when the hook or the built-in walk threw or returned an invalid
-list, `render_error` when a side had no JSON rendering, `logger_error` when
+list, `render_error` when a side had no JSON rendering (an absent side is
+not one, D13), `logger_error` when
 the logger threw, else `logged`; the outcomes rank in that order, so
 `hook_error` wins over `render_error`, which wins over `logger_error`.
 Logging off emits nothing, so the metric never shadows the mismatch count.
@@ -321,7 +325,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   panics in Go, the bounded CPU executor in Rust, the event loop in Python);
   which native types each renderer sees; the logger backend; the exporter
   names and schema of the `shadowMismatchLogging` metric; the native value
-  each driver uses for the absent source input, and how its hook and logger
+  each driver uses for the unrenderable source input and for an absent
+  value, and how its hook and logger
   fail (throw, panic or returned error).
 
 ## Decisions
@@ -572,8 +577,8 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   so the profile's dark jobs stand for both.
   - **Inputs.** Three inputs make each failure outcome reachable, alone and
     together: a `shadowMismatchDiff` fixture that throws (distinct from the
-    existing `shadowHook` fixture, which is the outcome hook), an absent source
-    result (the one compared value no port renders), and a logger-only
+    existing `shadowHook` fixture, which is the outcome hook), a source
+    result that fails to render in every port (D13), and a logger-only
     failure.
   - **Shared tests.** Besides the generated shadow corpus and the five fixed
     scenarios, every port runs the same tests with the same inputs and the
@@ -585,8 +590,9 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
     tests keep what is native (rendering text, hook execution, the logger
     backend and exporter names) and a hook's successful entries, which no
     shared input reaches.
-  - **Rust.** The Rust driver's value type gains `Serialize`, with the absent
-    value failing to serialize so it stays unrendered, and the driver builds
+  - **Rust.** The Rust driver's value type gains `Serialize`, with an
+    unrenderable value that fails to serialize and an absent value the
+    warning treats as absent (D13), and the driver builds
     its operation so the built-in walk runs; the Proposal's Rust shape is
     unchanged.
   - **What this buys.** The field, `null` and outcome rules are checked in all
@@ -623,6 +629,41 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
     would change the Proposal's Rust shape, where an operation built with
     `with_codec` gets entries only through the hook, to serve a test.
 
+### D13. An absent compared value is a side, not a rendering failure
+
+- **Choice:** a port's top-level undefined marker, the value its default
+  codec stores for a negative-cache entry (TypeScript `undefined`, Go
+  `Absent`, Python `UNDEFINED`), is an absent side, not a value with no
+  rendering. When one compared value is absent and the other is present,
+  the built-in computation reports one entry at `""` carrying only the
+  present side, as it reports a member present on one side only, so
+  `mismatchPaths` is `[""]` and `mismatchPathCount` is 1. The absent side's
+  value field is `null` and the outcome is `logged`: since a failure always
+  sets `loggingOutcome`, a `null` value field without it means the side was
+  absent. Two absent values compare equal and never reach a warning, and a
+  hook still receives the raw values. `render_error` keeps every value that
+  has no rendering: a cycle, a `bigint`, a throwing `toJSON` and their native
+  counterparts. Rust's default codec stores no distinct undefined marker, so
+  the case does not arise for its native values; the Rust driver's value type
+  gives the model's absent value the same treatment. D12's absent source
+  input becomes a source result that fails to render in every port: a
+  throwing `toJSON` in TypeScript, a failing `MarshalJSON` in Go, a failing
+  `Serialize` in Rust and a non-serializable object in Python.
+- **Status:** Open.
+- **Rejected:**
+  - Keeping the carried rule that every side with no rendering fails closed
+    (#138; see Carried decisions) for the undefined marker. A cached
+    negative-cache entry that meets a real source value, or a loader that
+    now returns the marker against a stale cached value, is ordinary drift.
+    Reporting it as `render_error` with `null` paths makes the one outcome
+    that means "logging broke" fire on healthy data.
+  - Rendering the marker as JSON `null`. It would blur a stored `null` with
+    absence, which each default codec keeps apart, and an absent value
+    against `null` would show no paths though the comparator saw a
+    difference.
+  - A separate outcome such as `absent`. It adds a metric label for ordinary
+    data, and the entry at `""` with one side already says what happened.
+
 ## Carried decisions
 
 Reviewed and approved by the maintainer on #138; carried unchanged:
@@ -635,7 +676,8 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   that snapshot, so a stateful `toJSON` cannot put into one field what
   another omits.
 - A side with no rendering fails every field it feeds closed to `null`; no
-  `null → null` entries.
+  `null → null` entries. D13 narrows this: an absent side is not a side with
+  no rendering.
 - Unknown `mismatchLogging` leaves and other unknown key-config fields are
   ignored and reported once per observed config as `config_unknown_field`.
   (#138 applied this to `shadow.logMismatches` itself; D10 keeps that field
@@ -704,12 +746,14 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 1. #242 opens with this record as its first commit and stays at the design
    gate until every decision is confirmed and the record is `Accepted`. D12,
    added after acceptance, returned the record to `Proposed` until the
-   maintainer confirmed it the same day.
+   maintainer confirmed it the same day; D13, added during the TypeScript
+   review, does the same until he confirms it.
 2. #242 then carries the TypeScript reference: the leaves and the shorthand,
    the built-in differ, the hook, the warning fields, the
    `shadowMismatchLogging` metric and its exporters, the TypeScript replay
    driver, C60's wording, the TypeScript docs and catalogs, and native tests
-   that pin the differ. The shared corpus keeps `logMismatches`, which stays
+   that pin the differ, with D13's absent side once it is confirmed. The
+   shared corpus keeps `logMismatches`, which stays
    valid in every port, so the other ports keep passing. Tier: Replay and
    Mutations, since M08 and M09 anchor on the moved logging code.
 3. Once the maintainer is satisfied with the TypeScript reference, #242 also
@@ -722,7 +766,8 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
    kernel's captured leaves, the shadow profile's starting and runtime
    choices for each `diff` level, `value` and the shorthand with their
    fixture and `logPolicy` encodings, its warning and outcome predictions,
-   the three failure inputs in every driver and the Rust driver's
+   the three failure inputs in every driver (the unrenderable source result
+   joins the model's source results, D13) and the Rust driver's
    serializable value type; records the new observation fields in every
    driver; and catalogues mutants for the built-in computation (the array
    rule, the root cases) and for the hook's fail-closed behavior in every
