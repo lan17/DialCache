@@ -1,7 +1,6 @@
 package dialcache
 
 import (
-	"reflect"
 	"strconv"
 	"unicode/utf8"
 )
@@ -26,8 +25,7 @@ func (logger isolatedLogger) Debug(message string, details any) {
 	logger.inner.Debug(message, details)
 }
 func (logger isolatedLogger) Warn(message string, details any) {
-	defer func() { _ = recover() }()
-	logger.inner.Warn(message, details)
+	warnDelivered(logger.inner, message, details)
 }
 func (logger isolatedLogger) Error(message string, details any) {
 	defer func() { _ = recover() }()
@@ -37,7 +35,26 @@ func FailureIsolatedLogger(logger Logger) Logger {
 	if logger == nil {
 		return nil
 	}
+	if isolated, ok := logger.(isolatedLogger); ok {
+		return isolated
+	}
 	return isolatedLogger{logger}
+}
+
+// warnDelivered calls Warn in isolation and reports whether it returned
+// without panicking; a Go logger returns nothing, so a panic is its only
+// observable failure.
+func warnDelivered(logger Logger, message string, details any) (delivered bool) {
+	if isolated, ok := logger.(isolatedLogger); ok {
+		logger = isolated.inner
+	}
+	defer func() {
+		if recover() != nil {
+			delivered = false
+		}
+	}()
+	logger.Warn(message, details)
+	return true
 }
 
 const ShadowLogKeyMaxBytes = 2048
@@ -56,32 +73,6 @@ func clampLogUTF8(value string, maximum int) string {
 	return value[:limit] + ShadowLogTruncationMarker
 }
 func PreviewShadowLogKey(value string) string { return clampLogUTF8(value, ShadowLogKeyMaxBytes) }
-func PreviewShadowLogJSON(value any) (preview *string) {
-	defer func() {
-		if recover() != nil {
-			preview = nil
-		}
-	}()
-	if IsAbsent(value) {
-		return nil
-	}
-	encoded, err := appendJSON(nil, reflect.ValueOf(value), make(map[visit]bool))
-	if err != nil {
-		return nil
-	}
-	text := clampLogUTF8(string(encoded), ShadowLogValueMaxBytes)
-	return &text
-}
-
-type ShadowMismatchDetails struct {
-	CacheKey        string  `json:"cacheKey"`
-	CachedValueJSON *string `json:"cachedValueJson"`
-	SourceValueJSON *string `json:"sourceValueJson"`
-}
-
-func ShadowMismatchLogDetails(key string, cached, source any) ShadowMismatchDetails {
-	return ShadowMismatchDetails{PreviewShadowLogKey(key), PreviewShadowLogJSON(cached), PreviewShadowLogJSON(source)}
-}
 
 var metricKinds = map[string]string{
 	"shadowAge": "shadowValueAge", "recoveryAge": "staleRecoveryValueAge",

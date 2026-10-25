@@ -322,28 +322,35 @@ func TestObserverIsolationAndBoundedNativeJSONLogs(t *testing.T) {
 	logger.Debug("", nil)
 	logger.Warn("", nil)
 	logger.Error("", nil)
+	// Wrapping twice keeps one layer, so a Warn panic stays observable as a
+	// logger failure.
+	if FailureIsolatedLogger(logger) != logger || warnDelivered(FailureIsolatedLogger(logger), "", nil) || !warnDelivered(FailureIsolatedLogger(&boundaryLogger{}), "", nil) {
+		t.Fatal("logger isolation hid or invented a Warn failure")
+	}
 	key := PreviewShadowLogKey(strings.Repeat("🙂", 1000))
 	if len(key) > ShadowLogKeyMaxBytes || !utf8.ValidString(key) || !strings.HasSuffix(key, ShadowLogTruncationMarker) {
 		t.Fatalf("invalid key preview: bytes=%d", len(key))
 	}
-	value := PreviewShadowLogJSON(strings.Repeat("🙂", 3000))
-	if value == nil || len(*value) > ShadowLogValueMaxBytes || !utf8.ValidString(*value) || !strings.HasSuffix(*value, ShadowLogTruncationMarker) {
+	preview := func(value any) any {
+		fields, _ := renderShadowMismatchLog(true, MismatchDiffOff, value, Absent, nil)
+		return fields["cachedValueJson"]
+	}
+	value, _ := preview(strings.Repeat("🙂", 3000)).(string)
+	if len(value) > ShadowLogValueMaxBytes || !utf8.ValidString(value) || !strings.HasSuffix(value, ShadowLogTruncationMarker) {
 		t.Fatal("invalid value preview")
 	}
-	if PreviewShadowLogJSON(Absent) != nil || PreviewShadowLogJSON(big.NewInt(1)) != nil {
+	if preview(Absent) != nil || preview(big.NewInt(1)) != nil {
 		t.Fatal("unsupported values should have null previews")
 	}
 	cycle := map[string]any{}
 	cycle["self"] = cycle
-	if PreviewShadowLogJSON(cycle) != nil {
+	if preview(cycle) != nil {
 		t.Fatal("cyclic object should have null preview")
 	}
-	plain := PreviewShadowLogJSON("<tag>")
-	if plain == nil || *plain != `"<tag>"` {
+	if plain := preview("<tag>"); plain != `"<tag>"` {
 		t.Fatalf("native JSON was HTML escaped: %v", plain)
 	}
-	null := PreviewShadowLogJSON(nil)
-	if null == nil || *null != "null" {
+	if null := preview(nil); null != "null" {
 		t.Fatal("null confused with absent")
 	}
 }
