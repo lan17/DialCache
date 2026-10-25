@@ -716,10 +716,11 @@ the whole warning, so the value fields come from the preview and the diff
 fields only from a `mismatch_diff` hook; the built-in walk never reads what a
 redacting preview leaves out. A field logged without its renderer, or a
 `preview` that returns `None` or panics, is unavailable with `render_error`.
-A value whose `Serialize` fails has no rendering, and a rendering nested more
-than 128 levels deep exceeds `serde_json`'s parser, so the built-in computation
-fails with `hook_error`. Rust's default codec stores no top-level undefined
-value, so an absent side does not arise for native values.
+A value whose `Serialize` fails has no rendering, so its value field and the
+built-in diff fields are unavailable with `render_error`. A rendering nested
+more than 128 levels deep exceeds `serde_json`'s parser, so the built-in
+computation fails with `hook_error`. Rust's default codec stores no top-level
+undefined value, so an absent side does not arise for native values.
 
 `Operation::mismatch_diff` and `UseCaseBuilder::mismatch_diff` set the hook,
 `Fn(&T, &T) -> Vec<MismatchEntry>`, whose entries carry a `path` and optional
