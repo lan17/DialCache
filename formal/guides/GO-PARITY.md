@@ -212,11 +212,15 @@ portable case's Quint evidence from its additional native binding requirements.
 
 `MetricsAdapter.ObserveEvent` accepts backend-neutral diagnostics.
 `FailureIsolatedObserver` and `FailureIsolatedLogger` prevent exporter errors
-or panics from replacing cache/source results. Shadow mismatch previews use
-native JSON behavior and bounded UTF-8 output; unavailable previews remain
-absent. The Prometheus and DogStatsD adapters preserve metric names, units,
-labels, bucket boundaries, and counter increments. Logical cache keys never
-become metric labels.
+or panics from replacing cache/source results. Confirmed-mismatch warning fields
+render each compared value once with native JSON behavior and bounded UTF-8
+output; the built-in mismatch-path walk runs over the parsed renderings,
+`Operation.MismatchDiff` replaces it for one operation, and a field whose
+rendering or computation fails is nil. A `Warn` panic stays isolated, and the
+`shadowMismatchLogging` event reports it as `logger_error` unless a hook or
+render failure outranks it. The Prometheus and DogStatsD adapters preserve
+metric names, units, labels, bucket boundaries, and counter increments. Logical
+cache keys never become metric labels.
 
 The Go Prometheus binding accepts an explicit native registry. Reconstructing
 this adapter with the same registry and prefix reuses its collectors and
