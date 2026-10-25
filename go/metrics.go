@@ -78,6 +78,7 @@ var metricKinds = map[string]string{
 	"shadowAge": "shadowValueAge", "recoveryAge": "staleRecoveryValueAge",
 	"request": "request", "miss": "miss", "disabled": "disabled", "error": "error", "invalidation": "invalidation", "coalesced": "coalesced",
 	"shadowValidation": "shadowValidation", "shadow": "shadowValidation", "shadowValueAge": "shadowValueAge", "observeShadowValueAge": "shadowValueAge",
+	"shadowMismatchLogging": "shadowMismatchLogging",
 	"futureTimestampOffset": "futureTimestampOffset", "observeFutureTimestampOffset": "futureTimestampOffset", "futureOffset": "futureTimestampOffset",
 	"staleRecovery": "staleRecovery", "recovery": "staleRecovery", "staleRecoveryValueAge": "staleRecoveryValueAge", "observeStaleRecoveryValueAge": "staleRecoveryValueAge",
 	"compression": "compression", "get": "get", "observeGet": "get", "fallback": "fallback", "observeFallback": "fallback",
@@ -102,7 +103,7 @@ func metricLabels(event Event, kind string) map[string]string {
 			scope = event.Scope
 		}
 		labels["scope"] = scope
-	case "shadowValidation", "shadowValueAge", "staleRecovery", "staleRecoveryValueAge":
+	case "shadowValidation", "shadowValueAge", "shadowMismatchLogging", "staleRecovery", "staleRecoveryValueAge":
 		outcome := eventString(event, "outcome")
 		if outcome == "" {
 			outcome = event.Outcome
