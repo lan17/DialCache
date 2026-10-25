@@ -345,9 +345,10 @@ function mergeShadowConfig(
   // it still wins within its own layer.
   const inherited = defaults === undefined ? {} : expandMismatchLogging(defaults);
   const written = overlay === undefined ? {} : expandMismatchLogging(overlay);
+  // Only the runtime layer can carry a malformed shorthand: registration
+  // rejects one in a static default. It stays raw, so admission records its
+  // config_resolution; its expanded leaves already won the merge.
   if (written.invalid === true) {
-    // A malformed runtime shorthand stays raw, so admission records its
-    // config_resolution; its expanded leaves already won the merge.
     merged.logMismatches = overlay?.logMismatches;
   }
   const value = written.value !== undefined ? written.value : inherited.value;

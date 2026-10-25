@@ -232,7 +232,9 @@ for how the shorthand and the leaves combine across config layers.
 
 The Datadog adapter's new `shadow_mismatch_logging.count` metric is its longest
 name, which lowers the longest valid Datadog namespace from 175 to 170
-characters.
+characters. `DialCacheKeyConfig.disabled()` now turns logging off with
+`shadow.mismatchLogging: { value: false, diff: "off" }` in place of
+`shadow.logMismatches: false`.
 
 </LanguageContent>
 
