@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "de14d22fc1d5dfa9e2770baa6e232e31303c8904e5db0b96b7317240019ba3eb",
+      "sha256": "593d369e81961df0980f7617a652b7dbb67de890dfe07d2ccb5c5ec08036dd36",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -668,7 +668,7 @@
     },
     {
       "path": "typescript/test/dialcache-observability-internals.test.ts",
-      "sha256": "8c25accd3c3e152aba2c0033380ca1ad3c1159cc6dfd3be586311582004747f8",
+      "sha256": "3d16f5167461441cff8bcc10b6e780d39d8358a73e6283e3193830aa25b21972",
       "entries": [
         {"title":"merges every runtime policy leaf independently","contracts":["C16"]},
         {"title":"preserves omitted requestLocal and coalesce through a runtime merge","contracts":["C16"]},
