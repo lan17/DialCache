@@ -240,7 +240,7 @@ Every event has `event`; additional label fields must be JSON primitives. The
 | `size`, `storedSize` | cache labels + `bytes` |
 | `compression` | cache labels + `outcome` |
 | `serialization` | cache labels + `operation`, `seconds` |
-| `mismatchWarning` | `cacheNamespace`, `useCase`, `keyType`, `outcome`; optional, each recorded exactly when the warning carries it: `cacheKey`, `cachedValueJson`, `sourceValueJson` and `diffJson` (string or null), `cachedValueAgeSeconds` (number or null), `mismatchPathsJson` (the `mismatchPaths` array as one JSON string, or null), `mismatchPathCount` (integer or null), `loggingOutcome` (`hook_error` or `render_error`) |
+| `mismatchWarning` | `cacheNamespace`, `useCase`, `keyType`, `outcome`; optional, each recorded exactly when the warning carries it: `cacheKey`, `cachedValueJson`, `sourceValueJson` and `diffJson` (string or null), `cachedValueAgeSeconds` (number or null; every shadow-profile warning follows a verdict that sampled an age, so that profile's projection requires a number), `mismatchPathsJson` (the `mismatchPaths` array as one JSON string, or null), `mismatchPathCount` (integer or null), `loggingOutcome` (`hook_error` or `render_error`) |
 | `shadowMismatchLogging` | `cacheNamespace`, `useCase`, `keyType` (no layer), `outcome` (`logged`, `hook_error`, `render_error` or `logger_error`) |
 | `readContext` | `index`, `timeoutMs`, `aborted` |
 | `readAbort`, `writeDispatch` | `index` |
