@@ -15,7 +15,7 @@
     },
     {
       "path": "docs/api.md",
-      "sha256": "523d18c1fc861abb20b0f74e09de5419716d6626977cded41c3d3c9590bc5fc9",
+      "sha256": "b67218e782ade7ee54c89322e85c328466202ee239585d7e215fa27c32e79ccc",
       "entries": [
         {"title":"API reference","contracts":["B01"]},
         {"title":"Imports","contracts":["B01"]},
@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "d4a9b260bfb17fbdf1449a6d96145431291e22cac7d92f02c0d14517eca72073",
+      "sha256": "7dfbcb70b700f84a8e39a57c09e1e6f0787153476cc33014c1b8f762b9726dba",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "f0e99c5ccf61355cfd348f7a029903fb4285fe933fd8cf6ccd358dc4176ba114",
+      "sha256": "f2ee03fc1db3af0342ecc0853f1bda8c20a7b731af10b042c113a6fc2610a0e4",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "95cda9c4764cacab80ee0caaf2504a96b5197ac200832e644ffe58af363b87ca",
+      "sha256": "32c7737ba51c1a699a0231544ac45d49c20a299bfa3f0c57204057515e79c746",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -454,7 +454,7 @@
     },
     {
       "path": "typescript/test/dialcache-config-ramp.test.ts",
-      "sha256": "728fc9a033b944c5f449eb0e26eba696076c244b64d28351d58f394e1f8f240f",
+      "sha256": "3ab42bf984ccb92843f05dfaa054cee199c3deb796ea884b9f90d75e6bf05dd9",
       "entries": [
         {"title":"rejects the removed public ramp sampler override","contracts":["B01"]},
         {"title":"preserves requestLocal omission until baseline and runtime config are merged","contracts":["C16"]},
@@ -499,6 +499,8 @@
         {"title":"reports config_unknown_field for a getOrLoad defaultConfig on every enabled call","contracts":["X01","B01"]},
         {"title":"reports config_unknown_field once per provider result with unknown fields","contracts":["C16","X01"]},
         {"title":"does not report config_unknown_field for configs with only known fields","contracts":["C16","X01"]},
+        {"title":"does not report again a provider result that is the key's own defaultConfig with %s","contracts":["C16","X01"]},
+        {"title":"scans a provider result that construction never saw, such as a hydrated prototype object","contracts":["C16","X01"]},
         {"title":"fails open when the runtime config provider throws","contracts":["C20"]}
       ]
     },
@@ -673,7 +675,7 @@
     },
     {
       "path": "typescript/test/dialcache-observability-internals.test.ts",
-      "sha256": "7daf1ae1605606736d764a1d7adc19f36c613cb9ef0d39e0b0a810b881915b05",
+      "sha256": "d4feb95d65de424faebf3d327f58e6d30a3d2ba0706661a916354c88ce365429",
       "entries": [
         {"title":"merges every runtime policy leaf independently","contracts":["C16"]},
         {"title":"preserves omitted requestLocal and coalesce through a runtime merge","contracts":["C16"]},
@@ -765,7 +767,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "e1fd5beaeef1149e841a4841f6470bbdf5b750887536bc108c6de3ef05a88ba1",
+      "sha256": "3e518e34b1bd77578f46153c714d4354883fb71eacc8109d3c88a53eae6d5982",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -781,6 +783,7 @@
         {"title":"logs the exact value age the verdict observed as cachedValueAgeSeconds","contracts":["C57","C60"]},
         {"title":"logs the documented GetUser example at diff $diff","contracts":["C60","X01"]},
         {"title":"emits one logged event per confirmed mismatch after its verdict and none for a match","contracts":["C60","X01"]},
+        {"title":"rejects %s as shadowMismatchDiff where each API captures it","contracts":["B01"]},
         {"title":"logs shadowMismatchDiff entries in place of the built-in walk through %s()","contracts":["C60"]},
         {"title":"logs null diff fields and hook_error without touching the verdict when the hook $name","contracts":["C30","C60"]},
         {"title":"logs render_error with null source and diff fields for a bigint source value under $name","contracts":["C60","B03"]},
@@ -1082,7 +1085,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "63a349c696a5820ed48eb66fd70de03746ec924233afa8229d3d0c7988c7908c",
+      "sha256": "067a573fcc185924ed2a5167fb1e351c4316c449a1eef2b7d74b3d8b5142fe9e",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1109,6 +1112,7 @@
         {"title":"fails closed with hook_error and no fallback when the hook %s","contracts":["C60","B02"]},
         {"title":"consumes a rejecting hook result without an unhandled rejection","contracts":["C30","B02"]},
         {"title":"keeps the hook paths and nulls diffJson when a hook side is %s","contracts":["C60","B03"]},
+        {"title":"stops rendering hook sides at the first side with no rendering","contracts":["C60","B03"]},
         {"title":"omits absent hook sides from diffJson and renders present ones as JSON","contracts":["C60"]},
         {"title":"clamps hook paths and sides and cuts at 64 with the total count","contracts":["X01"]},
         {"title":"does not call the hook when diff is off","contracts":["C60"]},
