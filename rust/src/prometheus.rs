@@ -1,6 +1,6 @@
 //! Prometheus metric exporter (feature `prometheus`).
 //!
-//! [`PrometheusObserver`] registers the nineteen DialCache collectors on a
+//! [`PrometheusObserver`] registers the twenty DialCache collectors on a
 //! [`Registry`] under the names, help text, label sets and histogram buckets
 //! of the TypeScript adapter, and feeds every [`Event`] to them.
 //!
@@ -69,7 +69,7 @@ impl CollectorSchema {
     }
 }
 
-/// The nineteen collectors DialCache registers, in registration order, with
+/// The twenty collectors DialCache registers, in registration order, with
 /// their names under `prefix`.
 pub fn schemas(prefix: &str) -> Vec<CollectorSchema> {
     let schema = |kind: MetricKind,
@@ -133,6 +133,12 @@ pub fn schemas(prefix: &str) -> Vec<CollectorSchema> {
             "shadow_value_age_histogram",
             "Age in seconds of the validated Redis value at DialCache shadow verdict time.",
             VALUE_AGE_BUCKETS,
+        ),
+        schema(
+            MetricKind::ShadowMismatchLogging,
+            "shadow_mismatch_logging_counter",
+            "DialCache confirmed shadow-mismatch warning outcomes.",
+            &[],
         ),
         schema(
             MetricKind::FutureTimestampOffset,

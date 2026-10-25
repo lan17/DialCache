@@ -103,6 +103,7 @@ fn invoke(executor: &mut TestExecutor, cache: &DialCache) {
                             .shadow(ShadowPolicy {
                                 ramp: Some(100.0),
                                 log_mismatches: None,
+                                mismatch_logging: None,
                             }),
                     )
                     .budget(SourceBudget::Millis(5)),

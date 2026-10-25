@@ -1478,6 +1478,11 @@ impl Observer for DriverObserver {
                 m.insert("seconds".to_string(), Value::from(*seconds));
                 ("shadowAge", m)
             }
+            Event::ShadowMismatchLogging { labels, outcome } => {
+                let mut m = outcome_map(labels);
+                m.insert("outcome".to_string(), Value::from(outcome.as_str()));
+                ("shadowMismatchLogging", m)
+            }
             Event::FutureTimestampOffset { labels, seconds } => {
                 let mut m = labels_map(labels);
                 m.insert("seconds".to_string(), Value::from(*seconds));
@@ -1601,19 +1606,20 @@ impl Logger for DriverLogger {
                 "cacheKey".to_string(),
                 Value::from(details.cache_key.as_str()),
             );
+            // Until every port emits the new warning fields, the shared
+            // corpus compares only the fields all ports share (#243).
+            let values = details.values.as_ref();
             fields.insert(
                 "cachedValueJson".to_string(),
-                details
-                    .cached_value_json
-                    .clone()
+                values
+                    .and_then(|values| values.cached_value_json.clone())
                     .map(Value::from)
                     .unwrap_or(Value::Null),
             );
             fields.insert(
                 "sourceValueJson".to_string(),
-                details
-                    .source_value_json
-                    .clone()
+                values
+                    .and_then(|values| values.source_value_json.clone())
                     .map(Value::from)
                     .unwrap_or(Value::Null),
             );

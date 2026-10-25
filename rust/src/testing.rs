@@ -23,6 +23,27 @@ use parking_lot::Mutex;
 /// Epoch of every controlled history: 2026-09-08T12:00:00.000Z.
 pub const WALL_EPOCH_MS: i64 = 1_788_868_800_000;
 
+/// The name [`Absent`] serializes as a unit struct.
+pub const ABSENT_MARKER: &str = "$dialcache::testing::Absent";
+
+/// The test-only absent value of confirmed-mismatch warnings.
+///
+/// Rust's default codec stores no distinct absent value, unlike TypeScript's
+/// top-level `undefined`. A test value type whose `Serialize` delegates to
+/// this marker at the top level stands for one: a warning treats it as an
+/// absent side, not as a value that failed to render, so its value field is
+/// unavailable without a `loggingOutcome` and the built-in difference
+/// reports the other side whole at the root pointer. `serde_json` renders the
+/// marker as `null`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Absent;
+
+impl serde::Serialize for Absent {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_unit_struct(ABSENT_MARKER)
+    }
+}
+
 impl std::fmt::Debug for VirtualClock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("VirtualClock")
