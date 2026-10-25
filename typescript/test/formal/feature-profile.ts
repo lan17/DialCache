@@ -16,6 +16,7 @@ export interface Profile {
   diagnosticConfigErrors?: boolean;
   diagnosticFutureOffsets?: boolean;
   diagnosticInspections?: boolean;
+  diagnosticWarnings?: boolean;
   diagnosticAge?: "shadowAge" | "recoveryAge" | "none";
   diagnosticUseCase?: string;
   fixture: Fixture | ((choice: number) => Fixture);

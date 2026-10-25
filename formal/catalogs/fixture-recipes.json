@@ -131,7 +131,9 @@
         "configErrors": true,
         "fallbackErrors": true,
         "warnings": true,
-        "futureOffsets": true
+        "futureOffsets": true,
+        "mismatchWarnings": true,
+        "loggingOutcomes": true
       }
     },
     "dark-layers": {
@@ -2108,6 +2110,46 @@
         {
           "id": "futureLateDarkReadKeepsTimeoutAndReportsOffsetTest",
           "regression": "futureLateDarkReadKeepsTimeoutAndReportsOffsetTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "trueShorthandWithValueFalseLogsDiffOnlyTest",
+          "regression": "trueShorthandWithValueFalseLogsDiffOnlyTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "falseShorthandWithDiffPathsLogsPathsOnlyTest",
+          "regression": "falseShorthandWithDiffPathsLogsPathsOnlyTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "runtimeFalseShorthandOverridesDefaultDiffTest",
+          "regression": "runtimeFalseShorthandOverridesDefaultDiffTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "runtimeTrueShorthandOverridesDefaultValueTest",
+          "regression": "runtimeTrueShorthandOverridesDefaultValueTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "hookErrorNullsDiffFieldsTest",
+          "regression": "hookErrorNullsDiffFieldsTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "renderErrorNullsUnrenderableSourceTest",
+          "regression": "renderErrorNullsUnrenderableSourceTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "loggerErrorStillDeliversWarningTest",
+          "regression": "loggerErrorStillDeliversWarningTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "hookErrorOutranksBothFailuresTest",
+          "regression": "hookErrorOutranksBothFailuresTest",
           "projection": "shadow"
         }
       ]

@@ -2,7 +2,9 @@ import type { Observation, Input } from "../../typescript/test/formal/behavior-d
 import type { Profile } from "../../typescript/test/formal/feature-profile.js";
 export type Projected = Omit<Observation, "calls"> & { calls: number[] };
 export interface Inspection { instance: number; activeLeaders: number; activeFollowers: number; oldestLeaderAgeMs: number | null }
-export interface Diagnostics { inspections?: Inspection[]; warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[]; configErrors?: number; futureOffsets?: Array<{ layer: string; offsetMs: number }> }
+export interface MismatchEntry { path: string; cached: number; source: number }
+export interface MismatchWarning { ageSeconds: number; cachedValue: number; sourceValue: number; diff: "off" | "paths" | "values"; diffNull: boolean; count: number; paths: string[]; entries: MismatchEntry[]; loggingOutcome: "" | "hook_error" | "render_error" }
+export interface Diagnostics { inspections?: Inspection[]; warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[]; configErrors?: number; futureOffsets?: Array<{ layer: string; offsetMs: number }>; mismatchWarnings?: MismatchWarning[]; loggingOutcomes?: string[] }
 export interface ReadIO { budgets: number[]; aborted: number[]; sourceErrors: number[] }
 export interface Marker { cutoffMs: number; ttlMs: number }
 export interface Step { policyErrors?: Array<{ layer: string; errorType: string }>; compression?: string[]; markers?: Marker[]; io?: ReadIO; action: string; choice: number; expected: Projected; diagnostics?: Diagnostics }

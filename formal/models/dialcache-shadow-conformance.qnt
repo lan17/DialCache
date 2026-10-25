@@ -843,6 +843,12 @@ module dialcache_shadow_conformance {
     .then(confirmMismatch(VALUE_TWO))
     .expect(s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, ...WARNING_AT_ZERO })
       and s.d.loggingOutcomes == List("logged"))
+  run valueWithDiffPathsLogsRenderingsAndPathsTest = initialize(FIRST_LOGGING_FIXTURE).then(setLogging(LOGGING_PATHS))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.d.mismatchWarnings == List({
+        cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, diff: "paths", count: 1, paths: List(""), ...WARNING_AT_ZERO
+      })
+      and s.d.loggingOutcomes == List("logged"))
   run identicalRenderingsLogNoPathsTest = initialize(FIRST_LOGGING_FIXTURE + 2).then(confirmMismatch(VALUE_ONE))
     .expect(s.o.shadow == List("mismatch") and s.o.comparisons == 1
       and s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_ONE, diff: "values", ...WARNING_AT_ZERO })

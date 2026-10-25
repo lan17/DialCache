@@ -128,7 +128,7 @@
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/same-c1-bytes-confirm-mismatch"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"mismatchWarnings":[],"loggingOutcomes":[]}},
     "steps": [
       {"action":"beginCall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
       {"action":"rejectLoader","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"3"}]},"d":{"fallbackErrors":["local"]}}},
@@ -174,7 +174,7 @@
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/different-c1-bytes-supersede"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"mismatchWarnings":[],"loggingOutcomes":[]}},
     "steps": [
       {"action":"beginCall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
       {"action":"loadFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
@@ -222,7 +222,7 @@
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/late-shadow-dump-cannot-dispatch-write"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"mismatchWarnings":[],"loggingOutcomes":[]}},
     "steps": [
       {"action":"readFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
       {"action":"writeFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
@@ -289,7 +289,7 @@
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/fill-write-error-preserves-caller"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"mismatchWarnings":[],"loggingOutcomes":[]}},
     "steps": [
       {"action":"advance","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
       {"action":"logPolicy","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
@@ -312,7 +312,7 @@
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "recipe": "formal/catalogs/fixture-recipes.json#typescript/test/fixtures/formal-witness-boundaries.json/dark-read-error-still-allows-source-result"
     },
-    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[]}},
+    "initialState": {"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"configErrors":{"#bigint":"0"},"fallbackErrors":[],"warnings":{"#bigint":"0"},"futureOffsets":[],"mismatchWarnings":[],"loggingOutcomes":[]}},
     "steps": [
       {"action":"readFault","choice":{"tag":"Some","value":{"#bigint":"1"}},"statePatch":{}},
       {"action":"beginCall","choice":{"tag":"None","value":{"#tup":[]}},"statePatch":{"o":{"calls":[{"#bigint":"0"}],"loaders":{"#bigint":"1"},"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"}}}},
