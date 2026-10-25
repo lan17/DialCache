@@ -260,7 +260,7 @@ impl Policy {
                 parsed.log_mismatches = Some(flag);
             }
             if let Some(group) = shadow.get("mismatchLogging") {
-                let group = policy_object(group, "shadow mismatchLogging")?;
+                let group = policy_object(group, "shadow mismatchLogging config")?;
                 let mut leaves = MismatchLogging::default();
                 if let Some(leaf) = group.get("value") {
                     let flag = leaf.as_bool().ok_or_else(|| {
