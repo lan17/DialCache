@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 import zstandard
+from formal.schema import json_equal, strict_json
 
+from dialcache._shadow_log import MismatchLogPlan, diff_shadow_mismatch_json, render_shadow_mismatch_log
 from dialcache.key import Key, normalize_args, ramp_hash, ramp_sample
 from dialcache.protocol import (
     Frame,
@@ -59,7 +61,7 @@ def key_from(vector):
 
 def test_schemas_provenance_and_inventory():
     assert all(corpus["schemaVersion"] == 3 for corpus in CORPORA)
-    expected_counts = [134, 457, 589, 297]
+    expected_counts = [184, 457, 589, 297]
     for corpus, expected in zip(CORPORA, expected_counts, strict=True):
         rows = [row for value in corpus.values() if isinstance(value, list) for row in value]
         assert len(rows) == expected
@@ -203,6 +205,32 @@ def test_compression_selection(vector):
     assert decompress_payload(result.payload).payload == raw
 
 
+@pytest.mark.parametrize("vector", vectors("mismatchPathVectors"))
+def test_mismatch_paths(vector):
+    # W10: the built-in walk over two JSON values, its entries compared as
+    # parsed JSON. Both projections of one entry list are checked: the paths
+    # and count at diff "paths", and the entries with their values at "values".
+    # An omitted cached or source member is an absent side (D13), UNDEFINED.
+    cached = vector.get("cached", UNDEFINED)
+    source = vector.get("source", UNDEFINED)
+    if cached is not UNDEFINED and source is not UNDEFINED:
+        entries, count = diff_shadow_mismatch_json(cached, source)
+        assert json_equal(entries, vector["entries"]), (entries, vector["entries"])
+        assert count == vector["count"]
+    paths = [entry["path"] for entry in vector["entries"]]
+    fields, failure = render_shadow_mismatch_log(MismatchLogPlan(value=False, diff="values"), cached, source)
+    assert failure is None
+    assert fields.keys() == {"mismatchPaths", "mismatchPathCount", "diffJson"}
+    assert fields["mismatchPaths"] == paths
+    assert fields["mismatchPathCount"] == vector["count"]
+    diff = strict_json(fields["diffJson"])
+    assert json_equal(diff, vector["entries"]), (diff, vector["entries"])
+    assert render_shadow_mismatch_log(MismatchLogPlan(value=False, diff="paths"), cached, source) == (
+        {"mismatchPaths": paths, "mismatchPathCount": vector["count"]},
+        None,
+    )
+
+
 def assert_wire_vector(group, vector):
     """Completion reporters call these same real assertions before granting credit."""
     assertions = {
@@ -218,6 +246,7 @@ def assert_wire_vector(group, vector):
         "envelopeVectors": test_envelopes,
         "compressedDecodeVectors": test_compressed_decode,
         "compressionWriteVectors": test_compression_selection,
+        "mismatchPathVectors": test_mismatch_paths,
     }
     try:
         assertion = assertions[group]

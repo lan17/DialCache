@@ -9,7 +9,7 @@ import json
 import math
 from dataclasses import dataclass
 
-from dialcache import DialCache
+from dialcache import UNDEFINED, DialCache
 from dialcache.errors import FallbackTimeoutError, MissingRemoteError
 from dialcache.key import Key
 from dialcache.local import LocalCache
@@ -17,7 +17,23 @@ from dialcache.protocol import Frame, Miss, decode_read, decode_tracked_read, en
 
 from .executor import WALL_EPOCH_MS, Executor
 
-ABSENT = object()
+# The pending adapter reply when none is queued; never a cache value.
+NO_REPLY = object()
+
+
+class Unrenderable:
+    """The source result with no JSON rendering (D13).
+
+    json.dumps rejects it, so every rendering of it fails, and the default
+    comparator finds it unequal to every decoded value. The driver knows it by
+    identity and observes a call that returns it as {"unrenderable": true}.
+    """
+
+    def __repr__(self):
+        return "UNRENDERABLE"
+
+
+UNRENDERABLE = Unrenderable()
 
 
 def empty_observation(fixture=None):
@@ -44,11 +60,28 @@ def empty_observation(fixture=None):
 
 
 def json_value(value):
-    return {"absent": True} if value is ABSENT else value
+    if value is UNDEFINED:
+        return {"absent": True}
+    return {"unrenderable": True} if value is UNRENDERABLE else value
 
 
 def dump_value(value):
-    return "undefined" if value is ABSENT else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return "undefined" if value is UNDEFINED else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def warning_observation(details):
+    """The warning's fields as logged, each present exactly when the warning carries it.
+
+    The mismatchPaths list crosses the wire as one JSON string, so every
+    observed field stays a primitive (PORTING.md, mismatchWarning).
+    """
+    fields = dict(details)
+    if "mismatchPaths" in fields:
+        paths = fields.pop("mismatchPaths")
+        fields["mismatchPathsJson"] = (
+            None if paths is None else json.dumps(paths, ensure_ascii=False, separators=(",", ":"))
+        )
+    return fields
 
 
 class FakeRedis:
@@ -100,8 +133,8 @@ class FakeRedis:
                 await owner.hold("read", index)
             if owner.faults.get("read"):
                 raise RuntimeError("Controlled read failure")
-            if owner.adapter_reply is not ABSENT:
-                result, owner.adapter_reply = owner.adapter_reply, ABSENT
+            if owner.adapter_reply is not NO_REPLY:
+                result, owner.adapter_reply = owner.adapter_reply, NO_REPLY
                 # Bind the coordinator's JSON record to the native adapter
                 # variants. Keep malformed reason/timestamp leaves intact so
                 # the production trust boundary, not the driver, validates them.
@@ -189,11 +222,21 @@ class Logger:
             and args[0] == "DialCache shadow validation mismatch: %s"
             and isinstance(args[1], dict)
         ):
-            self.owner.record("mismatchWarning", **shared_warning_fields(args[1]))
+            self.owner.record("mismatchWarning", **warning_observation(args[1]))
+        self.observer_failure()
+        # The logger fault fails every warning call after recording it;
+        # metric observers keep working.
+        if self.owner.faults.get("logger"):
+            raise RuntimeError("Controlled logger failure")
+
+    def debug(self, *args, **kwargs):
+        self.observer_failure()
+
+    error = debug
+
+    def observer_failure(self):
         if self.owner.fixture.get("observerFailure") or self.owner.faults.get("observer"):
             raise RuntimeError("Controlled observer failure")
-
-    debug = error = warning
 
 
 class Serializer:
@@ -215,7 +258,7 @@ class Serializer:
         if self.owner.faults.get("load"):
             raise RuntimeError("Controlled deserialization failure")
         text = raw.decode() if isinstance(raw, bytes) else raw
-        return ABSENT if text == "undefined" else json.loads(text)
+        return UNDEFINED if text == "undefined" else json.loads(text)
 
 
 class FaultingLocal:
@@ -258,7 +301,7 @@ class BehaviorDriver:
         self.scopes = {}
         self.instances = {}
         self.runtime_policy = {}
-        self.adapter_reply = ABSENT
+        self.adapter_reply = NO_REPLY
         self.maintenance_error = RuntimeError("Controlled mutation failure")
         self.redis = FakeRedis(self.clock, self)
         self.cache = self.instance("default")
@@ -347,6 +390,9 @@ class BehaviorDriver:
                 raise RuntimeError("Controlled comparison failure")
             return self.fixture["comparator"] == "equal"
 
+        def mismatch_diff(*args, **kwargs):
+            raise RuntimeError("Controlled mismatch diff failure")
+
         options = {
             "key_type": "id",
             "key": command.get("key", "1"),
@@ -359,6 +405,8 @@ class BehaviorDriver:
             options["should_attempt_stale_recovery"] = self.classifier(command["recovery"])
         if "comparator" in self.fixture:
             options["shadow_comparator"] = compare
+        if "mismatchDiff" in self.fixture:
+            options["shadow_mismatch_diff"] = mismatch_diff
         if self.fixture.get("fallbackTimeoutMs") != "default":
             options["fallback_timeout_ms"] = self.fixture.get("fallbackTimeoutMs", 10)
 
@@ -407,7 +455,8 @@ class BehaviorDriver:
         if op == "begin":
             self.begin(command)
         elif op == "resolve":
-            self.loaders[command["loader"]].set_result(command.get("value", ABSENT))
+            value = UNRENDERABLE if command.get("unrenderable") else command.get("value", UNDEFINED)
+            self.loaders[command["loader"]].set_result(value)
         elif op == "reject":
             index = command["loader"]
             if command.get("error") == "timeout":
@@ -422,7 +471,7 @@ class BehaviorDriver:
         elif op == "faults":
             self.faults.update(command["value"])
         elif op == "adapterReply":
-            if self.adapter_reply is not ABSENT:
+            if self.adapter_reply is not NO_REPLY:
                 raise RuntimeError("Unconsumed adapter reply")
             self.adapter_reply = command["value"]
         elif op == "release":
@@ -438,7 +487,7 @@ class BehaviorDriver:
                 payload = (
                     bytes.fromhex(command["payloadHex"])
                     if "payloadHex" in command
-                    else command.get("payloadText", dump_value(command.get("value", ABSENT)))
+                    else command.get("payloadText", dump_value(command.get("value", UNDEFINED)))
                 )
                 frame = encode_frame(payload, self.clock.wall_ms() - command.get("ageMs", 0))
             self.redis.seed(self.value_key(command).value_key, frame, command.get("ttlMs", 60_000))
@@ -538,22 +587,3 @@ class BehaviorDriver:
         # Teardown happens after assertions. Cancel held work and drain callback
         # cleanup; no pending task is allowed to enter the next isolated loop.
         self.executor.close()
-
-
-# Every port compares mismatchWarning events exactly against the shared
-# scenarios, so this driver records only the fields every port emits. The
-# optional mismatchPathsJson, mismatchPathCount, diffJson and loggingOutcome
-# observations join with the last port (design/2026-10-24-shadow-mismatch-paths.md, #243).
-SHARED_WARNING_FIELDS = (
-    "cacheNamespace",
-    "useCase",
-    "keyType",
-    "outcome",
-    "cacheKey",
-    "cachedValueJson",
-    "sourceValueJson",
-)
-
-
-def shared_warning_fields(details):
-    return {field: details[field] for field in SHARED_WARNING_FIELDS if field in details}
