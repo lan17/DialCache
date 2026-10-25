@@ -815,6 +815,114 @@ fn a_preview_replaces_the_json_rendering_so_the_walk_never_logs_what_it_redacts(
 }
 
 #[test]
+fn an_explicit_none_preview_logs_no_values_and_no_built_in_differences() {
+    // As on `main`, `preview = None` logs no values. It also removes the JSON
+    // rendering, so the operation behaves like one built with `with_codec`.
+    for (name, logging, diff) in [
+        (
+            "NoPreviewShorthand",
+            shadow(Some(true), None),
+            failed_diff(MismatchDiff::Values),
+        ),
+        (
+            "NoPreviewValue",
+            shadow(None, leaves(Some(true), None)),
+            None,
+        ),
+        (
+            "NoPreviewPaths",
+            shadow(None, leaves(Some(true), Some(MismatchDiff::Paths))),
+            failed_diff(MismatchDiff::Paths),
+        ),
+    ] {
+        let recorder = Arc::new(Recorder::default());
+        let mut without_preview = operation(name, logging);
+        without_preview.preview = None;
+        run(&recorder, None, without_preview, record(2));
+        assert_warning(
+            &recorder,
+            name,
+            diff,
+            values(None, None),
+            Some(ShadowMismatchLoggingOutcome::RenderError),
+        );
+        assert_eq!(
+            recorder.logging_outcomes(),
+            vec![ShadowMismatchLoggingOutcome::RenderError]
+        );
+    }
+
+    // Without values to log, the differences need the hook.
+    let recorder = Arc::new(Recorder::default());
+    let mut diff_only = operation(
+        "NoPreviewDiffOnly",
+        shadow(None, leaves(Some(false), Some(MismatchDiff::Paths))),
+    );
+    diff_only.preview = None;
+    run(&recorder, None, diff_only, record(2));
+    assert_warning(
+        &recorder,
+        "NoPreviewDiffOnly",
+        failed_diff(MismatchDiff::Paths),
+        None,
+        Some(ShadowMismatchLoggingOutcome::RenderError),
+    );
+
+    let recorder = Arc::new(Recorder::default());
+    let mut hooked = operation("NoPreviewHook", shadow(Some(true), None)).mismatch_diff(|_, _| {
+        vec![MismatchEntry {
+            path: "/version".into(),
+            cached: None,
+            source: None,
+        }]
+    });
+    hooked.preview = None;
+    run(&recorder, None, hooked, record(2));
+    assert_warning(
+        &recorder,
+        "NoPreviewHook",
+        paths(MismatchDiff::Values, Some(r#"[{"path":"/version"}]"#)),
+        values(None, None),
+        Some(ShadowMismatchLoggingOutcome::RenderError),
+    );
+}
+
+#[test]
+fn the_default_preview_keeps_the_json_rendering_through_clones_and_reassignment() {
+    let original = operation("DefaultPreview", shadow(Some(true), None));
+    // The default preview renders the value's JSON when called directly.
+    let preview = original.preview.clone().expect("new installs a preview");
+    assert_eq!(preview(&record(1)).as_deref(), Some(CACHED_JSON));
+    let mut reassigned = original.clone();
+    reassigned.preview = Some(preview);
+    for operation in [original.clone(), reassigned] {
+        let recorder = Arc::new(Recorder::default());
+        run(&recorder, None, operation, record(2));
+        assert_warning(
+            &recorder,
+            "DefaultPreview",
+            paths(MismatchDiff::Values, Some(DIFF_JSON)),
+            values(Some(CACHED_JSON), Some(SOURCE_JSON)),
+            None,
+        );
+    }
+
+    // Another operation's default preview is a preview set in place of this
+    // one's: it replaces the JSON, so its differences need a hook.
+    let recorder = Arc::new(Recorder::default());
+    let mut borrowed = operation("DefaultPreview", shadow(Some(true), None));
+    borrowed.preview = original.preview;
+    run(&recorder, None, borrowed, record(2));
+    assert_warning(
+        &recorder,
+        "DefaultPreview",
+        failed_diff(MismatchDiff::Values),
+        values(Some(CACHED_JSON), Some(SOURCE_JSON)),
+        Some(ShadowMismatchLoggingOutcome::RenderError),
+    );
+}
+
+#[test]
 fn an_invalid_runtime_leaf_keeps_the_valid_default_leaf_with_one_config_resolution() {
     let recorder = confirmed(
         "InvalidRuntimeLeaf",

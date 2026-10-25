@@ -69,8 +69,8 @@ impl Write for JsonPrefix {
     }
 }
 
-/// The streamed value-field prefix of `value`, as warnings render it.
-#[cfg(test)]
+/// The streamed value-field prefix of `value`, as warnings render it: the
+/// default preview of an operation built with JSON.
 pub(crate) fn json_preview<T: serde::Serialize>(value: &T) -> Option<String> {
     let mut prefix = JsonPrefix::new();
     serde_json::to_writer(&mut prefix, value).ok()?;
