@@ -473,6 +473,25 @@ describe("shadow mismatch log JSON", () => {
       });
     });
 
+    it("walks own members whose names collide with Object.prototype", () => {
+      // Parsed rather than written as literals: a "__proto__" key in an object
+      // literal sets the prototype instead of creating a member.
+      const cached = JSON.parse('{"constructor":1,"__proto__":{"a":1}}') as JsonValue;
+      const source = JSON.parse('{"toString":"x","valueOf":null,"__proto__":{"a":2}}') as JsonValue;
+      const entries = [
+        { path: "/__proto__/a", cached: 1, source: 2 },
+        { path: "/constructor", cached: 1 },
+        { path: "/toString", source: "x" },
+        { path: "/valueOf", source: null },
+      ];
+
+      expect(diffShadowMismatchJson(cached, source)).toStrictEqual({ entries, count: 4 });
+      const { fields, failure } = renderShadowMismatchLog(VALUES_ONLY, cached, source);
+      expect(failure).toBeNull();
+      expect(fields.mismatchPaths).toStrictEqual(entries.map((entry) => entry.path));
+      expect(JSON.parse(fields.diffJson!)).toStrictEqual(entries);
+    });
+
     it("cuts the entries at 64 in walk order and counts every difference", () => {
       const cached: Record<string, JsonValue> = {};
       const source: Record<string, JsonValue> = {};
