@@ -1,6 +1,6 @@
 # Shadow mismatch paths: name the differing fields in confirmed-mismatch warnings
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Issue:** #243, which tracks the work after the TypeScript reference
 - **Pull requests:** #242
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
@@ -649,7 +649,7 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   input becomes a source result that fails to render in every port: a
   throwing `toJSON` in TypeScript, a failing `MarshalJSON` in Go, a failing
   `Serialize` in Rust and a non-serializable object in Python.
-- **Status:** Open.
+- **Status:** Confirmed 2026-10-24, in session: "confirm D13".
 - **Rejected:**
   - Keeping the carried rule that every side with no rendering fails closed
     (#138; see Carried decisions) for the undefined marker. A cached
@@ -747,12 +747,12 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
    gate until every decision is confirmed and the record is `Accepted`. D12,
    added after acceptance, returned the record to `Proposed` until the
    maintainer confirmed it the same day; D13, added during the TypeScript
-   review, does the same until he confirms it.
+   review, did the same until he confirmed it the same day.
 2. #242 then carries the TypeScript reference: the leaves and the shorthand,
    the built-in differ, the hook, the warning fields, the
    `shadowMismatchLogging` metric and its exporters, the TypeScript replay
    driver, C60's wording, the TypeScript docs and catalogs, and native tests
-   that pin the differ, with D13's absent side once it is confirmed. The
+   that pin the differ, with D13's absent side. The
    shared corpus keeps `logMismatches`, which stays
    valid in every port, so the other ports keep passing. Tier: Replay and
    Mutations, since M08 and M09 anchor on the moved logging code.
