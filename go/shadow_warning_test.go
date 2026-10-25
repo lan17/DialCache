@@ -234,9 +234,12 @@ func TestShadowMismatchWarningFieldsPerLeaves(t *testing.T) {
 			})
 		})
 	}
-	if hookCalls != 0 {
-		t.Fatalf("diff off still ran the hook %d times", hookCalls)
-	}
+	// A subtest, so the mutation runner credits this assertion to a test.
+	t.Run("diff off never runs the hook", func(t *testing.T) {
+		if hookCalls != 0 {
+			t.Fatalf("diff off still ran the hook %d times", hookCalls)
+		}
+	})
 }
 
 func TestShadowMismatchWarningOnRampedDownPath(t *testing.T) {
