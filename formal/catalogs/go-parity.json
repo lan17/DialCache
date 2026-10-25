@@ -9,9 +9,9 @@
   },
   "inputs": {
     "semanticCasesSha256": "252390acc79bddd47b0ceab4fa561623e7d639d4b13c74d12fe5894e7bb5aac4",
-    "executionSha256": "902d236dd903a93c1df5d0135b3bbec63833b6f352783214b933b620fad0fe2b",
-    "sourceAuditDispositionsSha256": "831a47f68c338b4f745057848da892aa4d13a61b06c96e9eb9c6c9a3076e457c",
-    "featureCoverageSha256": "9065e0aaa3157529c986e873da700e3adef8aabb63608e061ddc73c646cdc8dc",
+    "executionSha256": "03dca0d8301b7ec1dc716ae15c775ecee24bfa1e26304f267eb3eb9e9959a74f",
+    "sourceAuditDispositionsSha256": "7144faec524f31f6d34a1637ae1c51cf585403fe0b19d922eeab989669bf244e",
+    "featureCoverageSha256": "a55bbd97efa82d9c3bc8bd909d44fcacf0e2b112cfa2d8e0e283da6abba63f17",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -3396,7 +3396,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Static configuration and callback contracts map to typed time.Duration Policy, functional Option constructors and Operation[T]. ParsePolicy exposes the seconds-based JSON input; pointer leaves and functional options preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults. The shadow.mismatchLogging leaves (value, diff) and the logMismatches shorthand that expands to them are TypeScript-only until the Go port (#243); Go maps logMismatches alone.",
+        "rationale": "Static configuration and callback contracts map to typed time.Duration Policy, functional Option constructors and Operation[T]. ParsePolicy exposes the seconds-based JSON input; pointer leaves and functional options preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults. The shadow.mismatchLogging leaves map to ShadowPolicy.MismatchLogging with a typed MismatchDiffLevel, and the logMismatches shorthand stays a *bool that expands to them.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -3410,9 +3410,11 @@
               "ParsePolicy",
               "ValidatePolicy",
               "SnapshotPolicy",
-              "ResolvePolicy"
+              "ResolvePolicy",
+              "MismatchLoggingPolicy",
+              "MismatchDiffLevel"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
           },
           {
             "path": "go/api.go",
@@ -3420,9 +3422,10 @@
               "Option",
               "Operation",
               "Logger",
-              "RecoveryPredicate"
+              "RecoveryPredicate",
+              "MismatchEntry"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
           }
         ]
       }
@@ -3466,7 +3469,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "DogStatsD integration maps event kinds, labels, units and suffixes through an application-owned DogStatsDClient. Go uses an interface returning errors and an explicit constructor; FailureIsolatedObserver prevents exporter failures from changing cache outcomes. The shadow_mismatch_logging.count metric has no Go exporter mapping until the Go port (#243).",
+        "rationale": "DogStatsD integration maps event kinds, labels, units and suffixes through an application-owned DogStatsDClient. Go uses an interface returning errors and an explicit constructor; FailureIsolatedObserver prevents exporter failures from changing cache outcomes. shadowMismatchLogging maps to shadow_mismatch_logging.count, which lowers the longest namespace to 170 characters.",
         "nativeAdaptations": [
           "B01",
           "X01"
@@ -3480,7 +3483,7 @@
               "NewDatadogMetrics",
               "ObserveEvent"
             ],
-            "sha256": "84f56821e1234a7ae77569c1429d2385a13bedb1ce7d1a5186a1d808ebe6809b"
+            "sha256": "d398ab0e2690ae6d6614d4f50d8de7d324ce85717bd2fba1158afa30aac440bb"
           },
           {
             "path": "go/metrics.go",
@@ -3489,7 +3492,7 @@
               "metricLabels",
               "metricValue"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "9066cceb94a24bdc514eca2a9a7090a7d437cc2b18bc389bd0d83e97ff7b5448"
           }
         ]
       }
@@ -3508,7 +3511,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The mismatch-logging plan, the warning's path/diff/age fields, the shadowMismatchDiff hook and the shadowMismatchLogging outcome are TypeScript-only until the Go port (#243).",
+        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The warning's leaves come from the invocation's ResolvedShadow, Operation.MismatchDiff replaces the built-in walk, and warnShadowMismatch emits one shadowMismatchLogging event; a Warn panic is the Go logger_error.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -3563,9 +3566,10 @@
             "symbols": [
               "darkSource",
               "scheduleShadow",
-              "runShadow"
+              "runShadow",
+              "warnShadowMismatch"
             ],
-            "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
+            "sha256": "c311406937c92c9deb710550a5b89016f4e5dfd2618942299a1233c2a192e2f4"
           },
           {
             "path": "go/api.go",
@@ -3574,7 +3578,7 @@
               "Operation",
               "Event"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
           },
           {
             "path": "go/internal/logging/logging.go",
@@ -3609,7 +3613,7 @@
               "CallbackPanicError",
               "ErrNoRemote"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
           },
           {
             "path": "go/redis_adapter.go",
@@ -3635,7 +3639,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The TypeScript root barrel becomes exported declarations in one Go module/package. Cache construction, typed wrapper registration, policy, key and codec helpers are available directly; JavaScript import aliases and package subpath export validation do not have separate Go implementations. The mismatch-logging config, hook, entry and metric types are TypeScript-only root exports until the Go port (#243).",
+        "rationale": "The TypeScript root barrel becomes exported declarations in one Go module/package. Cache construction, typed wrapper registration, policy, key and codec helpers are available directly; JavaScript import aliases and package subpath export validation do not have separate Go implementations. The mismatch-logging config, hook entry and level types are root declarations (MismatchLoggingPolicy, MismatchDiffLevel, MismatchEntry); metric labels are Event data.",
         "nativeAdaptations": [
           "B01"
         ],
@@ -3648,7 +3652,7 @@
               "Codec",
               "Remote"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
           },
           {
             "path": "go/bindings.go",
@@ -3669,7 +3673,7 @@
             "symbols": [
               "Policy"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
           },
           {
             "path": "go/protocol.go",
@@ -3786,7 +3790,7 @@
               "TimerClock",
               "DeferredExecutor"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
           }
         ]
       }
@@ -3823,7 +3827,7 @@
               "policyTTLMS",
               "ValidatePolicy"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
           }
         ]
       }
@@ -3874,7 +3878,7 @@
           },
           {
             "path": "go/api.go",
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f",
+            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f",
             "symbols": [
               "systemClock",
               "newSystemClock"
@@ -3907,7 +3911,7 @@
             "symbols": [
               "ResolvePolicy"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
           }
         ]
       }
@@ -3947,7 +3951,7 @@
             "symbols": [
               "runShadow"
             ],
-            "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
+            "sha256": "c311406937c92c9deb710550a5b89016f4e5dfd2618942299a1233c2a192e2f4"
           },
           {
             "path": "go/codec.go",
@@ -4088,7 +4092,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Runtime policy parsing, leaf-wise inheritance, invocation snapshots and feature-local invalidation map to ParsePolicy, SnapshotPolicy and ResolvePolicy. Nil/Absent whole-provider results inherit while explicit null leaves remain malformed; constructor and wrapper validation occur through Go APIs. Each layer's logMismatches shorthand expanded before the leaf-wise merge, and per-leaf mismatch-logging validation, are TypeScript-only until the Go port (#243).",
+        "rationale": "Runtime policy parsing, leaf-wise inheritance, invocation snapshots and feature-local invalidation map to ParsePolicy, SnapshotPolicy and ResolvePolicy. Nil/Absent whole-provider results inherit while explicit null leaves remain malformed; constructor and wrapper validation occur through Go APIs. Each layer's logMismatches shorthand expands before the leaf-wise merge in ResolvePolicy, and each mismatch-logging leaf validates independently into one LoggingConfigError.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -4100,9 +4104,12 @@
               "ParsePolicy",
               "SnapshotPolicy",
               "ResolvePolicy",
-              "ValidatePolicy"
+              "ValidatePolicy",
+              "expandMismatchLogging",
+              "resolveValueLeaf",
+              "resolveDiffLeaf"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
           }
         ]
       }
@@ -4112,11 +4119,12 @@
       "sha256": "b73fc7757703d9710a53f561185f48760576679eac4da496c4d78a39200454e2",
       "candidateGoFiles": [
         "go/metrics.go",
-        "go/codec.go"
+        "go/codec.go",
+        "go/shadow_log.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Mismatch previews use the Go JSON compatibility writer, byte-bounded UTF-8 output and the same truncation marker. Native type/prototype representation is a codec binding; failures return no preview and cannot suppress the shadow verdict or caller result. The built-in mismatch-path differ, the shadowMismatchDiff hook rendering and the diff caps have no Go binding until the Go port (#243); the value previews keep the mapping above.",
+        "rationale": "Warning content renders each compared value once with the Go JSON compatibility writer; the built-in walk runs over the parsed renderings with the same member order, array rule, root cases, depth cap and caps, and the MismatchDiff hook's entries take the same clamps. Byte-bounded UTF-8 output uses the same truncation marker; a failure nulls only the fields it feeds and cannot suppress the verdict or caller result. Native type representation is a codec binding (B03): Go's decoder fails a rendering nested past 10,000 levels as hook_error.",
         "nativeAdaptations": [
           "B03",
           "X01",
@@ -4126,11 +4134,9 @@
           {
             "path": "go/metrics.go",
             "symbols": [
-              "PreviewShadowLogKey",
-              "PreviewShadowLogJSON",
-              "ShadowMismatchLogDetails"
+              "PreviewShadowLogKey"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "9066cceb94a24bdc514eca2a9a7090a7d437cc2b18bc389bd0d83e97ff7b5448"
           },
           {
             "path": "go/codec.go",
@@ -4138,20 +4144,31 @@
               "appendJSON"
             ],
             "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+          },
+          {
+            "path": "go/shadow_log.go",
+            "symbols": [
+              "renderShadowMismatchLog",
+              "walkJSON",
+              "jsonValuesEqual",
+              "runMismatchHook",
+              "appendMismatchEntries"
+            ],
+            "sha256": "d37d7a403a00d43b8a0f8ad506b25ac4e475d9259b564a2b9afcbf527b656731"
           }
         ]
       }
     },
     {
       "path": "typescript/src/internal/thenable.ts",
-      "sha256": "894db398dcedff94e195a272d21caee4eed2d95917a1d1d4e499599104dc8491",
+      "sha256": "d828b19ef11d1d34b2cabd8eec099c7fd678c82b0571749f1c37605fb73b1c8b",
       "candidateGoFiles": [
         "go/deadline.go",
         "go/metrics.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "TypeScript application callbacks under a synchronous contract (comparators, the stale recovery predicate, the mismatch hook) and observers (loggers, metrics adapters) can still return a promise-like; isPromiseLike detects one and settles awaits it so a rejection is consumed and observer outcomes can wait for settlement. Go callbacks and observers are synchronous calls with no settlement to observe: callSafely turns a callback panic into CallbackPanicError, and isolatedLogger and FailureIsolatedObserver recover a logger or observer panic, which are the Go counterparts of a rejected promise.",
+        "rationale": "TypeScript application callbacks under a synchronous contract (comparators, the stale recovery predicate, the mismatch hook) and observers (loggers, metrics adapters) can still return a promise-like; isPromiseLike detects one and fulfills awaits it so a rejection is consumed and observer outcomes can wait for settlement. Go callbacks and observers are synchronous calls with no settlement to observe: callSafely turns a callback panic into CallbackPanicError, and isolatedLogger and FailureIsolatedObserver recover a logger or observer panic, which are the Go counterparts of a rejected promise.",
         "goBindings": [
           {
             "path": "go/deadline.go",
@@ -4167,7 +4184,7 @@
               "FailureIsolatedLogger",
               "FailureIsolatedObserver"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "9066cceb94a24bdc514eca2a9a7090a7d437cc2b18bc389bd0d83e97ff7b5448"
           }
         ]
       }
@@ -4211,7 +4228,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The backend-neutral Event stream expresses portable diagnostic outcomes, attribution and durations. Optional shadow/recovery hooks preserve admission semantics; FailureIsolatedObserver and FailureIsolatedLogger contain native exporter/logging failures. Exporter schemas are separately reviewed bindings. The shadowMismatchLogging hook and its outcome union have no Go event until the Go port (#243).",
+        "rationale": "The backend-neutral Event stream expresses portable diagnostic outcomes, attribution and durations. Optional shadow/recovery hooks preserve admission semantics; FailureIsolatedObserver and FailureIsolatedLogger contain native exporter/logging failures. Exporter schemas are separately reviewed bindings. shadowMismatchLogging is an Event kind with the outcome in Event.Outcome, and warnDelivered reports a Warn panic as logger_error.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -4225,16 +4242,17 @@
               "Option",
               "Logger"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
           },
           {
             "path": "go/metrics.go",
             "symbols": [
               "MetricsAdapter",
               "FailureIsolatedObserver",
-              "FailureIsolatedLogger"
+              "FailureIsolatedLogger",
+              "warnDelivered"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "9066cceb94a24bdc514eca2a9a7090a7d437cc2b18bc389bd0d83e97ff7b5448"
           },
           {
             "path": "go/engine.go",
@@ -4250,7 +4268,7 @@
             "symbols": [
               "shadowEvent"
             ],
-            "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
+            "sha256": "c311406937c92c9deb710550a5b89016f4e5dfd2618942299a1233c2a192e2f4"
           }
         ]
       }
@@ -4292,7 +4310,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "PrometheusMetrics preserves metric names, labels, histogram units and buckets using client_golang. Existing individually registered collectors require explicit schema-bearing bindings plus descriptor and registry-identity validation; this replaces prom-client registry introspection and makes histogram-schema knowledge an explicit caller precondition. The dialcache_shadow_mismatch_logging_counter collector has no Go schema until the Go port (#243).",
+        "rationale": "PrometheusMetrics preserves metric names, labels, histogram units and buckets using client_golang. Existing individually registered collectors require explicit schema-bearing bindings plus descriptor and registry-identity validation; this replaces prom-client registry introspection and makes histogram-schema knowledge an explicit caller precondition. dialcache_shadow_mismatch_logging_counter is a twentieth collector schema.",
         "nativeAdaptations": [
           "B01",
           "X01"
@@ -4308,7 +4326,7 @@
               "NewPrometheusMetricsWithBindings",
               "ObserveEvent"
             ],
-            "sha256": "c29b357dff3917acb3dbfe3912a74f6c3b7a6312b9d110577bd30e960bc5d87e"
+            "sha256": "1027779b913bb890cd06ffe314d80840ce67c522bc12dad9b6e12b4224a9d340"
           }
         ]
       }
@@ -4335,7 +4353,7 @@
               "Remote",
               "ReadBudget"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
           },
           {
             "path": "go/protocol.go",
@@ -4411,7 +4429,7 @@
               "Codec",
               "ContextCodec"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
           },
           {
             "path": "go/codec.go",
@@ -5070,7 +5088,8 @@
           "go/metrics.go",
           "go/feature_replay_test.go",
           "go/behavior_replay_test.go",
-          "go/internal/testsuite/codec_test.go"
+          "go/internal/testsuite/codec_test.go",
+          "go/shadow_warning_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -5220,7 +5239,9 @@
           "go/metrics_prometheus.go",
           "go/metrics_datadog.go",
           "go/metrics_test.go",
-          "go/api_boundary_test.go"
+          "go/api_boundary_test.go",
+          "go/shadow_log.go",
+          "go/shadow_log_test.go"
         ],
         "nativeAdaptations": [
           "B02",

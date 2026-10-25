@@ -90,7 +90,7 @@
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "9149345da4c19a2015aefcefaba8fad5de15afd42d4c5bf4ba813ff3ebb8a7fe",
+      "sha256": "cc25114e5a5512d2dd48cf8b6c7466a395a0b449cf818946fd4d8b0c5acdd64e",
       "entries": [
         {"title":"Configuration and rollout","contracts":["C16"]},
         {"title":"What belongs where","contracts":["C16","B01"]},
@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "d011de5bf43a253a0d3d2cd5d2cfdaa43926322ea65eba1781c5e8809a3c10c6",
+      "sha256": "514e3c9ab39e25d572b98dba915190ec2c368069f3d88a557657ffaeaffbf3c3",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -178,7 +178,7 @@
     },
     {
       "path": "docs/languages/python.md",
-      "sha256": "3cc5db10e5e69b517b32120c8f8be2c461c08a633b33d042922a1cee05cd6b32",
+      "sha256": "d6adc478599e184e585e15af8a3553f23e1749d041fe46f0358dbba1ee824b2e",
       "entries": [
         {"title":"Python integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -192,7 +192,7 @@
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "bd24a8859958f816750c1c4ce70e05f4f366f56d50ea8b491586e9c6441f4215",
+      "sha256": "ab4fd96e1664d9525adba0d80d9be6f209329d6ab1cf35091891f5c3c59a719f",
       "entries": [
         {"title":"Rust integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "07fb8e87278e4b0b7951ce86bb6fee18b603f5b7c21ad85630acac851bff0224",
+      "sha256": "f126a5bcda58689658f2ba8fe2361e8e1bc66d8533d7fdec72d36efd2e7a3202",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "69daf7d4537b13b8d75edd6ac9fc9e218732183a045de8bdf0089ef33e48a617",
+      "sha256": "8d961ca61a88a4e8cce437c6ed3ef873ec5ec87a89739ddb8893de28f522b01f",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "206537fd46179fb5c50ef26552e85c70774648f6095a5e1db10ec823c67fe69b",
+      "sha256": "7d6dc07e4a73283514edc78b6f5dba3466874daf13ef89fbeb15132720683a00",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -758,7 +758,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "bd6ebd1a39be1f6ade79f953062126ffb9f9d12b4c8714ad07b47981e31486c8",
+      "sha256": "a549cdd4e73557a487c6b5f7605bc36f93d406d4e3c26123c1ecc5e69771069c",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -779,6 +779,7 @@
         {"title":"logs null diff fields and hook_error without touching the verdict when the hook $name","contracts":["C30","C60"]},
         {"title":"logs render_error with null source and diff fields for a bigint source value under $name","contracts":["C60","B03"]},
         {"title":"logs a cached undefined negative-cache entry as an absent side, not a render failure","contracts":["C60","B03"]},
+        {"title":"passes an absent cached side to shadowMismatchDiff as the raw undefined","contracts":["C60","B03"]},
         {"title":"logs hook paths without rendering values at diff paths, even for a bigint source value","contracts":["C60","B03"]},
         {"title":"records $outcome and leaves the caller unaffected when the logger $name","contracts":["C30","C60"]},
         {"title":"records $outcome when an async logger $name after the global Promise was replaced","contracts":["C30","C60"]},
@@ -1080,7 +1081,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "70e1a48838394502acfed293aa625b0120bad899b289a052552873c9e893fe74",
+      "sha256": "0734fbc588946ecaeff7e21d99994459a207c218be8db7e7004aa7314039f39a",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1152,7 +1153,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "8c3930f2938792bd470f8f7c862a5ecfe6c0cb2c5a43c587ca0a515d96f7424b",
+      "sha256": "bf25fe2eecc7cd3a2bd9ae297a66bbd76aefb00ba12eb377f6eec599d633d913",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1176,7 +1177,7 @@
     },
     {
       "path": "formal/guides/AUTHORING.md",
-      "sha256": "378e920719b033ff0e713d8a0932c216922684aad14a2c0f06af23db1c6c093d",
+      "sha256": "51ba5d1f4a353059a085ea6c98243b0ca2050bfcf66ac8ed167d2527211846bb",
       "entries": [
         {"title":"Reading and extending the DialCache models"},
         {"title":"Reading a model"},
@@ -1505,7 +1506,7 @@
     },
     {
       "path": "formal/guides/GO-PARITY.md",
-      "sha256": "956b12eabff3716bac5f4c57d14315c792dc89524c224a261fd15508992ff63f",
+      "sha256": "0ab9505cb3cb1185887f080882bb50b16cf88dc7134305e144478ece178c7a7b",
       "entries": [
         {"title":"Go parity acceptance"},
         {"title":"Required evidence"},
@@ -1765,7 +1766,7 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "afc44715faa7df1512aa8ab1d013521319e97e9ce75725aa20b292459504b2bc",
+      "sha256": "17639637c18e28fc7870978f830250a114a9b2d7407654d6f58d826197b92f0e",
       "entries": [
         {"title":"Validation and evidence"},
         {"title":"Prerequisites"},
