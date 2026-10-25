@@ -118,6 +118,24 @@ type Operation[T any] struct {
 	ShouldRecover RecoveryPredicate
 	// Comparator decides shadow matches; nil compares with SemanticEqual.
 	Comparator func(cached, source T) (bool, error)
+	// MismatchDiff replaces the built-in JSON difference computation behind
+	// the mismatchPaths and diffJson fields of confirmed-mismatch warnings; it
+	// runs only when the resolved mismatch-logging diff level is above
+	// MismatchDiffOff. Inputs are borrowed snapshots. Like Comparator, it must
+	// be deterministic, side-effect-free, non-mutating and bounded. A returned
+	// error or panic logs null for the paths and the diff, without falling back
+	// to the built-in computation; a nil slice is an empty list.
+	MismatchDiff func(cached, source T) ([]MismatchEntry, error)
+}
+
+// MismatchEntry is one differing field of a confirmed shadow mismatch: an RFC
+// 6901 JSON Pointer into the compared value and the value on each side there.
+// Absent omits a side the field does not have, as the built-in computation
+// does for a member present on one side only; set both sides to Absent when
+// only the location is known. A nil side is JSON null.
+type MismatchEntry struct {
+	Path           string
+	Cached, Source any
 }
 
 // Event records public diagnostics; Data contains the backend-neutral labels.

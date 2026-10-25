@@ -73,27 +73,55 @@ func (x *execution[T]) shadowEvent(v shadowVerdict) {
 		}
 		x.event("shadowAge", "", map[string]any{"outcome": v.outcome, "seconds": float64(age) / 1000})
 	}
-	if v.outcome == "mismatch" && x.policy.Shadow.LogMismatches && x.cache.settings.logger != nil {
-		func() {
-			defer func() { recover() }()
-			details := x.labels("")
-			details["outcome"] = "mismatch"
-
-			preview := ShadowMismatchLogDetails(x.key, v.cached, v.source)
-			details["cacheKey"] = preview.CacheKey
-			if preview.CachedValueJSON != nil {
-				details["cachedValueJson"] = *preview.CachedValueJSON
-			} else {
-				details["cachedValueJson"] = nil
-			}
-			if preview.SourceValueJSON != nil {
-				details["sourceValueJson"] = *preview.SourceValueJSON
-			} else {
-				details["sourceValueJson"] = nil
-			}
-			x.cache.settings.logger.Warn("DialCache shadow validation mismatch", details)
-		}()
+	if v.outcome == "mismatch" && x.policy.Shadow.logsMismatches() {
+		x.warnShadowMismatch(v)
 	}
+}
+
+// warnShadowMismatch emits the confirmed-mismatch warning and its one
+// shadowMismatchLogging event. It runs after the verdict was recorded and
+// never changes it; a construction failure logs less, never more, and nothing
+// reaches the caller.
+func (x *execution[T]) warnShadowMismatch(v shadowVerdict) {
+	shadow := x.policy.Shadow
+	age := *v.age
+	if age < 0 {
+		age = 0
+	}
+	details := x.labels("")
+	details["outcome"] = "mismatch"
+	details["cachedValueAgeSeconds"] = float64(age) / 1000
+	var fields map[string]any
+	failure := shadowLogRenderError
+	func() {
+		// Construction is fail-closed by design; keep the metadata warning if
+		// anything unforeseen still panics while rendering it.
+		defer func() { _ = recover() }()
+		details["cacheKey"] = PreviewShadowLogKey(x.key)
+		var hook func() ([]MismatchEntry, error)
+		if x.op.MismatchDiff != nil {
+			cached, _ := assertValue[T](v.cached)
+			source, _ := assertValue[T](v.source)
+			hook = func() ([]MismatchEntry, error) { return x.op.MismatchDiff(cached, source) }
+		}
+		fields, failure = renderShadowMismatchLog(shadow.LogValue, shadow.LogDiff, v.cached, v.source, hook)
+	}()
+	for name, field := range fields {
+		details[name] = field
+	}
+	if failure != "" {
+		details["loggingOutcome"] = failure
+	}
+	delivered := warnDelivered(x.cache.settings.logger, "DialCache shadow validation mismatch", details)
+	// hook_error ranks above render_error, which ranks above logger_error.
+	outcome := failure
+	if outcome == "" {
+		outcome = "logged"
+		if !delivered {
+			outcome = "logger_error"
+		}
+	}
+	x.event("shadowMismatchLogging", "", map[string]any{"outcome": outcome})
 }
 
 func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[T], started time.Duration) {

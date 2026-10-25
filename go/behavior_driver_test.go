@@ -1046,9 +1046,22 @@ func (l behaviorLogger) Debug(string, any) { l.fail() }
 func (l behaviorLogger) Error(string, any) { l.fail() }
 func (l behaviorLogger) Warn(message string, details any) {
 	if message == "DialCache shadow validation mismatch" {
-		l.d.record("mismatchWarning", bm(details))
+		l.d.record("mismatchWarning", sharedWarningFields(bm(details)))
 	}
 	l.fail()
+}
+
+// sharedWarningFields keeps the warning fields every port emits, so the
+// mismatch-path fields do not reach the shared expectations before every
+// port records them.
+func sharedWarningFields(details obj) obj {
+	shared := obj{}
+	for _, field := range []string{"cacheNamespace", "useCase", "keyType", "outcome", "cacheKey", "cachedValueJson", "sourceValueJson"} {
+		if value, present := details[field]; present {
+			shared[field] = value
+		}
+	}
+	return shared
 }
 
 func (r behaviorRemote) Read(ctx context.Context, key, watermark string) (ReadResult, error) {

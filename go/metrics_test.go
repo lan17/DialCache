@@ -48,7 +48,7 @@ func TestDatadogMetricNamesUnitsAndLabels(t *testing.T) {
 		value                float64
 	}{
 		{"request", "request.count", "increment", 1}, {"miss", "miss.count", "increment", 1}, {"disabled", "disabled.count", "increment", 1}, {"error", "error.count", "increment", 1}, {"invalidation", "invalidation.count", "increment", 1}, {"coalesced", "coalesced.count", "increment", 1},
-		{"shadowValidation", "shadow.count", "increment", 1}, {"shadowAge", "shadow.value_age", "distribution", 0.25}, {"futureOffset", "future_timestamp_offset", "distribution", 0.25}, {"staleRecovery", "stale_recovery.count", "increment", 1}, {"recoveryAge", "stale_recovery.value_age", "distribution", 0.25},
+		{"shadowValidation", "shadow.count", "increment", 1}, {"shadowAge", "shadow.value_age", "distribution", 0.25}, {"shadowMismatchLogging", "shadow_mismatch_logging.count", "increment", 1}, {"futureOffset", "future_timestamp_offset", "distribution", 0.25}, {"staleRecovery", "stale_recovery.count", "increment", 1}, {"recoveryAge", "stale_recovery.value_age", "distribution", 0.25},
 		{"compression", "compression.count", "increment", 1}, {"get", "get.duration", "distribution", 0.25}, {"fallback", "fallback.duration", "distribution", 0.25}, {"serialization", "serialization.duration", "distribution", 0.25}, {"size", "serialization.size", "distribution", 123}, {"storedSize", "stored.size", "distribution", 123}, {"compressionRatio", "compression.ratio", "distribution", 0.25}, {"compressionDuration", "compression.duration", "distribution", 0.25},
 	}
 	for _, test := range cases {
@@ -85,7 +85,15 @@ func TestDatadogMetricNamesUnitsAndLabels(t *testing.T) {
 	if client.events[len(client.events)-1].method != "histogram" {
 		t.Fatal("histogram option ignored")
 	}
-	for _, namespace := range []string{"1bad", "has-dash", "two..dots", strings.Repeat("a", 201)} {
+	if mismatchLogging := client.events[8]; !reflect.DeepEqual(mismatchLogging.tags, map[string]string{"cache_namespace": "logical", "use_case": "lookup", "key_type": "item", "outcome": "mismatch"}) {
+		t.Fatalf("shadow mismatch logging tags: %+v", mismatchLogging)
+	}
+	// shadow_mismatch_logging.count is the longest suffix, so the namespace
+	// can be at most 170 characters.
+	if _, err := NewDatadogMetrics(DatadogMetricsOptions{Client: client, ObservationMetricType: "distribution", Namespace: strings.Repeat("a", 170)}); err != nil {
+		t.Fatal(err)
+	}
+	for _, namespace := range []string{"1bad", "has-dash", "two..dots", strings.Repeat("a", 171)} {
 		if _, err := NewDatadogMetrics(DatadogMetricsOptions{Client: client, ObservationMetricType: "distribution", Namespace: namespace}); err == nil {
 			t.Fatalf("accepted namespace %q", namespace)
 		}
@@ -106,7 +114,7 @@ func TestPrometheusWireSchemaMatchesTypeScriptBinding(t *testing.T) {
 	}
 	text := string(source)
 	schemas := PrometheusCollectorSchemas("")
-	if len(schemas) != 19 {
+	if len(schemas) != 20 {
 		t.Fatalf("collector count: %d", len(schemas))
 	}
 	for _, schema := range schemas {
@@ -232,7 +240,7 @@ func TestPrometheusExplicitBindingsPreserveExistingObservations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := collectorDescriptions(registry); len(got) != 19 {
+	if got := collectorDescriptions(registry); len(got) != 20 {
 		t.Fatalf("binding changed registry membership: %d", len(got))
 	}
 	families, err := registry.Gather()
@@ -322,28 +330,35 @@ func TestObserverIsolationAndBoundedNativeJSONLogs(t *testing.T) {
 	logger.Debug("", nil)
 	logger.Warn("", nil)
 	logger.Error("", nil)
+	// Wrapping twice keeps one layer, so a Warn panic stays observable as a
+	// logger failure.
+	if FailureIsolatedLogger(logger) != logger || warnDelivered(FailureIsolatedLogger(logger), "", nil) || !warnDelivered(FailureIsolatedLogger(&boundaryLogger{}), "", nil) {
+		t.Fatal("logger isolation hid or invented a Warn failure")
+	}
 	key := PreviewShadowLogKey(strings.Repeat("🙂", 1000))
 	if len(key) > ShadowLogKeyMaxBytes || !utf8.ValidString(key) || !strings.HasSuffix(key, ShadowLogTruncationMarker) {
 		t.Fatalf("invalid key preview: bytes=%d", len(key))
 	}
-	value := PreviewShadowLogJSON(strings.Repeat("🙂", 3000))
-	if value == nil || len(*value) > ShadowLogValueMaxBytes || !utf8.ValidString(*value) || !strings.HasSuffix(*value, ShadowLogTruncationMarker) {
+	preview := func(value any) any {
+		fields, _ := renderShadowMismatchLog(true, MismatchDiffOff, value, Absent, nil)
+		return fields["cachedValueJson"]
+	}
+	value, _ := preview(strings.Repeat("🙂", 3000)).(string)
+	if len(value) > ShadowLogValueMaxBytes || !utf8.ValidString(value) || !strings.HasSuffix(value, ShadowLogTruncationMarker) {
 		t.Fatal("invalid value preview")
 	}
-	if PreviewShadowLogJSON(Absent) != nil || PreviewShadowLogJSON(big.NewInt(1)) != nil {
+	if preview(Absent) != nil || preview(big.NewInt(1)) != nil {
 		t.Fatal("unsupported values should have null previews")
 	}
 	cycle := map[string]any{}
 	cycle["self"] = cycle
-	if PreviewShadowLogJSON(cycle) != nil {
+	if preview(cycle) != nil {
 		t.Fatal("cyclic object should have null preview")
 	}
-	plain := PreviewShadowLogJSON("<tag>")
-	if plain == nil || *plain != `"<tag>"` {
+	if plain := preview("<tag>"); plain != `"<tag>"` {
 		t.Fatalf("native JSON was HTML escaped: %v", plain)
 	}
-	null := PreviewShadowLogJSON(nil)
-	if null == nil || *null != "null" {
+	if null := preview(nil); null != "null" {
 		t.Fatal("null confused with absent")
 	}
 }
