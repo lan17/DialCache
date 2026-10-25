@@ -195,7 +195,7 @@ Each warning attempt, a confirmed mismatch with logging on, emits one
 `hook_error` when the hook or the built-in walk threw or returned an invalid
 list, `render_error` when a side had no JSON rendering (an absent side is
 not one, D13), `logger_error` when
-the logger threw, else `logged`; the outcomes rank in that order, so
+the logger failed (D15), else `logged`; the outcomes rank in that order, so
 `hook_error` wins over `render_error`, which wins over `logger_error`.
 Logging off emits nothing, so the metric never shadows the mismatch count.
 When the outcome is not `logged`, the warning carries it as
@@ -545,7 +545,8 @@ fails resolution like a malformed layer map. `logMismatches` keeps its type in e
   one event per warning attempt, nothing when logging is off, and
   `loggingOutcome` on the warning when it is not `logged`.
 - **Status:** Confirmed 2026-10-24, in session: "I confirm D0 through D11 as
-  proposed."
+  proposed." D15 widens `logger_error` from a throw to any observable logger
+  failure, an asynchronous one included.
 - **Rejected:**
   - Nothing, as today: a null field in a log line. A hook that has thrown
     for a week is invisible, and a logger that throws is silent.
@@ -692,6 +693,24 @@ fails resolution like a malformed layer map. `logMismatches` keeps its type in e
   - The carried #138 own-property reads of `shadow` and its leaves. They change
     how an inherited `shadow` group behaves for configs that exist today,
     which mismatch paths do not need.
+
+### D15. A logger that fails asynchronously is a `logger_error`
+
+- **Choice:** `logger_error` counts every logger failure the port can
+  observe: a throw or panic, a returned error, and a returned promise or
+  awaitable that rejects. When the logger returns a promise, the
+  `shadowMismatchLogging` event waits for it: rejection gives
+  `logger_error`, resolution gives `logged`, and a promise that never
+  settles emits no event. An earlier `hook_error` or `render_error` is
+  recorded at once, without waiting, since it wins either way.
+- **Status:** Confirmed 2026-10-25, in session: "oh ok yea it seems like ti
+  shoudl be logger_error if we cant log right".
+- **Rejected:**
+  - Counting only a synchronous throw, as D11 first worded it. An
+    asynchronous transport that drops every warning would report `logged`,
+    which is the silent failure the metric exists to show.
+  - Bounding the wait with a timeout. It adds a timer per warning and a
+    fifth outcome for a logger that is merely slow.
 
 ## Carried decisions
 
