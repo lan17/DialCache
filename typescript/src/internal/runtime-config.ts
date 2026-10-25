@@ -184,7 +184,10 @@ export function isShadowMismatchDiffLevel(value: unknown): value is ShadowMismat
  * both leaves off and is marked invalid.
  */
 export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
-  const shorthand = readField(shadow, "logMismatches");
+  const { logMismatches: shorthand, mismatchLogging: group } = shadow as {
+    readonly logMismatches?: unknown;
+    readonly mismatchLogging?: unknown;
+  };
   const expanded: MismatchLoggingLeaves = shorthand === undefined
     ? {}
     : shorthand === true
@@ -192,7 +195,6 @@ export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
       : shorthand === false
         ? { value: false, diff: "off" }
         : { value: false, diff: "off", invalid: true };
-  const group = readField(shadow, "mismatchLogging");
   if (group === undefined) {
     return expanded;
   }
@@ -200,13 +202,20 @@ export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
     // Construction, merging and default snapshots reject this shape first.
     return { value: false, diff: "off", invalid: true };
   }
-  const value = readField(group, "value");
-  const diff = readField(group, "diff");
-  return {
-    ...expanded,
-    ...(value === undefined ? {} : { value }),
-    ...(diff === undefined ? {} : { diff }),
-  };
+  const written = group as { readonly value?: unknown; readonly diff?: unknown };
+  const leaves: { value?: unknown; diff?: unknown; invalid?: true } = {};
+  const value = written.value !== undefined ? written.value : expanded.value;
+  const diff = written.diff !== undefined ? written.diff : expanded.diff;
+  if (value !== undefined) {
+    leaves.value = value;
+  }
+  if (diff !== undefined) {
+    leaves.diff = diff;
+  }
+  if (expanded.invalid === true) {
+    leaves.invalid = true;
+  }
+  return leaves;
 }
 
 /**
@@ -327,28 +336,22 @@ function mergeShadowConfig(
   }
 
   const merged: { ramp?: unknown; logMismatches?: unknown; mismatchLogging?: { value?: unknown; diff?: unknown } } = {};
-  const overlayRamp = readField(overlay, "ramp");
-  const ramp = overlayRamp !== undefined ? overlayRamp : readField(defaults, "ramp");
+  const ramp = overlay?.ramp !== undefined ? overlay.ramp : defaults?.ramp;
   if (ramp !== undefined) {
     merged.ramp = ramp;
   }
-  // The groups merge raw, and admission expands the result once. A runtime
-  // `logMismatches` stands for both leaves, so it replaces the inherited group
-  // and only the leaves written beside it apply; a malformed one stays raw, so
-  // admission records its config_resolution. Otherwise the default's shorthand
-  // stays the baseline and each leaf merges on its own.
-  const overlayShorthand = readField(overlay, "logMismatches");
-  const replacesGroup = overlayShorthand !== undefined;
-  const shorthand = replacesGroup ? overlayShorthand : readField(defaults, "logMismatches");
-  if (shorthand !== undefined) {
-    merged.logMismatches = shorthand;
+  // Each layer's shorthand expands before the leaf-wise merge, so a runtime
+  // `logMismatches` replaces both inherited leaves while a leaf written beside
+  // it still wins within its own layer.
+  const inherited = defaults === undefined ? {} : expandMismatchLogging(defaults);
+  const written = overlay === undefined ? {} : expandMismatchLogging(overlay);
+  if (written.invalid === true) {
+    // A malformed runtime shorthand stays raw, so admission records its
+    // config_resolution; its expanded leaves already won the merge.
+    merged.logMismatches = overlay?.logMismatches;
   }
-  const overlayGroup = readField(overlay, "mismatchLogging") as object | undefined;
-  const defaultGroup = replacesGroup ? undefined : readField(defaults, "mismatchLogging") as object | undefined;
-  const overlayValue = readField(overlayGroup, "value");
-  const overlayDiff = readField(overlayGroup, "diff");
-  const value = overlayValue !== undefined ? overlayValue : readField(defaultGroup, "value");
-  const diff = overlayDiff !== undefined ? overlayDiff : readField(defaultGroup, "diff");
+  const value = written.value !== undefined ? written.value : inherited.value;
+  const diff = written.diff !== undefined ? written.diff : inherited.diff;
   if (value !== undefined || diff !== undefined) {
     const group: { value?: unknown; diff?: unknown } = {};
     if (value !== undefined) {
@@ -366,7 +369,7 @@ function assertShadowConfig(config: ShadowConfig | undefined): void {
   if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError("DialCache shadow config must be an object");
   }
-  const mismatchLogging = readField(config, "mismatchLogging");
+  const mismatchLogging: unknown = config?.mismatchLogging;
   if (
     mismatchLogging !== undefined
     && (mismatchLogging === null || typeof mismatchLogging !== "object" || Array.isArray(mismatchLogging))
@@ -375,6 +378,3 @@ function assertShadowConfig(config: ShadowConfig | undefined): void {
   }
 }
 
-function readField(source: object | undefined, key: string): unknown {
-  return source === undefined ? undefined : (source as Record<string, unknown>)[key];
-}

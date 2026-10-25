@@ -53,7 +53,7 @@ describe("DialCache observability internal compatibility paths", () => {
           coalesce: true,
           ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 120 },
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 75 },
-          shadow: { ramp: 80, logMismatches: true },
+          shadow: { ramp: 80, mismatchLogging: { value: true, diff: "values" } },
           staleOnErrorMaxAgeSec: 3_600,
         }),
         effective: { value: true, diff: "values" },
@@ -72,7 +72,7 @@ describe("DialCache observability internal compatibility paths", () => {
           coalesce: false,
           ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 90 },
           ramp: { [CacheLayer.LOCAL]: 10, [CacheLayer.REMOTE]: 50 },
-          shadow: { ramp: 20, logMismatches: false },
+          shadow: { ramp: 20, mismatchLogging: { value: false, diff: "off" } },
           staleOnErrorMaxAgeSec: 0,
         }),
         effective: { value: false, diff: "off" },
@@ -84,7 +84,7 @@ describe("DialCache observability internal compatibility paths", () => {
           coalesce: false,
           ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 120 },
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
-          shadow: { ramp: 20, logMismatches: true },
+          shadow: { ramp: 20, mismatchLogging: { value: true, diff: "values" } },
           staleOnErrorMaxAgeSec: 7_200,
         }),
         effective: { value: true, diff: "values" },
@@ -95,7 +95,8 @@ describe("DialCache observability internal compatibility paths", () => {
       const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig));
 
       expect(merged).toEqual(expected);
-      // The groups merge raw; admission expands the shorthand once.
+      // Each layer's shorthand expands before the merge, so only leaves remain.
+      expect(merged?.shadow).not.toHaveProperty("logMismatches");
       expect(resolveMismatchLogging(merged!.shadow!)).toEqual({ ...effective, invalid: false });
     }
   });
@@ -174,9 +175,9 @@ describe("DialCache observability internal compatibility paths", () => {
       { mismatchLogging: { value: true, diff: "values" } },
       { mismatchLogging: { value: false } },
     )).resolves.toEqual({ mismatchLogging: { value: false, diff: "values" } });
-    // A default shorthand stays the baseline under the runtime leaves.
+    // A default shorthand is a baseline like any other pair of default leaves.
     const overShorthand = await mergedShadow({ logMismatches: true }, { mismatchLogging: { diff: "paths" } });
-    expect(overShorthand).toEqual({ logMismatches: true, mismatchLogging: { diff: "paths" } });
+    expect(overShorthand).toEqual({ mismatchLogging: { value: true, diff: "paths" } });
     expect(resolveMismatchLogging(overShorthand)).toEqual({ value: true, diff: "paths", invalid: false });
   });
 
@@ -186,10 +187,10 @@ describe("DialCache observability internal compatibility paths", () => {
       { logMismatches: "yes" as unknown as boolean, mismatchLogging: { value: true } },
     );
 
-    // The malformed shorthand replaces the default group, the leaf written
-    // beside it still applies, and the raw value stays so admission records its
-    // config_resolution.
-    expect(shadow).toEqual({ logMismatches: "yes", mismatchLogging: { value: true } });
+    // The malformed shorthand expands to both leaves off over the default, the
+    // leaf written beside it still wins, and the raw value stays so admission
+    // records its config_resolution.
+    expect(shadow).toEqual({ logMismatches: "yes", mismatchLogging: { value: true, diff: "off" } });
     expect(resolveMismatchLogging(shadow)).toEqual({ value: true, diff: "off", invalid: true });
   });
 
