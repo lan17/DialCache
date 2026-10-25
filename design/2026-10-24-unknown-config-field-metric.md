@@ -420,8 +420,7 @@ witness or mutant that encodes them changes outcome.
   - A full key walk on every call. It is simple, but it adds string
     comparisons, and in TypeScript array allocations, to every enabled call,
     for a condition that is almost always false.
-  - Checking only static defaults and constructed configs, and skipping raw
-    replies. The raw form is how a config service's reply usually arrives (Go
+  - Checking only constructed configs, and skipping raw replies. The raw form is how a config service's reply usually arrives (Go
     `RawPolicy`, Rust `RuntimePolicy::from_json`, a Python dict), so most typos
     would go unreported.
 
