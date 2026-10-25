@@ -94,11 +94,8 @@ func renderShadowMismatchLog(logValue bool, diff MismatchDiffLevel, cached, sour
 // renderJSON renders one value to native JSON. A value with no rendering,
 // including one whose MarshalJSON panics, reports false.
 func renderJSON(value any) (encoded []byte, rendered bool) {
-	defer func() {
-		if recover() != nil {
-			encoded, rendered = nil, false
-		}
-	}()
+	// A panic skips the return, leaving both results zero.
+	defer func() { _ = recover() }()
 	encoded, err := appendJSON(nil, reflect.ValueOf(value), make(map[visit]bool))
 	return encoded, err == nil
 }

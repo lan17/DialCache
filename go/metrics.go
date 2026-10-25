@@ -48,11 +48,8 @@ func warnDelivered(logger Logger, message string, details any) (delivered bool) 
 	if isolated, ok := logger.(isolatedLogger); ok {
 		logger = isolated.inner
 	}
-	defer func() {
-		if recover() != nil {
-			delivered = false
-		}
-	}()
+	// A panic skips the return, leaving delivered false.
+	defer func() { _ = recover() }()
 	logger.Warn(message, details)
 	return true
 }
