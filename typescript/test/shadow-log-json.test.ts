@@ -5,7 +5,6 @@ import {
   SHADOW_LOG_TRUNCATION_MARKER,
   SHADOW_LOG_VALUE_MAX_BYTES,
   diffShadowMismatchJson,
-  previewShadowLogJson,
   previewShadowLogKey,
   renderShadowMismatchLog,
   type JsonValue,
@@ -420,8 +419,10 @@ describe("shadow mismatch log JSON", () => {
       fields: { cachedValueJson: null, sourceValueJson: '{"version":2}' },
       failure: "render_error",
     });
-    expect(previewShadowLogJson(1n)).toBeNull();
-    expect(previewShadowLogJson(undefined)).toBeNull();
+    expect(renderShadowMismatchLog(VALUE_ONLY, 1n, undefined)).toStrictEqual({
+      fields: { cachedValueJson: null, sourceValueJson: null },
+      failure: "render_error",
+    });
   });
 
   it("catches user JSON hook failures", () => {
@@ -431,7 +432,6 @@ describe("shadow mismatch log JSON", () => {
       },
     };
 
-    expect(previewShadowLogJson(value)).toBeNull();
     expect(renderShadowMismatchLog(VALUE_ONLY, value, { version: 2 })).toStrictEqual({
       fields: { cachedValueJson: null, sourceValueJson: '{"version":2}' },
       failure: "render_error",
@@ -442,19 +442,17 @@ describe("shadow mismatch log JSON", () => {
     const key = `${"k".repeat(SHADOW_LOG_KEY_MAX_BYTES)}🙂`;
     const value = { text: "🙂".repeat(SHADOW_LOG_VALUE_MAX_BYTES) };
     const keyPreview = previewShadowLogKey(key);
-    const valuePreview = previewShadowLogJson(value);
+    const { fields } = renderShadowMismatchLog(VALUE_ONLY, value, value);
+    const valuePreview = fields.cachedValueJson;
 
-    expect(valuePreview).not.toBeNull();
+    expect(typeof valuePreview).toBe("string");
     expect(Buffer.byteLength(keyPreview)).toBeLessThanOrEqual(SHADOW_LOG_KEY_MAX_BYTES);
     expect(Buffer.byteLength(valuePreview!)).toBeLessThanOrEqual(SHADOW_LOG_VALUE_MAX_BYTES);
     expect(keyPreview.endsWith(SHADOW_LOG_TRUNCATION_MARKER)).toBe(true);
     expect(valuePreview!.endsWith(SHADOW_LOG_TRUNCATION_MARKER)).toBe(true);
     expect(keyPreview).not.toContain("�");
     expect(valuePreview).not.toContain("�");
-    expect(renderShadowMismatchLog(VALUE_ONLY, value, value).fields).toStrictEqual({
-      cachedValueJson: valuePreview,
-      sourceValueJson: valuePreview,
-    });
+    expect(fields.sourceValueJson).toBe(valuePreview);
   });
 
   describe("built-in mismatch paths", () => {
@@ -469,6 +467,10 @@ describe("shadow mismatch log JSON", () => {
       expect(fields.mismatchPaths).toStrictEqual(entries.map((entry) => entry.path));
       expect(fields.mismatchPathCount).toBe(count);
       expect(JSON.parse(fields.diffJson!)).toStrictEqual(entries);
+      expect(renderShadowMismatchLog(PATHS_ONLY, cached, source)).toStrictEqual({
+        fields: { mismatchPaths: fields.mismatchPaths, mismatchPathCount: count },
+        failure: null,
+      });
     });
 
     it("cuts the entries at 64 in walk order and counts every difference", () => {
@@ -824,6 +826,17 @@ describe("shadow mismatch log JSON", () => {
         fields: { mismatchPaths: ["/a", "/b"], mismatchPathCount: 2 },
         failure: null,
       });
+    });
+
+    it("stops rendering hook sides at the first side with no rendering", () => {
+      const later = { toJSON: vi.fn(() => "later") };
+      const hook = (): unknown => [{ path: "/a", cached: 1n }, { path: "/b", source: later }];
+
+      expect(renderShadowMismatchLog(VALUES_ONLY, CACHED_USER, SOURCE_USER, hook)).toStrictEqual({
+        fields: { mismatchPaths: ["/a", "/b"], mismatchPathCount: 2, diffJson: null },
+        failure: "render_error",
+      });
+      expect(later.toJSON).not.toHaveBeenCalled();
     });
 
     it("omits absent hook sides from diffJson and renders present ones as JSON", () => {

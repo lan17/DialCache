@@ -70,11 +70,6 @@ export function previewShadowLogKey(value: string): string {
   return clampUtf8(value, SHADOW_LOG_KEY_MAX_BYTES);
 }
 
-export function previewShadowLogJson(value: unknown): string | null {
-  const json = renderJson(value);
-  return json === null ? null : clampUtf8(json, SHADOW_LOG_VALUE_MAX_BYTES);
-}
-
 /**
  * Builds the content fields the plan requests for one confirmed mismatch.
  * Each side is rendered to native JSON at most once, and every built-in field
@@ -97,27 +92,19 @@ export function renderShadowMismatchLog(
   let diffFields: ShadowMismatchLogFields = {};
   if (plan.diff !== "off") {
     const withValues = plan.diff === "values";
-    let entries: readonly HookEntry[] | null = null;
-    let count = 0;
+    let diff: RawMismatchDiff | null = null;
     if (hook !== undefined) {
-      const result = runShadowMismatchHook(hook, cachedValue, sourceValue);
-      if (result === null) {
-        diffFailed = true;
-      } else {
-        count = result.count;
-        entries = result.entries;
-      }
+      diff = runShadowMismatchHook(hook, cachedValue, sourceValue);
+      diffFailed = diff === null;
     } else if (cachedJson !== null && sourceJson !== null) {
       try {
-        const diff = walkRenderedJson(cachedJson, sourceJson);
-        count = diff.count;
-        entries = diff.entries;
+        diff = walkRenderedJson(cachedJson, sourceJson);
       } catch {
         diffFailed = true;
       }
     }
 
-    if (entries === null) {
+    if (diff === null) {
       diffFields = {
         mismatchPaths: null,
         mismatchPathCount: null,
@@ -126,12 +113,13 @@ export function renderShadowMismatchLog(
     } else {
       let diffJson: string | null = null;
       if (withValues) {
-        diffJson = renderDiffJson(entries, hook !== undefined);
+        diffJson = renderDiffJson(diff.entries);
         renderFailed ||= diffJson === null;
       }
       diffFields = {
-        mismatchPaths: entries.map((entry) => clampUtf8(entry.path, SHADOW_MISMATCH_PATH_MAX_BYTES)),
-        mismatchPathCount: count,
+        // "paths" never renders a side.
+        mismatchPaths: diff.entries.map((entry) => clampPointer(entry.path)),
+        mismatchPathCount: diff.count,
         ...(withValues ? { diffJson } : {}),
       };
     }
@@ -166,17 +154,23 @@ export function renderShadowMismatchLog(
  */
 export function diffShadowMismatchJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff {
   const diff = walkJson(cached, source);
-  return {
-    count: diff.count,
-    entries: diff.entries.map((entry) => ({
-      path: clampUtf8(entry.path, SHADOW_MISMATCH_PATH_MAX_BYTES),
-      ...(Object.hasOwn(entry, "cached") ? { cached: clampJsonSide(entry.cached!) } : {}),
-      ...(Object.hasOwn(entry, "source") ? { source: clampJsonSide(entry.source!) } : {}),
-    })),
-  };
+  // JSON values always render, so every entry bounds.
+  return { count: diff.count, entries: diff.entries.map((entry) => boundEntry(entry)!) };
 }
 
-function walkRenderedJson(cachedJson: string, sourceJson: string): ShadowMismatchJsonDiff {
+/** Entries before the pointer and side clamps, from the walk or the hook. */
+interface RawMismatchDiff {
+  readonly entries: readonly RawMismatchEntry[];
+  readonly count: number;
+}
+
+interface RawMismatchEntry {
+  readonly path: string;
+  readonly cached?: unknown;
+  readonly source?: unknown;
+}
+
+function walkRenderedJson(cachedJson: string, sourceJson: string): RawMismatchDiff {
   if (cachedJson === sourceJson) {
     return { entries: [], count: 0 };
   }
@@ -300,12 +294,6 @@ function escapePointerToken(name: string): string {
   return name.replaceAll("~", "~0").replaceAll("/", "~1");
 }
 
-function clampJsonSide(value: JsonValue): JsonValue {
-  const json = JSON.stringify(value);
-  const clamped = clampUtf8(json, SHADOW_MISMATCH_SIDE_MAX_BYTES);
-  return clamped === json ? value : clamped;
-}
-
 /**
  * Runs the use case's hook under the comparator's synchronous discipline. A
  * throw, a promise-like, a non-array, or a member without a string `path`
@@ -316,7 +304,7 @@ function runShadowMismatchHook(
   hook: ShadowMismatchEntriesHook,
   cachedValue: unknown,
   sourceValue: unknown,
-): { readonly entries: readonly HookEntry[]; readonly count: number } | null {
+): RawMismatchDiff | null {
   try {
     const result: unknown = (hook as (cached: unknown, source: unknown) => unknown)(cachedValue, sourceValue);
     if (isPromiseLike(result)) {
@@ -329,7 +317,7 @@ function runShadowMismatchHook(
       return null;
     }
     const members = result as readonly unknown[];
-    const entries: HookEntry[] = [];
+    const entries: RawMismatchEntry[] = [];
     for (let index = 0; index < members.length; index += 1) {
       const member = members[index];
       if (member === null || typeof member !== "object") {
@@ -355,12 +343,6 @@ function runShadowMismatchHook(
   }
 }
 
-interface HookEntry {
-  readonly path: string;
-  readonly cached?: unknown;
-  readonly source?: unknown;
-}
-
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
   return value !== null
     && (typeof value === "object" || typeof value === "function")
@@ -368,32 +350,46 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
 }
 
 /**
- * Renders entries with their sides, each side clamped like a built-in side.
- * Built-in sides are already JSON; a hook side with no JSON rendering makes
- * the whole field `null`.
+ * Renders entries with their bounded sides; a side with no JSON rendering
+ * makes the whole field `null`, and later sides are not rendered.
  */
-function renderDiffJson(entries: readonly HookEntry[], fromHook: boolean): string | null {
-  const rendered: ShadowMismatchJsonEntry[] = [];
+function renderDiffJson(entries: readonly RawMismatchEntry[]): string | null {
+  const bounded: ShadowMismatchJsonEntry[] = [];
   for (const entry of entries) {
-    const sides: { cached?: JsonValue; source?: JsonValue } = {};
-    for (const side of ["cached", "source"] as const) {
-      if (!Object.hasOwn(entry, side)) {
-        continue;
-      }
-      if (fromHook) {
-        const json = renderJson(entry[side]);
-        if (json === null) {
-          return null;
-        }
-        const clamped = clampUtf8(json, SHADOW_MISMATCH_SIDE_MAX_BYTES);
-        sides[side] = clamped === json ? JSON.parse(json) as JsonValue : clamped;
-      } else {
-        sides[side] = clampJsonSide(entry[side] as JsonValue);
-      }
+    const next = boundEntry(entry);
+    if (next === null) {
+      return null;
     }
-    rendered.push({ path: clampUtf8(entry.path, SHADOW_MISMATCH_PATH_MAX_BYTES), ...sides });
+    bounded.push(next);
   }
-  return clampUtf8(JSON.stringify(rendered), SHADOW_LOG_DIFF_MAX_BYTES);
+  return clampUtf8(JSON.stringify(bounded), SHADOW_LOG_DIFF_MAX_BYTES);
+}
+
+/**
+ * The one clamp rule for built-in and hook entries: the pointer is clamped,
+ * and each present side is rendered once and kept as JSON, or as its clamped
+ * text when the rendering exceeds the side cap. `null` when a side has no
+ * JSON rendering.
+ */
+function boundEntry(entry: RawMismatchEntry): ShadowMismatchJsonEntry | null {
+  const bounded: { path: string; cached?: JsonValue; source?: JsonValue } = { path: clampPointer(entry.path) };
+  for (const side of ["cached", "source"] as const) {
+    if (!Object.hasOwn(entry, side)) {
+      continue;
+    }
+    const json = renderJson(entry[side]);
+    if (json === null) {
+      return null;
+    }
+    const clamped = clampUtf8(json, SHADOW_MISMATCH_SIDE_MAX_BYTES);
+    // Parsing the one rendering keeps a stateful `toJSON` from rendering twice.
+    bounded[side] = clamped === json ? JSON.parse(json) as JsonValue : clamped;
+  }
+  return bounded;
+}
+
+function clampPointer(path: string): string {
+  return clampUtf8(path, SHADOW_MISMATCH_PATH_MAX_BYTES);
 }
 
 function renderJson(value: unknown): string | null {
