@@ -20,7 +20,7 @@ fields and the observation record; [PORTING.md](../guides/PORTING.md) explains w
 | [scope](#scope) | [dialcache-scope-conformance.qnt](../models/dialcache-scope-conformance.qnt) | 7 | 256 | 14 | 26 |
 | [recovery](#recovery) | [dialcache-recovery-conformance.qnt](../models/dialcache-recovery-conformance.qnt) | 14 | 512 | 31 | 47 |
 | [policy](#policy) | [dialcache-policy-conformance.qnt](../models/dialcache-policy-conformance.qnt) | 12 | 512 | 33 | 51 |
-| [shadow](#shadow) | [dialcache-shadow-conformance.qnt](../models/dialcache-shadow-conformance.qnt) | 21 | 1024 | 59 | 111 |
+| [shadow](#shadow) | [dialcache-shadow-conformance.qnt](../models/dialcache-shadow-conformance.qnt) | 21 | 1024 | 61 | 115 |
 | [admission](#admission) | [dialcache-admission-conformance.qnt](../models/dialcache-admission-conformance.qnt) | 8 | 128 | 9 | 19 |
 | [layers](#layers) | [dialcache-layers-conformance.qnt](../models/dialcache-layers-conformance.qnt) | 8 | 512 | 17 | 27 |
 | [independent](#independent) | [dialcache-independent-conformance.qnt](../models/dialcache-independent-conformance.qnt) | 11 | 512 | 15 | 18 |
@@ -269,8 +269,8 @@ The coordinator sends an empty fixture; see [core.mjs](../replay/core.mjs) for w
 | Version | 4, inputs `explicit-v1` |
 | Smoke trace | [shadow-smoke.itf.json](./shadow-smoke.itf.json) |
 | Ports claiming it | typescript, go, rust, python |
-| Generation | 1024 sampled histories of at most 60 steps from 4096 samples; 20 scheduled invariants; 59 exported regressions |
-| Required witnesses | 111 labels in [coverage-witnesses.json](../catalogs/coverage-witnesses.json) |
+| Generation | 1024 sampled histories of at most 60 steps from 4096 samples; 20 scheduled invariants; 61 exported regressions |
+| Required witnesses | 115 labels in [coverage-witnesses.json](../catalogs/coverage-witnesses.json) |
 
 ### Fixture, by init choice
 
@@ -321,7 +321,7 @@ The coordinator sends an empty fixture; see [core.mjs](../replay/core.mjs) for w
 | `rollbackWall` | none | `{"op":"shiftWall","ms":-1000}` |
 | `advanceWall` | 1, 60000 | 1 → `{"op":"shiftWall","ms":1}`<br>60000 → `{"op":"shiftWall","ms":60000}` |
 | `shadowPolicy` | 0..2 | 0 → `{"op":"policy","value":{"shadow":{"ramp":100}}}`<br>1 → `{"op":"policy","value":{"shadow":{"ramp":0}}}`<br>2 → `{"op":"policy","value":{"shadow":{"ramp":101}}}` |
-| `logPolicy` | 0..10 | 0 → `{"op":"policy","value":{"shadow":{"logMismatches":false}}}`<br>1 → `{"op":"policy","value":{"shadow":{"logMismatches":true}}}`<br>2 → `{"op":"policy","value":{"shadow":{"logMismatches":"invalid"}}}`<br>3 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"diff":"paths"}}}}`<br>4 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"diff":"values"}}}}`<br>5 → `{"op":"policy","value":{"shadow":{"logMismatches":false,"mismatchLogging":{"value":true}}}}`<br>6 → `{"op":"policy","value":{"shadow":{"logMismatches":true,"mismatchLogging":{"value":false}}}}`<br>7 → `{"op":"policy","value":{"shadow":{"logMismatches":false,"mismatchLogging":{"diff":"paths"}}}}`<br>8 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"value":true,"diff":"invalid"}}}}`<br>9 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"value":"invalid","diff":"paths"}}}}`<br>10 → `{"op":"policy","value":{"shadow":{"logMismatches":"invalid","mismatchLogging":{"diff":"values"}}}}` |
+| `logPolicy` | 0..12 | 0 → `{"op":"policy","value":{"shadow":{"logMismatches":false}}}`<br>1 → `{"op":"policy","value":{"shadow":{"logMismatches":true}}}`<br>2 → `{"op":"policy","value":{"shadow":{"logMismatches":"invalid"}}}`<br>3 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"diff":"paths"}}}}`<br>4 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"diff":"values"}}}}`<br>5 → `{"op":"policy","value":{"shadow":{"logMismatches":false,"mismatchLogging":{"value":true}}}}`<br>6 → `{"op":"policy","value":{"shadow":{"logMismatches":true,"mismatchLogging":{"value":false}}}}`<br>7 → `{"op":"policy","value":{"shadow":{"logMismatches":false,"mismatchLogging":{"diff":"paths"}}}}`<br>8 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"value":true,"diff":"invalid"}}}}`<br>9 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"value":"invalid","diff":"paths"}}}}`<br>10 → `{"op":"policy","value":{"shadow":{"logMismatches":"invalid","mismatchLogging":{"diff":"values"}}}}`<br>11 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"diff":"off"}}}}`<br>12 → `{"op":"policy","value":{"shadow":{"mismatchLogging":{"value":false}}}}` |
 
 ### Observation channels
 
