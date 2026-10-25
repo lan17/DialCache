@@ -1429,7 +1429,7 @@
     },
     {
       "path": "formal/guides/FEATURE-COVERAGE.md",
-      "sha256": "8368ec455fa600c89821853926ca1c5025ba18bb6dacdc6d6a34794d9ade8afb",
+      "sha256": "a4bb78f80bff5982db8622802884c80e3ec3cec845fa10559c59591c2231fb19",
       "entries": [
         {"title":"DialCache features and known behavioral corners"},
         {"title":"What is accounted for"},
