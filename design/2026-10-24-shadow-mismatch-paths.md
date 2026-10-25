@@ -1,6 +1,6 @@
 # Shadow mismatch paths: name the differing fields in confirmed-mismatch warnings
 
-- **Status:** Accepted
+- **Status:** Proposed
 - **Issue:** #243, which tracks the work after the TypeScript reference
 - **Pull requests:** #242
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
@@ -191,11 +191,12 @@ Each warning attempt, a confirmed mismatch with logging on, emits one
 `shadowMismatchLogging` metric event with the cache labels and an `outcome`:
 `hook_error` when the hook or the built-in walk threw or returned an invalid
 list, `render_error` when a side had no JSON rendering, `logger_error` when
-the logger threw, else `logged`; the first failing stage wins. Logging off
-emits nothing, so the metric never shadows the mismatch count. When the
-outcome is not `logged`, the warning carries it as `loggingOutcome`, so a
-reader sees why fields are null. Invalid logging config stays
-`config_resolution`, carried from #138.
+the logger threw, else `logged`; the outcomes rank in that order, so
+`hook_error` wins over `render_error`, which wins over `logger_error`.
+Logging off emits nothing, so the metric never shadows the mismatch count.
+When the outcome is not `logged`, the warning carries it as
+`loggingOutcome`, so a reader sees why fields are null. Invalid logging
+config stays `config_resolution`, carried from #138.
 
 Port shapes: Go `ShadowPolicy.MismatchLogging *MismatchLoggingPolicy` with
 `Value *bool`, `Diff *MismatchDiffLevel` (`off`, `paths`, `values`) and
@@ -213,8 +214,9 @@ renderer for such types; Python
 `shadow={"mismatch_logging": {"diff": "paths"}}` (camelCase accepted as
 today) and `shadow_mismatch_diff=` beside `shadow_comparator`, returning a
 list of dicts. Runtime config in every port validates each leaf
-independently: an invalid leaf acts off (`value: false`, `diff: "off"`) and
-records one `config_resolution`; unknown fields are ignored and reported as
+independently: an invalid leaf acts off (`value: false`, `diff: "off"`), and
+one `config_resolution` per call covers every invalid leaf and shorthand;
+unknown fields are ignored and reported as
 `config_unknown_field`; a non-object `mismatchLogging` fails resolution like a
 malformed layer map. `logMismatches` keeps its type in every port (Go
 `LogMismatches *bool`, Rust `log_mismatches: Option<bool>`, Python
@@ -252,10 +254,12 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
 
 ## Contract and model changes
 
-- **C60** keeps its obligation and changes its wording: opting in means
-  `value` is true or `diff` is above `"off"`. Its native clause stays: JSON
-  conversion of native values, exact truncation text and the logger backend
-  remain B03/X01.
+- **C60** changes its wording: opting in means `value` is true or `diff` is
+  above `"off"`. With the last port it also gains the `shadowMismatchLogging`
+  outcome rule (D11, D12): one outcome per warning attempt, nothing with
+  logging off, and `hook_error` over `render_error` over `logger_error`. Its
+  native clause stays: JSON conversion of native values, exact truncation text
+  and the logger backend remain B03/X01.
 - **New obligation** (ID assigned when CONTRACTS.md assigns one): the
   built-in computation in the Proposal, as a portable function over JSON
   values, with the array rule, the root cases, the ordering and the caps.
@@ -265,34 +269,60 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
   compared as parsed JSON so each port's string rendering stays a B03
   detail, mapped in
   `semantic-cases.json` as `protocol/mismatchPathVectors/*` and replayed by
-  every port's protocol-vector test. The function has no relation to kernel
-  state, so it is not modelled in Quint. The completion inventory requires
+  every port's protocol-vector test. The walk over nested values has no
+  relation to kernel state, so Quint models only its scalar cases, the ones
+  the shadow profile's replay reaches (D12): `[]` for identical renderings,
+  else one entry at `""`. The completion inventory requires
   every port to replay every vector, so the group and the row land with the
   last port (Plan step 4); until then the TypeScript differ is pinned by
   native tests.
-- **Quint:** `kernel/shadow.qnt` keeps `logging: bool`, read as "`value` is
-  true or `diff` is above `off`"; `dialcache-shadow-conformance.qnt` keeps its
-  invariants and regressions, including `invalid-logging-policy`, which the
-  per-leaf validation still satisfies. The `logPolicy` choices in
-  `formal/replay/features.mjs` and the five fixed scenarios in
-  `behavioral-scenarios.json` keep `logMismatches`, which stays valid, so the
-  shared corpus needs no change while the ports catch up; with the last port,
-  #242 adds choices and scenarios for each `diff` level and for `value`, so the corpus exercises both leaves and the
-  shorthand's expansion. That is a driver fixture change, not a model change.
+- **Quint (D12):** `kernel/shadow.qnt` replaces the `logging` flag of
+  `Shadowing` and `Job` with the captured `{ value, diff }`, and keeps one
+  `Malformed.logging` flag, since one `config_resolution` covers any number of
+  invalid inputs; the shorthand expansion, the leaf-wise merge and per-leaf
+  resolution are pure functions there. The dark arm's channel row
+  (`DiagnosedShadowed` in `kernel/shadow.qnt`, with
+  `Diagnostics::ShadowChannel`; not the base `Diagnostics::Channel`) gains a
+  warning-content list and a logging-outcome list. The shadow profile's
+  `ShadowDiagnostics` carries them; the dark-layers and shadow-read-deadlines
+  profiles' channel types and the `held-dark-shadow` fixture carry them empty,
+  without a version change, and the shared `diagnostics` parser in
+  `features.mjs` accepts the two lists as absent or empty for a profile that
+  does not assert them, so `make differential` still compares those profiles
+  against reference traces that lack them.
+  `dialcache-shadow-conformance.qnt` gains starting and runtime choices
+  for each `diff` level, `value` and the shorthand. It restates
+  `invalidLoggingCannotBeCaptured` per leaf, because an invalid leaf beside a
+  valid one leaves the valid leaf on: a leaf whose effective value came from
+  an invalid input is off. It adds invariants (one outcome per warning
+  attempt, none with logging off, field groups matching the captured leaves)
+  and regressions for the four-row table and for each failure outcome alone
+  and combined. Served-hit jobs reach the same warning code as dark jobs in
+  every port, so the profile's dark jobs stand for both; a hook's successful
+  entries stay pinned by native tests. The shadow profile version goes from 3
+  to 4, so `make differential` reports it as an intended divergence; unchanged
+  behavior is shown by the existing regressions, which keep their warning
+  counts, and by the profiles that keep their versions. Until the last port
+  lands, the `logPolicy` choices in `formal/replay/features.mjs` and the five
+  fixed scenarios in `behavioral-scenarios.json` keep `logMismatches`, which
+  stays valid, so the shared corpus needs no change while the ports catch up;
+  the five fixed scenarios stay after that.
 - **Observation record:** the `mismatchWarning` event in
   [PORTING.md](../formal/guides/PORTING.md#trace-and-observation-contract)
-  gains optional `mismatchPathsJson` (the array as one JSON string, keeping
-  fields primitive), `mismatchPathCount`, `diffJson` and `loggingOutcome`,
-  and a `shadowMismatchLogging` event kind with the cache labels and
-  `outcome` joins the table, observed where a fixture lists it. Every port's
-  driver records them, and all four `formal-<port>` lanes run. While ports land one
-  at a time, a lane that compares warning fields across ports sees them from
-  TypeScript first; if that comparison is strict, the TypeScript driver
-  records the new fields only once every port emits them.
+  gains optional `cachedValueAgeSeconds`, `mismatchPathsJson` (the array as one
+  JSON string, keeping fields primitive), `mismatchPathCount`, `diffJson` and
+  `loggingOutcome`, and a `shadowMismatchLogging` event kind with the cache
+  labels and `outcome` joins the table, predicted by the shadow profile (D12).
+  Every port's driver records them and gains the profile's three failure
+  inputs, and all four `formal-<port>` lanes run. Every port compares warning
+  events exactly against shared expectations, so until every port emits the
+  new fields the TypeScript driver records only the fields all ports share.
 - **Native (B03/X01):** hook execution per port (thenables in TypeScript,
   panics in Go, the bounded CPU executor in Rust, the event loop in Python);
   which native types each renderer sees; the logger backend; the exporter
-  names and schema of the `shadowMismatchLogging` metric.
+  names and schema of the `shadowMismatchLogging` metric; the native value
+  each driver uses for the absent source input, and how its hook and logger
+  fail (throw, panic or returned error).
 
 ## Decisions
 
@@ -525,6 +555,74 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
     `logged`; `mismatchPathCount` against the list length and the
     `...[truncated]` marker already show it.
 
+### D12. What the shadow profile predicts about mismatch warnings
+
+- **Choice:** the `shadow` profile predicts what each confirmed-mismatch
+  warning contains, not only that one is emitted. A shadow job captures
+  `value` and `diff` at admission in place of the one `logging` flag;
+  `Malformed` keeps one flag, since one `config_resolution` covers any number
+  of invalid inputs. For each warning a dark job emits, the model predicts
+  which of the Proposal's fields it carries, which are `null`, its
+  `mismatchPaths` and `diffJson` entries, its `cachedValueAgeSeconds`, and its
+  `shadowMismatchLogging` outcome. Every port's replay compares its warning and
+  event with that prediction, the paths and entries as parsed JSON. The
+  model's values stay scalars, so the predicted entries are `[]`, one entry at
+  `""`, or `null` after a failure; the walk stays with the vector group, and D8
+  stands. Served-hit and dark jobs reach the same warning code in every port,
+  so the profile's dark jobs stand for both.
+  - **Inputs.** Three inputs make each failure outcome reachable, alone and
+    together: a `shadowMismatchDiff` fixture that throws (distinct from the
+    existing `shadowHook` fixture, which is the outcome hook), an absent source
+    result (the one compared value no port renders), and a logger-only
+    failure.
+  - **Shared tests.** Besides the generated shadow corpus and the five fixed
+    scenarios, every port runs the same tests with the same inputs and the
+    same expected outputs, in two groups: the `mismatchPathVectors` payload
+    pairs with their entries (D8), which check the walk, and named Quint
+    regression runs, one per row of the Proposal's four-row table and per
+    failure outcome alone and combined, which check the warning's fields, its
+    `null` fields and its `shadowMismatchLogging` outcome. Each port's native
+    tests keep what is native (rendering text, hook execution, the logger
+    backend and exporter names) and a hook's successful entries, which no
+    shared input reaches.
+  - **Rust.** The Rust driver's value type gains `Serialize`, with the absent
+    value failing to serialize so it stays unrendered, and the driver builds
+    its operation so the built-in walk runs; the Proposal's Rust shape is
+    unchanged.
+  - **What this buys.** The field, `null` and outcome rules are checked in all
+    four ports across every policy change, confirmation and failure the
+    generator reaches.
+  - **The cost accepted.** The shadow profile version goes from 3 to 4,
+    every driver gains the new inputs, and the generated corpus needs more
+    samples to reach every combination.
+
+  This lands with the last port (Plan step 4).
+- **Status:** Open.
+- **Rejected:**
+  - Keeping one logging flag, as the record was accepted with: `logPolicy`
+    choices for each `diff` level and `value` as a driver fixture change, with
+    warning content pinned only in shared fixed scenarios. Rejected 2026-10-24:
+    the walk is a pure function of two values, which vectors cover (D8), but
+    warning content depends on policy history: the leaves captured at
+    admission, a runtime change before the verdict, an invalid leaf beside a
+    valid one, a failure at each stage. Generated histories would reach those
+    combinations with nothing predicting their content, and fixed scenarios
+    check only the combinations someone writes down.
+  - Structured values in the model, so its predictions exercise the walk.
+    Quint has no recursive types, so the walk would be written for one fixed
+    shape or tabulated per pair, which duplicates the vector group; every
+    driver would have to seed and load structured values; and default
+    comparators differ per port on structured values (B03).
+  - Predicting rendered strings. Pinning text would make rendering a portable
+    obligation, which C60's native clause leaves to each port (B03); Quint has
+    no string operations either, so each rendering would be a lookup table.
+  - Predicting content without the failure inputs. Only `logged` would be
+    reachable, so the precedence of `hook_error` over `render_error` over
+    `logger_error` would stay unchecked.
+  - In Rust, walking the `preview` renderings when `T` is not `Serialize`. It
+    would change the Proposal's Rust shape, where an operation built with
+    `with_codec` gets entries only through the hook, to serve a test.
+
 ## Carried decisions
 
 Reviewed and approved by the maintainer on #138; carried unchanged:
@@ -574,8 +672,15 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   `mutations.json` and `rust-mutations.json` (M08 and M09 anchors move to the
   new leaf code; new mutants for the array rule, the root cases, the
   shorthand expansion and hook fail-closed behavior), the ledgers
-  `source-audit.json` and `go-parity.json`,
-  and any course lesson whose citation moves.
+  `source-audit.json` and `go-parity.json`, and any course lesson whose
+  citation moves. Under D12 also `kernel/shadow.qnt`,
+  `kernel/diagnostics.qnt`, `dialcache-shadow-conformance.qnt` and the other
+  models that spell a `Shadowing` record (the admission, dark-layers,
+  shadow-layers and shadow-read-deadlines profiles and the `held-shadow`,
+  `held-dark-shadow` and `shadow-jobs` fixtures), `features.d.mts`,
+  `witnesses/shadow.mjs` and `shadow-diagnostics.mjs`, `divergence.mjs`,
+  `coverage-witnesses.json`, `witness-baseline.json`, `execution.json`,
+  `profiles.json` and `BEHAVIOR.md`.
 - **Docs:** `shadow-validation.md` (Confirmed mismatch logging),
   `observability.md` (Confirmed mismatch warnings, the shadow outcomes
   section and the Datadog and Prometheus metric tables), `configuration.md`,
@@ -592,7 +697,9 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 ## Plan
 
 1. #242 opens with this record as its first commit and stays at the design
-   gate until every decision is confirmed and the record is `Accepted`.
+   gate until every decision is confirmed and the record is `Accepted`. D12,
+   added after acceptance, returned the record to `Proposed`; only step 4
+   waits for it.
 2. #242 then carries the TypeScript reference: the leaves and the shorthand,
    the built-in differ, the hook, the warning fields, the
    `shadowMismatchLogging` metric and its exporters, the TypeScript replay
@@ -606,11 +713,17 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
    in session: "we should just implement these ports in same pr once we are
    satsified ok with typescript".
 4. With the last port, #242 adds the vector group, its `semantic-cases.json`
-   mapping and the new contract row; re-encodes the `logPolicy` choices and
-   scenarios for each `diff` level and for `value`; records the new
-   observation fields in every driver; and catalogues mutants for the
-   built-in computation (the array rule, the root cases) and for the hook's
-   fail-closed behavior in every port. Tier: Full (Portable behavior).
+   mapping, the new contract row and C60's outcome rule; under D12, the
+   kernel's captured leaves, the shadow profile's starting and runtime
+   choices for each `diff` level, `value` and the shorthand with their
+   fixture and `logPolicy` encodings, its warning and outcome predictions,
+   the three failure inputs in every driver and the Rust driver's
+   serializable value type; records the new observation fields in every
+   driver; and catalogues mutants for the built-in computation (the array
+   rule, the root cases) and for the hook's fail-closed behavior in every
+   port, plus C60's first model-fault challenge, mapped to new mutants and to
+   M08, M09 and M65 (M65 gains a Rust edit). Tier: Full (Portable behavior).
+   This step waits for D12; steps 2 and 3 do not depend on it.
 
 ## Deviations
 
