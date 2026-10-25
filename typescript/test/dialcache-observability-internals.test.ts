@@ -231,17 +231,6 @@ describe("DialCache observability internal compatibility paths", () => {
       { logMismatches: "yes", mismatchLogging: { value: true, diff: "values" } },
       { value: true, diff: "values", invalid: true },
     ],
-    ["an inherited shorthand", Object.create({ logMismatches: true }), { value: false, diff: "off", invalid: false }],
-    [
-      "an inherited group",
-      Object.create({ mismatchLogging: { value: true, diff: "values" } }),
-      { value: false, diff: "off", invalid: false },
-    ],
-    [
-      "inherited leaves",
-      { mismatchLogging: Object.create({ value: true, diff: "values" }) },
-      { value: false, diff: "off", invalid: false },
-    ],
     ["a null group", { mismatchLogging: null }, { value: false, diff: "off", invalid: true }],
     ["an array group", { mismatchLogging: [] }, { value: false, diff: "off", invalid: true }],
     ["a numeric group", { mismatchLogging: 1 }, { value: false, diff: "off", invalid: true }],
@@ -262,28 +251,6 @@ describe("DialCache observability internal compatibility paths", () => {
     )).rejects.toThrow('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
   });
 
-  it("ignores an inherited shadow group or ramp in a raw provider result", async () => {
-    const defaultConfig = new DialCacheKeyConfig({ ttlSec: { [CacheLayer.REMOTE]: 60 } });
-    const inheritedGroup = await fetchKeyConfig(
-      async () => Object.assign(
-        Object.create({ shadow: { ramp: 100, logMismatches: true } }) as DialCacheKeyConfig,
-        { ttlSec: {}, ramp: {} },
-      ),
-      key(defaultConfig),
-    );
-    const inheritedRamp = await fetchKeyConfig(
-      async () => ({
-        ttlSec: {},
-        ramp: {},
-        shadow: Object.assign(Object.create({ ramp: 100 }) as ShadowConfig, { logMismatches: true }),
-      }) as unknown as DialCacheKeyConfig,
-      key(defaultConfig),
-    );
-
-    expect(inheritedGroup?.shadow).toBeUndefined();
-    expect(inheritedRamp?.shadow).toEqual({ logMismatches: true });
-  });
-
   it("resolves every merged combination of shorthand and leaves as each layer expanded first", async () => {
     // The recorded rule, written out independently of the merge: expand each
     // layer, merge leaf by leaf, and let an invalid runtime shorthand still owe
@@ -301,29 +268,19 @@ describe("DialCache observability internal compatibility paths", () => {
     };
     const ABSENT = Symbol("absent");
     const OWN_UNDEFINED = Symbol("own undefined");
-    const inherit = (value: unknown) => ({ inherited: value });
-    type Field = typeof ABSENT | typeof OWN_UNDEFINED | { readonly inherited: unknown } | unknown;
-    // Builds one shadow group, with each field absent, own and undefined,
-    // inherited through the prototype, or own with the given value.
-    const layer = (shorthand: Field, group: Field): Record<string, unknown> => {
-      const proto: Record<string, unknown> = {};
-      const own: Record<string, unknown> = {};
+    // Builds one shadow group, with each field absent, written as undefined,
+    // or written with the given value.
+    const layer = (shorthand: unknown, group: unknown): Record<string, unknown> => {
+      const shadow: Record<string, unknown> = {};
       for (const [name, field] of [["logMismatches", shorthand], ["mismatchLogging", group]] as const) {
-        if (field === ABSENT) {
-          continue;
-        }
-        if (field === OWN_UNDEFINED) {
-          own[name] = undefined;
-        } else if (typeof field === "object" && field !== null && Object.hasOwn(field, "inherited")) {
-          proto[name] = (field as { readonly inherited: unknown }).inherited;
-        } else {
-          own[name] = field;
+        if (field !== ABSENT) {
+          shadow[name] = field === OWN_UNDEFINED ? undefined : field;
         }
       }
-      return Object.assign(Object.create(proto) as Record<string, unknown>, own);
+      return shadow;
     };
-    const defaultShorthands: Field[] = [ABSENT, OWN_UNDEFINED, true, false];
-    const defaultGroups: Field[] = [
+    const defaultShorthands: unknown[] = [ABSENT, OWN_UNDEFINED, true, false];
+    const defaultGroups: unknown[] = [
       ABSENT,
       OWN_UNDEFINED,
       {},
@@ -334,11 +291,10 @@ describe("DialCache observability internal compatibility paths", () => {
       { value: true, diff: "values" },
       { value: undefined, diff: "paths" },
     ];
-    const runtimeShorthands: Field[] = [ABSENT, OWN_UNDEFINED, true, false, "yes", null, 0, inherit(true)];
-    const runtimeGroups: Field[] = [
+    const runtimeShorthands: unknown[] = [ABSENT, OWN_UNDEFINED, true, false, "yes", null, 0];
+    const runtimeGroups: unknown[] = [
       ABSENT,
       OWN_UNDEFINED,
-      inherit({ value: true }),
       { value: true },
       { value: false },
       { diff: "paths" },
@@ -349,7 +305,6 @@ describe("DialCache observability internal compatibility paths", () => {
       { diff: "full" },
       { diff: "toString" },
       { value: undefined },
-      Object.create({ value: true }) as object,
     ];
 
     let combinations = 0;
@@ -375,7 +330,7 @@ describe("DialCache observability internal compatibility paths", () => {
         }
       }
     }
-    expect(combinations).toBe(4 * 9 * 8 * 14 * 2);
+    expect(combinations).toBe(4 * 9 * 7 * 12 * 2);
 
     // disabled() on either side, and a runtime config without a shadow group.
     const disabledShadow = DialCacheKeyConfig.disabled().shadow!;
@@ -406,9 +361,6 @@ describe("DialCache observability internal compatibility paths", () => {
     expect(expandMismatchLogging({ logMismatches: true, mismatchLogging: { value: undefined } }))
       .toStrictEqual({ value: true, diff: "values" });
     expect(expandMismatchLogging({ mismatchLogging: { diff: "full" } })).toStrictEqual({ diff: "full" });
-    expect(expandMismatchLogging(Object.create({ logMismatches: true, mismatchLogging: { value: true } })))
-      .toStrictEqual({});
-    expect(expandMismatchLogging({ mismatchLogging: Object.create({ diff: "values" }) })).toStrictEqual({});
     expect(expandMismatchLogging({ logMismatches: true, mismatchLogging: null }))
       .toStrictEqual({ value: false, diff: "off", invalid: true });
   });

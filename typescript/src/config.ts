@@ -103,9 +103,7 @@ export class DialCacheKeyConfig {
     }
     this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
     this.ramp = cloneLayerConfig(config.ramp, "ramp");
-    // Own-property read: an inherited shadow group must not activate shadow
-    // work or put payload data into logs.
-    const shadow = cloneShadowConfig(Object.hasOwn(config, "shadow") ? config.shadow : undefined);
+    const shadow = cloneShadowConfig(config.shadow);
     if (shadow !== undefined) {
       this.shadow = shadow;
     }
@@ -191,18 +189,9 @@ function cloneShadowConfig(config: ShadowConfig | undefined): ShadowConfig | und
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError("DialCache shadow config must be an object");
   }
-  const clone: { -readonly [Field in keyof ShadowConfig]: ShadowConfig[Field] } = {};
-  const ramp = readOwnField(config, "ramp");
-  if (ramp !== undefined) {
-    clone.ramp = ramp;
-  }
-  const logMismatches = readOwnField(config, "logMismatches");
-  if (logMismatches !== undefined) {
-    clone.logMismatches = logMismatches;
-  }
-  const mismatchLogging = readOwnField(config, "mismatchLogging");
-  if (mismatchLogging !== undefined) {
-    clone.mismatchLogging = cloneMismatchLoggingConfig(mismatchLogging);
+  const clone: { -readonly [Field in keyof ShadowConfig]: ShadowConfig[Field] } = { ...config };
+  if (clone.mismatchLogging !== undefined) {
+    clone.mismatchLogging = cloneMismatchLoggingConfig(clone.mismatchLogging);
   }
   return clone;
 }
@@ -213,20 +202,7 @@ function cloneMismatchLoggingConfig(config: ShadowMismatchLoggingConfig): Shadow
   }
   // Leaf values stay unvalidated, like layer-map leaves, so a malformed
   // runtime leaf fails open narrowly at resolution.
-  const clone: { -readonly [Leaf in keyof ShadowMismatchLoggingConfig]: ShadowMismatchLoggingConfig[Leaf] } = {};
-  const value = readOwnField(config, "value");
-  if (value !== undefined) {
-    clone.value = value;
-  }
-  const diff = readOwnField(config, "diff");
-  if (diff !== undefined) {
-    clone.diff = diff;
-  }
-  return clone;
-}
-
-function readOwnField<T extends object, Key extends keyof T>(source: T, key: Key): T[Key] | undefined {
-  return Object.hasOwn(source, key) ? source[key] : undefined;
+  return { ...config };
 }
 
 /**

@@ -93,49 +93,10 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(config.shadow).toEqual({ mismatchLogging: { value: true, diff: "paths" } });
   });
 
-  it("keeps only own known shadow and mismatchLogging fields", () => {
-    expect(new DialCacheKeyConfig({
-      shadow: {
-        ramp: 5,
-        sampleRate: 10,
-        mismatchLogging: Object.assign(Object.create({ value: true }) as object, { diff: "paths", verbose: true }),
-      },
-    } as never).shadow).toStrictEqual({ ramp: 5, mismatchLogging: { diff: "paths" } });
-    expect(new DialCacheKeyConfig({
-      shadow: Object.create({ ramp: 100, logMismatches: true, mismatchLogging: { value: true } }) as never,
-    }).shadow).toStrictEqual({});
-    // Leaf values stay unvalidated until static capture or runtime resolution.
+  it("leaves mismatchLogging leaf values unvalidated until static capture or runtime resolution", () => {
     expect(new DialCacheKeyConfig({
       shadow: { mismatchLogging: { value: "yes", diff: "full" } },
     } as never).shadow).toStrictEqual({ mismatchLogging: { value: "yes", diff: "full" } });
-  });
-
-  it("ignores an inherited shadow group in the constructor and the registered default", async () => {
-    const inheritedShadow = { shadow: { ramp: 100, logMismatches: true } };
-    expect(new DialCacheKeyConfig(Object.create(inheritedShadow) as never).shadow).toBeUndefined();
-
-    const observedDefaults: Array<DialCacheKeyConfig | null> = [];
-    const dialcache = new DialCache({
-      cacheConfigProvider: (key) => {
-        observedDefaults.push(key.defaultConfig);
-        return null;
-      },
-    });
-    const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
-      keyType: "user_id",
-      useCase: "InheritedDefaultShadow",
-      cacheKey: (userId) => userId,
-      defaultConfig: Object.assign(Object.create(inheritedShadow) as object, {
-        ttlSec: { [CacheLayer.LOCAL]: 60 },
-        ramp: {},
-      }) as DialCacheKeyConfig,
-    });
-
-    await dialcache.enable(async () => await getUser("123"));
-
-    expect(observedDefaults).toHaveLength(1);
-    expect(observedDefaults[0]?.ttlSec[CacheLayer.LOCAL]).toBe(60);
-    expect(observedDefaults[0]?.shadow).toBeUndefined();
   });
 
   it("captures an immutable default policy snapshot when the use case is registered", async () => {

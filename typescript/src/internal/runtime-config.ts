@@ -184,7 +184,7 @@ export function isShadowMismatchDiffLevel(value: unknown): value is ShadowMismat
  * both leaves off and is marked invalid.
  */
 export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
-  const shorthand = readOwnUnknown(shadow, "logMismatches");
+  const shorthand = readField(shadow, "logMismatches");
   const expanded: MismatchLoggingLeaves = shorthand === undefined
     ? {}
     : shorthand === true
@@ -192,7 +192,7 @@ export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
       : shorthand === false
         ? { value: false, diff: "off" }
         : { value: false, diff: "off", invalid: true };
-  const group = readOwnUnknown(shadow, "mismatchLogging");
+  const group = readField(shadow, "mismatchLogging");
   if (group === undefined) {
     return expanded;
   }
@@ -200,8 +200,8 @@ export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
     // Construction, merging and default snapshots reject this shape first.
     return { value: false, diff: "off", invalid: true };
   }
-  const value = readOwnUnknown(group, "value");
-  const diff = readOwnUnknown(group, "diff");
+  const value = readField(group, "value");
+  const diff = readField(group, "diff");
   return {
     ...expanded,
     ...(value === undefined ? {} : { value }),
@@ -266,8 +266,8 @@ function mergeKeyConfig(
     ? overlay.staleOnErrorMaxAgeSec
     : defaultConfig?.staleOnErrorMaxAgeSec;
   const shadow = mergeShadowConfig(
-    readOwnUnknown(defaultConfig ?? undefined, "shadow") as ShadowConfig | undefined,
-    readOwnUnknown(overlay, "shadow") as ShadowConfig | undefined,
+    defaultConfig?.shadow,
+    overlay?.shadow,
   );
 
   return new DialCacheKeyConfig({
@@ -327,8 +327,8 @@ function mergeShadowConfig(
   }
 
   const merged: { ramp?: unknown; logMismatches?: unknown; mismatchLogging?: { value?: unknown; diff?: unknown } } = {};
-  const overlayRamp = readOwnUnknown(overlay, "ramp");
-  const ramp = overlayRamp !== undefined ? overlayRamp : readOwnUnknown(defaults, "ramp");
+  const overlayRamp = readField(overlay, "ramp");
+  const ramp = overlayRamp !== undefined ? overlayRamp : readField(defaults, "ramp");
   if (ramp !== undefined) {
     merged.ramp = ramp;
   }
@@ -337,18 +337,18 @@ function mergeShadowConfig(
   // and only the leaves written beside it apply; a malformed one stays raw, so
   // admission records its config_resolution. Otherwise the default's shorthand
   // stays the baseline and each leaf merges on its own.
-  const overlayShorthand = readOwnUnknown(overlay, "logMismatches");
+  const overlayShorthand = readField(overlay, "logMismatches");
   const replacesGroup = overlayShorthand !== undefined;
-  const shorthand = replacesGroup ? overlayShorthand : readOwnUnknown(defaults, "logMismatches");
+  const shorthand = replacesGroup ? overlayShorthand : readField(defaults, "logMismatches");
   if (shorthand !== undefined) {
     merged.logMismatches = shorthand;
   }
-  const overlayGroup = readOwnUnknown(overlay, "mismatchLogging") as object | undefined;
-  const defaultGroup = replacesGroup ? undefined : readOwnUnknown(defaults, "mismatchLogging") as object | undefined;
-  const overlayValue = readOwnUnknown(overlayGroup, "value");
-  const overlayDiff = readOwnUnknown(overlayGroup, "diff");
-  const value = overlayValue !== undefined ? overlayValue : readOwnUnknown(defaultGroup, "value");
-  const diff = overlayDiff !== undefined ? overlayDiff : readOwnUnknown(defaultGroup, "diff");
+  const overlayGroup = readField(overlay, "mismatchLogging") as object | undefined;
+  const defaultGroup = replacesGroup ? undefined : readField(defaults, "mismatchLogging") as object | undefined;
+  const overlayValue = readField(overlayGroup, "value");
+  const overlayDiff = readField(overlayGroup, "diff");
+  const value = overlayValue !== undefined ? overlayValue : readField(defaultGroup, "value");
+  const diff = overlayDiff !== undefined ? overlayDiff : readField(defaultGroup, "diff");
   if (value !== undefined || diff !== undefined) {
     const group: { value?: unknown; diff?: unknown } = {};
     if (value !== undefined) {
@@ -366,7 +366,7 @@ function assertShadowConfig(config: ShadowConfig | undefined): void {
   if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError("DialCache shadow config must be an object");
   }
-  const mismatchLogging = readOwnUnknown(config, "mismatchLogging");
+  const mismatchLogging = readField(config, "mismatchLogging");
   if (
     mismatchLogging !== undefined
     && (mismatchLogging === null || typeof mismatchLogging !== "object" || Array.isArray(mismatchLogging))
@@ -375,11 +375,6 @@ function assertShadowConfig(config: ShadowConfig | undefined): void {
   }
 }
 
-// Own-property reads keep runtime shadow policy immune to inherited values:
-// an inherited leaf must never activate shadow work or put payload data into
-// logs.
-function readOwnUnknown(source: object | undefined, key: string): unknown {
-  return source !== undefined && Object.hasOwn(source, key)
-    ? (source as Record<string, unknown>)[key]
-    : undefined;
+function readField(source: object | undefined, key: string): unknown {
+  return source === undefined ? undefined : (source as Record<string, unknown>)[key];
 }

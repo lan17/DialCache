@@ -1591,9 +1591,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   }
   const ttlSecConfig = config.ttlSec;
   const rampConfig = config.ramp;
-  // Own-property read, mirroring the constructor: an inherited shadow group
-  // must not activate policy.
-  const shadowConfig = Object.hasOwn(config, "shadow") ? config.shadow : undefined;
+  const shadowConfig = config.shadow;
   const requestLocal = config.requestLocal;
   const coalesce = config.coalesce;
   const staleOnErrorMaxAgeSec = config.staleOnErrorMaxAgeSec;
