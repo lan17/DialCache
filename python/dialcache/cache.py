@@ -175,6 +175,12 @@ class DialCache:
     The application owns Redis connections. Instances have independent scopes,
     LRU storage and in-flight tables. Values held in memory are shared by
     reference and should be treated as immutable.
+
+    ``logger`` receives ``warning(message, details)`` calls and defaults to
+    the ``dialcache`` standard-library logger. A confirmed shadow-mismatch
+    warning records its ``shadowMismatchLogging`` outcome after the call
+    returns, or after an awaitable it returns settles: ``logger_error`` when
+    either raises.
     """
 
     def __init__(
@@ -275,6 +281,22 @@ class DialCache:
         An explicit selector receives the original positional and keyword
         arguments, including self for methods. Loader defaults are not injected:
         declare matching defaults on the selector when callers can omit them.
+
+        Options, shared with :meth:`get_or_load`: ``default_config``,
+        ``fallback_timeout_ms``, ``serializer``, ``track_for_invalidation``,
+        ``shadow_comparator``, ``shadow_mismatch_diff`` and
+        ``should_attempt_stale_recovery``. ``shadow_mismatch_diff(cached,
+        source)`` replaces the built-in JSON difference computation of
+        confirmed-mismatch warnings, which runs only while
+        ``shadow.mismatch_logging.diff`` is above ``"off"``. It returns a list
+        of mappings, each with a str ``"path"`` (an RFC 6901 JSON Pointer) and
+        optional ``"cached"`` and ``"source"`` sides; a missing key or
+        ``UNDEFINED`` omits a side, and ``None`` is JSON null. Like the
+        comparator it must be synchronous, deterministic, side-effect-free,
+        non-mutating and bounded. A raise, an awaitable, or a result that is
+        not such a list logs None for the paths and the diff; DialCache never
+        falls back to the built-in computation. Non-callable callbacks raise
+        ConfigError.
         """
         if (cache_key is None) == (id_arg is None):
             raise ConfigError("Supply exactly one of cache_key or id_arg")
@@ -350,7 +372,10 @@ class DialCache:
         key_selector: Callable[[], Any] | None = None,
         **options: Any,
     ) -> T:
-        """Read a key or run its loader. Repeated inline use-case names are valid."""
+        """Read a key or run its loader. Repeated inline use-case names are valid.
+
+        Options are those of :meth:`cached`, validated on every call.
+        """
         op = self._operation(load, key_selector or (lambda: key), key_type, use_case, **options)
         return await self._execute(op)
 
