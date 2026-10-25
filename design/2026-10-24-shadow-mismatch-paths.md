@@ -692,7 +692,12 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   request still carries neither `!` nor a `BREAKING CHANGE:` footer, at the
   maintainer's request in session on 2026-10-24: "yes lets drop it and not
   use `!` in description since i dont want to increment major version right
-  now". The Rust entry in `docs/upgrading.md` names the change.
+  now". The Rust entry in `docs/upgrading.md` names the change. In
+  TypeScript, `shadow_mismatch_logging.count` becomes the Datadog adapter's
+  longest metric suffix, so its longest valid namespace drops from 175 to 170
+  characters; the maintainer kept the name in session on 2026-10-24: "lets
+  keep the shadow_mismatch_logging.count and just reduce documented max size
+  ofr namespace". `docs/upgrading.md` and `docs/observability.md` state it.
 
 ## Plan
 
@@ -726,4 +731,16 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 
 ## Deviations
 
-None.
+- **2026-10-24, #242:** the built-in computation's CPU is linear in the
+  rendered size of both values: the uncut `mismatchPathCount` (D9) needs a
+  full parse and walk, and the caps bound only the output. The Constraints'
+  "with bounded CPU" and the Proposal's "The caps bound the built-in" do not
+  describe this. Review measured about 86 ms per warning on a 5.6 MB value,
+  against 13 ms for the value fields alone. `docs/upgrading.md` and
+  `docs/shadow-validation.md` state the cost; whether to bound it is open with
+  the maintainer.
+- **2026-10-24, #242:** TypeScript's `cached()` and `getOrLoad()` throw a
+  `TypeError` for a `shadowMismatchDiff` that is not a function, as they do for
+  `shouldAttemptStaleRecovery`, rather than letting every warning fail as
+  `hook_error`; D6 covers only failures while the hook runs. Python's port
+  follows its existing rule for non-callable options.

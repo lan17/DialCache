@@ -273,6 +273,10 @@ relying on client-side normalization.
 
 <LanguageContent language="typescript">
 
+The longest name the adapter builds is
+`<namespace>.shadow_mismatch_logging.count`, so the namespace can be at most 170
+characters.
+
 A `hot-shots` `prefix` is applied after the adapter constructs the name. Include
 that prefix when checking final length, and avoid accidentally combining it
 with the adapter namespace. Client-level `globalTags` are appended by

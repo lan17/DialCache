@@ -218,13 +218,23 @@ confirmed mismatch and its warnings also carry `cachedValueAgeSeconds`,
 the same native-JSON renderings as `cachedValueJson` and `sourceValueJson`, so
 a member those renderings omit stays omitted. They are not cut at the 8 KiB
 value cap, though: for a larger value, `mismatchPaths` and `diffJson` can log
-differing fields past the point where `cachedValueJson` is clipped. To log only
-the previous fields plus `cachedValueAgeSeconds`, write
-`mismatchLogging: { diff: "off" }` beside `logMismatches: true`; to log the
-differing fields without values, set
-`mismatchLogging: { diff: "paths" }` instead. See
-[Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging)
+differing fields past the point where `cachedValueJson` is clipped. Computing
+them parses and walks both renderings in full, so each confirmed mismatch costs
+more CPU in proportion to the values' size, and a warning can carry up to about
+40 KiB more than before. To log only the previous fields plus
+`cachedValueAgeSeconds`, write `mismatchLogging: { diff: "off" }` beside
+`logMismatches: true`. To log the differing fields without values, replace
+`logMismatches` with `mismatchLogging: { diff: "paths" }`: a leaf written beside
+`logMismatches: true` leaves the other expanded leaf on, and a service still on
+an earlier DialCache version reads only `logMismatches` from the same config.
+See [Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging)
 for how the shorthand and the leaves combine across config layers.
+
+DialCache now reads `shadow` and its `mismatchLogging` group only as own
+properties, so a group inherited through a prototype no longer applies. The
+Datadog adapter's new `shadow_mismatch_logging.count` metric is its longest
+name, which lowers the longest valid Datadog namespace from 175 to 170
+characters.
 
 Key configs with fields DialCache does not know now report
 `error="config_unknown_field"` on the error counter with `layer="noop"`, once per

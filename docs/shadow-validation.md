@@ -384,8 +384,9 @@ carries, and the warning is emitted when either is on:
 
 `diff: "paths"` logs where the values differ but not what they hold, so it is the
 level meant to stay on for user data. Member names still appear in the pointers:
-an object keyed by identifiers logs those identifiers. This config excerpt keeps
-paths-only logging on for a 5% shadow cohort:
+an object keyed by identifiers logs those identifiers. `cacheKey` still carries
+the key's arguments as well. This config excerpt keeps paths-only logging on for
+a 5% shadow cohort:
 
 ```ts
 shadow: { ramp: 5, mismatchLogging: { diff: "paths" } }
@@ -406,6 +407,15 @@ other configuration layer, runtime over defaults:
 | `{ logMismatches: false, mismatchLogging: { diff: "paths" } }` | `{ value: false, diff: "paths" }` |
 | Default `mismatchLogging: { diff: "paths" }`, runtime `logMismatches: false` | Both off |
 | Default `mismatchLogging: { value: false }`, runtime `logMismatches: true` | `{ value: true, diff: "values" }` |
+
+To log less than `logMismatches: true`, replace the shorthand with leaves rather
+than writing a leaf beside it. A leaf beside `logMismatches: true` leaves the
+other expanded leaf on, and DialCache versions before `mismatchLogging` read
+only the shorthand, so a service still on such a version keeps logging both
+values from the same config. A runtime `mismatchLogging` that is not an object
+fails resolution for the whole call, which then runs the loader uncached; an
+invalid leaf only turns that leaf off
+([invalid runtime policy](api.md#validation-and-snapshots)).
 
 The logger receives the message `"DialCache shadow validation mismatch"` and an
 object with these fields:
@@ -492,7 +502,9 @@ An empty `mismatchPaths` means both renderings hold the same JSON, apart from
 member order and number precision beyond a double: the comparator saw a
 difference that native JSON does not show, such as a `Date` against its ISO
 string. A side longer than 1 KiB appears in `diffJson` as its clipped JSON text.
-Clipped fields end with `...[truncated]` inside their cap.
+Clipped fields end with `...[truncated]` inside their cap. The caps bound what is
+logged, not the work: the computation parses and walks both renderings in full
+on the event loop, so its cost grows with the size of the values.
 
 Each smaller pair below shows one rule; the last is a mismatch with no paths:
 
@@ -510,7 +522,8 @@ Each smaller pair below shows one rule; the last is a mismatch with no paths:
 | `{"at":"2026-10-24T00:00:00.000Z"}` | `{ at: new Date("2026-10-24T00:00:00.000Z") }` | `[]` | The JSON serializer stored the `Date` as this string. The default comparator tells a string from a `Date`, but both render to the same JSON, so no path differs |
 
 `shadowMismatchDiff`, set beside `shadowComparator`, replaces the computation
-for one use case. It receives the compared values and returns the entries; a
+for one use case; `cached()` and `getOrLoad()` throw a `TypeError` when it is not
+a function. It receives the compared values and returns the entries; a
 side may be omitted, so a hook that knows only where values differ returns paths
 alone. It follows the comparator's rules: synchronous, deterministic,
 side-effect-free, non-mutating, and bounded. Its entries are the use case's own

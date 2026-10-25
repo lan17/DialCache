@@ -181,9 +181,10 @@ uncached.
 values are string, number, bigint, boolean, `null`, or `undefined`; undefined
 arguments are omitted. See [Key design](keys.md).
 
-Static defaults, fallback timeout, and stale-recovery classifier are validated
-and captured when registering `cached()` or invoking `getOrLoad()`.
-The comparator and `shadowMismatchDiff` are captured then. The comparator's
+Static defaults, fallback timeout, stale-recovery classifier, and
+`shadowMismatchDiff` are validated and captured when registering `cached()` or
+invoking `getOrLoad()`; a `shadowMismatchDiff` that is not a function throws a
+`TypeError`. The comparator is captured then too. The comparator's
 execution and synchronous boolean result are checked only when shadow
 comparison runs, with failures reported as `comparison_error`; the diff hook
 runs only for a confirmed-mismatch warning that logs a diff, and its failures
@@ -255,7 +256,8 @@ avoid evaluating lower-layer policy. Unknown fields at any level of a static or
 runtime config, such as the misspelled `ramp.remtoe`, are ignored and reported
 once for each config DialCache observes as `config_unknown_field` with
 `layer="noop"`: at `cached()` registration, at each enabled `getOrLoad()` call,
-and for each provider result. The metric does not name the field, so validate
+and for each provider result other than the key's own `defaultConfig`, which
+was already observed. The metric does not name the field, so validate
 external policy against your application's schema as well.
 
 The removed `shadowRamp` field is an exception. Static config rejects it with
