@@ -169,7 +169,17 @@ export interface MismatchLoggingResolution {
   readonly invalid: boolean;
 }
 
-const DIFF_LEVELS: readonly unknown[] = ["off", "paths", "values"] satisfies readonly ShadowMismatchDiffLevel[];
+// `satisfies Record<…, true>` fails to compile when the level union gains a
+// member this set lacks.
+const DIFF_LEVELS = {
+  off: true,
+  paths: true,
+  values: true,
+} as const satisfies Record<ShadowMismatchDiffLevel, true>;
+
+export function isShadowMismatchDiffLevel(value: unknown): value is ShadowMismatchDiffLevel {
+  return typeof value === "string" && Object.hasOwn(DIFF_LEVELS, value);
+}
 
 /**
  * Expands one shadow group's `logMismatches` shorthand into the leaves it
@@ -233,7 +243,7 @@ function resolveDiffLeaf(leaf: unknown): ShadowMismatchDiffLevel | null {
   if (leaf === undefined) {
     return "off";
   }
-  return DIFF_LEVELS.includes(leaf) ? leaf as ShadowMismatchDiffLevel : null;
+  return isShadowMismatchDiffLevel(leaf) ? leaf : null;
 }
 
 function mergeKeyConfig(

@@ -225,6 +225,16 @@ describe("DialCache observability internal compatibility paths", () => {
       { value: true, diff: "off", invalid: true },
     ],
     ["a non-string diff leaf", { mismatchLogging: { diff: 1 } }, { value: false, diff: "off", invalid: true }],
+    [
+      "a diff leaf naming an Object.prototype member",
+      { mismatchLogging: { diff: "toString" } },
+      { value: false, diff: "off", invalid: true },
+    ],
+    [
+      "a diff leaf naming the constructor",
+      { mismatchLogging: { value: true, diff: "constructor" } },
+      { value: true, diff: "off", invalid: true },
+    ],
     ["a malformed shorthand", { logMismatches: "yes" }, { value: false, diff: "off", invalid: true }],
     ["a null shorthand", { logMismatches: null }, { value: false, diff: "off", invalid: true }],
     [

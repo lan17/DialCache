@@ -9,7 +9,6 @@ import {
   type CacheConfigProvider,
   type DialCacheConfig,
   type Logger,
-  type ShadowMismatchDiffLevel,
   type StaleRecoveryPredicate,
 } from "./config.js";
 import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
@@ -46,6 +45,7 @@ import { deterministicShadowRampSample } from "./internal/ramp.js";
 import { RedisCache, type FutureFramePolicy } from "./internal/redis-cache.js";
 import {
   fetchKeyConfig,
+  isShadowMismatchDiffLevel,
   resolveMismatchLogging,
   resolveRemoteLayerConfigResult,
   type LayerConfigResolution,
@@ -1734,10 +1734,6 @@ function assertDefaultLayerMap(config: unknown, name: "ttlSec" | "ramp"): void {
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError(`DialCache defaultConfig ${name} must be a layer map`);
   }
-}
-
-function isShadowMismatchDiffLevel(value: unknown): value is ShadowMismatchDiffLevel {
-  return value === "off" || value === "paths" || value === "values";
 }
 
 function assertDefaultShadowConfig(config: unknown): asserts config is Record<string, unknown> | undefined {

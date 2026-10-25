@@ -642,6 +642,12 @@ describe("DialCache runtime config and ramp controls", () => {
       'shadow.mismatchLogging.diff must be "off", "paths" or "values"',
     ],
     [
+      "a shadow mismatchLogging diff naming an Object.prototype member",
+      new DialCacheKeyConfig({ shadow: { mismatchLogging: { diff: "toString" as unknown as ShadowMismatchDiffLevel } } }),
+      TypeError,
+      'shadow.mismatchLogging.diff must be "off", "paths" or "values"',
+    ],
+    [
       "wrong-type shadow mismatchLogging diff",
       new DialCacheKeyConfig({ shadow: { mismatchLogging: { diff: true as unknown as ShadowMismatchDiffLevel } } }),
       TypeError,
