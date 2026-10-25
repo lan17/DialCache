@@ -758,7 +758,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "e4e4c4b64798b16c3d4f458750edb22c3ceb53748b149b21e175d72084e21a78",
+      "sha256": "a802630b2cea24dee738a880253d38305cc7e8878d36a343596f8379c950dac9",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -782,6 +782,8 @@
         {"title":"logs hook paths without rendering values at diff paths, even for a bigint source value","contracts":["C60","B03"]},
         {"title":"records $outcome and leaves the caller unaffected when the logger $name","contracts":["C30","C60"]},
         {"title":"records $outcome rather than logger_error when $name and the logger $loggerFailure","contracts":["C30","C60"]},
+        {"title":"records $outcome at once when $name while the logger's promise is still pending","contracts":["C30","C60"]},
+        {"title":"records no logging outcome while a logger's promise never settles","contracts":["C30","C60"]},
         {"title":"reports superseded when C1 is $name","contracts":["C51"]},
         {"title":"reports superseded when C1 becomes a typed watermark miss","contracts":["C51"]},
         {"title":"retains a future-dated C1 for payload confirmation and attributes its offset to remote_shadow","contracts":["C51","C57"]},
@@ -1077,7 +1079,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "15faf388484ace596460fc725e270681f2298e4f4db3bbba66fe0dfb2716915d",
+      "sha256": "70e1a48838394502acfed293aa625b0120bad899b289a052552873c9e893fe74",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},

@@ -97,7 +97,7 @@ You will edit a tracked guide and undo it at the end.
    ```text
    {
      sources: 50,
-     tests: 628,
+     tests: 630,
      sections: 216,
      reviewedGuides: 19,
      guideSections: 195
