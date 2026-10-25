@@ -83,20 +83,49 @@ const MISMATCH_LOGGING_FIELDS: readonly string[] = Object.keys({
 // own migration error, so it is never also reported as unknown.
 const SCANNED_KEY_CONFIG_FIELDS: readonly string[] = [...KEY_CONFIG_FIELDS, "shadowRamp"];
 const LAYER_FIELDS: readonly string[] = Object.values(CacheLayer);
-const UNKNOWN_KEY_CONFIG_FIELDS = Symbol("DialCacheKeyConfig.unknownFields");
+
+// A base constructor that returns its argument makes `new` on a subclass add
+// the subclass's private field to that object. Stamping through this
+// module-private pair keeps the answer off every enumeration and out of the
+// public class type, which stays structural.
+class Stamped {
+  constructor(target: object) {
+    return target;
+  }
+}
+
+class UnknownFieldsStamp extends Stamped {
+  readonly #unknownFields: boolean;
+
+  constructor(target: DialCacheKeyConfig, unknownFields: boolean) {
+    super(target);
+    this.#unknownFields = unknownFields;
+  }
+
+  /** The stamped answer, or `undefined` for an object no construction stamped. */
+  static read(config: object): boolean | undefined {
+    return #unknownFields in config ? config.#unknownFields : undefined;
+  }
+}
+
+// Set only for the next construction, which clears it before anything else.
+let constructingAssembledConfig = false;
 
 /**
  * Internal: whether a key config carries own fields DialCache does not know,
  * at the top level, in a layer map, in `shadow` or in `mismatchLogging`. A
- * constructed config answers from what its input carried, since construction
- * keeps known fields only; any other object is scanned.
+ * constructed config answers what construction found in its input, because
+ * construction drops unknown top-level and shadow fields; one DialCache
+ * assembled itself answers false. Any other object, including a Proxy of a
+ * constructed config, is scanned.
  */
 export function hasUnknownKeyConfigFields(config: unknown): boolean {
   if (!isConfigObject(config)) {
     return false;
   }
-  if (Object.hasOwn(config, UNKNOWN_KEY_CONFIG_FIELDS)) {
-    return config[UNKNOWN_KEY_CONFIG_FIELDS] === true;
+  const stamped = UnknownFieldsStamp.read(config);
+  if (stamped !== undefined) {
+    return stamped;
   }
   const shadow = readOwnField(config, "shadow");
   return hasUnknownOwnFields(config, SCANNED_KEY_CONFIG_FIELDS)
@@ -143,13 +172,15 @@ export class DialCacheKeyConfig {
   readonly remoteReadTimeoutMs?: number;
 
   constructor(config: DialCacheKeyConfigInput) {
+    const assembled = constructingAssembledConfig;
+    constructingAssembledConfig = false;
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
       throw new TypeError("DialCache key config must be an object");
     }
     if (Object.hasOwn(config, "shadowRamp")) {
       throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
     }
-    const hasUnknownFields = hasUnknownKeyConfigFields(config);
+    const hasUnknownFields = !assembled && hasUnknownKeyConfigFields(config);
     this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
     this.ramp = cloneLayerConfig(config.ramp, "ramp");
     // Own-property read: an inherited shadow group must not activate shadow
@@ -179,11 +210,11 @@ export class DialCacheKeyConfig {
       assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");
       this.remoteReadTimeoutMs = config.remoteReadTimeoutMs;
     }
-    Object.defineProperty(this, UNKNOWN_KEY_CONFIG_FIELDS, { value: hasUnknownFields });
+    new UnknownFieldsStamp(this, hasUnknownFields);
   }
 
   static enabled(ttlSec: number): DialCacheKeyConfig {
-    return keyConfigFromKnownFields({
+    return assembledKeyConfig({
       ttlSec: {
         [CacheLayer.LOCAL]: ttlSec,
         [CacheLayer.REMOTE]: ttlSec,
@@ -203,7 +234,7 @@ export class DialCacheKeyConfig {
    * maintenance operations.
    */
   static disabled(): DialCacheKeyConfig {
-    return keyConfigFromKnownFields({
+    return assembledKeyConfig({
       requestLocal: false,
       staleOnErrorMaxAgeSec: 0,
       shadow: {
@@ -225,11 +256,13 @@ export class DialCacheKeyConfig {
 }
 
 /**
- * Internal: constructs a key config from an input DialCache assembled from
- * known fields, so construction skips the unknown-field scan.
+ * Internal: constructs a config DialCache assembled itself, from literals or
+ * from configs it already observed, without scanning it for unknown fields.
+ * A default snapshot keeps the caller's layer maps, unknown layer names
+ * included; those were reported when the default was observed.
  */
-export function keyConfigFromKnownFields(input: DialCacheKeyConfigInput): DialCacheKeyConfig {
-  Object.defineProperty(input, UNKNOWN_KEY_CONFIG_FIELDS, { value: false });
+export function assembledKeyConfig(input: DialCacheKeyConfigInput): DialCacheKeyConfig {
+  constructingAssembledConfig = true;
   return new DialCacheKeyConfig(input);
 }
 

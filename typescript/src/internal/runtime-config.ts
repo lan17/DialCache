@@ -1,7 +1,7 @@
 import {
   CacheLayer,
   hasUnknownKeyConfigFields,
-  keyConfigFromKnownFields,
+  assembledKeyConfig,
   type DialCacheKeyConfig,
   type CacheConfigProvider,
   type LayerConfig,
@@ -62,9 +62,7 @@ export async function fetchKeyConfig(
 ): Promise<DialCacheKeyConfig | null> {
   const defaultConfig = key.defaultConfig;
   const runtimeConfig = (await configProvider(key)) as DialCacheKeyConfig | null | undefined;
-  // The key's own default snapshot was observed when the use case registered
-  // or the call began, and merging it with itself changes nothing.
-  if (runtimeConfig === null || runtimeConfig === undefined || runtimeConfig === defaultConfig) {
+  if (runtimeConfig === null || runtimeConfig === undefined) {
     return defaultConfig;
   }
   if (hasUnknownKeyConfigFields(runtimeConfig)) {
@@ -278,7 +276,7 @@ function mergeKeyConfig(
     readOwnUnknown(overlay, "shadow") as ShadowConfig | undefined,
   );
 
-  return keyConfigFromKnownFields({
+  return assembledKeyConfig({
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
     ramp: mergeLayerConfig(defaultConfig?.ramp, overlay?.ramp, "ramp"),
     ...(requestLocal === undefined ? {} : { requestLocal }),
