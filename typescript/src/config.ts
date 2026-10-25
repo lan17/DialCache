@@ -88,15 +88,15 @@ const UNKNOWN_KEY_CONFIG_FIELDS = Symbol("DialCacheKeyConfig.unknownFields");
 /**
  * Internal: whether a key config carries own fields DialCache does not know,
  * at the top level, in a layer map, in `shadow` or in `mismatchLogging`. A
- * constructed config remembers what its input carried, since construction
- * keeps known fields only.
+ * constructed config answers from what its input carried, since construction
+ * keeps known fields only; any other object is scanned.
  */
 export function hasUnknownKeyConfigFields(config: unknown): boolean {
   if (!isConfigObject(config)) {
     return false;
   }
-  if (Object.hasOwn(config, UNKNOWN_KEY_CONFIG_FIELDS) && config[UNKNOWN_KEY_CONFIG_FIELDS] === true) {
-    return true;
+  if (Object.hasOwn(config, UNKNOWN_KEY_CONFIG_FIELDS)) {
+    return config[UNKNOWN_KEY_CONFIG_FIELDS] === true;
   }
   const shadow = readOwnField(config, "shadow");
   return hasUnknownOwnFields(config, SCANNED_KEY_CONFIG_FIELDS)
@@ -179,13 +179,11 @@ export class DialCacheKeyConfig {
       assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");
       this.remoteReadTimeoutMs = config.remoteReadTimeoutMs;
     }
-    if (hasUnknownFields) {
-      Object.defineProperty(this, UNKNOWN_KEY_CONFIG_FIELDS, { value: true });
-    }
+    Object.defineProperty(this, UNKNOWN_KEY_CONFIG_FIELDS, { value: hasUnknownFields });
   }
 
   static enabled(ttlSec: number): DialCacheKeyConfig {
-    return new DialCacheKeyConfig({
+    return keyConfigFromKnownFields({
       ttlSec: {
         [CacheLayer.LOCAL]: ttlSec,
         [CacheLayer.REMOTE]: ttlSec,
@@ -205,7 +203,7 @@ export class DialCacheKeyConfig {
    * maintenance operations.
    */
   static disabled(): DialCacheKeyConfig {
-    return new DialCacheKeyConfig({
+    return keyConfigFromKnownFields({
       requestLocal: false,
       staleOnErrorMaxAgeSec: 0,
       shadow: {
@@ -224,6 +222,15 @@ export class DialCacheKeyConfig {
       },
     });
   }
+}
+
+/**
+ * Internal: constructs a key config from an input DialCache assembled from
+ * known fields, so construction skips the unknown-field scan.
+ */
+export function keyConfigFromKnownFields(input: DialCacheKeyConfigInput): DialCacheKeyConfig {
+  Object.defineProperty(input, UNKNOWN_KEY_CONFIG_FIELDS, { value: false });
+  return new DialCacheKeyConfig(input);
 }
 
 function cloneLayerConfig(config: LayerConfig | undefined, name: "ttlSec" | "ramp"): LayerConfig {

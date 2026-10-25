@@ -5,6 +5,7 @@ import {
   CacheLayer,
   DialCacheKeyConfig,
   hasUnknownKeyConfigFields,
+  keyConfigFromKnownFields,
   type Awaitable,
   type CacheConfigProvider,
   type DialCacheConfig,
@@ -1639,7 +1640,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   assertDefaultLayerMap(rampConfig, "ramp");
   assertDefaultShadowConfig(shadowConfig);
 
-  const snapshot = new DialCacheKeyConfig({
+  const snapshot = keyConfigFromKnownFields({
     ttlSec: ttlSecConfig,
     ramp: rampConfig,
     ...(requestLocal === undefined ? {} : { requestLocal }),

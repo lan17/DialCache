@@ -1396,6 +1396,86 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(metrics.errors).toEqual([]);
   });
 
+  it.each([
+    ["a top-level field", { ttl: 60 }],
+    ["a layer name", { ttlSec: { [CacheLayer.LOCAL]: 60, edge: 30 } }],
+    ["a shadow field", { shadow: { ramp: 0, sampleRate: 5 } }],
+    ["a mismatchLogging field", { shadow: { ramp: 0, mismatchLogging: { verbose: true } } }],
+  ])(
+    "does not report again a provider result that is the key's own defaultConfig with %s",
+    async (_level, unknown) => {
+      const metrics = errorRecordingMetrics();
+      const dialcache = new DialCache({
+        namespace: "unknownfields",
+        metrics,
+        cacheConfigProvider: (key) => key.defaultConfig,
+      });
+      const defaultConfig = new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 100 },
+        ...unknown,
+      } as never);
+      let calls = 0;
+      const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+        keyType: "user_id",
+        useCase: "ProviderReturnsDefault",
+        cacheKey: (userId) => userId,
+        defaultConfig,
+      });
+      const getOrLoadOptions = {
+        keyType: "user_id",
+        useCase: "ProviderReturnsGetOrLoadDefault",
+        key: "123",
+        defaultConfig,
+      } as const;
+
+      const first = await dialcache.enable(async () => await getUser("123"));
+      const second = await dialcache.enable(async () => await getUser("123"));
+      await dialcache.enable(async () => await dialcache.getOrLoad(async () => "value", getOrLoadOptions));
+      await dialcache.enable(async () => await dialcache.getOrLoad(async () => "value", getOrLoadOptions));
+
+      // The default's local policy still applies, and each observation of the
+      // default reports once: at registration, and at each enabled call.
+      expect(second).toBe(first);
+      expect(calls).toBe(1);
+      expect(metrics.errors).toEqual([
+        unknownFieldError("ProviderReturnsDefault"),
+        unknownFieldError("ProviderReturnsGetOrLoadDefault"),
+        unknownFieldError("ProviderReturnsGetOrLoadDefault"),
+      ]);
+    },
+  );
+
+  it("scans a provider result that construction never saw, such as a hydrated prototype object", async () => {
+    const metrics = errorRecordingMetrics();
+    const hydrated = (): DialCacheKeyConfig => Object.assign(Object.create(DialCacheKeyConfig.prototype), {
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+      ramp: { [CacheLayer.LOCAL]: 100 },
+      shadow: { ramp: 0, sampleRate: 5 },
+    }) as DialCacheKeyConfig;
+    const dialcache = new DialCache({
+      namespace: "unknownfields",
+      metrics,
+      cacheConfigProvider: async () => hydrated(),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "HydratedProviderFields",
+      cacheKey: (userId) => userId,
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(second).toBe(first);
+    expect(calls).toBe(1);
+    expect(metrics.errors).toEqual([
+      unknownFieldError("HydratedProviderFields"),
+      unknownFieldError("HydratedProviderFields"),
+    ]);
+  });
+
   it("fails open when the runtime config provider throws", async () => {
     // Given the runtime config provider is temporarily unavailable.
     const providerError = new Error("config provider unavailable");
