@@ -283,6 +283,7 @@ interface ShadowValidationPlan<Value> {
 }
 
 interface ShadowMismatchDetails {
+  readonly logPlan: ShadowMismatchLogPlan;
   readonly cachedValue: unknown;
   readonly sourceValue: unknown;
   readonly mismatchDiff: ShadowMismatchDiff<never> | undefined;
@@ -315,7 +316,6 @@ const defaultConfigProvider: CacheConfigProvider = () => null;
 const defaultLogger: Logger = console;
 const defaultStaleRecoveryPredicate: StaleRecoveryPredicate =
   (error) => error instanceof FallbackTimeoutError;
-const SHADOW_LOGGING_OFF: ShadowMismatchLogPlan = { value: false, diff: "off" };
 const SHADOW_MISMATCH_WARNING = "DialCache shadow validation mismatch";
 
 export class DialCache {
@@ -1044,15 +1044,16 @@ export class DialCache {
     );
   }
 
+  /** The leaves captured at admission; `null` when both are off. */
   private resolveShadowLogging(
     key: DialCacheKey,
     shadowConfig: Record<string, unknown>,
-  ): ShadowMismatchLogPlan {
+  ): ShadowMismatchLogPlan | null {
     const { value, diff, invalid } = resolveMismatchLogging(shadowConfig);
     if (invalid) {
       this.recordError(key, CacheLayer.REMOTE, "config_resolution");
     }
-    return { value, diff };
+    return value || diff !== "off" ? { value, diff } : null;
   }
 
   private deferShadowValidation<T>(
@@ -1062,7 +1063,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     validation: ShadowValidationPlan<T>,
     readTimeoutMs: number,
-    logPlan: ShadowMismatchLogPlan,
+    logPlan: ShadowMismatchLogPlan | null,
   ): void {
     setImmediate(() => {
       this.runShadowValidation(
@@ -1084,7 +1085,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     plan: ShadowValidationPlan<T>,
     readTimeoutMs: number,
-    logPlan: ShadowMismatchLogPlan,
+    logPlan: ShadowMismatchLogPlan | null,
   ): void {
     const pendingRedisReads = new Set<Promise<void>>();
     let operationFinished = false;
@@ -1284,8 +1285,8 @@ export class DialCache {
           if (confirmationFrame === null || !redisPayloadsEqual(originalFrame.payload, confirmationFrame.payload)) {
             return "superseded";
           }
-          if (shadowLoggingEnabled(logPlan)) {
-            mismatchDetails = { cachedValue, sourceValue, mismatchDiff: plan.mismatchDiff };
+          if (logPlan !== null) {
+            mismatchDetails = { logPlan, cachedValue, sourceValue, mismatchDiff: plan.mismatchDiff };
           }
           validatedValueAgeSeconds = shadowValueAgeSeconds(originalFrame.createdAtMs);
           return "mismatch";
@@ -1296,7 +1297,7 @@ export class DialCache {
     });
 
     void validation.then(
-      (outcome) => this.recordShadowValidation(key, outcome, logPlan, mismatchDetails, validatedValueAgeSeconds),
+      (outcome) => this.recordShadowValidation(key, outcome, mismatchDetails, validatedValueAgeSeconds),
       () => this.recordShadowValidation(key, "timeout"),
     );
   }
@@ -1304,7 +1305,6 @@ export class DialCache {
   private recordShadowValidation(
     key: DialCacheKey,
     outcome: ShadowValidationOutcome,
-    logPlan = SHADOW_LOGGING_OFF,
     mismatchDetails?: ShadowMismatchDetails,
     valueAgeSeconds?: number,
   ): void {
@@ -1318,10 +1318,10 @@ export class DialCache {
     if (valueAgeSeconds !== undefined) {
       this.metrics?.observeShadowValueAge?.(labels, valueAgeSeconds);
     }
-    if (outcome !== "mismatch" || !shadowLoggingEnabled(logPlan) || mismatchDetails === undefined) {
-      return;
+    // Only a confirmed mismatch with logging on carries details.
+    if (mismatchDetails !== undefined) {
+      this.warnShadowMismatch(key, mismatchDetails, valueAgeSeconds);
     }
-    this.warnShadowMismatch(key, logPlan, mismatchDetails, valueAgeSeconds);
   }
 
   /**
@@ -1331,7 +1331,6 @@ export class DialCache {
    */
   private warnShadowMismatch(
     key: DialCacheKey,
-    logPlan: ShadowMismatchLogPlan,
     details: ShadowMismatchDetails,
     valueAgeSeconds: number | undefined,
   ): void {
@@ -1349,7 +1348,7 @@ export class DialCache {
     try {
       cacheKey = previewShadowLogKey(key.urn);
       content = renderShadowMismatchLog(
-        logPlan,
+        details.logPlan,
         details.cachedValue,
         details.sourceValue,
         details.mismatchDiff,
@@ -1843,10 +1842,6 @@ function observerReturned(record: () => unknown): boolean {
     // Injected observers must not affect cache correctness or application fallbacks.
     return false;
   }
-}
-
-function shadowLoggingEnabled(plan: ShadowMismatchLogPlan): boolean {
-  return plan.value || plan.diff !== "off";
 }
 
 function resolveShadowComparator<Value>(
