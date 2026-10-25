@@ -1169,6 +1169,43 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "render_error")]);
   });
 
+  it("logs a cached undefined negative-cache entry as an absent side, not a render failure", async () => {
+    const useCase = "ShadowMismatchAbsentCachedValue";
+    // The default JSON serializer's stored form of a top-level undefined.
+    const payload = "__dialcache_json_undefined_v1__";
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
+    const getUser = dialcache.cached(async (): Promise<{ id: string } | undefined> => ({ id: "123" }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { logMismatches: true })),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toBeUndefined();
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, {
+        mismatchPaths: [""],
+        mismatchPathCount: 1,
+        diffJson: '[{"path":"","source":{"id":"123"}}]',
+        cachedValueJson: null,
+        sourceValueJson: '{"id":"123"}',
+      }),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
   it("logs hook paths without rendering values at diff paths, even for a bigint source value", async () => {
     const useCase = "ShadowMismatchBigintHookPaths";
     const payload = JSON.stringify({ id: "123", version: 1 });

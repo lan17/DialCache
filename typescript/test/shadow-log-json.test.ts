@@ -610,6 +610,20 @@ describe("shadow mismatch log JSON", () => {
       });
     });
 
+    it("reports the source whole at the root for the documented undefined row", () => {
+      // docs/shadow-validation.md: a cached negative-cache entry against a value.
+      expect(renderShadowMismatchLog(EVERYTHING, undefined, { plan: "pro" })).toStrictEqual({
+        fields: {
+          mismatchPaths: [""],
+          mismatchPathCount: 1,
+          diffJson: '[{"path":"","source":{"plan":"pro"}}]',
+          cachedValueJson: null,
+          sourceValueJson: '{"plan":"pro"}',
+        },
+        failure: null,
+      });
+    });
+
     it("renders no entries for a Date against its ISO string", () => {
       expect(renderShadowMismatchLog(
         VALUES_ONLY,
@@ -624,7 +638,7 @@ describe("shadow mismatch log JSON", () => {
     it.each([
       ["cycle", circular()],
       ["bigint", 1n],
-      ["undefined", undefined],
+      ["throwing toJSON", { toJSON: (): never => { throw new Error("not serializable"); } }],
       ["function", () => 1],
       ["symbol", Symbol("value")],
     ])("nulls the fields fed by a root %s with render_error", (_name, unrenderable) => {
@@ -639,6 +653,51 @@ describe("shadow mismatch log JSON", () => {
       expect(renderShadowMismatchLog(PATHS_ONLY, { version: 2 }, unrenderable)).toStrictEqual({
         fields: { mismatchPaths: null, mismatchPathCount: null },
         failure: "render_error",
+      });
+    });
+
+    it("reports an absent root as one side at the root pointer, not as a render failure", () => {
+      expect(renderShadowMismatchLog(EVERYTHING, undefined, { version: 2 })).toStrictEqual({
+        fields: {
+          mismatchPaths: [""],
+          mismatchPathCount: 1,
+          diffJson: '[{"path":"","source":{"version":2}}]',
+          cachedValueJson: null,
+          sourceValueJson: '{"version":2}',
+        },
+        failure: null,
+      });
+      expect(renderShadowMismatchLog(EVERYTHING, { version: 2 }, undefined)).toStrictEqual({
+        fields: {
+          mismatchPaths: [""],
+          mismatchPathCount: 1,
+          diffJson: '[{"path":"","cached":{"version":2}}]',
+          cachedValueJson: '{"version":2}',
+          sourceValueJson: null,
+        },
+        failure: null,
+      });
+      expect(renderShadowMismatchLog(PATHS_ONLY, undefined, null)).toStrictEqual({
+        fields: { mismatchPaths: [""], mismatchPathCount: 1 },
+        failure: null,
+      });
+      // A stored null is a value, so it stays distinct from absence.
+      expect(renderShadowMismatchLog(VALUES_ONLY, undefined, null).fields.diffJson).toBe('[{"path":"","source":null}]');
+      // Absence beside a side with no rendering is still a render failure.
+      expect(renderShadowMismatchLog(EVERYTHING, undefined, 1n)).toStrictEqual({
+        fields: { ...FAILED_DIFF, cachedValueJson: null, sourceValueJson: null },
+        failure: "render_error",
+      });
+      // A custom comparator may call two absent values different; no field differs.
+      expect(renderShadowMismatchLog(EVERYTHING, undefined, undefined)).toStrictEqual({
+        fields: {
+          mismatchPaths: [],
+          mismatchPathCount: 0,
+          diffJson: "[]",
+          cachedValueJson: null,
+          sourceValueJson: null,
+        },
+        failure: null,
       });
     });
 

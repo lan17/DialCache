@@ -519,6 +519,7 @@ Each smaller pair below shows one rule; the last is a mismatch with no paths:
 | `{"address":{"city":"Paris"}}` | `{"address":null}` | `["/address"]` | An object against `null` is reported whole |
 | `{"a/b":1,"m~n":1}` | `{"a/b":2,"m~n":2}` | `["/a~1b","/m~0n"]` | RFC 6901 escapes `/` as `~1` and `~` as `~0` |
 | `["a","b"]` | `{"items":["a","b"]}` | `[""]` | Roots of different kinds, at the root pointer |
+| `undefined` | `{"plan":"pro"}` | `[""]` | A cached negative-cache entry is an absent value, not a failure: the source is reported whole at the root, and `cachedValueJson` is `null` |
 | `{"at":"2026-10-24T00:00:00.000Z"}` | `{ at: new Date("2026-10-24T00:00:00.000Z") }` | `[]` | The JSON serializer stored the `Date` as this string. The default comparator tells a string from a `Date`, but both render to the same JSON, so no path differs |
 
 `shadowMismatchDiff`, set beside `shadowComparator`, replaces the computation
@@ -540,9 +541,11 @@ const getUser = dialcache.cached(fetchUser, {
 });
 ```
 
-Failures log less, never more. A value without a JSON rendering (`undefined`, a
-cycle, or a `bigint`) makes its value field `null`, along with the built-in diff
-fields. A hook that throws or returns a promise, a non-array, or an entry
+Failures log less, never more. A value without a JSON rendering (a cycle, a
+`bigint`, or a `toJSON` that throws) makes its value field `null`, along with the
+built-in diff fields. A top-level `undefined` is not such a failure: it is an
+absent value, as a negative-cache entry stores, so only its own value field is
+`null` and the warning carries no `loggingOutcome`. A hook that throws or returns a promise, a non-array, or an entry
 without a string `path` makes `mismatchPaths`, `mismatchPathCount`, and
 `diffJson` `null`; DialCache does not fall back to the built-in computation. A
 hook value without a JSON rendering makes `diffJson` alone `null`. Any other

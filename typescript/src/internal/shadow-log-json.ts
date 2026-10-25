@@ -75,7 +75,10 @@ export function previewShadowLogKey(value: string): string {
  * Each side is rendered to native JSON at most once, and every built-in field
  * derives from that rendering, so a stateful `toJSON` cannot put into one
  * field what another omits. Every failure fails its fields closed to `null`;
- * a failed hook never falls back to the built-in computation.
+ * a failed hook never falls back to the built-in computation. An absent side,
+ * the top-level `undefined` a negative-cache entry stores, is not a failure:
+ * its value field is `null`, and the built-in reports the other side whole at
+ * the root.
  */
 export function renderShadowMismatchLog(
   plan: ShadowMismatchLogPlan,
@@ -87,7 +90,8 @@ export function renderShadowMismatchLog(
   const cachedJson = renderSides ? renderJson(cachedValue) : null;
   const sourceJson = renderSides ? renderJson(sourceValue) : null;
   let diffFailed = false;
-  let renderFailed = renderSides && (cachedJson === null || sourceJson === null);
+  let renderFailed = renderSides
+    && ((cachedJson === null && cachedValue !== undefined) || (sourceJson === null && sourceValue !== undefined));
 
   let diffFields: ShadowMismatchLogFields = {};
   if (plan.diff !== "off") {
@@ -96,7 +100,7 @@ export function renderShadowMismatchLog(
     if (hook !== undefined) {
       diff = runShadowMismatchHook(hook, cachedValue, sourceValue);
       diffFailed = diff === null;
-    } else if (cachedJson !== null && sourceJson !== null) {
+    } else if (!renderFailed) {
       try {
         diff = walkRenderedJson(cachedJson, sourceJson);
       } catch {
@@ -170,12 +174,19 @@ interface RawMismatchEntry {
   readonly source?: unknown;
 }
 
-function walkRenderedJson(cachedJson: string, sourceJson: string): RawMismatchDiff {
+/** `null` is an absent side; a side that failed to render never reaches here. */
+function walkRenderedJson(cachedJson: string | null, sourceJson: string | null): RawMismatchDiff {
   if (cachedJson === sourceJson) {
     return { entries: [], count: 0 };
   }
-  // Both strings came from successful native JSON rendering, so this is the
+  // Each string came from successful native JSON rendering, so this is the
   // single boundary from arbitrary values to the closed JSON domain.
+  if (cachedJson === null) {
+    return { entries: [{ path: "", source: JSON.parse(sourceJson!) as JsonValue }], count: 1 };
+  }
+  if (sourceJson === null) {
+    return { entries: [{ path: "", cached: JSON.parse(cachedJson) as JsonValue }], count: 1 };
+  }
   return walkJson(JSON.parse(cachedJson) as JsonValue, JSON.parse(sourceJson) as JsonValue);
 }
 
