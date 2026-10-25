@@ -384,8 +384,9 @@ carries, and the warning is emitted when either is on:
 
 `diff: "paths"` logs where the values differ but not what they hold, so it is the
 level meant to stay on for user data. Member names still appear in the pointers:
-an object keyed by identifiers logs those identifiers. `cacheKey` still carries
-the key's arguments as well. This config excerpt keeps paths-only logging on for
+an object keyed by identifiers logs those identifiers, exactly as written,
+control characters included, so send warnings to a structured or escaping
+logger. `cacheKey` still carries the key's arguments as well. This config excerpt keeps paths-only logging on for
 a 5% shadow cohort:
 
 ```ts

@@ -1341,19 +1341,28 @@ export class DialCache {
       content = { fields: {}, failure: "render_error" };
     }
     const failure = content.failure;
-    const logged = this.logger.warn(SHADOW_MISMATCH_WARNING, {
+    const delivered = this.logger.warn(SHADOW_MISMATCH_WARNING, {
       ...metadata,
       ...(cacheKey === undefined ? {} : { cacheKey }),
       ...content.fields,
       ...(failure === null ? {} : { loggingOutcome: failure }),
     });
-    const loggingOutcome: ShadowMismatchLoggingOutcome = failure ?? (logged ? "logged" : "logger_error");
-    this.metrics?.shadowMismatchLogging?.({
-      cacheNamespace: key.namespace,
-      useCase: key.useCase,
-      keyType: key.keyType,
-      outcome: loggingOutcome,
-    });
+    const recordOutcome = (outcome: ShadowMismatchLoggingOutcome): void => {
+      this.metrics?.shadowMismatchLogging?.({
+        cacheNamespace: key.namespace,
+        useCase: key.useCase,
+        keyType: key.keyType,
+        outcome,
+      });
+    };
+    if (failure !== null) {
+      recordOutcome(failure);
+    } else if (typeof delivered === "boolean") {
+      recordOutcome(delivered ? "logged" : "logger_error");
+    } else {
+      // An asynchronous logger settles the outcome when its promise does.
+      void delivered.then((loggerSucceeded) => recordOutcome(loggerSucceeded ? "logged" : "logger_error"));
+    }
   }
 
   private async resolveLocalLayerConfig(
@@ -1748,7 +1757,9 @@ function withFallbackTimeout<T>(
 }
 
 /** The application logger; each method reports whether it returned without throwing. */
-type SafeLogger = { readonly [Method in keyof Logger]: (...args: Parameters<Logger[Method]>) => boolean };
+type SafeLogger = {
+  readonly [Method in keyof Logger]: (...args: Parameters<Logger[Method]>) => boolean | Promise<boolean>;
+};
 
 function safeLogger(logger: Logger): SafeLogger {
   return {
@@ -1795,14 +1806,20 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
   };
 }
 
-/** Runs an injected observer in isolation and reports whether it returned without throwing. */
-function callObserver(record: () => unknown): boolean {
+/**
+ * Runs an injected observer in isolation and reports whether it succeeded:
+ * `false` when it throws, and for a returned promise-like, a promise of whether
+ * it resolved. Observer failures never produce unhandled rejections.
+ */
+function callObserver(record: () => unknown): boolean | Promise<boolean> {
   try {
     const result = record();
-    if (result !== undefined) {
-      void Promise.resolve(result).catch(() => {
-        // Observer failures must not produce unhandled rejections.
-      });
+    if (
+      result !== null
+      && (typeof result === "object" || typeof result === "function")
+      && typeof (result as { readonly then?: unknown }).then === "function"
+    ) {
+      return Promise.resolve(result).then(() => true, () => false);
     }
     return true;
   } catch {

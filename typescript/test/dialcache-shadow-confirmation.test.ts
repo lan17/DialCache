@@ -582,13 +582,13 @@ describe("DialCache Redis shadow confirmation", () => {
       "sourceValueJson",
     ]);
     // Labels come from the key, not from the mutated verdict labels, and a
-    // rejected logger promise still counts as logged.
+    // rejected logger promise counts as logger_error.
     expect(metrics.shadowMismatchLoggingEvents).toEqual([
       {
         cacheNamespace: "private-namespace",
         useCase: "ShadowMismatchJson",
         keyType: "user_id",
-        outcome: "logged",
+        outcome: "logger_error",
       },
     ]);
     await nextImmediate();
@@ -1255,7 +1255,23 @@ describe("DialCache Redis shadow confirmation", () => {
       name: "returns a rejected promise",
       useCase: "ShadowMismatchLoggerRejects",
       warn: () => Promise.reject(new Error("logger transport unavailable")),
+      outcome: "logger_error",
+    },
+    {
+      name: "returns a resolved promise",
+      useCase: "ShadowMismatchLoggerResolves",
+      warn: () => Promise.resolve(),
       outcome: "logged",
+    },
+    {
+      name: "returns a thenable that rejects",
+      useCase: "ShadowMismatchLoggerThenableRejects",
+      warn: () => ({
+        then(_resolve: unknown, reject: (reason: unknown) => void): void {
+          reject(new Error("logger transport unavailable"));
+        },
+      }),
+      outcome: "logger_error",
     },
   ])("records $outcome and leaves the caller unaffected when the logger $name", async ({
     useCase,
@@ -1291,13 +1307,7 @@ describe("DialCache Redis shadow confirmation", () => {
     });
   });
 
-  it.each<{
-    readonly name: string;
-    readonly useCase: string;
-    readonly shadowMismatchDiff: ShadowMismatchDiff<MismatchRecord>;
-    readonly fields: Record<string, unknown>;
-    readonly outcome: ShadowMismatchLoggingOutcome;
-  }>([
+  it.each(([
     {
       name: "the hook throws",
       useCase: "ShadowMismatchHookAndLoggerThrow",
@@ -1314,15 +1324,29 @@ describe("DialCache Redis shadow confirmation", () => {
       fields: { mismatchPaths: ["/version"], mismatchPathCount: 1, diffJson: null },
       outcome: "render_error",
     },
-  ])("records $outcome rather than logger_error when $name and the logger throws", async ({
+  ] as const satisfies readonly {
+    readonly name: string;
+    readonly useCase: string;
+    readonly shadowMismatchDiff: ShadowMismatchDiff<MismatchRecord>;
+    readonly fields: Record<string, unknown>;
+    readonly outcome: ShadowMismatchLoggingOutcome;
+  }[]).flatMap((failure) => (["throws", "rejects"] as const).map((loggerFailure) => ({
+    ...failure,
+    useCase: `${failure.useCase}${loggerFailure}`,
+    loggerFailure,
+  }))))("records $outcome rather than logger_error when $name and the logger $loggerFailure", async ({
     useCase,
     shadowMismatchDiff,
     fields,
     outcome,
+    loggerFailure,
   }) => {
     const calls: unknown[][] = [];
-    const warn = (...args: unknown[]): void => {
+    const warn = (...args: unknown[]): unknown => {
       calls.push(args);
+      if (loggerFailure === "rejects") {
+        return Promise.reject(new Error("logger transport unavailable"));
+      }
       throw new Error("logger unavailable");
     };
     await expectNoUnhandledRejection(async () => {

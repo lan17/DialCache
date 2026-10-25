@@ -29,7 +29,8 @@ export type ShadowValidationOutcome =
  * Bounded outcomes of one confirmed-mismatch warning attempt. `hook_error`:
  * the use case's `shadowMismatchDiff` hook or the built-in walk threw or
  * returned an invalid list. `render_error`: a value had no JSON rendering.
- * `logger_error`: the logger threw. The first failing stage wins.
+ * `logger_error`: the logger threw, or the promise it returned rejected. The
+ * first failing stage wins.
  */
 export type ShadowMismatchLoggingOutcome =
   | "logged"
