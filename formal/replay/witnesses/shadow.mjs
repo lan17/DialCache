@@ -36,14 +36,17 @@ const UNRENDERABLE = 12;
 // Mismatch logging inputs as written, one config layer each: the
 // logMismatches shorthand, then the mismatchLogging value and diff leaves;
 // "" leaves one unwritten and "invalid" has the wrong type. The defaults by
-// init fixture and the runtime overlays by logPolicy choice.
+// init fixture and the runtime overlays by logPolicy choice (11 and 12 write
+// one leaf off).
 const written = (shorthand, value, diff) => ({ shorthand, value, diff });
 const NO_LOGGING = written("", "", "");
 const defaultLoggingOf = choice => (choice >= 4 && choice < 8) || choice === 13 ? written("true", "", "")
   : choice === 14 ? written("", "", "paths") : choice === 15 ? written("", "false", "") : NO_LOGGING;
 const OVERLAYS = [written("false", "", ""), written("true", "", ""), written("invalid", "", ""), written("", "", "paths"),
   written("", "", "values"), written("false", "true", ""), written("true", "false", ""), written("false", "", "paths"),
-  written("", "true", "invalid"), written("", "invalid", "paths"), written("invalid", "", "values")];
+  written("", "true", "invalid"), written("", "invalid", "paths"), written("invalid", "", "values"),
+  written("", "", "off"), written("", "false", "")];
+const DIFF_OFF_OVERLAY = 11, VALUE_FALSE_OVERLAY = 12;
 // The leaves a job captures (record D10), per leaf: the overlay's own leaf
 // when written, else what its shorthand stands for, else the same from the
 // defaults. `value` is on only for "true" and `diff` only for a level it
@@ -201,6 +204,15 @@ function warningLabels(recorder, step, previous, before, after, fixture, reporte
   if (overlay === 6 && !valueLogged && warning.diff === "values") recorder.credit("shorthand-row:1");
   if (overlay === 7 && !valueLogged && warning.diff === "paths") recorder.credit("shorthand-row:2");
   if (fixture === 15 && overlay === 1 && valueLogged && warning.diff === "values") recorder.credit("shorthand-row:4");
+  // A leaf the overlay writes off replaces its own inherited leaf, which the
+  // defaults alone turn on, and leaves the other inherited leaf on.
+  const inherited = capturedLogging(defaultLoggingOf(fixture), NO_LOGGING).logging;
+  if (overlay === DIFF_OFF_OVERLAY && inherited.diff !== "off" && inherited.value && valueLogged && warning.diff === "off") {
+    recorder.credit("written-off-leaf:diff");
+  }
+  if (overlay === VALUE_FALSE_OVERLAY && inherited.value && inherited.diff !== "off" && !valueLogged && warning.diff === inherited.diff) {
+    recorder.credit("written-off-leaf:value");
+  }
   if (reported && (overlay === 8 || overlay === 9) && valueLogged !== (warning.diff !== "off")) recorder.credit("invalid-leaf-keeps-valid-leaf");
   if (reported && overlay === 10 && !valueLogged && warning.diff === "values") recorder.credit("invalid-shorthand-keeps-written-leaf");
 }

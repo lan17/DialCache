@@ -67,6 +67,8 @@ module dialcache_shadow_conformance {
   pure val LOGGING_INVALID_DIFF = 8
   pure val LOGGING_INVALID_VALUE = 9
   pure val LOGGING_INVALID_SHORTHAND_WITH_VALUES = 10
+  pure val LOGGING_DIFF_OFF = 11
+  pure val LOGGING_VALUE_FALSE = 12
   pure val JOB_BUDGET_MS = 10
   pure val SOURCE_BUDGET_MS = 10
   pure val FRESHNESS_MS = 60000
@@ -121,12 +123,14 @@ module dialcache_shadow_conformance {
     { shorthand: shorthand, value: value, diff: diff }
   pure val LOG_MISMATCHES = loggingInput("true", "", "")
   // The runtime logging overlays by `logPolicy` choice; choices 6 and 7 are
-  // the first two rows of the record's shorthand table.
+  // the first two rows of the record's shorthand table, and choices 11 and 12
+  // write one leaf off.
   pure val LOGGING_OVERLAYS = List(
     loggingInput("false", "", ""), loggingInput("true", "", ""), loggingInput("invalid", "", ""),
     loggingInput("", "", "paths"), loggingInput("", "", "values"), loggingInput("false", "true", ""),
     loggingInput("true", "false", ""), loggingInput("false", "", "paths"),
-    loggingInput("", "true", "invalid"), loggingInput("", "invalid", "paths"), loggingInput("invalid", "", "values")
+    loggingInput("", "true", "invalid"), loggingInput("", "invalid", "paths"), loggingInput("invalid", "", "values"),
+    loggingInput("", "", "off"), loggingInput("", "false", "")
   )
 
   // State: the layered shape with its held remote effects, deadlines, held
@@ -356,7 +360,7 @@ module dialcache_shadow_conformance {
     s' = { overlayLogging: LOGGING_OVERLAYS.nth(choice), selected: true, rampInvalid: false, ...s }
   }
   action logPolicy = {
-    nondet choice = 0.to(LOGGING_INVALID_SHORTHAND_WITH_VALUES).oneOf()
+    nondet choice = 0.to(LOGGING_VALUE_FALSE).oneOf()
     setLogging(choice)
   }
   action shadowPolicyAt(choice: int): bool = all {
@@ -943,6 +947,20 @@ module dialcache_shadow_conformance {
   run invalidShorthandKeepsDiffLeafBesideItTest = initialize(0).then(setLogging(LOGGING_INVALID_SHORTHAND_WITH_VALUES))
     .then(confirmMismatch(VALUE_TWO))
     .expect(s.d.configErrors == 1
+      and s.d.mismatchWarnings == List(LOGGED_WITHOUT_VALUES)
+      and s.d.loggingOutcomes == List("logged"))
+
+  // A leaf the runtime overlay writes off is a written value, not an unwritten
+  // one: over the `logMismatches: true` default it replaces its own inherited
+  // leaf, and the other inherited leaf stays on.
+  run runtimeOffDiffOverridesDefaultDiffTest = initialize(FIRST_LOGGING_FIXTURE).then(setLogging(LOGGING_DIFF_OFF))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.o.shadow == List("mismatch") and s.d.configErrors == 0
+      and s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, ...WARNING_AT_ZERO })
+      and s.d.loggingOutcomes == List("logged"))
+  run runtimeFalseValueOverridesDefaultValueTest = initialize(FIRST_LOGGING_FIXTURE)
+    .then(setLogging(LOGGING_VALUE_FALSE)).then(confirmMismatch(VALUE_TWO))
+    .expect(s.o.shadow == List("mismatch") and s.d.configErrors == 0
       and s.d.mismatchWarnings == List(LOGGED_WITHOUT_VALUES)
       and s.d.loggingOutcomes == List("logged"))
 }

@@ -2133,6 +2133,16 @@
           "projection": "shadow"
         },
         {
+          "id": "runtimeOffDiffOverridesDefaultDiffTest",
+          "regression": "runtimeOffDiffOverridesDefaultDiffTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "runtimeFalseValueOverridesDefaultValueTest",
+          "regression": "runtimeFalseValueOverridesDefaultValueTest",
+          "projection": "shadow"
+        },
+        {
           "id": "hookErrorNullsDiffFieldsTest",
           "regression": "hookErrorNullsDiffFieldsTest",
           "projection": "shadow"
