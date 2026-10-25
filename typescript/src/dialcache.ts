@@ -316,7 +316,6 @@ const defaultLogger: Logger = console;
 const defaultStaleRecoveryPredicate: StaleRecoveryPredicate =
   (error) => error instanceof FallbackTimeoutError;
 const SHADOW_MISMATCH_WARNING = "DialCache shadow validation mismatch";
-const PROMISE_THEN = Promise.prototype.then;
 
 export class DialCache {
   private readonly context = new DialCacheContext();
@@ -1820,12 +1819,23 @@ function callObserver(record: () => unknown): boolean | Promise<boolean> {
       && (typeof result === "object" || typeof result === "function")
       && typeof (result as { readonly then?: unknown }).then === "function"
     ) {
-      // The intrinsic then, so a promise whose own then was replaced is still observed.
-      return PROMISE_THEN.call(Promise.resolve(result), () => true, () => false) as Promise<boolean>;
+      return fulfills(result as PromiseLike<unknown>);
     }
     return true;
   } catch {
     // Injected observers must not affect cache correctness or application fallbacks.
+    return false;
+  }
+}
+
+// `await` adopts a promise-like through the intrinsic Promise, so neither a
+// replaced own `then` nor a global `Promise` replaced after load can skip the
+// handler.
+async function fulfills(value: PromiseLike<unknown>): Promise<boolean> {
+  try {
+    await value;
+    return true;
+  } catch {
     return false;
   }
 }

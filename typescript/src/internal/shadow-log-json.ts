@@ -320,9 +320,8 @@ function runShadowMismatchHook(
     const result: unknown = (hook as (cached: unknown, source: unknown) => unknown)(cachedValue, sourceValue);
     if (isPromiseLike(result)) {
       // The contract is synchronous. Consume an accidental rejecting
-      // thenable without awaiting it, through the intrinsic then so a replaced
-      // own then cannot skip the handler, and fail closed.
-      void Promise.prototype.then.call(Promise.resolve(result), undefined, () => undefined);
+      // thenable without awaiting it, and fail closed.
+      void absorbRejection(result);
       return null;
     }
     if (!Array.isArray(result)) {
@@ -352,6 +351,16 @@ function runShadowMismatchHook(
     return { entries, count: members.length };
   } catch {
     return null;
+  }
+}
+
+// `await` adopts through the intrinsic Promise, so neither a replaced own
+// `then` nor a replaced global `Promise` can skip the handler.
+async function absorbRejection(value: PromiseLike<unknown>): Promise<void> {
+  try {
+    await value;
+  } catch {
+    // The hook already failed closed.
   }
 }
 
