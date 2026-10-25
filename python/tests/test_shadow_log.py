@@ -8,6 +8,7 @@ import json
 import math
 import tracemalloc
 import warnings
+from pathlib import Path
 from types import MappingProxyType
 
 import pytest
@@ -30,363 +31,14 @@ PATHS_ONLY = MismatchLogPlan(value=False, diff="paths")
 VALUES_ONLY = MismatchLogPlan(value=False, diff="values")
 EVERYTHING = MismatchLogPlan(value=True, diff="values")
 
-# Hand-authored expectations for the built-in walk, shared verbatim with the
-# TypeScript reference so the group can move unchanged into
-# formal/catalogs/protocol-vectors.json. The depth vectors nest arrays in
-# groups of eight; each "/0" is one token.
-MISMATCH_PATH_VECTORS = json.loads(
-    r"""
-[
-  {
-    "name": "identical objects",
-    "cached": {"id": "123", "tags": ["a", "b"], "meta": {}, "list": [], "profile": {"email": "a@example.com"}},
-    "source": {"id": "123", "tags": ["a", "b"], "meta": {}, "list": [], "profile": {"email": "a@example.com"}},
-    "entries": [],
-    "count": 0
-  },
-  {
-    "name": "identical primitives",
-    "cached": "same",
-    "source": "same",
-    "entries": [],
-    "count": 0
-  },
-  {
-    "name": "identical objects with different member order",
-    "cached": {"a": 1, "b": {"c": 2, "d": 3}},
-    "source": {"b": {"d": 3, "c": 2}, "a": 1},
-    "entries": [],
-    "count": 0
-  },
-  {
-    "name": "differing number roots",
-    "cached": 1,
-    "source": 2,
-    "entries": [{"path": "", "cached": 1, "source": 2}],
-    "count": 1
-  },
-  {
-    "name": "differing string roots",
-    "cached": "old",
-    "source": "new",
-    "entries": [{"path": "", "cached": "old", "source": "new"}],
-    "count": 1
-  },
-  {
-    "name": "null root against false root",
-    "cached": null,
-    "source": false,
-    "entries": [{"path": "", "cached": null, "source": false}],
-    "count": 1
-  },
-  {
-    "name": "number root against string root",
-    "cached": 1,
-    "source": "1",
-    "entries": [{"path": "", "cached": 1, "source": "1"}],
-    "count": 1
-  },
-  {
-    "name": "object root against array root",
-    "cached": {},
-    "source": [],
-    "entries": [{"path": "", "cached": {}, "source": []}],
-    "count": 1
-  },
-  {
-    "name": "array root against string root",
-    "cached": ["a"],
-    "source": "a",
-    "entries": [{"path": "", "cached": ["a"], "source": "a"}],
-    "count": 1
-  },
-  {
-    "name": "null root against object root",
-    "cached": null,
-    "source": {"a": null},
-    "entries": [{"path": "", "cached": null, "source": {"a": null}}],
-    "count": 1
-  },
-  {
-    "name": "nested member change",
-    "cached": {"id": "123", "profile": {"email": "old@example.com", "name": "Ada"}},
-    "source": {"id": "123", "profile": {"email": "new@example.com", "name": "Ada"}},
-    "entries": [{"path": "/profile/email", "cached": "old@example.com", "source": "new@example.com"}],
-    "count": 1
-  },
-  {
-    "name": "nested members changing kind",
-    "cached": {"a": [1], "b": {"c": 1}, "d": null},
-    "source": {"a": {"0": 1}, "b": "c", "d": {}},
-    "entries": [
-      {"path": "/a", "cached": [1], "source": {"0": 1}},
-      {"path": "/b", "cached": {"c": 1}, "source": "c"},
-      {"path": "/d", "cached": null, "source": {}}
-    ],
-    "count": 3
-  },
-  {
-    "name": "member only in cached",
-    "cached": {"id": 1, "legacy": {"flag": true}},
-    "source": {"id": 1},
-    "entries": [{"path": "/legacy", "cached": {"flag": true}}],
-    "count": 1
-  },
-  {
-    "name": "member only in source",
-    "cached": {"id": 1},
-    "source": {"id": 1, "roles": ["admin"]},
-    "entries": [{"path": "/roles", "source": ["admin"]}],
-    "count": 1
-  },
-  {
-    "name": "one-sided members on both sides",
-    "cached": {"a": 1, "b": 2},
-    "source": {"b": 2, "c": 3},
-    "entries": [{"path": "/a", "cached": 1}, {"path": "/c", "source": 3}],
-    "count": 2
-  },
-  {
-    "name": "one-sided null member",
-    "cached": {"a": null},
-    "source": {},
-    "entries": [{"path": "/a", "cached": null}],
-    "count": 1
-  },
-  {
-    "name": "member names in UTF-16 code-unit order",
-    "cached": {"～": 1, "b": 1, "😀": 1, "a": 1, "B": 1},
-    "source": {"a": 2, "😀": 2, "B": 2, "～": 2, "b": 2},
-    "entries": [
-      {"path": "/B", "cached": 1, "source": 2},
-      {"path": "/a", "cached": 1, "source": 2},
-      {"path": "/b", "cached": 1, "source": 2},
-      {"path": "/😀", "cached": 1, "source": 2},
-      {"path": "/～", "cached": 1, "source": 2}
-    ],
-    "count": 5
-  },
-  {
-    "name": "integer-like member names in string order",
-    "cached": {"9": 1, "10": 1, "a": 1},
-    "source": {"9": 2, "10": 2, "a": 2},
-    "entries": [
-      {"path": "/10", "cached": 1, "source": 2},
-      {"path": "/9", "cached": 1, "source": 2},
-      {"path": "/a", "cached": 1, "source": 2}
-    ],
-    "count": 3
-  },
-  {
-    "name": "equal-length arrays recursed by index",
-    "cached": {"items": [1, 2, 3]},
-    "source": {"items": [1, 5, 4]},
-    "entries": [
-      {"path": "/items/1", "cached": 2, "source": 5},
-      {"path": "/items/2", "cached": 3, "source": 4}
-    ],
-    "count": 2
-  },
-  {
-    "name": "equal-length arrays of objects recursed into each item",
-    "cached": [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}],
-    "source": [{"id": 1, "name": "a"}, {"id": 2, "name": "c"}],
-    "entries": [{"path": "/1/name", "cached": "b", "source": "c"}],
-    "count": 1
-  },
-  {
-    "name": "different-length root arrays reported once",
-    "cached": [1, 2],
-    "source": [1, 2, 3],
-    "entries": [{"path": "", "cached": [1, 2], "source": [1, 2, 3]}],
-    "count": 1
-  },
-  {
-    "name": "different-length nested arrays reported once at the array pointer",
-    "cached": {"name": "x", "roles": ["admin"], "tags": []},
-    "source": {"name": "y", "roles": ["admin", "owner"], "tags": [null]},
-    "entries": [
-      {"path": "/name", "cached": "x", "source": "y"},
-      {"path": "/roles", "cached": ["admin"], "source": ["admin", "owner"]},
-      {"path": "/tags", "cached": [], "source": [null]}
-    ],
-    "count": 3
-  },
-  {
-    "name": "escaped reference tokens and the empty member name",
-    "cached": {"m~n": 1, "a/b": 1, "/": 1, "~1": 1, "": 1},
-    "source": {"": 2, "~1": 2, "/": 2, "a/b": 2, "m~n": 2},
-    "entries": [
-      {"path": "/", "cached": 1, "source": 2},
-      {"path": "/~1", "cached": 1, "source": 2},
-      {"path": "/a~1b", "cached": 1, "source": 2},
-      {"path": "/m~0n", "cached": 1, "source": 2},
-      {"path": "/~01", "cached": 1, "source": 2}
-    ],
-    "count": 5
-  },
-  {
-    "name": "nested empty member names",
-    "cached": {"": {"": "x"}},
-    "source": {"": {"": "y"}},
-    "entries": [{"path": "//", "cached": "x", "source": "y"}],
-    "count": 1
-  },
-  {
-    "name": "escaped tokens composed with array indices",
-    "cached": {"a/b": [0, {"~": 1}]},
-    "source": {"a/b": [0, {"~": 2}]},
-    "entries": [{"path": "/a~1b/1/~0", "cached": 1, "source": 2}],
-    "count": 1
-  },
-  {
-    "name": "entries in walk order",
-    "cached": {"z": [1, {"b": 1, "a": 1}], "a": {"y": 1, "x": 1}},
-    "source": {"a": {"x": 2, "y": 2}, "z": [2, {"a": 2, "b": 2}]},
-    "entries": [
-      {"path": "/a/x", "cached": 1, "source": 2},
-      {"path": "/a/y", "cached": 1, "source": 2},
-      {"path": "/z/0", "cached": 1, "source": 2},
-      {"path": "/z/1/a", "cached": 1, "source": 2},
-      {"path": "/z/1/b", "cached": 1, "source": 2}
-    ],
-    "count": 5
-  },
-  {
-    "name": "difference at the depth cap reported at its own pointer",
-    "cached": [[[[[[[[ [[[[[[[[ [[[[[[[[ [[[[[[[[ 1 ]]]]]]]] ]]]]]]]] ]]]]]]]] ]]]]]]]],
-    "source": [[[[[[[[ [[[[[[[[ [[[[[[[[ [[[[[[[[ 2 ]]]]]]]] ]]]]]]]] ]]]]]]]] ]]]]]]]],
-    "entries": [{"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0", "cached": 1, "source": 2}],
-    "count": 1
-  },
-  {
-    "name": "difference past the depth cap reported at the 32-token container",
-    "cached": [[[[[[[[ [[[[[[[[ [[[[[[[[ [[[[[[[[ [1] ]]]]]]]] ]]]]]]]] ]]]]]]]] ]]]]]]]],
-    "source": [[[[[[[[ [[[[[[[[ [[[[[[[[ [[[[[[[[ [2] ]]]]]]]] ]]]]]]]] ]]]]]]]] ]]]]]]]],
-    "entries": [{"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0", "cached": [1], "source": [2]}],
-    "count": 1
-  },
-  {
-    "name": "equal containers past the depth cap with different member order",
-    "cached": [[[[[[[[ [[[[[[[[ [[[[[[[[ [[[[[[[[ {"a": 1, "b": {"c": [1, 2], "d": null}} ]]]]]]]] ]]]]]]]] ]]]]]]]] ]]]]]]]],
-    "source": [[[[[[[[ [[[[[[[[ [[[[[[[[ [[[[[[[[ {"b": {"d": null, "c": [1, 2]}, "a": 1} ]]]]]]]] ]]]]]]]] ]]]]]]]] ]]]]]]]],
-    "entries": [],
-    "count": 0
-  },
-  {
-    "name": "containers at the depth cap reported whole",
-    "cached": [[[[[[[[ [[[[[[[[ [[[[[[[[ [[[[[[[ {
-      "kinds": {"m": [1]},
-      "kindsSwap": {"m": {"0": 1}},
-      "lengths": [[1, 2]],
-      "lengthsShort": [[1]],
-      "members": {"k": 1},
-      "order": {"x": 1, "y": {"p": null, "q": [true]}},
-      "sizes": {"a": 1},
-      "values": [1]
-    } ]]]]]]] ]]]]]]]] ]]]]]]]] ]]]]]]]],
-    "source": [[[[[[[[ [[[[[[[[ [[[[[[[[ [[[[[[[ {
-      "values": [2],
-      "sizes": {"a": 1, "b": 2},
-      "order": {"y": {"q": [true], "p": null}, "x": 1},
-      "members": {"j": 1},
-      "lengthsShort": [[1, 2]],
-      "lengths": [[1]],
-      "kindsSwap": {"m": [1]},
-      "kinds": {"m": {"0": 1}}
-    } ]]]]]]] ]]]]]]]] ]]]]]]]] ]]]]]]]],
-    "entries": [
-      {"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/kinds", "cached": {"m": [1]}, "source": {"m": {"0": 1}}},
-      {"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/kindsSwap", "cached": {"m": {"0": 1}}, "source": {"m": [1]}},
-      {"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/lengths", "cached": [[1, 2]], "source": [[1]]},
-      {"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/lengthsShort", "cached": [[1]], "source": [[1, 2]]},
-      {"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/members", "cached": {"k": 1}, "source": {"j": 1}},
-      {"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/sizes", "cached": {"a": 1}, "source": {"a": 1, "b": 2}},
-      {"path": "/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/values", "cached": [1], "source": [2]}
-    ],
-    "count": 7
-  },
-  {
-    "name": "documented example: a user record at four differing fields",
-    "cached": {"id": "u_123", "email": "ana@example.com", "plan": "free", "roles": ["viewer"], "profile": {"name": "Ana", "locale": "en-US"}},
-    "source": {"id": "u_123", "email": "ana@example.com", "plan": "pro", "roles": ["viewer", "editor"], "profile": {"name": "Ana", "locale": "en-GB", "timezone": "Europe/London"}},
-    "entries": [
-      {"path": "/plan", "cached": "free", "source": "pro"},
-      {"path": "/profile/locale", "cached": "en-US", "source": "en-GB"},
-      {"path": "/profile/timezone", "source": "Europe/London"},
-      {"path": "/roles", "cached": ["viewer"], "source": ["viewer", "editor"]}
-    ],
-    "count": 4
-  },
-  {
-    "name": "documented example: a changed field",
-    "cached": {"plan": "free"},
-    "source": {"plan": "pro"},
-    "entries": [{"path": "/plan", "cached": "free", "source": "pro"}],
-    "count": 1
-  },
-  {
-    "name": "documented example: an element changed in place",
-    "cached": {"tags": ["a", "b"]},
-    "source": {"tags": ["a", "c"]},
-    "entries": [{"path": "/tags/1", "cached": "b", "source": "c"}],
-    "count": 1
-  },
-  {
-    "name": "documented example: an element inserted",
-    "cached": {"tags": ["a", "b"]},
-    "source": {"tags": ["a", "x", "b"]},
-    "entries": [{"path": "/tags", "cached": ["a", "b"], "source": ["a", "x", "b"]}],
-    "count": 1
-  },
-  {
-    "name": "documented example: a field only the source has",
-    "cached": {"name": "Ana"},
-    "source": {"name": "Ana", "nickname": "A"},
-    "entries": [{"path": "/nickname", "source": "A"}],
-    "count": 1
-  },
-  {
-    "name": "documented example: a field only the cache has",
-    "cached": {"name": "Ana", "nickname": "A"},
-    "source": {"name": "Ana"},
-    "entries": [{"path": "/nickname", "cached": "A"}],
-    "count": 1
-  },
-  {
-    "name": "documented example: a field changing type",
-    "cached": {"count": 1},
-    "source": {"count": "1"},
-    "entries": [{"path": "/count", "cached": 1, "source": "1"}],
-    "count": 1
-  },
-  {
-    "name": "documented example: an object replaced by null",
-    "cached": {"address": {"city": "Paris"}},
-    "source": {"address": null},
-    "entries": [{"path": "/address", "cached": {"city": "Paris"}, "source": null}],
-    "count": 1
-  },
-  {
-    "name": "documented example: member names with escaped characters",
-    "cached": {"a/b": 1, "m~n": 1},
-    "source": {"a/b": 2, "m~n": 2},
-    "entries": [
-      {"path": "/a~1b", "cached": 1, "source": 2},
-      {"path": "/m~0n", "cached": 1, "source": 2}
-    ],
-    "count": 2
-  },
-  {
-    "name": "documented example: roots of different kinds",
-    "cached": ["a", "b"],
-    "source": {"items": ["a", "b"]},
-    "entries": [{"path": "", "cached": ["a", "b"], "source": {"items": ["a", "b"]}}],
-    "count": 1
-  }
+# The built-in walk's portable vectors (W10), read from the shared corpus every
+# port replays; they also pin the examples docs/shadow-validation.md shows. An
+# omitted cached or source member is an absent side (D13), UNDEFINED here.
+PROTOCOL_VECTORS = Path(__file__).resolve().parents[2] / "formal/catalogs/protocol-vectors.json"
+MISMATCH_PATH_VECTORS = json.loads(PROTOCOL_VECTORS.read_text(encoding="utf-8"))["mismatchPathVectors"]
+PRESENT_MISMATCH_PATH_VECTORS = [
+    vector for vector in MISMATCH_PATH_VECTORS if "cached" in vector and "source" in vector
 ]
-"""
-)
 
 CACHED_USER = {"id": "123", "email": "old@example.com"}
 SOURCE_USER = {"id": "123", "email": "new@example.com"}
@@ -479,22 +131,24 @@ def test_byte_clamps_keys_and_json_without_splitting_utf8():
     assert fields["sourceValueJson"] == preview
 
 
-@pytest.mark.parametrize("vector", MISMATCH_PATH_VECTORS, ids=lambda vector: vector["name"])
+@pytest.mark.parametrize("vector", PRESENT_MISMATCH_PATH_VECTORS, ids=lambda vector: vector["name"])
 def test_computes_the_expected_entries(vector):
     entries, count = diff_shadow_mismatch_json(vector["cached"], vector["source"])
     assert_entries(entries, vector["entries"])
     assert count == vector["count"]
 
 
+# An absent side reaches the walk only through rendering, as UNDEFINED.
 @pytest.mark.parametrize("vector", MISMATCH_PATH_VECTORS, ids=lambda vector: vector["name"])
 def test_renders_the_expected_diff_fields(vector):
-    fields, failure = render_shadow_mismatch_log(VALUES_ONLY, vector["cached"], vector["source"])
+    cached, source = vector.get("cached", UNDEFINED), vector.get("source", UNDEFINED)
+    fields, failure = render_shadow_mismatch_log(VALUES_ONLY, cached, source)
 
     assert failure is None
     assert fields["mismatchPaths"] == [entry["path"] for entry in vector["entries"]]
     assert fields["mismatchPathCount"] == vector["count"]
     assert_entries(json.loads(fields["diffJson"]), vector["entries"])
-    assert render_shadow_mismatch_log(PATHS_ONLY, vector["cached"], vector["source"]) == (
+    assert render_shadow_mismatch_log(PATHS_ONLY, cached, source) == (
         {"mismatchPaths": fields["mismatchPaths"], "mismatchPathCount": vector["count"]},
         None,
     )
