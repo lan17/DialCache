@@ -366,8 +366,9 @@ jobs:
   # cohort, about 2.5 minutes per mutant on a fast runner and about 4.5 on the
   # slow class (run 40146831443: 145 s per mutant on shard 3, 270 s on shard
   # 2, whose seven mutants took 37 minutes), strictly in sequence. A shard
-  # compiles, runs the baselines (2-4 minutes) and its slice of the catalog;
-  # one hung cohort adds its 8-minute test bound before the shard fails.
+  # compiles, runs the baselines (about 5.5 minutes on the slow class) and its
+  # slice of the catalog; one hung cohort adds its 8-minute test bound before
+  # the shard fails.
   # typescript/test/formal-validation.test.ts pins the mutants a shard may
   # hold within the timeout, so catalog growth fails the pull request until
   # the matrix grows.
