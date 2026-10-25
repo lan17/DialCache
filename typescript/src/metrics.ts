@@ -63,7 +63,6 @@ export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "in
 export type MetricErrorKind =
   | "key_construction"
   | "config_resolution"
-  | "config_unknown_field"
   | "cache_read"
   | "cache_read_timeout"
   | "cache_write"

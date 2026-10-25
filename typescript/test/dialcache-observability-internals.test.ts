@@ -1,7 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { CacheLayer, DialCacheKey, DialCacheKeyConfig, type ShadowConfig } from "../src/index.js";
-import { hasUnknownKeyConfigFields } from "../src/config.js";
 import {
   expandMismatchLogging,
   fetchKeyConfig,
@@ -11,7 +10,6 @@ import {
 
 const key = (defaultConfig: DialCacheKeyConfig | null = DialCacheKeyConfig.enabled(60)) =>
   new DialCacheKey({ keyType: "user_id", id: "123", useCase: "ObservabilityInternals", defaultConfig });
-const ignoreUnknownFields = (): void => undefined;
 
 /** The shadow group fetchKeyConfig merges from one default and one runtime shadow group. */
 async function mergedShadow(
@@ -21,7 +19,6 @@ async function mergedShadow(
   const merged = await fetchKeyConfig(
     async () => new DialCacheKeyConfig({ shadow: runtimeShadow }),
     key(new DialCacheKeyConfig(defaultShadow === undefined ? {} : { shadow: defaultShadow })),
-    ignoreUnknownFields,
   );
   if (merged?.shadow === undefined) {
     throw new Error("expected a merged shadow group");
@@ -95,7 +92,7 @@ describe("DialCache observability internal compatibility paths", () => {
     ];
 
     for (const { runtime, expected, effective } of cases) {
-      const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig), ignoreUnknownFields);
+      const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig));
 
       expect(merged).toEqual(expected);
       // The groups merge raw; admission expands the shorthand once.
@@ -112,7 +109,7 @@ describe("DialCache observability internal compatibility paths", () => {
     });
     const runtime = new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: 50 } });
 
-    const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig), ignoreUnknownFields);
+    const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig));
 
     expect(merged?.requestLocal).toBeUndefined();
     expect(merged?.coalesce).toBeUndefined();
@@ -258,16 +255,11 @@ describe("DialCache observability internal compatibility paths", () => {
     expect(resolveMismatchLogging(shadow)).toEqual(expected);
   });
 
-  it("rejects the removed shadowRamp field without also reporting it as unknown", async () => {
-    const onUnknownFields = vi.fn();
-
+  it("rejects the removed shadowRamp field in a provider result", async () => {
     await expect(fetchKeyConfig(
       async () => ({ ttlSec: {}, ramp: {}, shadowRamp: 100 }) as unknown as DialCacheKeyConfig,
       key(),
-      onUnknownFields,
     )).rejects.toThrow('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
-    expect(onUnknownFields).not.toHaveBeenCalled();
-    expect(hasUnknownKeyConfigFields({ ttlSec: {}, ramp: {}, shadowRamp: 100 })).toBe(false);
   });
 
   it("ignores an inherited shadow group or ramp in a raw provider result", async () => {
@@ -278,7 +270,6 @@ describe("DialCache observability internal compatibility paths", () => {
         { ttlSec: {}, ramp: {} },
       ),
       key(defaultConfig),
-      ignoreUnknownFields,
     );
     const inheritedRamp = await fetchKeyConfig(
       async () => ({
@@ -287,7 +278,6 @@ describe("DialCache observability internal compatibility paths", () => {
         shadow: Object.assign(Object.create({ ramp: 100 }) as ShadowConfig, { logMismatches: true }),
       }) as unknown as DialCacheKeyConfig,
       key(defaultConfig),
-      ignoreUnknownFields,
     );
 
     expect(inheritedGroup?.shadow).toBeUndefined();
@@ -377,7 +367,7 @@ describe("DialCache observability internal compatibility paths", () => {
               new DialCacheKeyConfig({ shadow: runtimeShadow as ShadowConfig }),
               { ttlSec: {}, ramp: {}, shadow: runtimeShadow } as unknown as DialCacheKeyConfig,
             ]) {
-              const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig), ignoreUnknownFields);
+              const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig));
               expect(resolveMismatchLogging(merged!.shadow!)).toEqual(expected);
               combinations += 1;
             }
@@ -397,7 +387,6 @@ describe("DialCache observability internal compatibility paths", () => {
       const merged = await fetchKeyConfig(
         async () => runtime,
         key(new DialCacheKeyConfig({ shadow: defaultShadow })),
-        ignoreUnknownFields,
       );
       expect(resolveMismatchLogging(merged!.shadow!)).toEqual(expectedLeaves(defaultShadow, runtime.shadow));
     }
@@ -425,75 +414,16 @@ describe("DialCache observability internal compatibility paths", () => {
   });
 
   it.each([
-    ["the top level", { ttlSec: { [CacheLayer.LOCAL]: 30 }, ttl: 60 }],
-    ["ttlSec", { ttlSec: { [CacheLayer.LOCAL]: 30, edge: 60 } }],
-    ["ramp", { ttlSec: { [CacheLayer.LOCAL]: 30 }, ramp: { [CacheLayer.LOCAL]: 100, edge: 50 } }],
-    ["shadow", { ttlSec: { [CacheLayer.LOCAL]: 30 }, shadow: { ramp: 5, logMismatch: true } }],
-    [
-      "mismatchLogging",
-      { ttlSec: { [CacheLayer.LOCAL]: 30 }, shadow: { mismatchLogging: { diff: "paths", values: true } } },
-    ],
-  ])("reports unknown provider fields at %s once and still merges the known fields", async (_name, input) => {
-    // A constructed config remembers the unknown fields its input carried.
-    for (const runtime of [input, new DialCacheKeyConfig(input as never)]) {
-      const onUnknownFields = vi.fn();
-
-      const merged = await fetchKeyConfig(async () => runtime as DialCacheKeyConfig, key(), onUnknownFields);
-
-      expect(onUnknownFields).toHaveBeenCalledTimes(1);
-      expect(merged?.ttlSec[CacheLayer.LOCAL]).toBe(30);
-      expect(hasUnknownKeyConfigFields(merged)).toBe(false);
-    }
-  });
-
-  it("does not report unknown fields for known-only or null provider results", async () => {
-    const knownOnly = {
-      ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 60 },
-      ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 50 },
-      shadow: { ramp: 5, logMismatches: true, mismatchLogging: { value: false, diff: "paths" } },
-      requestLocal: true,
-      coalesce: false,
-      staleOnErrorMaxAgeSec: 0,
-      remoteReadTimeoutMs: 50,
-    } as const;
-    // A default's unknown fields are reported when it is registered, not on
-    // every resolution.
-    const defaultWithUnknownFields = new DialCacheKeyConfig({ ...knownOnly, ttl: 60 } as never);
-    const onUnknownFields = vi.fn();
-
-    for (const runtime of [knownOnly, new DialCacheKeyConfig(knownOnly), DialCacheKeyConfig.disabled(), null, undefined]) {
-      await fetchKeyConfig(
-        async () => runtime as DialCacheKeyConfig | null,
-        key(defaultWithUnknownFields),
-        onUnknownFields,
-      );
-    }
-
-    expect(onUnknownFields).not.toHaveBeenCalled();
-  });
-
-  it.each([
     ["null", null],
     ["an array", []],
     ["a number", 1],
     ["a string", "paths"],
   ])("rejects a provider result whose mismatchLogging is %s", async (_name, mismatchLogging) => {
-    const onUnknownFields = vi.fn();
     const runtime = { ttlSec: {}, ramp: {}, shadow: { mismatchLogging } } as unknown as DialCacheKeyConfig;
 
-    await expect(fetchKeyConfig(async () => runtime, key(), onUnknownFields)).rejects.toThrow(
+    await expect(fetchKeyConfig(async () => runtime, key())).rejects.toThrow(
       new TypeError("DialCache shadow mismatchLogging config must be an object"),
     );
-    expect(onUnknownFields).not.toHaveBeenCalled();
-
-    // Unknown fields are reported before the merge, so a result that then
-    // fails resolution is still reported.
-    await expect(fetchKeyConfig(
-      async () => ({ ...runtime, ttl: 60 }) as DialCacheKeyConfig,
-      key(),
-      onUnknownFields,
-    )).rejects.toThrow(TypeError);
-    expect(onUnknownFields).toHaveBeenCalledTimes(1);
   });
 
   it("keeps invalid stale-on-error policy diagnostic-only in remote resolution", () => {

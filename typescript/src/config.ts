@@ -59,83 +59,6 @@ interface DialCacheKeyConfigInput {
   readonly remoteReadTimeoutMs?: number;
 }
 
-// `satisfies Record<keyof …, true>` fails to compile when an interface gains
-// a field its set is missing, so unknown-field detection stays exhaustive.
-const KEY_CONFIG_FIELDS: readonly string[] = Object.keys({
-  ttlSec: true,
-  ramp: true,
-  shadow: true,
-  requestLocal: true,
-  coalesce: true,
-  staleOnErrorMaxAgeSec: true,
-  remoteReadTimeoutMs: true,
-} as const satisfies Record<keyof DialCacheKeyConfigInput, true>);
-const SHADOW_CONFIG_FIELDS: readonly string[] = Object.keys({
-  ramp: true,
-  logMismatches: true,
-  mismatchLogging: true,
-} as const satisfies Record<keyof ShadowConfig, true>);
-const MISMATCH_LOGGING_FIELDS: readonly string[] = Object.keys({
-  value: true,
-  diff: true,
-} as const satisfies Record<keyof ShadowMismatchLoggingConfig, true>);
-// The removed shadowRamp field fails construction and runtime merging with its
-// own migration error, so it is never also reported as unknown.
-const SCANNED_KEY_CONFIG_FIELDS: readonly string[] = [...KEY_CONFIG_FIELDS, "shadowRamp"];
-const LAYER_FIELDS: readonly string[] = Object.values(CacheLayer);
-
-// A base constructor that returns its argument makes `new` on a subclass add
-// the subclass's private field to that object. Stamping through this
-// module-private pair keeps the answer off every enumeration and out of the
-// public class type, which stays structural.
-class Stamped {
-  constructor(target: object) {
-    return target;
-  }
-}
-
-class UnknownFieldsStamp extends Stamped {
-  readonly #unknownFields: boolean;
-
-  constructor(target: DialCacheKeyConfig, unknownFields: boolean) {
-    super(target);
-    this.#unknownFields = unknownFields;
-  }
-
-  /** The stamped answer, or `undefined` for an object no construction stamped. */
-  static read(config: object): boolean | undefined {
-    return #unknownFields in config ? config.#unknownFields : undefined;
-  }
-}
-
-// Set only for the next construction, which clears it before anything else.
-let constructingAssembledConfig = false;
-
-/**
- * Internal: whether a key config carries own fields DialCache does not know,
- * at the top level, in a layer map, in `shadow` or in `mismatchLogging`. A
- * constructed config answers what construction found in its input, because
- * construction drops unknown top-level and shadow fields; one DialCache
- * assembled itself answers false. Any other object, including a Proxy of a
- * constructed config, is scanned.
- */
-export function hasUnknownKeyConfigFields(config: unknown): boolean {
-  if (!isConfigObject(config)) {
-    return false;
-  }
-  const stamped = UnknownFieldsStamp.read(config);
-  if (stamped !== undefined) {
-    return stamped;
-  }
-  const shadow = readOwnField(config, "shadow");
-  return hasUnknownOwnFields(config, SCANNED_KEY_CONFIG_FIELDS)
-    || hasUnknownOwnFields(readOwnField(config, "ttlSec"), LAYER_FIELDS)
-    || hasUnknownOwnFields(readOwnField(config, "ramp"), LAYER_FIELDS)
-    || hasUnknownOwnFields(shadow, SHADOW_CONFIG_FIELDS)
-    || (isConfigObject(shadow)
-      && hasUnknownOwnFields(readOwnField(shadow, "mismatchLogging"), MISMATCH_LOGGING_FIELDS));
-}
-
 export class DialCacheKeyConfig {
   /** Per-layer TTLs in seconds, from 1 through 31,536,000 (365 days). */
   readonly ttlSec: LayerConfig;
@@ -172,15 +95,12 @@ export class DialCacheKeyConfig {
   readonly remoteReadTimeoutMs?: number;
 
   constructor(config: DialCacheKeyConfigInput) {
-    const assembled = constructingAssembledConfig;
-    constructingAssembledConfig = false;
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
       throw new TypeError("DialCache key config must be an object");
     }
     if (Object.hasOwn(config, "shadowRamp")) {
       throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
     }
-    const hasUnknownFields = !assembled && hasUnknownKeyConfigFields(config);
     this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
     this.ramp = cloneLayerConfig(config.ramp, "ramp");
     // Own-property read: an inherited shadow group must not activate shadow
@@ -210,11 +130,10 @@ export class DialCacheKeyConfig {
       assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");
       this.remoteReadTimeoutMs = config.remoteReadTimeoutMs;
     }
-    new UnknownFieldsStamp(this, hasUnknownFields);
   }
 
   static enabled(ttlSec: number): DialCacheKeyConfig {
-    return assembledKeyConfig({
+    return new DialCacheKeyConfig({
       ttlSec: {
         [CacheLayer.LOCAL]: ttlSec,
         [CacheLayer.REMOTE]: ttlSec,
@@ -234,7 +153,7 @@ export class DialCacheKeyConfig {
    * maintenance operations.
    */
   static disabled(): DialCacheKeyConfig {
-    return assembledKeyConfig({
+    return new DialCacheKeyConfig({
       requestLocal: false,
       staleOnErrorMaxAgeSec: 0,
       shadow: {
@@ -253,17 +172,6 @@ export class DialCacheKeyConfig {
       },
     });
   }
-}
-
-/**
- * Internal: constructs a config DialCache assembled itself, from literals or
- * from configs it already observed, without scanning it for unknown fields.
- * A default snapshot keeps the caller's layer maps, unknown layer names
- * included; those were reported when the default was observed.
- */
-export function assembledKeyConfig(input: DialCacheKeyConfigInput): DialCacheKeyConfig {
-  constructingAssembledConfig = true;
-  return new DialCacheKeyConfig(input);
 }
 
 function cloneLayerConfig(config: LayerConfig | undefined, name: "ttlSec" | "ramp"): LayerConfig {
@@ -317,16 +225,8 @@ function cloneMismatchLoggingConfig(config: ShadowMismatchLoggingConfig): Shadow
   return clone;
 }
 
-function isConfigObject(value: unknown): value is Record<PropertyKey, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function readOwnField<T extends object, Key extends keyof T>(source: T, key: Key): T[Key] | undefined {
   return Object.hasOwn(source, key) ? source[key] : undefined;
-}
-
-function hasUnknownOwnFields(value: unknown, knownFields: readonly string[]): boolean {
-  return isConfigObject(value) && Object.keys(value).some((name) => !knownFields.includes(name));
 }
 
 /**

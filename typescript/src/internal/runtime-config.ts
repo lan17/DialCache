@@ -1,8 +1,6 @@
 import {
   CacheLayer,
-  hasUnknownKeyConfigFields,
-  assembledKeyConfig,
-  type DialCacheKeyConfig,
+  DialCacheKeyConfig,
   type CacheConfigProvider,
   type LayerConfig,
   type ShadowConfig,
@@ -58,15 +56,11 @@ interface ResolveRemoteLayerConfigOptions {
 export async function fetchKeyConfig(
   configProvider: CacheConfigProvider,
   key: DialCacheKey,
-  onUnknownFields?: () => void,
 ): Promise<DialCacheKeyConfig | null> {
   const defaultConfig = key.defaultConfig;
   const runtimeConfig = (await configProvider(key)) as DialCacheKeyConfig | null | undefined;
   if (runtimeConfig === null || runtimeConfig === undefined) {
     return defaultConfig;
-  }
-  if (hasUnknownKeyConfigFields(runtimeConfig)) {
-    onUnknownFields?.();
   }
   return mergeKeyConfig(defaultConfig, runtimeConfig);
 }
@@ -276,7 +270,7 @@ function mergeKeyConfig(
     readOwnUnknown(overlay, "shadow") as ShadowConfig | undefined,
   );
 
-  return assembledKeyConfig({
+  return new DialCacheKeyConfig({
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
     ramp: mergeLayerConfig(defaultConfig?.ramp, overlay?.ramp, "ramp"),
     ...(requestLocal === undefined ? {} : { requestLocal }),

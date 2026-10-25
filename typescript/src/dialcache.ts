@@ -4,8 +4,6 @@ import { isDeepStrictEqual } from "node:util";
 import {
   CacheLayer,
   DialCacheKeyConfig,
-  hasUnknownKeyConfigFields,
-  assembledKeyConfig,
   type Awaitable,
   type CacheConfigProvider,
   type DialCacheConfig,
@@ -416,7 +414,6 @@ export class DialCache {
    * values are shared by reference and must be treated as immutable.
    */
   cached<Fn extends AnyFn>(fn: Fn, options: CachedOptions<Fn>): CachedFn<Fn> {
-    const hasUnknownDefaultFields = hasUnknownKeyConfigFields(options.defaultConfig);
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
@@ -426,9 +423,6 @@ export class DialCache {
       this.staleRecoveryPredicate,
     );
     this.registerUseCase(options.useCase);
-    if (hasUnknownDefaultFields) {
-      this.recordUnknownConfigFields(options);
-    }
 
     return (...args: Parameters<Fn>): Promise<CachedValue<Fn>> =>
       this.executeCacheOperation(
@@ -461,11 +455,6 @@ export class DialCache {
       this.staleRecoveryPredicate,
     );
     this.assertUseCaseIsNotReserved(options.useCase);
-    // Disabled calls stay pass-through, so only an enabled call observes the
-    // inline default config.
-    if (this.isEnabled() && hasUnknownKeyConfigFields(options.defaultConfig)) {
-      this.recordUnknownConfigFields(options);
-    }
 
     return this.executeCacheOperation(
       load,
@@ -534,11 +523,7 @@ export class DialCache {
 
     let keyConfig: DialCacheKeyConfig | null;
     try {
-      keyConfig = await fetchKeyConfig(
-        this.configProvider,
-        key,
-        () => this.recordError(key, NO_CACHE_LAYER, "config_unknown_field"),
-      );
+      keyConfig = await fetchKeyConfig(this.configProvider, key);
     } catch (error) {
       // Provider failure: fail open and run uncached, mirroring the per-layer config_error path.
       this.logger.warn("Could not resolve DialCache key config", error);
@@ -1469,18 +1454,6 @@ export class DialCache {
     this.metrics?.error({ ...labelsFor(key, layer), error: kind, inFallback: false });
   }
 
-  /** One event per observed static default config, without naming the fields. */
-  private recordUnknownConfigFields(options: { readonly useCase: string; readonly keyType: string }): void {
-    this.metrics?.error({
-      cacheNamespace: this.namespace,
-      useCase: options.useCase,
-      keyType: options.keyType,
-      layer: NO_CACHE_LAYER,
-      error: "config_unknown_field",
-      inFallback: false,
-    });
-  }
-
   /**
    * Invalid runtime TTL/ramp leaves can only come from provider results, since
    * static defaults are validated before the operation executes. Count them as
@@ -1636,7 +1609,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   assertDefaultLayerMap(rampConfig, "ramp");
   assertDefaultShadowConfig(shadowConfig);
 
-  const snapshot = assembledKeyConfig({
+  const snapshot = new DialCacheKeyConfig({
     ttlSec: ttlSecConfig,
     ramp: rampConfig,
     ...(requestLocal === undefined ? {} : { requestLocal }),
