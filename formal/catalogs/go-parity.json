@@ -10,8 +10,8 @@
   "inputs": {
     "semanticCasesSha256": "f5f7ee357201b343eb00f8f9c783c92af0d722709137edc0f55e0a52b3cdec0a",
     "executionSha256": "29a412f87329347840f000ea44a6e95332464c0b01b92b4e41c615af3c9157cd",
-    "sourceAuditDispositionsSha256": "6c56dacf9c53303984743f82fe5be5cfd3d9987b32d2bb00216e05e396288d75",
-    "featureCoverageSha256": "154af616ab7bd06b5465cfdd778be40af20d9e93688315562edcc40e3a92aa71",
+    "sourceAuditDispositionsSha256": "d2c78f1a74f2e686f95601fb024001c3cfb4353f3024cee289b52ef0e2047a05",
+    "featureCoverageSha256": "3ef50a630ade2ea9dca15cf2d1666e19346a1323e3b8fa7e1d5dc285aaf95cd3",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "9df8285820e4fff65f6a7753885bbb192c09f3f476eac8f9c98d130454ae1a28"
   },
@@ -21,7 +21,7 @@
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
-    "sourceDeclarations": 894,
+    "sourceDeclarations": 875,
     "casesWithScheduledChecks": 266,
     "requiredWitnesses": 497,
     "casesWithQuintRegressionReplay": 192,
@@ -3317,14 +3317,14 @@
   "sourceInventory": [
     {
       "path": "typescript/src/config.ts",
-      "sha256": "0df18816c46826950ea8378e6d3c2e0e0a2392e608059ff20f440ccd7a8e84c6",
+      "sha256": "f5acc4ba69337f0c03be5d9ea1816c6a067aa5c652d8107b4ad679a34ec8276c",
       "candidateGoFiles": [
         "go/policy.go",
         "go/api.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Static configuration and callback contracts map to typed time.Duration Policy, functional Option constructors and Operation[T]. ParsePolicy exposes the seconds-based JSON input; pointer leaves and functional options preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults. The shadow.mismatchLogging leaves (value, diff) and the logMismatches shorthand that expands to them, plus unknown-field detection, are TypeScript-only until the Go port (#243); Go maps logMismatches alone.",
+        "rationale": "Static configuration and callback contracts map to typed time.Duration Policy, functional Option constructors and Operation[T]. ParsePolicy exposes the seconds-based JSON input; pointer leaves and functional options preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults. The shadow.mismatchLogging leaves (value, diff) and the logMismatches shorthand that expands to them are TypeScript-only until the Go port (#243); Go maps logMismatches alone.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -3424,7 +3424,7 @@
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "aa3aa6c0762312fabd1eba7af70cb22cba7f6d11c8a5345ad6eb81d25b95b0f3",
+      "sha256": "60f87d5dde98d6b3936a5f0d1a16d79b225b856b86dfc9434090ee3ab9333a4d",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -3436,7 +3436,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The mismatch-logging plan, the warning's path/diff/age fields, the shadowMismatchDiff hook, the shadowMismatchLogging outcome and config_unknown_field reporting are TypeScript-only until the Go port (#243).",
+        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The mismatch-logging plan, the warning's path/diff/age fields, the shadowMismatchDiff hook and the shadowMismatchLogging outcome are TypeScript-only until the Go port (#243).",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -4010,13 +4010,13 @@
     },
     {
       "path": "typescript/src/internal/runtime-config.ts",
-      "sha256": "de4d27fd3586d62cfc6865baf93804223f59691dfda083314ddef32e96b49c88",
+      "sha256": "e95aa202d2e30e24bd2e349d0d7ac5028c7e245e6a2c0189608a036a37818d59",
       "candidateGoFiles": [
         "go/policy.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Runtime policy parsing, leaf-wise inheritance, invocation snapshots and feature-local invalidation map to ParsePolicy, SnapshotPolicy and ResolvePolicy. Nil/Absent whole-provider results inherit while explicit null leaves remain malformed; constructor and wrapper validation occur through Go APIs. The raw shadow-group merge with the shorthand expanded once at admission, per-leaf mismatch-logging validation and unknown-field reporting are TypeScript-only until the Go port (#243).",
+        "rationale": "Runtime policy parsing, leaf-wise inheritance, invocation snapshots and feature-local invalidation map to ParsePolicy, SnapshotPolicy and ResolvePolicy. Nil/Absent whole-provider results inherit while explicit null leaves remain malformed; constructor and wrapper validation occur through Go APIs. The raw shadow-group merge with the shorthand expanded once at admission and per-leaf mismatch-logging validation are TypeScript-only until the Go port (#243).",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -4100,7 +4100,7 @@
     },
     {
       "path": "typescript/src/metrics.ts",
-      "sha256": "a53794276e43ae3bc61dc46aa85a1dd7622b296beb06634e1d0259f73c5233b5",
+      "sha256": "b498b2cf264d1b37de9e808329296d6a0c9b3dea3f31425e943beed9ada558e9",
       "candidateGoFiles": [
         "go/api.go",
         "go/metrics.go",
@@ -4109,7 +4109,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The backend-neutral Event stream expresses portable diagnostic outcomes, attribution and durations. Optional shadow/recovery hooks preserve admission semantics; FailureIsolatedObserver and FailureIsolatedLogger contain native exporter/logging failures. Exporter schemas are separately reviewed bindings. The shadowMismatchLogging hook, its outcome union and the config_unknown_field error kind have no Go event until the Go port (#243).",
+        "rationale": "The backend-neutral Event stream expresses portable diagnostic outcomes, attribution and durations. Optional shadow/recovery hooks preserve admission semantics; FailureIsolatedObserver and FailureIsolatedLogger contain native exporter/logging failures. Exporter schemas are separately reviewed bindings. The shadowMismatchLogging hook and its outcome union have no Go event until the Go port (#243).",
         "nativeAdaptations": [
           "B01",
           "B02",

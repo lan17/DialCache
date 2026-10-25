@@ -15,7 +15,7 @@
     },
     {
       "path": "docs/api.md",
-      "sha256": "b67218e782ade7ee54c89322e85c328466202ee239585d7e215fa27c32e79ccc",
+      "sha256": "315112302be59d3a112212ff05ba5f8d5c5e4d02ef220708c477f3a717082acb",
       "entries": [
         {"title":"API reference","contracts":["B01"]},
         {"title":"Imports","contracts":["B01"]},
@@ -90,7 +90,7 @@
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "96caf9ebfd50491c607ef483fae2f4f4a78320ee67e2ee868ae0d05455e0c37a",
+      "sha256": "9149345da4c19a2015aefcefaba8fad5de15afd42d4c5bf4ba813ff3ebb8a7fe",
       "entries": [
         {"title":"Configuration and rollout","contracts":["C16"]},
         {"title":"What belongs where","contracts":["C16","B01"]},
@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "7dfbcb70b700f84a8e39a57c09e1e6f0787153476cc33014c1b8f762b9726dba",
+      "sha256": "665bb9fd5b391217fde2308aacc7f25fbc294aa71771cf5bb831f31f6b226a6a",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "32c7737ba51c1a699a0231544ac45d49c20a299bfa3f0c57204057515e79c746",
+      "sha256": "58ffce5b044042696950c848961282d880f5a192bd0fc388f01dede4c40ae2ad",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -391,7 +391,7 @@
     },
     {
       "path": "typescript/test/datadog.test.ts",
-      "sha256": "9b589e3b1d137af141a52365bcbc14cab70de61003048851c4ce9d8a34bcc15d",
+      "sha256": "2c953d1fa3f861dd2d036105856a4d8bfed72887b8fc77f0c7354ababff7a747",
       "entries": [
         {"title":"maps every DialCache metric to the default metric namespace with exact names, values, and tags","contracts":["X01"]},
         {"title":"`uses ${observationMetricType} for every observation, so switching modes requires a new namespace`","contracts":["X01"]},
@@ -454,7 +454,7 @@
     },
     {
       "path": "typescript/test/dialcache-config-ramp.test.ts",
-      "sha256": "3ab42bf984ccb92843f05dfaa054cee199c3deb796ea884b9f90d75e6bf05dd9",
+      "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82",
       "entries": [
         {"title":"rejects the removed public ramp sampler override","contracts":["B01"]},
         {"title":"preserves requestLocal omission until baseline and runtime config are merged","contracts":["C16"]},
@@ -495,12 +495,6 @@
         {"title":"rejects unsupported runtime TTLs before cache or serialization work","contracts":["C21"]},
         {"title":"disables missing local config while allowing the remote layer to work","contracts":["C05","C21"]},
         {"title":"disables missing remote config while allowing the local layer to work","contracts":["C05","C21"]},
-        {"title":"reports config_unknown_field once when cached() registers a defaultConfig with unknown fields","contracts":["X01","B01"]},
-        {"title":"reports config_unknown_field for a getOrLoad defaultConfig on every enabled call","contracts":["X01","B01"]},
-        {"title":"reports config_unknown_field once per provider result with unknown fields","contracts":["C16","X01"]},
-        {"title":"does not report config_unknown_field for configs with only known fields","contracts":["C16","X01"]},
-        {"title":"does not report again a provider result that is the key's own defaultConfig with %s","contracts":["C16","X01"]},
-        {"title":"scans a provider result that construction never saw, such as a hydrated prototype object","contracts":["C16","X01"]},
         {"title":"fails open when the runtime config provider throws","contracts":["C20"]}
       ]
     },
@@ -675,7 +669,7 @@
     },
     {
       "path": "typescript/test/dialcache-observability-internals.test.ts",
-      "sha256": "39c6882b6be6532208ad2a853104d99bdeb40b7e63d88c2feff7846176fdaa32",
+      "sha256": "a239f4612e72f310d268e407a519ab5727731a8e33d6cb41944ff019e313ffba",
       "entries": [
         {"title":"merges every runtime policy leaf independently","contracts":["C16"]},
         {"title":"preserves omitted requestLocal and coalesce through a runtime merge","contracts":["C16"]},
@@ -684,12 +678,10 @@
         {"title":"lets a runtime mismatchLogging leaf override its default leaf","contracts":["C16"]},
         {"title":"keeps a malformed runtime logMismatches for admission while its same-object leaves win","contracts":["C21","C60"]},
         {"title":"resolves %s to the effective mismatch-logging leaves","contracts":["C21","C60"]},
-        {"title":"rejects the removed shadowRamp field without also reporting it as unknown","contracts":["B01","X01"]},
+        {"title":"rejects the removed shadowRamp field in a provider result","contracts":["B01","X01"]},
         {"title":"ignores an inherited shadow group or ramp in a raw provider result","contracts":["C16","C60"]},
         {"title":"resolves every merged combination of shorthand and leaves as each layer expanded first","contracts":["C16","C60"]},
         {"title":"expands the logMismatches shorthand before the same group's leaves override it","contracts":["C16","C60"]},
-        {"title":"reports unknown provider fields at %s once and still merges the known fields","contracts":["C16","X01"]},
-        {"title":"does not report unknown fields for known-only or null provider results","contracts":["C16","X01"]},
         {"title":"rejects a provider result whose mismatchLogging is %s","contracts":["C20"]},
         {"title":"keeps invalid stale-on-error policy diagnostic-only in remote resolution","contracts":["C21"]}
       ]
@@ -984,7 +976,7 @@
     },
     {
       "path": "typescript/test/prometheus.test.ts",
-      "sha256": "61970a43db29426ad586cc8ecba8b400faa5e27546ed009d5d42c4f0fcf8496d",
+      "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296",
       "entries": [
         {"title":"keeps default DialCache construction detached from Prometheus","contracts":["X01"]},
         {"title":"registers collectors only in the caller-owned registry","contracts":["X01"]},
