@@ -88,7 +88,7 @@ do not export the same outcome twice. See [observability](observability.md).
 <LanguageContent language="rust">
 
 Use a policy with `.remote_ttl_sec(300).remote_ramp(0.0)` and a
-`ShadowPolicy { ramp: Some(5.0), log_mismatches: None }`. Configure
+`ShadowPolicy { ramp: Some(5.0), ..ShadowPolicy::default() }`. Configure
 `shadow_max_in_flight(4)` on the builder and an observer whose
 `observes_shadow_outcomes` returns true. Bundled exporters opt in. See
 [observability](observability.md).
@@ -304,7 +304,8 @@ holding the shadow slot after timeout.
 
 Scheduling and shadow deadline timers are unreferenced and do not keep an
 otherwise idle Node process alive. Detachment uses the event loop, not a worker;
-synchronous source, codec, comparator and logger work still consumes it.
+synchronous source, codec, comparator and logger work still consumes it, as do
+mismatch-warning rendering and `shadowMismatchDiff`.
 
 </LanguageContent>
 
@@ -312,16 +313,20 @@ synchronous source, codec, comparator and logger work still consumes it.
 
 Shadow work runs independently of the caller. Native callbacks still consume
 CPU and can outlive the cache's bounded wait. Give dependency calls finite
-context deadlines and bound application concurrency.
+context deadlines and bound application concurrency. Mismatch-warning content,
+the built-in walk and `Operation.MismatchDiff` included, runs on the shadow
+job's goroutine after the verdict.
 
 </LanguageContent>
 
 <LanguageContent language="rust">
 
 The captured runtime runs detached shadow tasks. Admitted CPU work can retain
-capacity even after an async runtime shutdown. Mismatch preview callbacks run
-through the bounded CPU executor and can run on worker threads; application
-codecs control their own scheduling.
+capacity even after an async runtime shutdown. Mismatch-warning content runs
+through the bounded CPU executor too: JSON rendering, the built-in walk,
+`preview` and the `mismatch_diff` hook can run on worker threads and hold the
+job's capacity until they finish. Application codecs control their own
+scheduling.
 
 </LanguageContent>
 
@@ -330,6 +335,8 @@ codecs control their own scheduling.
 The asyncio event loop owns detached shadow work. Keep it alive while work
 settles. Loaders, codecs and compression execute on that event loop; use native
 async I/O and application-controlled scheduling for blocking custom work.
+Mismatch-warning content, the built-in walk and `shadow_mismatch_diff`
+included, also runs there, after the job releases its slot.
 
 </LanguageContent>
 
@@ -372,8 +379,6 @@ mismatch. Logging is default-off and independent of sampling. It can contain
 cache keys and value previews, so enable it only for data appropriate to your
 application's logging policy.
 
-<LanguageContent language="typescript">
-
 Two default-off leaves under `shadow.mismatchLogging` choose what the warning
 carries, and the warning is emitted when either is on:
 
@@ -386,12 +391,68 @@ carries, and the warning is emitted when either is on:
 level meant to stay on for user data. Member names still appear in the pointers:
 an object keyed by identifiers logs those identifiers, exactly as written,
 control characters included, so send warnings to a structured or escaping
-logger. `cacheKey` still carries the key's arguments as well. This config excerpt keeps paths-only logging on for
-a 5% shadow cohort:
+logger. `cacheKey` still carries the key's arguments as well. This config
+excerpt keeps paths-only logging on for a 5% shadow cohort:
+
+<LanguageContent language="typescript">
 
 ```ts
 shadow: { ramp: 5, mismatchLogging: { diff: "paths" } }
 ```
+
+An invalid leaf in `defaultConfig` throws when `cached()` registers or
+`getOrLoad()` runs; see [validation and snapshots](api.md#validation-and-snapshots).
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+```go
+Shadow: &dialcache.ShadowPolicy{
+	Ramp:            dialcache.Ptr(5.0),
+	MismatchLogging: &dialcache.MismatchLoggingPolicy{Diff: dialcache.Ptr(dialcache.MismatchDiffPaths)},
+},
+```
+
+`MismatchLoggingPolicy` holds `Value`, a `*bool`, and `Diff`, a
+`*MismatchDiffLevel`: `MismatchDiffOff`, `MismatchDiffPaths` or
+`MismatchDiffValues`. `ShadowPolicy.LogMismatches` is the shorthand described
+below. Static validation rejects any other `Diff`, and a `JSONPolicy` or
+`RawPolicy` overlay uses the JSON names on this page.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+```rust
+ShadowPolicy {
+    ramp: Some(5.0),
+    mismatch_logging: Some(MismatchLogging {
+        diff: Some(MismatchDiff::Paths),
+        ..MismatchLogging::default()
+    }),
+    ..ShadowPolicy::default()
+}
+```
+
+`MismatchLogging` holds `value: Option<bool>` and `diff: Option<MismatchDiff>`,
+whose variants are `Off`, `Paths` and `Values`. `log_mismatches` is the
+shorthand described below, and a runtime overlay uses the JSON names on this
+page.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+```python
+shadow={"ramp": 5, "mismatch_logging": {"diff": "paths"}}
+```
+
+`log_mismatches` is the shorthand described below, and mappings also accept the
+camelCase `mismatchLogging` and `logMismatches`. Static defaults reject an
+invalid shorthand or leaf with `ConfigError`.
+
+</LanguageContent>
 
 `diff: "values"` and `value: true` log application data and suit an
 investigation.
@@ -413,18 +474,19 @@ To log less than `logMismatches: true`, replace the shorthand with leaves rather
 than writing a leaf beside it. A leaf beside `logMismatches: true` leaves the
 other expanded leaf on, and DialCache versions before `mismatchLogging` read
 only the shorthand, so a service still on such a version keeps logging both
-values from the same config. A runtime `mismatchLogging` that is not an object
-fails resolution for the whole call, which then runs the loader uncached; an
-invalid leaf only turns that leaf off
-([invalid runtime policy](api.md#validation-and-snapshots)).
+values from the same config. At runtime, an invalid leaf only turns that leaf
+off and an invalid shorthand expands to both leaves off; one remote
+`config_resolution` covers every invalid input of a call and is recorded only
+when a shadow job is admitted. A runtime `mismatchLogging` that is not an
+object fails resolution for the whole call, which then runs the loader
+uncached.
 
-The logger receives the message `"DialCache shadow validation mismatch"` and an
-object with these fields:
+The warning carries these fields:
 
 | Field | Present | Content | UTF-8 cap |
 | --- | --- | --- | --- |
 | `cacheNamespace`, `useCase`, `keyType`, `outcome: "mismatch"` | Always | Use-case metadata | |
-| `cachedValueAgeSeconds` | Always | Age of the cached value at the verdict, as `observeShadowValueAge` records it; `null` when unavailable | |
+| `cachedValueAgeSeconds` | Always | Age of the cached value at the verdict, as the shadow value-age metric records it; `null` when unavailable | |
 | `cacheKey` | Always | Logical URN, not the physical Redis key | 2 KiB |
 | `mismatchPaths` | `diff` above `"off"` | RFC 6901 JSON Pointers of the differing fields, at most 64 | 512 bytes each |
 | `mismatchPathCount` | `diff` above `"off"` | Number of differing fields before the cut to 64 | |
@@ -433,34 +495,78 @@ object with these fields:
 | `sourceValueJson` | `value: true` | Native JSON of the raw source value | 8 KiB |
 | `loggingOutcome` | After a failure | `"hook_error"` or `"render_error"`: why fields are `null` | |
 
+<LanguageContent language="typescript">
+
+The logger's `warn` receives the message
+`"DialCache shadow validation mismatch"` and an object with these fields, in
+this order.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+The logger's `Warn` receives the message
+`"DialCache shadow validation mismatch"` and a `map[string]any` with these
+fields, so they have no order. `cachedValueAgeSeconds` is a `float64`,
+`mismatchPaths` a `[]string` and `mismatchPathCount` an `int`; a field that
+failed is a nil interface value.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+The logger receives `LogEvent::ShadowMismatch` with `ShadowMismatchDetails`:
+`cached_value_age_seconds`, `cache_key`, a `diff` group present when `diff` is
+above `Off` (`mismatch_paths`, `mismatch_path_count` and, at `Values`,
+`diff_json`), a `values` group present when `value` is on
+(`cached_value_json`, `source_value_json`), and `logging_outcome`. When the
+content work does not complete, as when the CPU executor rejects it, both
+groups are `None` whatever the leaves request, and `logging_outcome` is
+`RenderError`.
+Inside a present group, `None` marks an unavailable field. The default
+`Display` writes the fields in the order of the table and leaves unavailable
+ones out.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+The logger's `warning` receives the message
+`"DialCache shadow validation mismatch: %s"` and one dict with these fields, in
+this order; a field that failed is `None`.
+
+</LanguageContent>
+
 For example, take the `GetUser` use case configured above, with
 `mismatchLogging: { diff: "paths" }` added to its shadow policy. It has this
-user cached, and the source has changed it since:
+user cached, as decoded from Redis:
 
-```ts
-// Decoded from Redis
-const cached = { id: "u_123", email: "ana@example.com", plan: "free",
-  roles: ["viewer"], profile: { name: "Ana", locale: "en-US" } };
-// Returned by the source
-const source = { id: "u_123", email: "ana@example.com", plan: "pro",
-  roles: ["viewer", "editor"],
-  profile: { name: "Ana", locale: "en-GB", timezone: "Europe/London" } };
+```json
+{"id": "u_123", "email": "ana@example.com", "plan": "free",
+ "roles": ["viewer"], "profile": {"name": "Ana", "locale": "en-US"}}
 ```
 
-After the mismatch is confirmed, DialCache makes this call to the configured
-logger:
+The source has changed the user since and now returns:
 
-```ts
-logger.warn("DialCache shadow validation mismatch", {
-  cacheNamespace: "users-api",
-  useCase: "GetUser",
-  keyType: "user_id",
-  outcome: "mismatch",
-  cachedValueAgeSeconds: 42.5, // varies
-  cacheKey: "{users-api:user_id:u_123}#GetUser",
-  mismatchPaths: ["/plan", "/profile/locale", "/profile/timezone", "/roles"],
-  mismatchPathCount: 4,
-});
+```json
+{"id": "u_123", "email": "ana@example.com", "plan": "pro",
+ "roles": ["viewer", "editor"],
+ "profile": {"name": "Ana", "locale": "en-GB", "timezone": "Europe/London"}}
+```
+
+After the mismatch is confirmed, the warning carries these fields:
+
+```jsonc
+{
+  "cacheNamespace": "users-api",
+  "useCase": "GetUser",
+  "keyType": "user_id",
+  "outcome": "mismatch",
+  "cachedValueAgeSeconds": 42.5, // varies
+  "cacheKey": "{users-api:user_id:u_123}#GetUser",
+  "mismatchPaths": ["/plan", "/profile/locale", "/profile/timezone", "/roles"],
+  "mismatchPathCount": 4
+}
 ```
 
 `/id`, `/email`, and `/profile/name` match, so they are absent. The paths follow
@@ -483,11 +589,11 @@ The `/profile/timezone` entry carries `source` alone because the cached value
 has no such member.
 
 The paths come from the native JSON of both values: each side is rendered once
-with `JSON.stringify`, not the Redis serializer, and every field above derives
-from that rendering, so a member that `toJSON` leaves out of `cachedValueJson`
-stays out of the diff too. The diff is not limited to the 8 KiB that
-`cachedValueJson` keeps: for a larger value it can show differing fields from
-past that point. The two renderings are compared structurally:
+with the language's native JSON writer, not the Redis serializer, and every
+field above derives from that rendering, so a member the rendering leaves out of
+`cachedValueJson` stays out of the diff too. The diff is not limited to the
+8 KiB that `cachedValueJson` keeps: for a larger value it can show differing
+fields from past that point. The two renderings are compared structurally:
 
 - Object members are compared in UTF-16 code-unit order of their names. A member
   present on one side only is reported with that side.
@@ -501,13 +607,15 @@ past that point. The two renderings are compared structurally:
 
 An empty `mismatchPaths` means both renderings hold the same JSON, apart from
 member order and number precision beyond a double: the comparator saw a
-difference that native JSON does not show, such as a `Date` against its ISO
-string. A side longer than 1 KiB appears in `diffJson` as its clipped JSON text.
-Clipped fields end with `...[truncated]` inside their cap. The caps bound what is
-logged, not the work: the computation parses and walks both renderings in full
-on the event loop, so its cost grows with the size of the values.
+difference that native JSON does not show, such as a native type the rendering
+erased, or a custom comparator compared more than the JSON. A side longer than
+1 KiB appears in `diffJson` as its clipped JSON text. Clipped fields end with
+`...[truncated]` inside their cap. The caps bound what is logged, not the work:
+the computation parses and walks both renderings in full, so its CPU time and
+memory grow with the rendered size of the values and with the number of members
+and elements they hold.
 
-Each smaller pair below shows one rule; the last is a mismatch with no paths:
+Each smaller pair below shows one rule:
 
 | Cached | Source | `mismatchPaths` | Why |
 | --- | --- | --- | --- |
@@ -520,17 +628,43 @@ Each smaller pair below shows one rule; the last is a mismatch with no paths:
 | `{"address":{"city":"Paris"}}` | `{"address":null}` | `["/address"]` | An object against `null` is reported whole |
 | `{"a/b":1,"m~n":1}` | `{"a/b":2,"m~n":2}` | `["/a~1b","/m~0n"]` | RFC 6901 escapes `/` as `~1` and `~` as `~0` |
 | `["a","b"]` | `{"items":["a","b"]}` | `[""]` | Roots of different kinds, at the root pointer |
-| `undefined` | `{"plan":"pro"}` | `[""]` | A cached negative-cache entry is an absent value, not a failure: the source is reported whole at the root, and `cachedValueJson` is `null` |
-| `{"at":"2026-10-24T00:00:00.000Z"}` | `{ at: new Date("2026-10-24T00:00:00.000Z") }` | `[]` | The JSON serializer stored the `Date` as this string. The default comparator tells a string from a `Date`, but both render to the same JSON, so no path differs |
+| Absent | `{"plan":"pro"}` | `[""]` | A cached negative-cache entry is an absent value, not a failure: the source is reported whole at the root, and `cachedValueJson` is `null` |
 
-`shadowMismatchDiff`, set beside `shadowComparator`, replaces the computation
-for one use case; `cached()` and `getOrLoad()` throw a `TypeError` when it is not
-a function. It receives the compared values and returns the entries; a
-side may be omitted, so a hook that knows only where values differ returns paths
-alone. It follows the comparator's rules: synchronous, deterministic,
-side-effect-free, non-mutating, and bounded. Its entries are the use case's own
-output, so they log whatever it returns. This API excerpt assumes a `fetchUser`
-source:
+A use case can replace the computation with a diff hook, set beside its shadow
+comparator. The hook receives the compared values, an absent one included as
+the language's own absent marker, and returns the entries, each a `path` with
+optional `cached` and `source` sides; a hook that knows only where values
+differ returns paths alone. It follows the comparator's rules: synchronous,
+deterministic, side-effect-free, non-mutating, and bounded. Its entries are the
+use case's own output, so they log whatever it returns.
+
+Failures log less, never more. A value without a JSON rendering makes its value
+field `null`, along with the built-in diff fields. An absent value, the
+top-level marker a negative-cache entry stores, is not such a failure: only its
+own value field is `null` and the warning carries no `loggingOutcome`. A hook
+that fails makes `mismatchPaths`, `mismatchPathCount`, and `diffJson` `null`;
+DialCache does not fall back to the built-in computation. A hook value without a
+JSON rendering makes `diffJson` alone `null`. Any other failure while building
+the fields leaves the metadata warning. Failures never change the
+`shadowValidation` outcome, and the `shadowMismatchLogging` metric reports each
+warning attempt; see
+[Confirmed mismatch warnings](observability.md#confirmed-mismatch-warnings).
+
+<LanguageContent language="typescript">
+
+Each side is rendered with `JSON.stringify`, so a member that `toJSON` leaves
+out of `cachedValueJson` stays out of the diff too. A cycle, a `bigint`, or a
+`toJSON` that throws has no rendering, and a top-level `undefined` is the absent
+value. The default comparator tells a string from a `Date`, but both render to
+the same JSON: a `Date` that the JSON serializer stored comes back as its ISO
+string, so `{"at":"2026-10-24T00:00:00.000Z"}` against
+`{ at: new Date("2026-10-24T00:00:00.000Z") }` is a mismatch whose
+`mismatchPaths` is `[]`.
+
+`shadowMismatchDiff` sets the hook; `cached()` and `getOrLoad()` throw a
+`TypeError` when it is not a function. A hook that throws or returns a promise,
+a non-array, or an entry without a string `path` fails. This API excerpt
+assumes a `fetchUser` source:
 
 ```ts
 const getUser = dialcache.cached(fetchUser, {
@@ -542,51 +676,97 @@ const getUser = dialcache.cached(fetchUser, {
 });
 ```
 
-Failures log less, never more. A value without a JSON rendering (a cycle, a
-`bigint`, or a `toJSON` that throws) makes its value field `null`, along with the
-built-in diff fields. A top-level `undefined` is not such a failure: it is an
-absent value, as a negative-cache entry stores, so only its own value field is
-`null` and the warning carries no `loggingOutcome`. A hook that throws or returns a promise, a non-array, or an entry
-without a string `path` makes `mismatchPaths`, `mismatchPathCount`, and
-`diffJson` `null`; DialCache does not fall back to the built-in computation. A
-hook value without a JSON rendering makes `diffJson` alone `null`. Any other
-failure while building the fields leaves the metadata warning. Failures never
-change the `shadowValidation` outcome, and the optional `shadowMismatchLogging`
-metric reports each warning attempt; see
-[Confirmed mismatch warnings](observability.md#confirmed-mismatch-warnings).
+Rendering, the walk, and the hook run on the event loop after the job releases
+its capacity slot. On one Apple-silicon Mac, a 6.3 MB object of 150,000 members
+took about 0.12 seconds per warning at `diff: "paths"`, against 0.06 seconds for
+the value fields alone.
 
 </LanguageContent>
 
 <LanguageContent language="go">
 
-Set `ShadowPolicy.LogMismatches` to `Ptr(true)`. Confirmed warnings carry bounded
-metadata, a logical-key preview (2 KiB), and JSON value previews (8 KiB each).
-A failed preview does not prevent the remaining metadata warning.
+Each side is rendered with the JSON writer `JSONCodec` uses, not the
+operation's `Codec`, so a struct's `MarshalJSON` runs once. A cycle, a
+`*big.Int`, a channel, a function, or a `MarshalJSON` that fails or panics has
+no rendering, and `Absent` is the absent value. A rendering nested more than
+10,000 levels deep does not parse back, so the built-in computation fails with
+`hook_error`.
+
+`Operation.MismatchDiff`, beside `Comparator`, sets the hook:
+`func(cached, source T) ([]MismatchEntry, error)`. A `MismatchEntry` side set
+to `Absent` is omitted and nil is JSON `null`, so an entry that only names a
+location sets both sides to `Absent`; a nil slice is an empty list. The hook
+fails by returning an error or panicking.
+
+Rendering, the walk, and the hook run on the shadow job's goroutine after the
+verdict. On one Apple-silicon Mac, a 6.3 MB map of 150,000 members took about
+0.6 seconds per warning at `MismatchDiffPaths`, most of it rendering: the value
+fields alone took about 0.5 seconds.
 
 </LanguageContent>
 
 <LanguageContent language="rust">
 
-Set `ShadowPolicy.log_mismatches` to `Some(true)`. The operation's `preview`
-callback renders optional value details. Default JSON previews retain an 8 KiB
-prefix while checking serialization; they run through the bounded CPU executor
-after confirmation. Admission failure can omit previews while retaining a
-metadata warning. The logical-key preview is bounded to 2 KiB.
+An operation built with `Operation::new`, or registered with `register`,
+renders each side once with `serde_json`, and its default `preview` logs that
+JSON. Setting `preview` to `None` logs no values, as before: like an operation
+built with `with_codec` or registered with `register_custom`, which has no JSON
+rendering, it gets no built-in diff. A custom `preview` replaces the JSON for
+the whole warning, so the value fields come from the preview and the diff
+fields only from a `mismatch_diff` hook; the built-in walk never reads what a
+redacting preview leaves out. A field logged without its renderer, or a
+`preview` that returns `None` or panics, is unavailable with `render_error`.
+A value whose `Serialize` fails has no rendering, so its value field and the
+built-in diff fields are unavailable with `render_error`. A rendering nested
+more than 128 levels deep exceeds `serde_json`'s parser, so the built-in
+computation fails with `hook_error`. Rust's default codec stores no top-level
+undefined value, so an absent side does not arise for native values.
+
+`Operation::mismatch_diff` and `UseCaseBuilder::mismatch_diff` set the hook,
+`Fn(&T, &T) -> Vec<MismatchEntry>`, whose entries carry a `path` and optional
+`serde_json::Value` sides. A panic is its only failure, and its sides always
+render.
+
+Rendering, the walk, `preview`, and the hook run through the bounded CPU
+executor after confirmation and hold the job's shadow capacity until they
+finish; they can run on a worker thread. When the executor rejects the work,
+or the work panics or is dropped, the warning keeps its metadata, both field
+groups are `None`, and it carries `render_error`. On one Apple-silicon Mac, a
+6.3 MB map of 150,000 entries took about 0.09 seconds per warning at
+`MismatchDiff::Paths` in a release build, against 0.006 seconds for the value
+fields alone.
 
 </LanguageContent>
 
 <LanguageContent language="python">
 
-Set `shadow={"ramp": 5, "log_mismatches": True}`. Confirmed mismatches emit
-bounded native JSON previews (8 KiB) and a logical-key preview (2 KiB).
-Serialization failures omit unavailable value previews; warning failures do
-not alter cache results.
+Each side is rendered once with `json.dumps`, using compact separators, keeping
+non-ASCII text, and escaping lone surrogates as `\uXXXX`. Tuples render as
+arrays, so an empty `mismatchPaths` can mean a cached list against a source
+tuple, which the default comparator tells apart. `NaN`, an infinity, a `set`,
+`bytes`, another non-JSON object, a nested `UNDEFINED`, or a cycle has no
+rendering, so a `datetime`, `Decimal` or `UUID` in a compared value makes the
+diff fields `None` with `render_error` unless `shadow_mismatch_diff` is set.
+A top-level `UNDEFINED` is the absent value, and `None` is JSON `null`.
+
+`shadow_mismatch_diff=`, set beside `shadow_comparator` on `cached()` or
+`get_or_load()`, sets the hook. It returns a list of mappings, each with a str
+`"path"` and optional `"cached"` and `"source"` sides; a missing key or
+`UNDEFINED` omits a side. A hook that raises, returns an awaitable (a coroutine
+is closed without running), returns something other than a list, or returns an
+entry that is not a mapping with a str `"path"` fails. A non-callable value
+raises `ConfigError`.
+
+Rendering, the walk, and the hook run on the event loop after the job releases
+its capacity slot. On one Apple-silicon Mac, a 6.3 MB dict of 150,000 members
+took about 0.18 seconds per warning at `"paths"`, against 0.04 seconds for the
+value fields alone.
 
 </LanguageContent>
 
 Truncation is not redaction. Keys and values can contain sensitive application
-data. Preview byte limits do not by themselves bound serialization traversal or
-CPU cost. Logger failures are isolated from cache behavior.
+data. Field byte limits do not bound rendering, parsing, or the walk. Logger
+failures are isolated from cache behavior.
 
 ## Metrics and shutdown
 

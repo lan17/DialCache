@@ -745,17 +745,21 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   its outcome type), `datadog.ts` and `prometheus.ts`, `index.ts` exports for
   the new config, hook and metric types, `scripts/test-package.mjs`, the
   shadow, config and exporter tests, the formal behavior driver.
-- **Go:** `policy.go` (leaf lists, resolution, JSON form), `shadow.go`,
-  `metrics.go` (details, the `shadowMismatchLogging` event kind and its
-  exporter mapping), the operation type and a `MismatchEntry` type,
+- **Go:** `policy.go` (leaves, shorthand expansion, merge and resolution),
+  `shadow.go` (warning assembly), the new `shadow_log.go` (walk, caps, hook and
+  rendering), `metrics.go` (`warnDelivered`, the `shadowMismatchLogging` event
+  kind and its exporter mapping), `api.go` (`Operation.MismatchDiff`,
+  `MismatchEntry`), `metrics_datadog.go`, `metrics_prometheus.go`,
   `*_driver_test.go`, `protocol_test.go`, `internal/testsuite/policy_test.go`.
-- **Rust:** `policy.rs`, `shadow.rs`, `observe.rs` (`ShadowMismatchDetails`,
-  `Display`, the new `Event` variant), `metrics.rs` exporters,
-  `operation.rs`, `preview.rs`, `tests/formal/driver.rs`, the protocol-vector
-  and exporter tests.
-- **Python:** `config.py`, `cache.py`, the metrics adapters,
-  `tests/formal/driver.py`, `tests/test_protocol_vectors.py`,
-  `test_config.py`.
+- **Rust:** `policy.rs`, `shadow.rs`, the new `shadow_log.rs` (rendering and
+  warning content) and `protocol/mismatch.rs` (the walk), `observe.rs`
+  (`ShadowMismatchDetails`, `Display`, the new `Event` variant), `metrics.rs`,
+  `datadog.rs` and `prometheus.rs` exporters, `operation.rs` and
+  `use_case.rs` (the hook), `preview.rs`, `testing.rs` (the test-only absent
+  value), `tests/formal/driver.rs`, the protocol-vector and exporter tests.
+- **Python:** `config.py`, `cache.py`, the new `_shadow_log.py`,
+  `_callbacks.py`, `tests/formal/driver.py`, `tests/test_protocol_vectors.py`,
+  `test_config.py`, `test_shadow_log.py`.
 - **Formal:** `CONTRACTS.md` (C60 wording, the new row, the page and test
   inventories), `SPEC.md` (mismatch logging rows), `PORTING.md` (observation
   row), `GO-PARITY.md`, `behavioral-scenarios.json` (five fixtures),
@@ -773,23 +777,38 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   `witnesses/shadow.mjs` and `shadow-diagnostics.mjs`, `divergence.mjs`,
   `coverage-witnesses.json`, `witness-baseline.json`, `execution.json`,
   `profiles.json` and `BEHAVIOR.md`.
-- **Docs:** `shadow-validation.md` (Confirmed mismatch logging),
-  `observability.md` (Confirmed mismatch warnings, the shadow outcomes
-  section and the Datadog and Prometheus metric tables), `configuration.md`,
-  `api.md`, the port READMEs that name `logMismatches`, and `upgrading.md`:
+- **Docs:** `shadow-validation.md` (Confirmed mismatch logging, shared by
+  every port with native notes per language), `observability.md` (Confirmed
+  mismatch warnings, the shadow outcomes section and the Datadog and
+  Prometheus metric tables), `configuration.md`, `api.md`, the language
+  guides, the port READMEs that name `logMismatches`, and `upgrading.md`:
   `shadow.logMismatches` stays and now also logs `mismatchPaths`,
-  `mismatchPathCount` and `diffJson`; no config migration is required.
-- **Release:** additive for TypeScript, Go and Python. Rust's `ShadowPolicy`
-  gains a public field, so existing struct literals stop compiling. The pull
-  request still carries neither `!` nor a `BREAKING CHANGE:` footer, at the
-  maintainer's request in session on 2026-10-24: "yes lets drop it and not
-  use `!` in description since i dont want to increment major version right
-  now". The Rust entry in `docs/upgrading.md` names the change. In
-  TypeScript, `shadow_mismatch_logging.count` becomes the Datadog adapter's
-  longest metric suffix, so its longest valid namespace drops from 175 to 170
-  characters; the maintainer kept the name in session on 2026-10-24: "lets
-  keep the shadow_mismatch_logging.count and just reduce documented max size
-  ofr namespace". `docs/upgrading.md` and `docs/observability.md` state it.
+  `mismatchPathCount` and `diffJson`; no config migration is required, and
+  the Go and Rust entries list the code changes.
+- **Release:** additive for TypeScript and Python; Python's
+  `Policy.disabled()` and a merged runtime policy now carry the expanded
+  `mismatch_logging` leaves in place of `log_mismatches`. Go and Rust
+  replace the old shapes and delete what becomes unused, at the maintainer's
+  direction in session on 2026-10-25 ("Replace and delete"). Go adds
+  `ShadowPolicy.MismatchLogging` and replaces `ResolvedShadow.LogMismatches`
+  with `LogValue` and `LogDiff`, so unkeyed `ShadowPolicy` and
+  `ResolvedShadow` literals stop compiling, and it removes
+  `ShadowMismatchLogDetails`, `ShadowMismatchDetails` and
+  `PreviewShadowLogJSON`. Rust's `ShadowPolicy` gains a public field, so
+  existing struct literals stop compiling; `Operation` gains a private field
+  and can no longer be built with a struct literal; `ShadowMismatchDetails`
+  and `ResolvedShadow` change shape; and `Event` and `MetricKind` gain
+  variants that exhaustive matches must handle. The pull request still
+  carries neither `!` nor a `BREAKING CHANGE:` footer, at the maintainer's
+  request in session on 2026-10-24: "yes lets drop it and not use `!` in
+  description since i dont want to increment major version right now". The
+  Go and Rust entries in `docs/upgrading.md` name the changes.
+  `shadow_mismatch_logging.count` becomes the longest metric suffix of the
+  Datadog adapters that TypeScript, Go and Rust bundle, so their longest
+  valid namespace drops from 175 to 170 characters; the maintainer kept the
+  name in session on 2026-10-24: "lets keep the shadow_mismatch_logging.count
+  and just reduce documented max size ofr namespace". `docs/upgrading.md` and
+  `docs/observability.md` state it.
 
 ## Plan
 
@@ -827,16 +846,77 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 ## Deviations
 
 - **2026-10-24, #242:** the built-in computation's CPU and transient memory
-  grow with the rendered size of both values, linearly apart from sorting each
-  object's member names: the uncut `mismatchPathCount` (D9) needs a full parse
-  and walk, which holds both parsed trees, and the caps bound only the output. The Constraints'
-  "with bounded CPU" and the Proposal's "The caps bound the built-in" do not
-  describe this. Review measured about 86 ms per warning on a 5.6 MB value,
-  against 13 ms for the value fields alone. `docs/upgrading.md` and
-  `docs/shadow-validation.md` state the cost; whether to bound it is open with
-  the maintainer.
+  grow with the rendered size of both values and with the number of members
+  and elements they hold, linearly apart from sorting each object's member
+  names: the uncut `mismatchPathCount` (D9) needs a full parse and walk, which
+  holds both parsed trees, and the caps bound only the output. The
+  Constraints' "with bounded CPU" and the Proposal's "The caps bound the
+  built-in" do not describe this. Review measured about 86 ms per warning on
+  a 5.6 MB value in TypeScript, against 13 ms for the value fields alone. On
+  2026-10-25, at the merge of the four ports, one Apple-silicon Mac measured
+  a 6.3 MB object of 150,000 string members at `diff: "paths"`, against the
+  value fields alone: TypeScript about 0.12 s against 0.06 s and Python about
+  0.18 s against 0.04 s, both on the event loop after the shadow slot is
+  released; Go about 0.6 s against 0.5 s on the shadow job's goroutine, most
+  of it the JSON rendering the value fields already paid; Rust about 0.09 s
+  against 0.006 s in a release build, on the bounded CPU executor holding the
+  slot. `docs/upgrading.md` and `docs/shadow-validation.md` state the cost in
+  every port; whether to bound it is open with the maintainer.
 - **2026-10-24, #242:** TypeScript's `cached()` and `getOrLoad()` throw a
   `TypeError` for a `shadowMismatchDiff` that is not a function, as they do for
   `shouldAttemptStaleRecovery`, rather than letting every warning fail as
   `hook_error`; D6 covers only failures while the hook runs. Python's port
   follows its existing rule for non-callable options.
+- **2026-10-25, #242, Go:** the built-in walk parses each rendering with
+  `encoding/json`, whose decoder rejects nesting deeper than 10,000 levels, so
+  a value that deep renders but fails the walk as `hook_error`; TypeScript's
+  parser has no fixed limit. A `diffJson` side clipped at 1 KiB orders object
+  members in UTF-16 order, since the walk holds parsed Go maps, while
+  `cachedValueJson` keeps a `JSONObject`'s insertion order; the parsed entries
+  are unaffected. Both are B03 rendering details.
+- **2026-10-25, #242, Go:** a Go hook fails by returning an error or
+  panicking; Go's types rule out a promise, a non-array and a member without a
+  string path, and a nil slice is an empty list. The metadata-only warning for
+  a construction failure is kept as a defensive recover, but rendering and the
+  hook already recover their panics, so no native test reaches it.
+- **2026-10-25, #242, Rust:** a rendering nested more than 128 levels exceeds
+  `serde_json`'s parser recursion limit, so the built-in walk fails with
+  `hook_error` where TypeScript compares it. The vectors nest at most 40
+  levels.
+- **2026-10-25, #242, Rust:** `diffJson` sides from the built-in walk are
+  parsed `serde_json::Value`s, whose objects render members in UTF-8 byte
+  order of their names, not the source order TypeScript keeps; a side over
+  1 KiB is clamped from that rendering. Entries compare equal as parsed JSON,
+  so this is a B03 rendering detail.
+- **2026-10-25, #242, Rust:** the Proposal's Rust shape keeps
+  `Operation::preview` as the renderer for operations without `T: Serialize`.
+  The port keeps `main`'s meanings for it: `Operation::new` and `register`
+  install a default renderer of the values' JSON, and a `preview` set to
+  `None` logs no values, as on `main`, at the maintainer's direction on
+  2026-10-25. Only the default renderer feeds the built-in walk. A custom
+  `preview` replaces the JSON for the whole warning, and an operation whose
+  `preview` is `None` has no JSON rendering, so both, like an operation built
+  with `with_codec` or registered with `register_custom`, get difference
+  fields only from a `mismatch_diff` hook. A preview is Rust's redaction path
+  where TypeScript has `toJSON`, so this keeps D3's rule that `diff` logs
+  nothing outside the renderings `value` logs.
+- **2026-10-25, #242, Rust:** an operation that logs a field it has no
+  renderer for (a value field without a preview, a difference field without
+  the default renderer or a hook), and a `preview` that returns `None` or
+  panics, report `render_error`, so a null field always has a cause (D13).
+  The maintainer chose `render_error` for the missing renderer, and #245
+  tracks a JSON renderer for operations built with `with_codec`.
+- **2026-10-25, #242, Rust:** the warning's rendering, walk, preview and hook
+  run on the bounded CPU executor (see Failure handling). When the executor
+  rejects that work, or it panics or is dropped, the warning keeps its
+  metadata, both field groups are absent, and the outcome is `render_error`:
+  nothing was rendered, and no other outcome describes a warning whose content
+  never ran. A rejection is not a failure the Proposal's outcomes name.
+- **2026-10-25, #242, Rust:** the hook returns `Vec<MismatchEntry>` with
+  `serde_json::Value` sides, so a panic is its only failure and its sides
+  always render; `render_error` never comes from hook entries.
+- **2026-10-25, #242, Rust:** the absent value of D13 does not arise for
+  Rust's native values. The replay driver's absent value is the test-only
+  `dialcache::testing::Absent` (feature `test-util`), which only an
+  operation's JSON rendering recognizes; a custom `preview` replaces that
+  rendering, so the preview receives the value.
