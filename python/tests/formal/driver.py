@@ -196,25 +196,6 @@ class Logger:
     debug = error = warning
 
 
-# Every port compares mismatchWarning events exactly against the shared
-# scenarios, so this driver records only the fields every port emits. The
-# optional mismatchPathsJson, mismatchPathCount, diffJson and loggingOutcome
-# observations join with the last port (design/2026-10-24-shadow-mismatch-paths.md, #243).
-SHARED_WARNING_FIELDS = (
-    "cacheNamespace",
-    "useCase",
-    "keyType",
-    "outcome",
-    "cacheKey",
-    "cachedValueJson",
-    "sourceValueJson",
-)
-
-
-def shared_warning_fields(details):
-    return {field: details[field] for field in SHARED_WARNING_FIELDS if field in details}
-
-
 class Serializer:
     def __init__(self, owner):
         self.owner = owner
@@ -557,3 +538,22 @@ class BehaviorDriver:
         # Teardown happens after assertions. Cancel held work and drain callback
         # cleanup; no pending task is allowed to enter the next isolated loop.
         self.executor.close()
+
+
+# Every port compares mismatchWarning events exactly against the shared
+# scenarios, so this driver records only the fields every port emits. The
+# optional mismatchPathsJson, mismatchPathCount, diffJson and loggingOutcome
+# observations join with the last port (design/2026-10-24-shadow-mismatch-paths.md, #243).
+SHARED_WARNING_FIELDS = (
+    "cacheNamespace",
+    "useCase",
+    "keyType",
+    "outcome",
+    "cacheKey",
+    "cachedValueJson",
+    "sourceValueJson",
+)
+
+
+def shared_warning_fields(details):
+    return {field: details[field] for field in SHARED_WARNING_FIELDS if field in details}
