@@ -15,7 +15,7 @@
     },
     {
       "path": "docs/api.md",
-      "sha256": "ed6e3b5290c874f2c520669c1a4de6ea29308e6be6d20f880982affb1438df19",
+      "sha256": "523d18c1fc861abb20b0f74e09de5419716d6626977cded41c3d3c9590bc5fc9",
       "entries": [
         {"title":"API reference","contracts":["B01"]},
         {"title":"Imports","contracts":["B01"]},
@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "62bd5557318ece3cd35f09fbc04ca9305da6284a5618f6146570fd76f05c9d79",
+      "sha256": "f0e99c5ccf61355cfd348f7a029903fb4285fe933fd8cf6ccd358dc4176ba114",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -454,7 +454,7 @@
     },
     {
       "path": "typescript/test/dialcache-config-ramp.test.ts",
-      "sha256": "e242e99cfcd3d5c093ee062c9cb41e2c8d152f3161cf274ba1265cbfaeb9d733",
+      "sha256": "728fc9a033b944c5f449eb0e26eba696076c244b64d28351d58f394e1f8f240f",
       "entries": [
         {"title":"rejects the removed public ramp sampler override","contracts":["B01"]},
         {"title":"preserves requestLocal omission until baseline and runtime config are merged","contracts":["C16"]},
@@ -496,7 +496,7 @@
         {"title":"disables missing local config while allowing the remote layer to work","contracts":["C05","C21"]},
         {"title":"disables missing remote config while allowing the local layer to work","contracts":["C05","C21"]},
         {"title":"reports config_unknown_field once when cached() registers a defaultConfig with unknown fields","contracts":["X01","B01"]},
-        {"title":"reports config_unknown_field for a getOrLoad defaultConfig on every call","contracts":["X01","B01"]},
+        {"title":"reports config_unknown_field for a getOrLoad defaultConfig on every enabled call","contracts":["X01","B01"]},
         {"title":"reports config_unknown_field once per provider result with unknown fields","contracts":["C16","X01"]},
         {"title":"does not report config_unknown_field for configs with only known fields","contracts":["C16","X01"]},
         {"title":"fails open when the runtime config provider throws","contracts":["C20"]}
@@ -765,7 +765,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "25b6ce5ed4e9adbd1a9b53c0a251213189319666348c99d9df11bf8a375586c3",
+      "sha256": "e1fd5beaeef1149e841a4841f6470bbdf5b750887536bc108c6de3ef05a88ba1",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -779,6 +779,7 @@
         {"title":"logs the paths and diffJson without whole-value JSON at diff values with value false","contracts":["C60"]},
         {"title":"logs only the whole-value JSON and never runs the diff hook at value true alone","contracts":["C60"]},
         {"title":"logs the exact value age the verdict observed as cachedValueAgeSeconds","contracts":["C57","C60"]},
+        {"title":"logs the documented GetUser example at diff $diff","contracts":["C60","X01"]},
         {"title":"emits one logged event per confirmed mismatch after its verdict and none for a match","contracts":["C60","X01"]},
         {"title":"logs shadowMismatchDiff entries in place of the built-in walk through %s()","contracts":["C60"]},
         {"title":"logs null diff fields and hook_error without touching the verdict when the hook $name","contracts":["C30","C60"]},
@@ -1081,7 +1082,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "9a8d4881e130ab475965d5853a4a59064b28b3eae5b21be7a7a9a37d3cff224e",
+      "sha256": "63a349c696a5820ed48eb66fd70de03746ec924233afa8229d3d0c7988c7908c",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1096,6 +1097,7 @@
         {"title":"compares equal containers past the depth cap regardless of member order and depth","contracts":["C60","X01"]},
         {"title":"renders exactly the fields requested by %s","contracts":["C60"]},
         {"title":"renders no entries for byte-identical renderings","contracts":["C60","B03"]},
+        {"title":"renders no entries for the documented Date row","contracts":["C60","B03"]},
         {"title":"renders no entries for a Date against its ISO string","contracts":["C60","B03"]},
         {"title":"nulls the fields fed by a root %s with render_error","contracts":["B03","X01"]},
         {"title":"runs each side's toJSON once for every field it feeds","contracts":["C60","B03"]},
