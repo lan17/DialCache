@@ -1745,6 +1745,325 @@
       }
     },
     {
+      "id": "shadow-logging-true-shorthand-expands-off",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "capturedLoggingFollowsLayers",
+      "before": "val stands = if (written.shorthand == \"true\") { value: \"true\", diff: DIFF_VALUES }",
+      "after": "val stands = if (written.shorthand == \"true\") { value: \"false\", diff: DIFF_OFF }",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "runtimeTrueShorthandOverridesDefaultValueTest",
+        "failure": "s.o.shadow == List(\"mismatch\") and s.d.mismatchWarnings == List(LOGGED_EVERYTHING) and s.d.loggingOutcomes == List(\"logged\")",
+        "family": "mismatch-logging-shorthand-expansion",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M65",
+        "text": "M65 is the native twin of kernel/shadow.qnt expandLogging letting a true logMismatches stand for both leaves off: both ports expand a true shorthand to value false and diff off, so a runtime true over a default value false captures nothing and a confirmed mismatch logs no warning."
+      }
+    },
+    {
+      "id": "shadow-logging-malformed-shorthand-expands-on",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "capturedLoggingFollowsLayers",
+      "before": "      else { value: \"false\", diff: DIFF_OFF }\n    {",
+      "after": "      else if (written.shorthand == \"false\") { value: \"false\", diff: DIFF_OFF }\n      else { value: \"true\", diff: DIFF_VALUES }\n    {",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "invalidLoggingKeepsComparisonWithoutWarningTest",
+        "failure": "s.o.shadow == List(\"mismatch\") and s.d.warnings == 0 and s.o.comparisons == 1",
+        "family": "mismatch-logging-shorthand-expansion",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M08",
+        "text": "M08 is the native twin of kernel/shadow.qnt expandLogging letting a malformed logMismatches stand for both leaves on while still marking it invalid: both ports expand it to value true and diff values, so admission records the config_resolution error and the confirmed mismatch warns instead of comparing silently."
+      }
+    },
+    {
+      "id": "shadow-logging-written-off-leaf-ignored",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "capturedLoggingFollowsLayers",
+      "before": "      value: if (written.value != UNWRITTEN) written.value else stands.value,\n      diff: if (written.diff != UNWRITTEN) written.diff else stands.diff,",
+      "after": "      value: if (written.value != UNWRITTEN and written.value != \"false\") written.value else stands.value,\n      diff: if (written.diff != UNWRITTEN and written.diff != DIFF_OFF) written.diff else stands.diff,",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "runtimeOffDiffOverridesDefaultDiffTest",
+        "failure": "s.o.shadow == List(\"mismatch\") and s.d.configErrors == 0 and s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, ...WARNING_AT_ZERO }) and s.d.loggingOutcomes == List(\"logged\")",
+        "family": "mismatch-logging-shorthand-expansion",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M71",
+        "text": "M71 is the native twin of kernel/shadow.qnt expandLogging treating a leaf written off as unwritten: both ports drop a written value false or diff off, so a runtime diff off over a default logMismatches true inherits diff values and the warning carries difference fields it should not."
+      }
+    },
+    {
+      "id": "shadow-logging-omitted-value-resolves-on",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "capturedLoggingFollowsLayers",
+      "before": "logging: { value: merged.value == \"true\",",
+      "after": "logging: { value: merged.value == \"true\" or merged.value == UNWRITTEN,",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "omittedLoggingKeepsMismatchMetricsOnlyTest",
+        "failure": "s.o.shadow == List(\"mismatch\") and s.d.ages == List(0) and s.d.warnings == 0 and s.d.configErrors == 0 and s.o.comparisons == 1",
+        "family": "mismatch-logging-leaf-resolution",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M09",
+        "text": "M09 is the native twin of kernel/shadow.qnt resolveLogging capturing an unwritten value leaf as on: both ports resolve an omitted value leaf to true, so a shadow policy that writes no logging input warns with both values at a confirmed mismatch."
+      }
+    },
+    {
+      "id": "shadow-logging-invalid-diff-leaf-acts-values",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "invalidLoggingCannotBeCaptured",
+      "before": "diff: if (levels.contains(merged.diff)) merged.diff else DIFF_OFF }",
+      "after": "diff: if (levels.contains(merged.diff)) merged.diff else if (merged.diff == UNWRITTEN) DIFF_OFF else DIFF_VALUES }",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "invalidDiffLeafKeepsValueLeafTest",
+        "failure": "s.d.configErrors == 1 and s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, ...WARNING_AT_ZERO }) and s.d.loggingOutcomes == List(\"logged\")",
+        "family": "mismatch-logging-leaf-resolution",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
+          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M76",
+        "text": "M76 is the native twin of kernel/shadow.qnt resolveLogging capturing an invalid diff leaf as values: both ports resolve a diff leaf of the wrong type to values while recording its config_resolution, so an invalid leaf beside value true adds the entries with their values to the warning."
+      }
+    },
+    {
+      "id": "shadow-warning-with-logging-off",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "noWarningWithLoggingOff",
+      "before": "val warned = if (outcome == \"mismatch\" and logs(job.logging))",
+      "after": "val warned = if (outcome == \"mismatch\")",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "runtimeFalseShorthandOverridesDefaultDiffTest",
+        "failure": "s.o.shadow == List(\"mismatch\") and s.d.ages == List(0) and s.d.warnings == 0 and s.d.mismatchWarnings == List() and s.d.loggingOutcomes == List() and s.d.configErrors == 0",
+        "family": "mismatch-warning-opt-in",
+        "profiles": [
+          "shadow",
+          "dark-layers"
+        ],
+        "exclusions": {
+          "admission": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "shadow-layers": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "shadow-read-deadlines": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy, so the fault adds a warning at each confirmed mismatch, but no run or scheduled invariant of this profile reads the warning count or lists: it claims dark read deadlines and raw ownership, not C60."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M74",
+        "text": "M74 is the native twin of kernel/shadow.qnt recordVerdict warning at every confirmed mismatch whatever the leaves the job captured: both ports treat both leaves off as opting in, so a runtime false shorthand over a default diff paths still logs a metadata-only warning and a logged outcome."
+      }
+    },
+    {
+      "id": "shadow-diff-hook-failure-falls-back-to-walk",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "warningFieldsMatchCapturedLeaves",
+      "before": "val listed = diffOn and not(hookFails) and not(renderFails)",
+      "after": "val listed = diffOn and not(renderFails)",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "hookErrorNullsDiffFieldsTest",
+        "failure": "s.o.shadow == List(\"mismatch\") and s.o.calls == List(VALUE_TWO) and s.d.mismatchWarnings == List(failedWith(VALUE_TWO, \"hook_error\")) and s.d.loggingOutcomes == List(\"hook_error\")",
+        "family": "mismatch-diff-hook-fail-closed",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "dark-layers": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept.",
+          "shadow-layers": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "shadow-read-deadlines": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M69",
+        "text": "M69 is the native twin of kernel/shadow.qnt warningOf listing the walk's entries after the diff hook failed: both ports keep hook_error but walk the renderings, so the warning carries the root entry instead of null difference fields."
+      }
+    },
+    {
+      "id": "shadow-diff-hook-runs-at-diff-off",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "loggingOutcomePrecedence",
+      "before": "val hookFails = diffOn and job.diffHook",
+      "after": "val hookFails = job.diffHook",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "hookSkippedWithDiffOffTest",
+        "failure": "s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: Shadow::NO_RENDERING, loggingOutcome: \"render_error\", ...WARNING_AT_ZERO }) and s.d.loggingOutcomes == List(\"render_error\")",
+        "family": "mismatch-diff-hook-fail-closed",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "dark-layers": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept.",
+          "shadow-layers": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "shadow-read-deadlines": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M70",
+        "text": "M70 is the native twin of kernel/shadow.qnt warningOf running the throwing diff hook with diff off: both ports call the hook when only value is on and report its failure, so an unrenderable source logs hook_error instead of render_error."
+      }
+    },
+    {
+      "id": "shadow-warning-paths-carry-entries",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "warningFieldsMatchCapturedLeaves",
+      "before": "entries: if (listed and job.logging.diff == DIFF_VALUES) found else List(),",
+      "after": "entries: if (listed) found else List(),",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "valueWithDiffPathsLogsRenderingsAndPathsTest",
+        "failure": "s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, diff: \"paths\", count: 1, paths: List(\"\"), ...WARNING_AT_ZERO }) and s.d.loggingOutcomes == List(\"logged\")",
+        "family": "mismatch-warning-field-groups",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "dark-layers": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept.",
+          "shadow-layers": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "shadow-read-deadlines": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M75",
+        "text": "M75 is the native twin of kernel/shadow.qnt warningOf logging the entries at diff paths: both ports treat paths as values, so a warning at diff paths also carries diffJson with each entry's cached and source sides."
+      }
+    },
+    {
+      "id": "shadow-logging-render-error-outranks-hook-error",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "loggingOutcomePrecedence",
+      "before": "loggingOutcome: if (hookFails) \"hook_error\" else if (renderFails) \"render_error\" else \"\"",
+      "after": "loggingOutcome: if (renderFails) \"render_error\" else if (hookFails) \"hook_error\" else \"\"",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "hookErrorOutranksRenderErrorTest",
+        "failure": "s.d.mismatchWarnings == List(failedWith(Shadow::NO_RENDERING, \"hook_error\")) and s.d.loggingOutcomes == List(\"hook_error\")",
+        "family": "mismatch-logging-outcome-precedence",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "dark-layers": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept.",
+          "shadow-layers": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "shadow-read-deadlines": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M72",
+        "text": "M72 is the native twin of kernel/shadow.qnt warningOf naming render_error before hook_error: both ports check the render failure first, so a throwing diff hook beside an unrenderable source reports render_error on the warning and its outcome."
+      }
+    },
+    {
+      "id": "shadow-logging-logger-error-outranks-construction",
+      "contract": "C60",
+      "source": "formal/models/kernel/shadow.qnt",
+      "model": "formal/models/dialcache-shadow-conformance.qnt",
+      "invariant": "loggingOutcomePrecedence",
+      "before": "if (warning.loggingOutcome != \"\") warning.loggingOutcome else if (loggerFailed) \"logger_error\" else \"logged\"",
+      "after": "if (loggerFailed) \"logger_error\" else if (warning.loggingOutcome != \"\") warning.loggingOutcome else \"logged\"",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "hookErrorOutranksLoggerErrorTest",
+        "failure": "s.d.mismatchWarnings == List(failedWith(VALUE_TWO, \"hook_error\")) and s.d.loggingOutcomes == List(\"hook_error\")",
+        "family": "mismatch-logging-outcome-precedence",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {
+          "admission": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "dark-layers": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept.",
+          "shadow-layers": "Settles its jobs through the undiagnosed lifecycle (Shadow::settleRead, settleLoad or settle), never through recordVerdict, so no warning or logging outcome is ever built.",
+          "shadow-read-deadlines": "Records verdicts through recordVerdict under the constant Shadow::LOGGING_OFF policy and no diff hook, so no warning is ever recorded and the mutated warning content or outcome is never kept."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M73",
+        "text": "M73 is the native twin of kernel/shadow.qnt loggingOutcomeOf letting a failed logger decide before the construction failure the warning names: both ports record logger_error when the logger also fails, while the warning keeps hook_error."
+      }
+    },
+    {
       "id": "redis-protocol-inclusive-fence",
       "contract": "C33",
       "source": "formal/models/cache-rules.qnt",

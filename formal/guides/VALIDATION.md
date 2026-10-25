@@ -239,8 +239,9 @@ its timeout, so catalog growth fails the pull request until the matrix grows.
 The Go lane bounded the whole run
 when it had 13 mutants on three shards (25 minutes on a fast runner, 47 to 48
 minutes on the slow class, runs 34669546872 and 34670045249; the TypeScript lane
-took 17), and its cost grows with the catalog: about 1.6 minutes per Go mutant
-and one per TypeScript mutant on a fast runner, twice that on the slow class.
+took 17), and its cost grows with the catalog and the corpus: about one minute
+per TypeScript mutant on a fast runner and twice that on the slow class, and
+about 2.5 and 4.5 minutes per Go mutant (run 40146831443).
 Each shard measures every unmodified baseline itself, so its evidence stands
 on the environment it ran in, then measures a contiguous slice of the catalog. A merge
 job per language reads the shard reports and writes the complete report. It

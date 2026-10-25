@@ -148,7 +148,11 @@ describe("Rust fault catalog", () => {
       expect(entry.case, entry.id).toBe(counterpart.case);
       expect(entry.description, entry.id).toBe(counterpart.description);
       expect(entry.typescriptRequiredDetections, entry.id).toEqual(counterpart.typescript.requiredDetections);
-      expect(entry.requiredDetections, entry.id).toEqual(expect.arrayContaining(["generated", "portable"]));
+      // A rule only the checked-in vectors reach, such as the built-in
+      // mismatch walk over nested values, requires fixed in place of
+      // generated, as the shared catalog allows.
+      expect(entry.requiredDetections, entry.id).toContain("portable");
+      expect(entry.requiredDetections.some(cohort => ["generated", "fixed"].includes(cohort)), entry.id).toBe(true);
       expect(entry.requiredDetections.every(cohort => ["generated", "fixed", "portable"].includes(cohort)), entry.id).toBe(true);
     }
   });

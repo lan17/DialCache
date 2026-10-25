@@ -1658,7 +1658,9 @@ fn warning_observation(details: &ShadowMismatchDetails) -> Map<String, Value> {
             "mismatchPathCount".to_string(),
             diff.mismatch_path_count.map_or(Value::Null, Value::from),
         );
-        if diff.level == MismatchDiff::Values {
+        // Null at values when the entries are unavailable; at paths only when
+        // a faulty port carries entries there, which the replay must see.
+        if diff.level == MismatchDiff::Values || diff.diff_json.is_some() {
             fields.insert("diffJson".to_string(), text(&diff.diff_json));
         }
     }

@@ -363,11 +363,11 @@ jobs:
           retention-days: 14
 
   # The Go lane bounds the whole workflow: every mutant replays the generated
-  # cohort, about 1.6 minutes per mutant on a fast runner and about 3 on the
-  # slow class (13 mutants took 25 minutes in run 34660598461 and 47-48 in
-  # runs 34669546872 and 34670045249), strictly in sequence. A shard compiles,
-  # runs the baselines (2-4 minutes) and its slice of the catalog; one hung
-  # cohort adds its 8-minute test bound before the shard fails.
+  # cohort, about 2.5 minutes per mutant on a fast runner and about 4.5 on the
+  # slow class (run 40146831443: 145 s per mutant on shard 3, 270 s on shard
+  # 2, whose seven mutants took 37 minutes), strictly in sequence. A shard
+  # compiles, runs the baselines (2-4 minutes) and its slice of the catalog;
+  # one hung cohort adds its 8-minute test bound before the shard fails.
   # typescript/test/formal-validation.test.ts pins the mutants a shard may
   # hold within the timeout, so catalog growth fails the pull request until
   # the matrix grows.
@@ -378,9 +378,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     env:
-      MUTATION_SHARD: ${{ matrix.shard }}/10
+      MUTATION_SHARD: ${{ matrix.shard }}/15
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -433,7 +433,10 @@ jobs:
 
   # The Rust lane compiles the crate and its test binaries in release mode
   # once per mutant (dependencies are cached across mutants) and replays the
-  # generated cohort in about a minute; the budget mirrors go-mutations.
+  # generated cohort in about a minute; the budget mirrors go-mutations. On
+  # the slow class a shard's baselines take about 5.5 minutes and a mutant
+  # about 3.7 (run 40146831443), so four shards hold seven mutants in about
+  # 31 minutes.
   rust-mutations:
     needs: generate
     if: inputs.mode != 'replay'
@@ -441,9 +444,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     env:
-      MUTATION_SHARD: ${{ matrix.shard }}/3
+      MUTATION_SHARD: ${{ matrix.shard }}/4
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
