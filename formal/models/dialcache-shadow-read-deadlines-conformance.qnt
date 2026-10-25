@@ -31,10 +31,13 @@ module dialcache_shadow_read_deadlines_conformance {
   }
   pure val DARK: Resolution = { layers: { request: false, local: false, remote: false }, coalesce: true }
   pure val TTLS: Ttls = { localMs: 0, freshMs: TTL, retentionMs: TTL }
-  pure val SHADOW: Shadow::Shadowing = { hook: true, selected: true, capacity: 1, budgetMs: SOURCE_BUDGET, logging: false }
+  pure val SHADOW: Shadow::Shadowing = { hook: true, selected: true, capacity: 1, budgetMs: SOURCE_BUDGET, logging: Shadow::LOGGING_OFF, diffHook: false }
   pure def call(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }
 
-  type Channel = { configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str], futureOffsets: List[Diagnostics::FutureOffset] }
+  type Channel = {
+    configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str], futureOffsets: List[Diagnostics::FutureOffset],
+    mismatchWarnings: List[Shadow::MismatchWarning], loggingOutcomes: List[str]
+  }
   type State = {
     o: Observation, d: Channel, io: RemoteIO::IO,
     now: int, skew: int, remoteAvailable: bool, tracked: bool, capacity: int,
@@ -53,7 +56,10 @@ module dialcache_shadow_read_deadlines_conformance {
   action init = all {
     input' = { name: "init", choice: -1 },
     s' = {
-      o: empty, d: { configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List() }, io: RemoteIO::NO_IO,
+      o: empty, d: {
+        configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List(),
+        mismatchWarnings: List(), loggingOutcomes: List()
+      }, io: RemoteIO::NO_IO,
       now: 0, skew: 100000, remoteAvailable: true, tracked: true, capacity: 0,
       readFailed: false, dumpFailed: false, writeFailed: false, readBudget: 5,
       closed: List(), memo: List(), requestFlights: List(), processFlights: List(NO_OWNER, NO_OWNER),

@@ -28,13 +28,16 @@ module held_dark_shadow {
   pure val LAYOUT: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false, policyProvider: true }
   pure val DARK: Resolution = { layers: { request: false, local: false, remote: false }, coalesce: false }
   pure val TTLS: Ttls = { localMs: 0, freshMs: 1000, retentionMs: 5000 }
-  pure val SHADOWING: Shadow::Shadowing = { hook: true, selected: true, capacity: 1, budgetMs: 100, logging: false }
+  pure val SHADOWING: Shadow::Shadowing = { hook: true, selected: true, capacity: 1, budgetMs: 100, logging: Shadow::LOGGING_OFF, diffHook: false }
   // The same policy with a job budget above the source budget and two slots.
   pure val LONG_SHADOWING: Shadow::Shadowing = { capacity: 2, budgetMs: 200, ...SHADOWING }
   pure def call(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }
 
   type State = {
-    o: Observation, d: { configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str], futureOffsets: List[Diagnostics::FutureOffset] },
+    o: Observation, d: {
+      configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str],
+      futureOffsets: List[Diagnostics::FutureOffset], mismatchWarnings: List[Shadow::MismatchWarning], loggingOutcomes: List[str]
+    },
     io: RemoteIO::IO, now: int, skew: int, remoteAvailable: bool, tracked: bool, capacity: int,
     readFailed: bool, dumpFailed: bool, writeFailed: bool,
     closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
@@ -51,7 +54,10 @@ module held_dark_shadow {
   action init = all {
     input' = { name: "init", choice: -1 },
     s' = {
-      o: empty, d: { configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List() },
+      o: empty, d: {
+        configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List(),
+        mismatchWarnings: List(), loggingOutcomes: List()
+      },
       io: RemoteIO::NO_IO, now: 0, skew: 100000, remoteAvailable: true, tracked: true, capacity: 0,
       readFailed: false, dumpFailed: false, writeFailed: false,
       closed: List(), memo: List(), requestFlights: List(), processFlights: List(NO_OWNER, NO_OWNER),

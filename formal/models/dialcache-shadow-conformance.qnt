@@ -18,7 +18,8 @@ module dialcache_shadow_conformance {
   // Model boundary -----------------------------------------------------------
   // One ramped-down caller source and its selected dark C0/source/C1 job.
   // Selected rules from C47/C49-C54 govern admission, comparison, fill authority,
-  // and timeout ownership; C57/C60 cover snapshot age and captured logging.
+  // and timeout ownership; C57/C60 cover snapshot age, the captured logging
+  // leaves and each confirmed-mismatch warning's content and logging outcome.
   // See formal/generated/PROFILES.md (shadow) for fixtures and payloads and BEHAVIOR.md "Generated profiles".
   // Each source/read/decode/serialize/write can remain externally pending. This
   // profile excludes serving hits, request/local storage, and overlapping jobs.
@@ -36,9 +37,10 @@ module dialcache_shadow_conformance {
   // invalidation raises with its future buffer (remote_frames, serving), the
   // wall skew (clock). This module owns the bounded state, the fixture
   // decoding (the comparator, its elapsed time and the source work an init
-  // choice names; the hook and the default logging; the payload code a seed
-  // choice names; the policy facts a runtime overlay sets), the input choices
-  // and the guards.
+  // choice names; the hooks and the default logging inputs; the payload code a
+  // seed choice names; the policy facts and logging inputs a runtime overlay
+  // sets), the input choices, the guards and the verdict receipts its
+  // warning properties read.
 
   // Trace encodings and fixture bounds ---------------------------------------
   pure val COMPARATOR_COUNT = 4
@@ -48,12 +50,23 @@ module dialcache_shadow_conformance {
   pure val FIXTURE_SLOW_ERROR = 10
   pure val FIXTURE_SOURCE_WORK_BEFORE_DEADLINE = 11
   pure val FIXTURE_SOURCE_WORK_AT_DEADLINE = 12
+  pure val FIXTURE_DIFF_HOOK = 13
+  pure val FIXTURE_DEFAULT_PATHS = 14
+  pure val FIXTURE_DEFAULT_VALUE_FALSE = 15
   pure val SHADOW_ENABLED = 0
   pure val SHADOW_DISABLED = 1
   pure val SHADOW_INVALID = 2
   pure val LOGGING_DISABLED = 0
   pure val LOGGING_ENABLED = 1
   pure val LOGGING_INVALID = 2
+  pure val LOGGING_PATHS = 3
+  pure val LOGGING_VALUES = 4
+  pure val LOGGING_VALUE_ALONE = 5
+  pure val LOGGING_TRUE_WITHOUT_VALUE = 6
+  pure val LOGGING_FALSE_WITH_PATHS = 7
+  pure val LOGGING_INVALID_DIFF = 8
+  pure val LOGGING_INVALID_VALUE = 9
+  pure val LOGGING_INVALID_SHORTHAND_WITH_VALUES = 10
   pure val JOB_BUDGET_MS = 10
   pure val SOURCE_BUDGET_MS = 10
   pure val FRESHNESS_MS = 60000
@@ -91,20 +104,39 @@ module dialcache_shadow_conformance {
   pure val TEXT_UNICODE = Payloads::UNICODE + DECODED_UNICODE
   pure val BINARY_UNICODE = Payloads::BINARY + Payloads::UNICODE + DECODED_UNICODE
 
-  // Shadow profile v3 retains explicit external inputs and future timestamp
-  // samples as well as verdict age, captured logging, and configuration errors.
+  // Shadow profile v4 retains explicit external inputs and future timestamp
+  // samples as well as verdict age and configuration errors, and adds each
+  // confirmed-mismatch warning's content and its logging outcome.
   type ShadowDiagnostics = {
     configErrors: int, warnings: int, ages: List[int],
     coalesced: List[str], fallbackErrors: List[str],
-    futureOffsets: List[Diagnostics::FutureOffset]
+    futureOffsets: List[Diagnostics::FutureOffset],
+    mismatchWarnings: List[Shadow::MismatchWarning], loggingOutcomes: List[str]
   }
+  // The logging inputs as written, one config layer each (`shadow` in the
+  // fixture's policy or in a runtime overlay): the `logMismatches` shorthand,
+  // then the `mismatchLogging` leaves `value` and `diff`. "invalid" is a value
+  // of the wrong type for any of them; "" leaves it unwritten.
+  pure def writes(shorthand: str, value: str, diff: str): Shadow::LoggingInput =
+    { shorthand: shorthand, value: value, diff: diff }
+  pure val LOG_MISMATCHES = writes("true", "", "")
+  // The runtime logging overlays by `logPolicy` choice; choices 6 and 7 are
+  // the first two rows of the record's shorthand table.
+  pure val LOGGING_OVERLAYS = List(
+    writes("false", "", ""), writes("true", "", ""), writes("invalid", "", ""),
+    writes("", "", "paths"), writes("", "", "values"), writes("false", "true", ""),
+    writes("true", "false", ""), writes("false", "", "paths"), writes("", "true", "invalid"),
+    writes("", "invalid", "paths"), writes("invalid", "", "values")
+  )
 
   // State: the layered shape with its held remote effects, deadlines, held
   // fills and jobs, the two driver channels (o, d), the io channel the held
   // shape carries, and the fixture's facts: the comparator, its elapsed time
-  // and the source work the init choice names, the hook and the default
-  // logging, and the shadow policy in force (the ramp selecting, the ramp
-  // malformed, logging on, logging malformed), decoded once at each overlay.
+  // and the source work the init choice names, the outcome and diff hooks and
+  // the default logging inputs, and the shadow policy in force (the ramp
+  // selecting, the ramp malformed, decoded once at each overlay, and the
+  // overlay's logging inputs, resolved at admission), the logger's failure
+  // input and the receipt of each verdict (`shadow::recordVerdictInputs`).
   type State = {
     o: Observation, d: ShadowDiagnostics, io: RemoteIO::IO,
     now: int, skew: int, remoteAvailable: bool, tracked: bool, capacity: int,
@@ -116,8 +148,9 @@ module dialcache_shadow_conformance {
     reads: List[RemoteIO::HeldRead], loads: List[RemoteIO::HeldLoad], loaders: List[int], retained: List[Recovery::Snapshot],
     sourceBudget: int, deadlines: List[Deadlines::Due], drained: List[bool], sourceLayers: List[str],
     dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite], jobs: List[Shadow::Job],
-    comparator: int, comparisonMs: int, sourceWorkMs: int, hook: bool, defaultLog: bool,
-    selected: bool, rampInvalid: bool, logging: bool, loggingInvalid: bool
+    comparator: int, comparisonMs: int, sourceWorkMs: int, hook: bool, diffHook: bool,
+    defaultLogging: Shadow::LoggingInput, selected: bool, rampInvalid: bool, overlayLogging: Shadow::LoggingInput,
+    loggerFailed: bool, verdicts: List[Shadow::Verdict]
   }
   var s: State
   var input: { name: str, choice: int }
@@ -127,7 +160,10 @@ module dialcache_shadow_conformance {
   // with mismatch logging enabled; fixture 8 omits the outcome hook.
   // Fixtures 9/10 let successful/failing comparison consume the job budget.
   // Fixtures 11/12 consume 9/10 ms of synchronous external source work before
-  // deferred job dispatch.
+  // deferred job dispatch. Fixture 13 installs a throwing `shadowMismatchDiff`
+  // hook with mismatch logging enabled; fixtures 14/15 write the default
+  // leaves `diff: "paths"` and `value: false` (the shorthand table's last two
+  // rows). 13 to 15 use the library comparator.
   pure def comparatorOf(choice: int): int =
     if (choice >= FIXTURE_SOURCE_WORK_BEFORE_DEADLINE) Shadow::COMPARE_VALUES
     else if (choice == FIXTURE_SLOW_ERROR) Shadow::COMPARE_ERROR else choice % COMPARATOR_COUNT
@@ -136,7 +172,12 @@ module dialcache_shadow_conformance {
     if (choice == FIXTURE_SOURCE_WORK_AT_DEADLINE) JOB_BUDGET_MS
     else if (choice == FIXTURE_SOURCE_WORK_BEFORE_DEADLINE) JOB_BUDGET_MS - 1 else 0
   pure def hookOf(choice: int): bool = choice != FIXTURE_NO_HOOK
-  pure def defaultLogOf(choice: int): bool = choice >= FIRST_LOGGING_FIXTURE and choice < FIXTURE_NO_HOOK
+  pure def diffHookOf(choice: int): bool = choice == FIXTURE_DIFF_HOOK
+  pure def defaultLoggingOf(choice: int): Shadow::LoggingInput =
+    if ((choice >= FIRST_LOGGING_FIXTURE and choice < FIXTURE_NO_HOOK) or choice == FIXTURE_DIFF_HOOK) LOG_MISMATCHES
+    else if (choice == FIXTURE_DEFAULT_PATHS) writes("", "", "paths")
+    else if (choice == FIXTURE_DEFAULT_VALUE_FALSE) writes("", "false", "")
+    else Shadow::NO_LOGGING_INPUT
   // The payload a seed choice stores, and the choice naming the other form of
   // a stored payload (the drivers' `reencode`).
   pure def seedPayload(choice: int): int =
@@ -147,7 +188,10 @@ module dialcache_shadow_conformance {
   // Initial fixture: no frame, no watermark, empty storage, the ramp selecting,
   // logging as the fixture defaults it. Policy changes are captured at admission.
   pure def initialState(choice: int): State = {
-    o: empty, d: { configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List() },
+    o: empty, d: {
+      configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List(),
+      mismatchWarnings: List(), loggingOutcomes: List()
+    },
     io: RemoteIO::NO_IO,
     now: INITIAL_NOW_MS, skew: WALL_SKEW_MS, remoteAvailable: true, tracked: true, capacity: 0,
     readFailed: false, dumpFailed: false, writeFailed: false, loadFailed: false,
@@ -159,15 +203,15 @@ module dialcache_shadow_conformance {
     sourceBudget: SOURCE_BUDGET_MS, deadlines: List(), drained: List(), sourceLayers: List(),
     dumps: List(), writes: List(), jobs: List(),
     comparator: comparatorOf(choice), comparisonMs: comparisonMsOf(choice), sourceWorkMs: sourceWorkOf(choice),
-    hook: hookOf(choice), defaultLog: defaultLogOf(choice),
-    selected: true, rampInvalid: false, logging: defaultLogOf(choice), loggingInvalid: false
+    hook: hookOf(choice), diffHook: diffHookOf(choice), defaultLogging: defaultLoggingOf(choice),
+    selected: true, rampInvalid: false, overlayLogging: Shadow::NO_LOGGING_INPUT, loggerFailed: false, verdicts: List()
   }
   action initialize(choice: int): bool = all {
     input' = { name: "init", choice: choice },
     s' = initialState(choice)
   }
   action init = {
-    nondet choice = 0.to(FIXTURE_SOURCE_WORK_AT_DEADLINE).oneOf()
+    nondet choice = 0.to(FIXTURE_DEFAULT_VALUE_FALSE).oneOf()
     initialize(choice)
   }
 
@@ -177,22 +221,31 @@ module dialcache_shadow_conformance {
   // late result drains); the drivers settle the latest loader and release the
   // latest held read, decode, dump or write.
   val sourcePending = s.loaders.length() > 0 and Deadlines::pending(s, RemoteIO::latestOrdinal(s))
+  // A source result with no JSON rendering is offered only while no live job
+  // could still fill with it: every job has timed out or acquired its C0. A
+  // dark fill of it would fail natively at its dump, which the model does not
+  // state, so the environment never offers that history.
+  val unrenderableCannotFill = s.jobs.indices().forall(i => s.jobs.nth(i).timedOut or s.jobs.nth(i).cached != NO_VALUE)
 
   // Caller source and job admission ------------------------------------------
   action beginCall = all {
     input' = { name: "beginCall", choice: -1 },
     s.jobs.length() == 0, not(sourcePending), s.o.calls.length() < MAX_CALLS,
     s' = Shadow::beginDark(s, LAYOUT, CALL, DARK, TTLS, Deadlines::UNBOUNDED,
-      { hook: s.hook, selected: s.selected, capacity: 1, budgetMs: JOB_BUDGET_MS, logging: s.logging },
-      { ramp: s.rampInvalid, logging: s.loggingInvalid }, s.sourceWorkMs)
+      {
+        hook: s.hook, selected: s.selected, capacity: 1, budgetMs: JOB_BUDGET_MS,
+        logging: Shadow::resolveLogging(Shadow::mergeLogging(s.defaultLogging, s.overlayLogging)).logging, diffHook: s.diffHook
+      },
+      { ramp: s.rampInvalid, logging: Shadow::resolveLogging(Shadow::mergeLogging(s.defaultLogging, s.overlayLogging)).invalid },
+      s.sourceWorkMs)
   }
   action resolveAt(choice: int): bool = all {
     input' = { name: "resolveLoader", choice: choice },
-    sourcePending,
+    sourcePending, choice != VALUE_UNRENDERABLE or unrenderableCannotFill,
     s' = Shadow::settleHeld(s, LAYOUT, RemoteIO::latestOrdinal(s), choice, false)
   }
   action resolveLoader = {
-    nondet choice = Set(VALUE_ONE, VALUE_TWO).oneOf()
+    nondet choice = (if (unrenderableCannotFill) Set(VALUE_ONE, VALUE_TWO, VALUE_UNRENDERABLE) else Set(VALUE_ONE, VALUE_TWO)).oneOf()
     resolveAt(choice)
   }
   action rejectLoader = all {
@@ -205,12 +258,15 @@ module dialcache_shadow_conformance {
   action releaseRead = all {
     input' = { name: "releaseRead", choice: -1 },
     Shadow::latestRead(s) >= 0,
-    s' = Shadow::releaseRead(s, LAYOUT, Shadow::latestRead(s), s.readFailed)
+    s' = Shadow::recordVerdictInputs(s, Shadow::releaseReadWithLogger(s, LAYOUT, Shadow::latestRead(s), s.readFailed, s.loggerFailed),
+      Shadow::readerOf(s, Shadow::latestRead(s)), s.loggerFailed)
   }
   action releaseLoad = all {
     input' = { name: "releaseLoad", choice: -1 },
     Shadow::latestLoad(s) >= 0,
-    s' = Shadow::releaseLoad(s, LAYOUT, Shadow::latestLoad(s), s.loadFailed, { comparator: s.comparator, elapsedMs: s.comparisonMs }, Deadlines::UNBOUNDED)
+    s' = Shadow::recordVerdictInputs(s,
+      Shadow::releaseLoad(s, LAYOUT, Shadow::latestLoad(s), s.loadFailed, { comparator: s.comparator, elapsedMs: s.comparisonMs }, Deadlines::UNBOUNDED),
+      Shadow::decoderOf(s, Shadow::latestLoad(s)), s.loggerFailed)
   }
   action releaseDump = all {
     input' = { name: "releaseDump", choice: -1 },
@@ -285,18 +341,19 @@ module dialcache_shadow_conformance {
     advanceWallBy(choice)
   }
   // A runtime overlay replaces the previous one: a logging overlay leaves the
-  // ramp at the fixture's 100, a ramp overlay leaves logging at the fixture's default.
+  // ramp at the fixture's 100, a ramp overlay leaves logging to the fixture's
+  // defaults. The logging inputs are kept as written and resolved at admission.
   action setLogging(choice: int): bool = all {
     input' = { name: "logPolicy", choice: choice },
-    s' = { logging: choice == LOGGING_ENABLED, loggingInvalid: choice == LOGGING_INVALID, selected: true, rampInvalid: false, ...s }
+    s' = { overlayLogging: LOGGING_OVERLAYS.nth(choice), selected: true, rampInvalid: false, ...s }
   }
   action logPolicy = {
-    nondet choice = Set(LOGGING_DISABLED, LOGGING_ENABLED, LOGGING_INVALID).oneOf()
+    nondet choice = 0.to(LOGGING_INVALID_SHORTHAND_WITH_VALUES).oneOf()
     setLogging(choice)
   }
   action shadowPolicyAt(choice: int): bool = all {
     input' = { name: "shadowPolicy", choice: choice },
-    s' = { selected: choice == SHADOW_ENABLED, rampInvalid: choice == SHADOW_INVALID, logging: s.defaultLog, loggingInvalid: false, ...s }
+    s' = { selected: choice == SHADOW_ENABLED, rampInvalid: choice == SHADOW_INVALID, overlayLogging: Shadow::NO_LOGGING_INPUT, ...s }
   }
   action shadowPolicy = {
     nondet choice = Set(SHADOW_ENABLED, SHADOW_DISABLED, SHADOW_INVALID).oneOf()
@@ -334,17 +391,30 @@ module dialcache_shadow_conformance {
     nondet choice = Set(0, 1).oneOf()
     writeFaultAt(choice)
   }
+  // The application logger fails when it receives a warning; the warning was
+  // still handed to it (D15: a synchronous throw).
+  action loggerFaultAt(choice: int): bool = all {
+    input' = { name: "loggerFault", choice: choice },
+    s' = { loggerFailed: choice == 1, ...s }
+  }
+  action loggerFault = {
+    nondet choice = Set(0, 1).oneOf()
+    loggerFaultAt(choice)
+  }
 
   // Exploration schedule: retain every progress/environment action.
   // At C1, favor completion and logging changes while retaining every
   // replacement, failure, clock, and admission-policy transition. Unicode seed
   // choices add exploration frequency, not another payload representation.
+  // A third group weights the logging inputs (the overlays and the logger's
+  // failure), so each leaf combination reaches a confirmed mismatch.
   action step = if (Shadow::confirming(s)) any {
-    releaseRead, logPolicy, reencode, advanceWall,
+    releaseRead, logPolicy, reencode, advanceWall, loggerFault,
     any { seed, seedUnicode, invalidate, readFault, advance, rollbackWall, shadowPolicy }
   } else any {
     any { beginCall, resolveLoader, rejectLoader, releaseRead, releaseLoad, releaseDump, releaseWrite },
-    any { advance, seed, seedUnicode, invalidate, readFault, loadFault, dumpFault, writeFault, rollbackWall, logPolicy, shadowPolicy }
+    any { advance, seed, seedUnicode, invalidate, readFault, loadFault, dumpFault, writeFault, rollbackWall, logPolicy, shadowPolicy },
+    any { logPolicy, loggerFault }
   }
 
   // Invariants: independent checks over the public channels and the library records.
@@ -356,10 +426,86 @@ module dialcache_shadow_conformance {
   val agesRequireVerdicts = s.d.ages.length() == s.o.shadow.select(x => x == "match" or x == "mismatch").length()
   val warningsRequireMismatch = s.d.warnings <= s.o.shadow.select(x => x == "mismatch").length()
   val expiredSourceWorkSkipsRedis = s.sourceWorkMs < JOB_BUDGET_MS or s.o.reads == 0
-  // The environment restriction stated: an invalid logging value never also
-  // enables logging, so no job captures an authority from a malformed value
-  // (the former invalidLoggingCannotBeCaptured over the captured pair).
-  val invalidLoggingCannotBeCaptured = not(s.loggingInvalid and s.logging)
+  // The logging inputs in force for each leaf, written independently of
+  // shadow::mergeLogging: the overlay's own leaf when written, else what its
+  // shorthand stands for, else the default's leaf, else its shorthand's. A
+  // `true` shorthand stands for "true" and "values", `false` for "false" and
+  // "off", and a malformed one for "invalid", the input it came from.
+  pure def standsFor(shorthand: str, valueLeaf: bool): str =
+    if (shorthand == "") "" else if (shorthand == "true") (if (valueLeaf) "true" else "values")
+    else if (shorthand == "false") (if (valueLeaf) "false" else "off") else "invalid"
+  pure def layerLeaf(written: Shadow::LoggingInput, valueLeaf: bool): str = {
+    val leaf = if (valueLeaf) written.value else written.diff
+    if (leaf != "") leaf else standsFor(written.shorthand, valueLeaf)
+  }
+  def inForce(valueLeaf: bool): str =
+    if (layerLeaf(s.overlayLogging, valueLeaf) != "") layerLeaf(s.overlayLogging, valueLeaf) else layerLeaf(s.defaultLogging, valueLeaf)
+  // Restated per leaf at the admitting step, where the layers are as
+  // admission read them: a leaf whose input in force is not a valid value
+  // (written with the wrong type, or standing for a malformed shorthand) is
+  // captured off, whatever the other leaf captures (C60).
+  val invalidLoggingCannotBeCaptured = input.name != "beginCall" or s.jobs.indices().forall(i => {
+    val job = s.jobs.nth(i)
+    (Set("", "true", "false").contains(inForce(true)) or not(job.logging.value))
+      and (Set("", "off", "paths", "values").contains(inForce(false)) or job.logging.diff == "off")
+  })
+  // The leaves a job captures at admission (record table and D10): `value`
+  // exactly when its input in force is "true", `diff` the level its input
+  // names and off for anything else, and the fixture's diff hook.
+  val capturedLoggingFollowsLayers = input.name != "beginCall" or s.jobs.indices().forall(i => {
+    val job = s.jobs.nth(i)
+    val diff = inForce(false)
+    job.logging == { value: inForce(true) == "true", diff: if (Set("paths", "values").contains(diff)) diff else "off" }
+      and job.diffHook == s.diffHook
+  })
+  // Over the verdict receipts (`shadow::recordVerdictInputs`): the verdicts
+  // whose warning is attempted, a confirmed mismatch whose job captured
+  // either leaf on, by index among the verdicts and so among `d.ages`.
+  pure def optsIn(verdict: Shadow::Verdict): bool =
+    verdict.outcome == "mismatch" and (verdict.logging.value or verdict.logging.diff != "off")
+  def attempts: List[int] = range(0, s.verdicts.length()).select(k => optsIn(s.verdicts.nth(k)))
+  // One warning per attempt and none otherwise, so none with logging off
+  // (D11): the receipts are the verdicts the ages sample, and the attempts
+  // are exactly the warnings.
+  val noWarningWithLoggingOff = s.verdicts.length() == s.d.ages.length() and attempts.length() == s.d.mismatchWarnings.length()
+  // One `shadowMismatchLogging` outcome per warning attempt (D11).
+  val oneLoggingOutcomePerWarning = s.d.loggingOutcomes.length() == s.d.mismatchWarnings.length()
+    and s.d.warnings == s.d.mismatchWarnings.length()
+  // A value field restated: left out with `value` off, null for a side with no JSON rendering.
+  pure def valueFieldOf(verdict: Shadow::Verdict, code: int): int =
+    if (not(verdict.logging.value)) Shadow::OMITTED else if (code == VALUE_UNRENDERABLE) Shadow::NO_RENDERING else code
+  // The diff fields fail closed at a level above off when the hook replaces
+  // the walk (it throws) or a side has no rendering; else two equal scalars
+  // differ nowhere and two different ones at the root, both sides carried.
+  pure def contentAgrees(verdict: Shadow::Verdict, warning: Shadow::MismatchWarning): bool = {
+    val diffOn = verdict.logging.diff != "off"
+    val failed = diffOn and (verdict.diffHook or verdict.cached == VALUE_UNRENDERABLE or verdict.result == VALUE_UNRENDERABLE)
+    val differs = diffOn and not(failed) and verdict.cached != verdict.result
+    warning.cachedValue == valueFieldOf(verdict, verdict.cached) and warning.sourceValue == valueFieldOf(verdict, verdict.result)
+      and warning.diff == verdict.logging.diff and warning.diffNull == failed
+      and warning.count == (if (differs) 1 else 0) and warning.paths == (if (differs) List("") else List())
+      and warning.entries == (if (differs and verdict.logging.diff == "values") List({ path: "", cached: verdict.cached, source: verdict.result }) else List())
+  }
+  // Each warning carries the field groups its job captured and their content
+  // over its verdict's inputs (D12).
+  val warningFieldsMatchCapturedLeaves = not(noWarningWithLoggingOff)
+    or s.d.mismatchWarnings.indices().forall(i => contentAgrees(s.verdicts.nth(attempts.nth(i)), s.d.mismatchWarnings.nth(i)))
+  // The outcome restated (D11, D15): `hook_error` when the hook ran (`diff`
+  // on), over `render_error` for a side with no rendering, over
+  // `logger_error`, else `logged`; the warning names the first two.
+  pure def outcomeOf(verdict: Shadow::Verdict): str =
+    if (verdict.logging.diff != "off" and verdict.diffHook) "hook_error"
+    else if (verdict.cached == VALUE_UNRENDERABLE or verdict.result == VALUE_UNRENDERABLE) "render_error"
+    else if (verdict.loggerFailed) "logger_error" else "logged"
+  val loggingOutcomePrecedence = not(noWarningWithLoggingOff and oneLoggingOutcomePerWarning)
+    or s.d.mismatchWarnings.indices().forall(i => {
+      val outcome = outcomeOf(s.verdicts.nth(attempts.nth(i)))
+      s.d.loggingOutcomes.nth(i) == outcome
+        and s.d.mismatchWarnings.nth(i).loggingOutcome == (if (Set("hook_error", "render_error").contains(outcome)) outcome else "")
+    })
+  // A warning's `cachedValueAgeSeconds` is the age its verdict sampled (C57).
+  val warningAgeIsVerdictAge = not(noWarningWithLoggingOff)
+    or s.d.mismatchWarnings.indices().forall(i => s.d.mismatchWarnings.nth(i).ageMs == s.d.ages.nth(attempts.nth(i)))
   // Over the library records, one step from the former text: every held fill
   // belongs to a job whose C0 found nothing and whose source was accepted (the
   // former writesRequireMiss over the fill phase).
@@ -415,9 +561,10 @@ module dialcache_shadow_conformance {
   val oneExecution = s.jobs.length() <= 1 and s.sources.select(source => source.result == CALL_PENDING).length() <= 1
   // The former warningsRequireValidCapturedPolicy read the authorization list
   // the profile kept per verdict; the fact it stated (a warning exactly at a
-  // confirmed mismatch whose admission captured logging on) lives in
-  // shadow::recordVerdict and is pinned by
-  // explicitInequalityRequiresConfirmationTest,
+  // confirmed mismatch whose admission captured logging on) is
+  // noWarningWithLoggingOff over the verdict receipts, with
+  // capturedLoggingFollowsLayers checking the capture itself, and is pinned
+  // by explicitInequalityRequiresConfirmationTest,
   // acceptedLoggingSurvivesPolicyChangeTest,
   // invalidLoggingKeepsComparisonWithoutWarningTest,
   // omittedLoggingKeepsMismatchMetricsOnlyTest and
@@ -483,14 +630,14 @@ module dialcache_shadow_conformance {
   // Omission and an explicit false reply are distinct environment inputs. Both
   // keep diagnostic metrics, while neither authorizes a mismatch warning.
   run omittedLoggingKeepsMismatchMetricsOnlyTest = initialize(2)
-    .expect(not(s.defaultLog) and not(s.logging))
+    .expect(s.defaultLogging == Shadow::NO_LOGGING_INPUT and s.overlayLogging == Shadow::NO_LOGGING_INPUT)
     .then(seedAt(1)).then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
     .then(releaseLoad).then(releaseRead)
     .expect(s.o.shadow == List("mismatch") and s.d.ages == List(0)
       and s.d.warnings == 0 and s.d.configErrors == 0 and s.o.comparisons == 1)
 
   run explicitFalseLoggingOverridesEnabledDefaultTest = initialize(FIRST_LOGGING_FIXTURE + 2)
-    .expect(s.defaultLog and s.logging)
+    .expect(s.defaultLogging == LOG_MISMATCHES and s.overlayLogging == Shadow::NO_LOGGING_INPUT)
     .then(setLogging(LOGGING_DISABLED)).then(seedAt(1)).then(beginCall)
     .then(releaseRead).then(resolveAt(VALUE_TWO)).then(releaseLoad).then(releaseRead)
     .expect(s.o.shadow == List("mismatch") and s.d.ages == List(0)
@@ -597,6 +744,7 @@ module dialcache_shadow_conformance {
     .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List("mismatch")
       and s.o.reads == 2 and s.o.loads == 1 and s.o.writes == 0
       and s.d.ages == List(60000) and s.d.warnings == 1 and s.d.futureOffsets == List())
+    .expect(s.d.mismatchWarnings == List({ ageMs: 60000, ...LOGGED_EVERYTHING }) and s.d.loggingOutcomes == List("logged"))
 
   // C1 may finish with its retained bytes at the boundary. The next job's C0
   // must classify those same stored bytes again and refill instead of decoding.
@@ -617,6 +765,7 @@ module dialcache_shadow_conformance {
       and s.o.reads == 2 and s.o.loads == 1 and s.o.writes == 0
       and s.d.ages == List(0) and s.d.warnings == 1
       and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 1000 }))
+    .expect(s.d.mismatchWarnings == List(LOGGED_EVERYTHING) and s.d.loggingOutcomes == List("logged"))
 
   run futureDarkAcquisitionReportsOffsetAndFillsMissTest = initialize(0)
     .then(seedAt(1)).then(rollbackWall).then(beginCall).then(releaseRead)
@@ -646,4 +795,117 @@ module dialcache_shadow_conformance {
     .expect(s.o.shadow == List("mismatch") and s.o.loads == 1 and s.o.writes == 0)
     .then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.loads == 1 and s.o.dumps == 1)
+  // -- Mismatch warning content and logging outcomes (C60, D11 to D13, W10's scalar cases) --
+  // Each history confirms one mismatch at C0 age 0: text `1` seeded, the
+  // call, its C0 read, the source's result, the decode and the confirmation
+  // read of the same bytes. The expected warnings start from WARNING_AT_ZERO,
+  // which carries neither value field nor diff fields.
+  action confirmMismatch(value: int): bool = seedAt(1).then(beginCall).then(releaseRead).then(resolveAt(value))
+    .then(releaseLoad).then(releaseRead)
+  pure val WARNING_AT_ZERO: Shadow::MismatchWarning = {
+    ageMs: 0, cachedValue: Shadow::OMITTED, sourceValue: Shadow::OMITTED, diff: "off", diffNull: false,
+    count: 0, paths: List(), entries: List(), loggingOutcome: ""
+  }
+  pure val ROOT_ONE_TWO: Shadow::Entry = { path: "", cached: VALUE_ONE, source: VALUE_TWO }
+  pure val LOGGED_EVERYTHING: Shadow::MismatchWarning = {
+    cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, diff: "values", count: 1, paths: List(""), entries: List(ROOT_ONE_TWO),
+    ...WARNING_AT_ZERO
+  }
+  // The diff fields of a failed construction: carried at `values`, all null.
+  pure val DIFF_FAILED: Shadow::MismatchWarning = { diff: "values", diffNull: true, ...WARNING_AT_ZERO }
+
+  // The record's shorthand table, one run per row. Rows 1 and 2 write the
+  // shorthand and a leaf in one runtime overlay; rows 3 and 4 put a runtime
+  // shorthand over a default leaf, which it replaces.
+  run trueShorthandWithValueFalseLogsDiffOnlyTest = initialize(0).then(setLogging(LOGGING_TRUE_WITHOUT_VALUE))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.o.shadow == List("mismatch") and s.d.configErrors == 0
+      and s.d.mismatchWarnings == List({ cachedValue: Shadow::OMITTED, sourceValue: Shadow::OMITTED, ...LOGGED_EVERYTHING })
+      and s.d.loggingOutcomes == List("logged"))
+  run falseShorthandWithDiffPathsLogsPathsOnlyTest = initialize(0).then(setLogging(LOGGING_FALSE_WITH_PATHS))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.o.shadow == List("mismatch") and s.d.configErrors == 0
+      and s.d.mismatchWarnings == List({ diff: "paths", count: 1, paths: List(""), ...WARNING_AT_ZERO })
+      and s.d.loggingOutcomes == List("logged"))
+  run runtimeFalseShorthandOverridesDefaultDiffTest = initialize(FIXTURE_DEFAULT_PATHS).then(setLogging(LOGGING_DISABLED))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.o.shadow == List("mismatch") and s.d.ages == List(0) and s.d.warnings == 0
+      and s.d.mismatchWarnings == List() and s.d.loggingOutcomes == List() and s.d.configErrors == 0)
+  run runtimeTrueShorthandOverridesDefaultValueTest = initialize(FIXTURE_DEFAULT_VALUE_FALSE).then(setLogging(LOGGING_ENABLED))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.o.shadow == List("mismatch") and s.d.mismatchWarnings == List(LOGGED_EVERYTHING)
+      and s.d.loggingOutcomes == List("logged"))
+
+  // Each leaf alone logs its own fields; the built-in walk over the model's
+  // scalars reports nothing for identical renderings (a comparator that calls
+  // equal values unequal) and one root entry carrying both sides otherwise.
+  run valueAloneLogsBothRenderingsTest = initialize(0).then(setLogging(LOGGING_VALUE_ALONE))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, ...WARNING_AT_ZERO })
+      and s.d.loggingOutcomes == List("logged"))
+  run identicalRenderingsLogNoPathsTest = initialize(FIRST_LOGGING_FIXTURE + 2).then(confirmMismatch(VALUE_ONE))
+    .expect(s.o.shadow == List("mismatch") and s.o.comparisons == 1
+      and s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_ONE, diff: "values", ...WARNING_AT_ZERO })
+      and s.d.loggingOutcomes == List("logged"))
+  run differingScalarsLogOneRootEntryTest = initialize(FIRST_LOGGING_FIXTURE).then(confirmMismatch(VALUE_TWO))
+    .expect(s.o.shadow == List("mismatch") and s.d.mismatchWarnings == List(LOGGED_EVERYTHING)
+      and s.d.loggingOutcomes == List("logged"))
+
+  // Each failure outcome alone and combined (D11, D15): the throwing diff
+  // hook (fixture 13), a source result with no JSON rendering (D13) and a
+  // logger that throws. `hook_error` outranks `render_error`, which outranks
+  // `logger_error`; a logger failure leaves the warning's content as logged.
+  run hookErrorNullsDiffFieldsTest = initialize(FIXTURE_DIFF_HOOK).then(confirmMismatch(VALUE_TWO))
+    .expect(s.o.shadow == List("mismatch") and s.o.calls == List(VALUE_TWO)
+      and s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, loggingOutcome: "hook_error", ...DIFF_FAILED })
+      and s.d.loggingOutcomes == List("hook_error"))
+  run renderErrorNullsUnrenderableSourceTest = initialize(FIRST_LOGGING_FIXTURE).then(confirmMismatch(VALUE_UNRENDERABLE))
+    .expect(s.o.shadow == List("mismatch") and s.o.calls == List(VALUE_UNRENDERABLE)
+      and s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: Shadow::NO_RENDERING, loggingOutcome: "render_error", ...DIFF_FAILED })
+      and s.d.loggingOutcomes == List("render_error"))
+  run loggerErrorStillDeliversWarningTest = initialize(FIRST_LOGGING_FIXTURE).then(loggerFaultAt(1))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.o.shadow == List("mismatch") and s.d.mismatchWarnings == List(LOGGED_EVERYTHING)
+      and s.d.loggingOutcomes == List("logger_error"))
+  run hookErrorOutranksRenderErrorTest = initialize(FIXTURE_DIFF_HOOK).then(confirmMismatch(VALUE_UNRENDERABLE))
+    .expect(s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: Shadow::NO_RENDERING, loggingOutcome: "hook_error", ...DIFF_FAILED })
+      and s.d.loggingOutcomes == List("hook_error"))
+  run hookErrorOutranksLoggerErrorTest = initialize(FIXTURE_DIFF_HOOK).then(loggerFaultAt(1))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, loggingOutcome: "hook_error", ...DIFF_FAILED })
+      and s.d.loggingOutcomes == List("hook_error"))
+  run renderErrorOutranksLoggerErrorTest = initialize(FIRST_LOGGING_FIXTURE).then(loggerFaultAt(1))
+    .then(confirmMismatch(VALUE_UNRENDERABLE))
+    .expect(s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: Shadow::NO_RENDERING, loggingOutcome: "render_error", ...DIFF_FAILED })
+      and s.d.loggingOutcomes == List("render_error"))
+  run hookErrorOutranksBothFailuresTest = initialize(FIXTURE_DIFF_HOOK).then(loggerFaultAt(1))
+    .then(confirmMismatch(VALUE_UNRENDERABLE))
+    .expect(s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: Shadow::NO_RENDERING, loggingOutcome: "hook_error", ...DIFF_FAILED })
+      and s.d.loggingOutcomes == List("hook_error"))
+  // The hook runs only when `diff` is above off: with `value` alone the
+  // unrenderable source is the failure the warning names.
+  run hookSkippedWithDiffOffTest = initialize(FIXTURE_DIFF_HOOK).then(setLogging(LOGGING_VALUE_ALONE))
+    .then(confirmMismatch(VALUE_UNRENDERABLE))
+    .expect(s.d.mismatchWarnings == List({
+        cachedValue: VALUE_ONE, sourceValue: Shadow::NO_RENDERING, loggingOutcome: "render_error", ...WARNING_AT_ZERO
+      })
+      and s.d.loggingOutcomes == List("render_error"))
+
+  // An invalid input acts off and is reported once; a valid leaf beside it
+  // stays on, whether the invalid input is the other leaf or the shorthand.
+  run invalidDiffLeafKeepsValueLeafTest = initialize(0).then(setLogging(LOGGING_INVALID_DIFF))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.d.configErrors == 1
+      and s.d.mismatchWarnings == List({ cachedValue: VALUE_ONE, sourceValue: VALUE_TWO, ...WARNING_AT_ZERO })
+      and s.d.loggingOutcomes == List("logged"))
+  run invalidValueLeafKeepsDiffLeafTest = initialize(FIRST_LOGGING_FIXTURE).then(setLogging(LOGGING_INVALID_VALUE))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.d.configErrors == 1
+      and s.d.mismatchWarnings == List({ diff: "paths", count: 1, paths: List(""), ...WARNING_AT_ZERO })
+      and s.d.loggingOutcomes == List("logged"))
+  run invalidShorthandKeepsDiffLeafBesideItTest = initialize(0).then(setLogging(LOGGING_INVALID_SHORTHAND_WITH_VALUES))
+    .then(confirmMismatch(VALUE_TWO))
+    .expect(s.d.configErrors == 1
+      and s.d.mismatchWarnings == List({ cachedValue: Shadow::OMITTED, sourceValue: Shadow::OMITTED, ...LOGGED_EVERYTHING })
+      and s.d.loggingOutcomes == List("logged"))
 }

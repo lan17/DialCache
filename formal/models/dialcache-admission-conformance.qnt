@@ -64,7 +64,7 @@ module dialcache_admission_conformance {
   // The instance's shadow policy as read when a hit is judged: the outcome
   // hook installed, two slots per instance, a 10 ms job budget, no mismatch
   // logging; the cohort selection consulted is the one captured for the flight.
-  pure val SHADOWING: Shadow::Shadowing = { hook: true, selected: true, capacity: JOB_CAPACITY, budgetMs: SHADOW_TIMEOUT_MS, logging: false }
+  pure val SHADOWING: Shadow::Shadowing = { hook: true, selected: true, capacity: JOB_CAPACITY, budgetMs: SHADOW_TIMEOUT_MS, logging: Shadow::LOGGING_OFF, diffHook: false }
 
   // State: the held remote shape with the served job registry, its budgets
   // and the cohort selections captured for pending flights, and the policy
