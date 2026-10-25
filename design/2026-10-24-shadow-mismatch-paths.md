@@ -663,10 +663,12 @@ fails resolution like a malformed layer map. `logMismatches` keeps its type in e
   - A separate outcome such as `absent`. It adds a metric label for ordinary
     data, and the entry at `""` with one side already says what happened.
 
-### D14. This change adds no unknown-field reporting
+### D14. This change keeps `main`'s config reads
 
-- **Choice:** unknown key-config fields stay ignored, as on `main`, and
-  `config_unknown_field` is not added. The maintainer wants strict validation
+- **Choice:** apart from the new leaves, config is read as on `main`. Unknown
+  key-config fields stay ignored and `config_unknown_field` is not added, and
+  `shadow` and its fields are read as ordinary properties, so an inherited
+  `shadow` group applies as it does today. The maintainer wants strict validation
   instead: a runtime config that fails validation is rejected as a whole, an
   error metric is recorded, and the call runs uncached, as one invariant in
   every port. That rule replaces both the ignored unknown fields and the
@@ -677,7 +679,9 @@ fails resolution like a malformed layer map. `logMismatches` keeps its type in e
   just do strcit checking for the config and if it fails it fails and we emit
   an error metrics and turn teh cache off. we should maintain this behavior
   and invariant in the whole library", with "New record + separate PR" chosen
-  for where it lands.
+  for where it lands; then "for 242, lets just leave same behavior as in main
+  for configs, and just remove typo shit, since i nevre asked for it" and, for
+  the own-property reads, "ok lets do that".
 - **Rejected:**
   - The carried #138 rule (see Carried decisions): ignore unknown fields and
     report each observed config as `config_unknown_field`. A misspelled field
@@ -685,13 +689,17 @@ fails resolution like a malformed layer map. `logMismatches` keeps its type in e
     cheap reporting needed a per-config marker on every construction.
   - Strict validation inside this pull request. It changes every config field
     and every port, well beyond mismatch paths.
+  - The carried #138 own-property reads of `shadow` and its leaves. They change
+    how an inherited `shadow` group behaves for configs that exist today,
+    which mismatch paths do not need.
 
 ## Carried decisions
 
 Reviewed and approved by the maintainer on #138; carried unchanged:
 
 - Runtime reads of the whole `shadow` group, and of each leaf, are
-  own-property reads at every boundary.
+  own-property reads at every boundary. D14 drops this: config reads stay as
+  on `main`.
 - The differ traverses own members of parsed JSON only; no hostile-intrinsics
   hardening (the maintainer withdrew that finding).
 - Each side is rendered to JSON exactly once; every logged field derives from

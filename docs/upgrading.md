@@ -230,9 +230,7 @@ an earlier DialCache version reads only `logMismatches` from the same config.
 See [Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging)
 for how the shorthand and the leaves combine across config layers.
 
-DialCache now reads `shadow` and its `mismatchLogging` group only as own
-properties, so a group inherited through a prototype no longer applies. The
-Datadog adapter's new `shadow_mismatch_logging.count` metric is its longest
+The Datadog adapter's new `shadow_mismatch_logging.count` metric is its longest
 name, which lowers the longest valid Datadog namespace from 175 to 170
 characters.
 
