@@ -283,14 +283,20 @@ function cloneShadowConfig(config: ShadowConfig | undefined): ShadowConfig | und
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError("DialCache shadow config must be an object");
   }
+  const clone: { -readonly [Field in keyof ShadowConfig]: ShadowConfig[Field] } = {};
   const ramp = readOwnField(config, "ramp");
+  if (ramp !== undefined) {
+    clone.ramp = ramp;
+  }
   const logMismatches = readOwnField(config, "logMismatches");
+  if (logMismatches !== undefined) {
+    clone.logMismatches = logMismatches;
+  }
   const mismatchLogging = readOwnField(config, "mismatchLogging");
-  return {
-    ...(ramp === undefined ? {} : { ramp }),
-    ...(logMismatches === undefined ? {} : { logMismatches }),
-    ...(mismatchLogging === undefined ? {} : { mismatchLogging: cloneMismatchLoggingConfig(mismatchLogging) }),
-  };
+  if (mismatchLogging !== undefined) {
+    clone.mismatchLogging = cloneMismatchLoggingConfig(mismatchLogging);
+  }
+  return clone;
 }
 
 function cloneMismatchLoggingConfig(config: ShadowMismatchLoggingConfig): ShadowMismatchLoggingConfig {
@@ -299,12 +305,16 @@ function cloneMismatchLoggingConfig(config: ShadowMismatchLoggingConfig): Shadow
   }
   // Leaf values stay unvalidated, like layer-map leaves, so a malformed
   // runtime leaf fails open narrowly at resolution.
+  const clone: { -readonly [Leaf in keyof ShadowMismatchLoggingConfig]: ShadowMismatchLoggingConfig[Leaf] } = {};
   const value = readOwnField(config, "value");
+  if (value !== undefined) {
+    clone.value = value;
+  }
   const diff = readOwnField(config, "diff");
-  return {
-    ...(value === undefined ? {} : { value }),
-    ...(diff === undefined ? {} : { diff }),
-  };
+  if (diff !== undefined) {
+    clone.diff = diff;
+  }
+  return clone;
 }
 
 function isConfigObject(value: unknown): value is Record<PropertyKey, unknown> {

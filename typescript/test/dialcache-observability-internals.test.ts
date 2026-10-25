@@ -56,12 +56,10 @@ describe("DialCache observability internal compatibility paths", () => {
           coalesce: true,
           ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 120 },
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 75 },
-          shadow: {
-            ramp: 80,
-            mismatchLogging: { value: true, diff: "values" },
-          },
+          shadow: { ramp: 80, logMismatches: true },
           staleOnErrorMaxAgeSec: 3_600,
         }),
+        effective: { value: true, diff: "values" },
       },
       {
         runtime: new DialCacheKeyConfig({
@@ -77,12 +75,10 @@ describe("DialCache observability internal compatibility paths", () => {
           coalesce: false,
           ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 90 },
           ramp: { [CacheLayer.LOCAL]: 10, [CacheLayer.REMOTE]: 50 },
-          shadow: {
-            ramp: 20,
-            mismatchLogging: { value: false, diff: "off" },
-          },
+          shadow: { ramp: 20, logMismatches: false },
           staleOnErrorMaxAgeSec: 0,
         }),
+        effective: { value: false, diff: "off" },
       },
       {
         runtime: new DialCacheKeyConfig({ shadow: {}, staleOnErrorMaxAgeSec: 7_200 }),
@@ -91,21 +87,19 @@ describe("DialCache observability internal compatibility paths", () => {
           coalesce: false,
           ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 120 },
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
-          shadow: {
-            ramp: 20,
-            mismatchLogging: { value: true, diff: "values" },
-          },
+          shadow: { ramp: 20, logMismatches: true },
           staleOnErrorMaxAgeSec: 7_200,
         }),
+        effective: { value: true, diff: "values" },
       },
     ];
 
-    for (const { runtime, expected } of cases) {
+    for (const { runtime, expected, effective } of cases) {
       const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig), ignoreUnknownFields);
 
       expect(merged).toEqual(expected);
-      // Each layer's shorthand expands before the merge, so only leaves remain.
-      expect(merged?.shadow).not.toHaveProperty("logMismatches");
+      // The groups merge raw; admission expands the shorthand once.
+      expect(resolveMismatchLogging(merged!.shadow!)).toEqual({ ...effective, invalid: false });
     }
   });
 
@@ -165,7 +159,6 @@ describe("DialCache observability internal compatibility paths", () => {
   ] as const)("resolves %s to the recorded effective leaves", async (_name, defaultShadow, runtimeShadow, effective) => {
     const shadow = await mergedShadow(defaultShadow, runtimeShadow);
 
-    expect(shadow).not.toHaveProperty("logMismatches");
     expect(resolveMismatchLogging(shadow)).toEqual({ ...effective, invalid: false });
   });
 
@@ -184,11 +177,10 @@ describe("DialCache observability internal compatibility paths", () => {
       { mismatchLogging: { value: true, diff: "values" } },
       { mismatchLogging: { value: false } },
     )).resolves.toEqual({ mismatchLogging: { value: false, diff: "values" } });
-    // A default shorthand is a baseline like any other pair of default leaves.
-    await expect(mergedShadow(
-      { logMismatches: true },
-      { mismatchLogging: { diff: "paths" } },
-    )).resolves.toEqual({ mismatchLogging: { value: true, diff: "paths" } });
+    // A default shorthand stays the baseline under the runtime leaves.
+    const overShorthand = await mergedShadow({ logMismatches: true }, { mismatchLogging: { diff: "paths" } });
+    expect(overShorthand).toEqual({ logMismatches: true, mismatchLogging: { diff: "paths" } });
+    expect(resolveMismatchLogging(overShorthand)).toEqual({ value: true, diff: "paths", invalid: false });
   });
 
   it("keeps a malformed runtime logMismatches for admission while its same-object leaves win", async () => {
@@ -197,10 +189,10 @@ describe("DialCache observability internal compatibility paths", () => {
       { logMismatches: "yes" as unknown as boolean, mismatchLogging: { value: true } },
     );
 
-    // The malformed shorthand expands to both leaves off over the default, the
-    // leaf written beside it still wins, and the raw value stays so admission
-    // records its config_resolution.
-    expect(shadow).toEqual({ logMismatches: "yes", mismatchLogging: { value: true, diff: "off" } });
+    // The malformed shorthand replaces the default group, the leaf written
+    // beside it still applies, and the raw value stays so admission records its
+    // config_resolution.
+    expect(shadow).toEqual({ logMismatches: "yes", mismatchLogging: { value: true } });
     expect(resolveMismatchLogging(shadow)).toEqual({ value: true, diff: "off", invalid: true });
   });
 
@@ -299,7 +291,116 @@ describe("DialCache observability internal compatibility paths", () => {
     );
 
     expect(inheritedGroup?.shadow).toBeUndefined();
-    expect(inheritedRamp?.shadow).toEqual({ mismatchLogging: { value: true, diff: "values" } });
+    expect(inheritedRamp?.shadow).toEqual({ logMismatches: true });
+  });
+
+  it("resolves every merged combination of shorthand and leaves as each layer expanded first", async () => {
+    // The recorded rule, written out independently of the merge: expand each
+    // layer, merge leaf by leaf, and let an invalid runtime shorthand still owe
+    // one config_resolution. Defaults stay valid, as registration guarantees.
+    const expectedLeaves = (defaultShadow: object | undefined, runtimeShadow: object | undefined) => {
+      const inherited = defaultShadow === undefined ? {} : expandMismatchLogging(defaultShadow);
+      const written = runtimeShadow === undefined ? {} : expandMismatchLogging(runtimeShadow);
+      return resolveMismatchLogging({
+        ...(written.invalid === true ? { logMismatches: "invalid" } : {}),
+        mismatchLogging: {
+          value: written.value !== undefined ? written.value : inherited.value,
+          diff: written.diff !== undefined ? written.diff : inherited.diff,
+        },
+      });
+    };
+    const ABSENT = Symbol("absent");
+    const OWN_UNDEFINED = Symbol("own undefined");
+    const inherit = (value: unknown) => ({ inherited: value });
+    type Field = typeof ABSENT | typeof OWN_UNDEFINED | { readonly inherited: unknown } | unknown;
+    // Builds one shadow group, with each field absent, own and undefined,
+    // inherited through the prototype, or own with the given value.
+    const layer = (shorthand: Field, group: Field): Record<string, unknown> => {
+      const proto: Record<string, unknown> = {};
+      const own: Record<string, unknown> = {};
+      for (const [name, field] of [["logMismatches", shorthand], ["mismatchLogging", group]] as const) {
+        if (field === ABSENT) {
+          continue;
+        }
+        if (field === OWN_UNDEFINED) {
+          own[name] = undefined;
+        } else if (typeof field === "object" && field !== null && Object.hasOwn(field, "inherited")) {
+          proto[name] = (field as { readonly inherited: unknown }).inherited;
+        } else {
+          own[name] = field;
+        }
+      }
+      return Object.assign(Object.create(proto) as Record<string, unknown>, own);
+    };
+    const defaultShorthands: Field[] = [ABSENT, OWN_UNDEFINED, true, false];
+    const defaultGroups: Field[] = [
+      ABSENT,
+      OWN_UNDEFINED,
+      {},
+      { value: true },
+      { value: false },
+      { diff: "paths" },
+      { diff: "off" },
+      { value: true, diff: "values" },
+      { value: undefined, diff: "paths" },
+    ];
+    const runtimeShorthands: Field[] = [ABSENT, OWN_UNDEFINED, true, false, "yes", null, 0, inherit(true)];
+    const runtimeGroups: Field[] = [
+      ABSENT,
+      OWN_UNDEFINED,
+      inherit({ value: true }),
+      { value: true },
+      { value: false },
+      { diff: "paths" },
+      { diff: "values" },
+      { value: true, diff: "off" },
+      { value: "yes" },
+      { value: null },
+      { diff: "full" },
+      { diff: "toString" },
+      { value: undefined },
+      Object.create({ value: true }) as object,
+    ];
+
+    let combinations = 0;
+    for (const defaultShorthand of defaultShorthands) {
+      for (const defaultGroup of defaultGroups) {
+        const defaultShadow = layer(defaultShorthand, defaultGroup);
+        const defaultConfig = new DialCacheKeyConfig({ shadow: defaultShadow as ShadowConfig });
+        for (const runtimeShorthand of runtimeShorthands) {
+          for (const runtimeGroup of runtimeGroups) {
+            const runtimeShadow = layer(runtimeShorthand, runtimeGroup);
+            const expected = expectedLeaves(defaultShadow, runtimeShadow);
+            // A constructed runtime config clones the group; a raw provider
+            // result reaches the merge as written.
+            for (const runtime of [
+              new DialCacheKeyConfig({ shadow: runtimeShadow as ShadowConfig }),
+              { ttlSec: {}, ramp: {}, shadow: runtimeShadow } as unknown as DialCacheKeyConfig,
+            ]) {
+              const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig), ignoreUnknownFields);
+              expect(resolveMismatchLogging(merged!.shadow!)).toEqual(expected);
+              combinations += 1;
+            }
+          }
+        }
+      }
+    }
+    expect(combinations).toBe(4 * 9 * 8 * 14 * 2);
+
+    // disabled() on either side, and a runtime config without a shadow group.
+    const disabledShadow = DialCacheKeyConfig.disabled().shadow!;
+    for (const [defaultShadow, runtime] of [
+      [{ logMismatches: true }, DialCacheKeyConfig.disabled()],
+      [disabledShadow, new DialCacheKeyConfig({ shadow: { mismatchLogging: { diff: "paths" } } })],
+      [{ logMismatches: true, mismatchLogging: { diff: "paths" } }, new DialCacheKeyConfig({ ttlSec: {} })],
+    ] as const) {
+      const merged = await fetchKeyConfig(
+        async () => runtime,
+        key(new DialCacheKeyConfig({ shadow: defaultShadow })),
+        ignoreUnknownFields,
+      );
+      expect(resolveMismatchLogging(merged!.shadow!)).toEqual(expectedLeaves(defaultShadow, runtime.shadow));
+    }
   });
 
   it("expands the logMismatches shorthand before the same group's leaves override it", () => {

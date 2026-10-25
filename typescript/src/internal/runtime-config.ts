@@ -332,32 +332,40 @@ function mergeShadowConfig(
     return undefined;
   }
 
+  const merged: { ramp?: unknown; logMismatches?: unknown; mismatchLogging?: { value?: unknown; diff?: unknown } } = {};
   const overlayRamp = readOwnUnknown(overlay, "ramp");
   const ramp = overlayRamp !== undefined ? overlayRamp : readOwnUnknown(defaults, "ramp");
-  // Each layer's shorthand expands before the leaf-wise merge, so a runtime
-  // `logMismatches` replaces both inherited leaves while a leaf written beside
-  // it still wins within its own layer.
-  const defaultLeaves = defaults === undefined ? {} : expandMismatchLogging(defaults);
-  const overlayLeaves = overlay === undefined ? {} : expandMismatchLogging(overlay);
-  const value = overlayLeaves.value !== undefined ? overlayLeaves.value : defaultLeaves.value;
-  const diff = overlayLeaves.diff !== undefined ? overlayLeaves.diff : defaultLeaves.diff;
-
-  return {
-    ...(ramp === undefined ? {} : { ramp: ramp as number }),
-    // A malformed runtime shorthand keeps flowing to admission, which records
-    // its config_resolution; its expanded leaves already won the merge.
-    ...(overlayLeaves.invalid === true
-      ? { logMismatches: readOwnUnknown(overlay, "logMismatches") as boolean }
-      : {}),
-    ...(value === undefined && diff === undefined
-      ? {}
-      : {
-          mismatchLogging: {
-            ...(value === undefined ? {} : { value: value as boolean }),
-            ...(diff === undefined ? {} : { diff: diff as ShadowMismatchDiffLevel }),
-          },
-        }),
-  };
+  if (ramp !== undefined) {
+    merged.ramp = ramp;
+  }
+  // The groups merge raw, and admission expands the result once. A runtime
+  // `logMismatches` stands for both leaves, so it replaces the inherited group
+  // and only the leaves written beside it apply; a malformed one stays raw, so
+  // admission records its config_resolution. Otherwise the default's shorthand
+  // stays the baseline and each leaf merges on its own.
+  const overlayShorthand = readOwnUnknown(overlay, "logMismatches");
+  const replacesGroup = overlayShorthand !== undefined;
+  const shorthand = replacesGroup ? overlayShorthand : readOwnUnknown(defaults, "logMismatches");
+  if (shorthand !== undefined) {
+    merged.logMismatches = shorthand;
+  }
+  const overlayGroup = readOwnUnknown(overlay, "mismatchLogging") as object | undefined;
+  const defaultGroup = replacesGroup ? undefined : readOwnUnknown(defaults, "mismatchLogging") as object | undefined;
+  const overlayValue = readOwnUnknown(overlayGroup, "value");
+  const overlayDiff = readOwnUnknown(overlayGroup, "diff");
+  const value = overlayValue !== undefined ? overlayValue : readOwnUnknown(defaultGroup, "value");
+  const diff = overlayDiff !== undefined ? overlayDiff : readOwnUnknown(defaultGroup, "diff");
+  if (value !== undefined || diff !== undefined) {
+    const group: { value?: unknown; diff?: unknown } = {};
+    if (value !== undefined) {
+      group.value = value;
+    }
+    if (diff !== undefined) {
+      group.diff = diff;
+    }
+    merged.mismatchLogging = group;
+  }
+  return merged as ShadowConfig;
 }
 
 function assertShadowConfig(config: ShadowConfig | undefined): void {
