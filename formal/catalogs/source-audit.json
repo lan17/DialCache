@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "665bb9fd5b391217fde2308aacc7f25fbc294aa71771cf5bb831f31f6b226a6a",
+      "sha256": "98ce26a5f1758e7a46b559d35469d843aa0d1d1fd142036ea4fc09b71b99c168",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "56919457cf39c3287f4a77fb2b7ee7c7fbafeece77778df2547c8b04ddaccf38",
+      "sha256": "69daf7d4537b13b8d75edd6ac9fc9e218732183a045de8bdf0089ef33e48a617",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -758,7 +758,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "5f60f3fc7872c74f09110b73764be521dad3ab64524246168172039838adf025",
+      "sha256": "e4e4c4b64798b16c3d4f458750edb22c3ceb53748b149b21e175d72084e21a78",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -781,7 +781,7 @@
         {"title":"logs a cached undefined negative-cache entry as an absent side, not a render failure","contracts":["C60","B03"]},
         {"title":"logs hook paths without rendering values at diff paths, even for a bigint source value","contracts":["C60","B03"]},
         {"title":"records $outcome and leaves the caller unaffected when the logger $name","contracts":["C30","C60"]},
-        {"title":"records $outcome rather than logger_error when $name and the logger throws","contracts":["C30","C60"]},
+        {"title":"records $outcome rather than logger_error when $name and the logger $loggerFailure","contracts":["C30","C60"]},
         {"title":"reports superseded when C1 is $name","contracts":["C51"]},
         {"title":"reports superseded when C1 becomes a typed watermark miss","contracts":["C51"]},
         {"title":"retains a future-dated C1 for payload confirmation and attributes its offset to remote_shadow","contracts":["C51","C57"]},
