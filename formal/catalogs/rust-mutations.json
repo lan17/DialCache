@@ -170,8 +170,8 @@
       "edits": [
         {
           "path": "rust/src/policy.rs",
-          "before": "                    shadow.log_mismatches = false;\n                    shadow.logging_config_error = true;",
-          "after": "                    shadow.log_mismatches = true;\n                    shadow.logging_config_error = true;"
+          "before": "        Some(_) => expanded(false, MismatchDiff::Off, true),",
+          "after": "        Some(_) => expanded(true, MismatchDiff::Values, true),"
         }
       ],
       "requiredDetections": [
@@ -193,8 +193,8 @@
       "edits": [
         {
           "path": "rust/src/policy.rs",
-          "before": "    let mut shadow = ResolvedShadow::default();",
-          "after": "    let mut shadow = ResolvedShadow {\n        log_mismatches: true,\n        ..ResolvedShadow::default()\n    };"
+          "before": "    let value = match &leaves.value {\n        None => Some(false),",
+          "after": "    let value = match &leaves.value {\n        None => Some(true),"
         }
       ],
       "requiredDetections": [
@@ -285,6 +285,29 @@
           "path": "rust/src/shadow.rs",
           "before": "        if expired() {\n            return Verdict::of(ShadowOutcome::Timeout);\n        }\n        let mut fill = false;",
           "after": "        if false && expired() {\n            return Verdict::of(ShadowOutcome::Timeout);\n        }\n        let mut fill = false;"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "fixed",
+        "portable"
+      ],
+      "typescriptRequiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M14",
+      "case": "C60.logging-enabled",
+      "description": "Leave mismatch logging off when its flag is true",
+      "typescriptMutation": "M65",
+      "edits": [
+        {
+          "path": "rust/src/policy.rs",
+          "before": "        Some(Value::Bool(true)) => expanded(true, MismatchDiff::Values, false),",
+          "after": "        Some(Value::Bool(true)) => expanded(false, MismatchDiff::Off, false),"
         }
       ],
       "requiredDetections": [
