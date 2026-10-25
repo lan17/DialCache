@@ -609,8 +609,9 @@ and work the bounded CPU executor rejected. A `Logger` panic is the
 
 <LanguageContent language="python">
 
-Observers receive a `shadowMismatchLogging` event dictionary with
-`cacheNamespace`, `useCase`, `keyType` and `outcome`. `hook_error` means
+Observers receive an event dictionary whose `event` is
+`shadowMismatchLogging`, with `cacheNamespace`, `useCase`, `keyType` and
+`outcome`. `hook_error` means
 `shadow_mismatch_diff` raised or returned an invalid list. `logged` means the
 logger's `warning` returned, or the awaitable it returned completed;
 `logger_error` means `warning` raised, or that awaitable raised or was
