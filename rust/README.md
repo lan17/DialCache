@@ -222,18 +222,26 @@ Default stale-recovery decode warnings omit error text that could contain cached
 values; JSON errors retain their category and line/column location. A custom
 `Logger` can inspect the original error when application-controlled details are
 needed.
-Mismatch logging is opt-in, confirmed, bounded, and previews values through
-the operation's `preview` (JSON for serde values). Default JSON previews retain
-only an 8 KiB prefix while checking the entire serialization for errors. Preview
-callbacks run through the bounded CPU executor after confirmation; they may run
-on a worker thread. Queue rejection omits value previews but still logs the
-confirmed mismatch. Diagnostic work holds shadow capacity until it finishes,
-including after runtime shutdown. Observer and logger failures never change a
-cache, source or maintenance result.
+Mismatch logging is opt-in, confirmed and bounded. `ShadowPolicy::mismatch_logging`
+chooses the warning's content: `value` logs the JSON of both values, and
+`diff` at `MismatchDiff::Paths` logs RFC 6901 pointers to the differing
+fields, which `MismatchDiff::Values` extends with what each side holds there;
+`log_mismatches: Some(true)` is shorthand for both. Values built with
+`Operation::new` or `register` are compared through their `serde` JSON, so a
+`with_codec` or `register_custom` operation logs value fields through its
+`preview` and differences through its `mismatch_diff` hook. The differences
+are computed over each value's whole rendering, so their cost grows with the
+value's size. Rendering and hooks run through the bounded CPU executor after
+confirmation; they may run on a worker thread. A failure leaves the field
+unavailable and names its cause in the warning, and every warning attempt
+emits one `ShadowMismatchLogging` event with its outcome. Queue rejection
+still logs the metadata warning. Diagnostic work holds shadow capacity until
+it finishes, including after runtime shutdown. Observer and logger failures
+never change a cache, source or maintenance result.
 
 `MetricKind` maps every event to the metric names, labels and values shared
 with the TypeScript and Go exporters. `PrometheusObserver` (feature
-`prometheus`) registers the nineteen collectors on a `prometheus::Registry`
+`prometheus`) registers the twenty collectors on a `prometheus::Registry`
 under an optional prefix; clone one observer for every instance that exports
 to the same registry, because the `prometheus` crate cannot hand back an
 existing collector and a second registration of the same names is a
