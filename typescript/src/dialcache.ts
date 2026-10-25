@@ -324,9 +324,7 @@ export class DialCache {
   private readonly useCases = new Set<string>();
   private readonly configProvider: CacheConfigProvider;
   private readonly namespace: string;
-  private readonly logger: Logger;
-  /** The application's logger warn, reporting whether it returned without throwing. */
-  private readonly warnReportingFailure: (message: string, details: object) => boolean;
+  private readonly logger: SafeLogger;
   private readonly redisCache: RedisCache | null;
   private readonly metrics: DialCacheMetricsAdapter | null;
   private readonly staleRecoveryPredicate: StaleRecoveryPredicate;
@@ -362,9 +360,7 @@ export class DialCache {
 
     this.configProvider = config.cacheConfigProvider ?? defaultConfigProvider;
     this.namespace = namespace;
-    const logger = config.logger ?? defaultLogger;
-    this.logger = safeLogger(logger);
-    this.warnReportingFailure = (message, details) => observerReturned(() => logger.warn(message, details));
+    this.logger = safeLogger(config.logger ?? defaultLogger);
     this.metrics = safeMetrics(config.metrics ?? null);
     this.staleRecoveryPredicate = resolveStaleRecoveryPredicate(
       config.shouldAttemptStaleRecovery,
@@ -1359,7 +1355,7 @@ export class DialCache {
       content = { fields: {}, failure: "render_error" };
     }
     const failure = content.failure;
-    const logged = this.warnReportingFailure(SHADOW_MISMATCH_WARNING, {
+    const logged = this.logger.warn(SHADOW_MISMATCH_WARNING, {
       ...metadata,
       ...(cacheKey === undefined ? {} : { cacheKey }),
       ...content.fields,
@@ -1779,7 +1775,10 @@ function withFallbackTimeout<T>(
   });
 }
 
-function safeLogger(logger: Logger): Logger {
+/** The application logger; each method reports whether it returned without throwing. */
+type SafeLogger = { readonly [Method in keyof Logger]: (...args: Parameters<Logger[Method]>) => boolean };
+
+function safeLogger(logger: Logger): SafeLogger {
   return {
     debug: (...args: Parameters<Logger["debug"]>) => callObserver(() => logger.debug(...args)),
     error: (...args: Parameters<Logger["error"]>) => callObserver(() => logger.error(...args)),
@@ -1824,12 +1823,8 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
   };
 }
 
-function callObserver(record: () => unknown): void {
-  observerReturned(record);
-}
-
 /** Runs an injected observer in isolation and reports whether it returned without throwing. */
-function observerReturned(record: () => unknown): boolean {
+function callObserver(record: () => unknown): boolean {
   try {
     const result = record();
     if (result !== undefined) {
