@@ -6,6 +6,7 @@ import asyncio
 import gc
 import json
 import math
+import tracemalloc
 import warnings
 from types import MappingProxyType
 
@@ -596,6 +597,29 @@ def test_clamps_each_pointer_to_512_bytes_without_splitting_utf8():
         ],
     )
     assert count == 3
+
+
+def test_never_builds_a_whole_pointer_under_a_deep_chain_of_long_names():
+    # Copying the pointer prefix for each member would cost members times
+    # pointer length; the walk builds only the clamped pointer of a retained entry.
+    names = [f"{level:02d}" + "x" * 100_000 for level in range(31)]
+    cached = {f"m{index:03d}": 0 for index in range(100)}
+    source = {f"m{index:03d}": 1 for index in range(100)}
+    for name in reversed(names):
+        cached, source = {name: cached}, {name: source}
+    path = "/" + names[0][:497] + TRUNCATION_MARKER
+
+    tracemalloc.start()
+    try:
+        actual, count = diff_shadow_mismatch_json(cached, source)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+    assert_entries(actual, [{"path": path, "cached": 0, "source": 1}] * 64)
+    assert count == 100
+    # A whole pointer here is 3.1 MB, and the prefixes along the chain 50 MB.
+    assert peak < 1_000_000
 
 
 def test_replaces_each_side_over_1_kib_with_its_clamped_json_text():

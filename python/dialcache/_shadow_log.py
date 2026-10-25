@@ -155,41 +155,54 @@ def _walk_rendered(cached_json: str | None, source_json: str | None) -> tuple[li
 def _walk(cached: Any, source: Any) -> tuple[list[Entry], int]:
     entries: list[Entry] = []
     count = 0
+    # The escaped reference tokens down to the pair being walked. Python
+    # strings have no ropes, so a pointer is built only for a retained entry:
+    # copying the prefix for each member would cost members times its length.
+    tokens: list[str] = []
 
-    def report(entry: Entry) -> None:
+    def report(**sides: Any) -> None:
         nonlocal count
         count += 1
         if len(entries) < MAX_ENTRIES:
-            entries.append(entry)
+            entries.append({"path": _clamped_pointer(tokens), **sides})
 
-    def walk(left: Any, right: Any, path: str, depth: int) -> None:
+    def walk(left: Any, right: Any) -> None:
         kind = _kind(left)
         if kind != _kind(right) or kind == "primitive":
             if not _same_primitive(left, right):
-                report({"path": path, "cached": left, "source": right})
+                report(cached=left, source=right)
             return
-        if depth >= MAX_DEPTH:
+        if len(tokens) >= MAX_DEPTH:
             if not _json_equal(left, right):
-                report({"path": path, "cached": left, "source": right})
+                report(cached=left, source=right)
             return
         if kind == "array":
             if len(left) != len(right):
-                report({"path": path, "cached": left, "source": right})
+                report(cached=left, source=right)
                 return
             for index, (item, other) in enumerate(zip(left, right)):
-                walk(item, other, f"{path}/{index}", depth + 1)
+                tokens.append(str(index))
+                walk(item, other)
+                tokens.pop()
             return
         for name in sorted(left.keys() | right.keys(), key=_utf16_order):
-            member = f"{path}/{_escape_token(name)}"
+            tokens.append(_escape_token(name))
             if name not in right:
-                report({"path": member, "cached": left[name]})
+                report(cached=left[name])
             elif name not in left:
-                report({"path": member, "source": right[name]})
+                report(source=right[name])
             else:
-                walk(left[name], right[name], member, depth + 1)
+                walk(left[name], right[name])
+            tokens.pop()
 
-    walk(cached, source, "", 0)
+    walk(cached, source)
     return entries, count
+
+
+def _clamped_pointer(tokens: list[str]) -> str:
+    # A token longer than the cap in code points is longer than it in UTF-8
+    # bytes, so cutting each token there keeps every byte the clamp keeps.
+    return clamp_utf8("".join(f"/{token[:PATH_MAX_BYTES]}" for token in tokens), PATH_MAX_BYTES)
 
 
 def _json_equal(cached: Any, source: Any) -> bool:
