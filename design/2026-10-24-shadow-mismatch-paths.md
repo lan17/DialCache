@@ -1,6 +1,6 @@
 # Shadow mismatch paths: name the differing fields in confirmed-mismatch warnings
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Issue:** #243, which tracks the work after the TypeScript reference
 - **Pull requests:** #242
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
@@ -597,7 +597,7 @@ malformed layer map. `logMismatches` keeps its type in every port (Go
     samples to reach every combination.
 
   This lands with the last port (Plan step 4).
-- **Status:** Open.
+- **Status:** Confirmed 2026-10-24, in session: "confirm".
 - **Rejected:**
   - Keeping one logging flag, as the record was accepted with: `logPolicy`
     choices for each `diff` level and `value` as a driver fixture change, with
@@ -698,8 +698,8 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 
 1. #242 opens with this record as its first commit and stays at the design
    gate until every decision is confirmed and the record is `Accepted`. D12,
-   added after acceptance, returned the record to `Proposed`; only step 4
-   waits for it.
+   added after acceptance, returned the record to `Proposed` until the
+   maintainer confirmed it the same day.
 2. #242 then carries the TypeScript reference: the leaves and the shorthand,
    the built-in differ, the hook, the warning fields, the
    `shadowMismatchLogging` metric and its exporters, the TypeScript replay
@@ -723,7 +723,6 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
    rule, the root cases) and for the hook's fail-closed behavior in every
    port, plus C60's first model-fault challenge, mapped to new mutants and to
    M08, M09 and M65 (M65 gains a Rust edit). Tier: Full (Portable behavior).
-   This step waits for D12; steps 2 and 3 do not depend on it.
 
 ## Deviations
 
