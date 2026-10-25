@@ -584,7 +584,7 @@
           "test": "captures an immutable default policy snapshot when the use case is registered",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding captures an immutable default policy snapshot when the use case is registered.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         }
       ],
       "go": [
@@ -723,25 +723,25 @@
           "test": "accepts disabled and exact-maximum static stale-on-error policy",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding accepts disabled and exact-maximum static stale-on-error policy.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects unsupported runtime TTLs before cache or serialization work",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding rejects unsupported runtime TTLs before cache or serialization work.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects $0 in the public config constructor",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Malformed policy objects, layer maps, boolean leaves, and shadow shapes reject at public configuration construction.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects a malformed static defaultConfig with $0 at registration",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Invalid static TTLs, ramps, recovery limits, and policy shapes reject before reserving the use case; a corrected policy may reuse the same name.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects invalid fallbackTimeoutMs value %s without reserving the use case",
@@ -801,31 +801,31 @@
           "test": "preserves requestLocal omission until baseline and runtime config are merged",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding preserves requestLocal omission until baseline and runtime config are merged.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "preserves coalesce omission until baseline and runtime config are merged",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding preserves coalesce omission until baseline and runtime config are merged.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "clones the supplied shadow policy",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding clones the supplied shadow policy.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "preserves stale-on-error omission and explicit disable values",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Absent stale recovery remains absent while explicit zero and positive maximum age retain their distinct construction values.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "preserves shadow omission and explicit kill-switch values",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Absent shadow remains absent; an empty shadow overlay and explicit zero ramp/false logging remain distinct sparse construction values.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         }
       ],
       "go": [
@@ -861,7 +861,7 @@
           "test": "accepts a positive shadowMaxInFlight",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding accepts a positive shadowMaxInFlight.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "allows localMaxSize zero to disable local storage",
@@ -879,7 +879,7 @@
           "test": "rejects invalid shadowMaxInFlight value %s",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Null, zero, negative, fractional, non-finite, and unsafe shadow capacities reject under the positive safe-integer constraint.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         }
       ],
       "go": [
@@ -2046,7 +2046,7 @@
           "test": "rejects the removed public ramp sampler override",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding rejects the removed public ramp sampler override.",
-          "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects the renamed urnPrefix option for untyped callers",

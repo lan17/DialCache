@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "58ffce5b044042696950c848961282d880f5a192bd0fc388f01dede4c40ae2ad",
+      "sha256": "de14d22fc1d5dfa9e2770baa6e232e31303c8904e5db0b96b7317240019ba3eb",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -454,7 +454,7 @@
     },
     {
       "path": "typescript/test/dialcache-config-ramp.test.ts",
-      "sha256": "3acaac9a1aeb57e82c831dd07602255ed2bd56eb0c8ef2c5ce7077a8d04f1f82",
+      "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed",
       "entries": [
         {"title":"rejects the removed public ramp sampler override","contracts":["B01"]},
         {"title":"preserves requestLocal omission until baseline and runtime config are merged","contracts":["C16"]},
@@ -463,8 +463,7 @@
         {"title":"preserves shadow omission and explicit kill-switch values","contracts":["C16","C17"]},
         {"title":"clones the supplied shadow policy","contracts":["B01"]},
         {"title":"clones the supplied mismatchLogging leaves","contracts":["B01"]},
-        {"title":"keeps only own known shadow and mismatchLogging fields","contracts":["B01"]},
-        {"title":"ignores an inherited shadow group in the constructor and the registered default","contracts":["B01","C17"]},
+        {"title":"leaves mismatchLogging leaf values unvalidated until static capture or runtime resolution","contracts":["B01"]},
         {"title":"captures an immutable default policy snapshot when the use case is registered","contracts":["C18","B01"]},
         {"title":"captures an immutable mismatchLogging snapshot when the use case is registered","contracts":["C18","B01"]},
         {"title":"enables request-local caching without TTL or ramp policy","contracts":["C07"]},
@@ -669,7 +668,7 @@
     },
     {
       "path": "typescript/test/dialcache-observability-internals.test.ts",
-      "sha256": "a239f4612e72f310d268e407a519ab5727731a8e33d6cb41944ff019e313ffba",
+      "sha256": "8c25accd3c3e152aba2c0033380ca1ad3c1159cc6dfd3be586311582004747f8",
       "entries": [
         {"title":"merges every runtime policy leaf independently","contracts":["C16"]},
         {"title":"preserves omitted requestLocal and coalesce through a runtime merge","contracts":["C16"]},
@@ -679,7 +678,6 @@
         {"title":"keeps a malformed runtime logMismatches for admission while its same-object leaves win","contracts":["C21","C60"]},
         {"title":"resolves %s to the effective mismatch-logging leaves","contracts":["C21","C60"]},
         {"title":"rejects the removed shadowRamp field in a provider result","contracts":["B01","X01"]},
-        {"title":"ignores an inherited shadow group or ramp in a raw provider result","contracts":["C16","C60"]},
         {"title":"resolves every merged combination of shorthand and leaves as each layer expanded first","contracts":["C16","C60"]},
         {"title":"expands the logMismatches shorthand before the same group's leaves override it","contracts":["C16","C60"]},
         {"title":"rejects a provider result whose mismatchLogging is %s","contracts":["C20"]},

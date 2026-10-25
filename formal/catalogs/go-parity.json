@@ -10,8 +10,8 @@
   "inputs": {
     "semanticCasesSha256": "f5f7ee357201b343eb00f8f9c783c92af0d722709137edc0f55e0a52b3cdec0a",
     "executionSha256": "29a412f87329347840f000ea44a6e95332464c0b01b92b4e41c615af3c9157cd",
-    "sourceAuditDispositionsSha256": "d2c78f1a74f2e686f95601fb024001c3cfb4353f3024cee289b52ef0e2047a05",
-    "featureCoverageSha256": "3ef50a630ade2ea9dca15cf2d1666e19346a1323e3b8fa7e1d5dc285aaf95cd3",
+    "sourceAuditDispositionsSha256": "46246f8406e1d6efc54b3a73682af7822cb7d9d7b21d6ca23165b89723564888",
+    "featureCoverageSha256": "47aafe8da221cddecd39929f3dc815110e12a5a81a7bea1c34b45fa3a881aad8",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "9df8285820e4fff65f6a7753885bbb192c09f3f476eac8f9c98d130454ae1a28"
   },
@@ -21,7 +21,7 @@
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
-    "sourceDeclarations": 875,
+    "sourceDeclarations": 874,
     "casesWithScheduledChecks": 266,
     "requiredWitnesses": 497,
     "casesWithQuintRegressionReplay": 192,
@@ -3317,7 +3317,7 @@
   "sourceInventory": [
     {
       "path": "typescript/src/config.ts",
-      "sha256": "f5acc4ba69337f0c03be5d9ea1816c6a067aa5c652d8107b4ad679a34ec8276c",
+      "sha256": "e8fafc6f9452a40c212150e492ccc8223bb1e13efe94cb5708be9b0fca6cc392",
       "candidateGoFiles": [
         "go/policy.go",
         "go/api.go"
@@ -3424,7 +3424,7 @@
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "60f87d5dde98d6b3936a5f0d1a16d79b225b856b86dfc9434090ee3ab9333a4d",
+      "sha256": "cd606ce6d70ba3081ffc7a5203b0549e1b130248fe7191ab274db2c50bf6f45a",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -4010,7 +4010,7 @@
     },
     {
       "path": "typescript/src/internal/runtime-config.ts",
-      "sha256": "e95aa202d2e30e24bd2e349d0d7ac5028c7e245e6a2c0189608a036a37818d59",
+      "sha256": "761ca1a86fb67cd8084e5c89d1ccf6693c64f89e1fc462079fdfa0d97ed5c074",
       "candidateGoFiles": [
         "go/policy.go"
       ],
