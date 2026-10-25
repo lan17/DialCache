@@ -63,13 +63,18 @@ What each port can see today:
 
 ## Proposal
 
-Unknown fields stay ignored, and invalid values keep every consequence in the
-table above. The one change is a diagnostic. When a config that DialCache
-observes carries one or more own fields it does not know, DialCache records one
-`error` metric event with the new kind `config_unknown_field` on the `noop`
-layer, with `inFallback: false`, and the call proceeds exactly as it would
-without those fields. A warning log names the unknown field paths, such as
-`ramp.remtoe`. Field names never become metric labels.
+In runtime config, unknown fields stay ignored, and invalid values keep every
+consequence in the table above. The one runtime change is a diagnostic. When a
+provider reply carries one or more own fields DialCache does not know,
+DialCache records one `error` metric event with the new kind
+`config_unknown_field` on the `noop` layer, with `inFallback: false`, and the
+call proceeds exactly as it would without those fields. A warning log names
+the unknown field paths, such as `ramp.remtoe`. Field names never become
+metric labels.
+
+A static default is code the service owns. One that carries an unknown field
+throws where an invalid static value throws today: at `cached()`
+registration, or on each `getOrLoad()` invocation (D6).
 
 ```ts
 // Provider reply over a default with both TTLs set:
@@ -79,12 +84,13 @@ without those fields. A warning log names the unknown field paths, such as
 // Log: one warning naming "ramp.remtoe" (D3 bounds repeats).
 ```
 
-D2 defines which names count as unknown, D4 when the event fires, D5 how
-constructors that drop fields keep the answer, and D6 static defaults. A
+D2 defines which names count as unknown, D4 when the event fires, and D5 how
+constructors that drop fields keep the answer. A
 reply that fails resolution as a whole keeps `main`'s `config_resolution` and
-`disabled{config_error}` and records no unknown-field event (D4). The scan
-runs once per observed config before traversal, so unlike value validation it
-does not depend on which layer a call reaches.
+`disabled{config_error}` and records no unknown-field event (D4). The check
+runs before traversal, so unlike value validation it does not depend on which
+layer a call reaches. On the hot path it costs at most one size comparison
+per map, and nothing for typed configs (D9).
 
 ## Out of scope
 
@@ -112,12 +118,11 @@ witness or mutant that encodes them changes outcome.
   traverses, publishes, shadows and recovers as it would for the same reply
   without the field. A reply that resolves and carries one or more unknown
   fields records one `config_unknown_field` diagnostic on `noop`. A reply
-  that fails as a whole records none. Static defaults stay binding
-  obligations, beside registration validation (CONTRACTS.md "Applying the
-  distinction"). TypeScript and Python report them (D6). Go's and Rust's typed
-  static policies cannot carry an unknown field, and their JSON parse helpers
-  reject one. Replay sees a static default only as the fixture's valid policy,
-  so these rules are native tests in each port.
+  that fails as a whole records none. A static default with an unknown field
+  throws where an invalid static value throws (D6). That is a binding
+  obligation, beside registration validation (CONTRACTS.md "Applying the
+  distinction"). Replay sees a static default only as the fixture's valid
+  policy, so the rule is a native test in each port.
 - **SPEC.md** policy table gains a row: unknown field, ignored at every level;
   a resolved reply carrying one records one `config_unknown_field` diagnostic.
 - **Quint, policy profile.** `kernel/policy-overlay.qnt` appends overlay
@@ -169,16 +174,18 @@ witness or mutant that encodes them changes outcome.
 
   Python has no mutation catalog, so the gap stays named.
 - **AGENTS.md Critical behavior** gains a bullet: "Unknown runtime config
-  fields never change caching; a resolved config that carries one records one
-  `config_unknown_field` diagnostic."
+  fields never change caching; each enabled call whose resolved provider reply
+  carries one records one `config_unknown_field` diagnostic. A static default
+  with an unknown field throws where an invalid static value throws."
 
 ## Decisions
 
 ### D1. Keep `main`'s fail-open rules and add reporting, instead of strict validation
 
-- **Choice:** keep every consequence `main` has for invalid values and keep
-  ignoring unknown fields, and record a diagnostic for unknown fields. No
-  input that caches on `main` stops caching.
+- **Choice:** for runtime config, keep every consequence `main` has for
+  invalid values and keep ignoring unknown fields, and record a diagnostic for
+  unknown fields. No provider reply that caches on `main` stops caching.
+  Static defaults are D6's question.
 - **Status:** Confirmed 2026-10-24, in session: "instead of doing strict, can
   we just add instrumentaiton so that if we do get incorrect field we emit
   some metric instead of failing and not caching? SO same as main behavior,
@@ -256,36 +263,30 @@ witness or mutant that encodes them changes outcome.
 
 ### D4. When the event fires
 
-- **Choice:** once for each observed config that carries unknown fields:
-  - Every enabled invocation whose provider result carries one records the
-    event after the provider settles, before any cache read and before
-    joining a flight. Config resolves once per invocation (C18), so each
-    coalesced follower reports its own reply.
-  - A `getOrLoad()` default, captured on each enabled invocation, is reported
-    on each such invocation.
-  - A `cached()` default, captured once at registration, is reported once at
-    registration (D6).
-  - Disabled calls report nothing (C01).
+- **Choice:** whenever a call reads runtime config. Every enabled invocation
+  whose provider reply carries an unknown field records one event, after the
+  provider settles and the merge succeeds, before any cache read and before
+  joining a flight.
+  - Config resolves once per invocation (C18), so each coalesced follower
+    reports its own reply.
+  - One event per call, however many unknown fields the reply carries.
+  - Disabled calls read no config and report nothing (C01).
   - A reply that fails resolution as a whole records only `main`'s
-    `config_resolution` and `disabled{config_error}`. The event is recorded
-    after the merge succeeds. A TypeScript provider that builds
-    `new DialCacheKeyConfig(parsedJson)` from a malformed reply throws before
-    DialCache sees the input, so this is the only rule all four ports can
-    agree on.
+    `config_resolution` and `disabled{config_error}`. A TypeScript provider
+    that builds `new DialCacheKeyConfig(parsedJson)` from a malformed reply
+    throws before DialCache sees the input, so this is the only rule all four
+    ports can agree on.
+  - Static defaults never report, because an unknown field in one throws
+    (D6).
 
-  One invocation can therefore record two events, one for its default and one
-  for its provider result: they have different owners (code and config store).
-  The scan is a handful of key comparisons: at most seven top-level keys, two
-  layer maps and a small shadow group. TypeScript answers from a construction
-  stamp for `DialCacheKeyConfig` instances (D5) and scans plain objects.
-- **Status:** Open
+  D9 keeps the check itself off the hot path.
+- **Status:** Open. The maintainer asked in session for "whenever the config
+  is read"; the whole-call-failure exception still needs his confirmation.
 - **Rejected:**
   - Once per distinct config object. It has no portable identity (D1), and a
     count of objects is not a rate an operator can compare with call volume.
   - Once per use case per process. The metric would fall to zero while the
     typo is still in the config, and alerts would clear early.
-  - At most one event per invocation covering both sources. It is cheaper to
-    count, but it hides which owner has to fix the config.
   - Recording the event for a reply that also fails as a whole. Go, Rust and
     Python could scan a raw reply before failing it, but a TypeScript
     constructor that throws inside the provider leaves nothing to scan, so the
@@ -294,8 +295,9 @@ witness or mutant that encodes them changes outcome.
 ### D5. Configs whose constructor drops unknown fields
 
 - **Choice:** a constructor that drops unknown input fields records on the
-  instance whether its input had any, and resolution reports a marked
-  instance as it would report the raw input.
+  instance whether its input had any. Resolution reports a marked provider
+  reply as it would report the raw input (D4), and static-default capture
+  throws for a marked default (D6).
   - TypeScript: `new DialCacheKeyConfig(input)` marks the instance with a
     module-private stamp, kept off enumeration and out of the public class
     type, as #242's prototype did before ed80bbe removed it.
@@ -315,24 +317,36 @@ witness or mutant that encodes them changes outcome.
 
 ### D6. Static defaults with unknown fields
 
-- **Choice:** report instead of throwing.
-  - `cached()` records one event at registration, labelled with the
-    namespace, use case and key type, and registers normally. `getOrLoad()`
-    records the event on each enabled invocation (D4).
-  - Go's `ParsePolicy` and Rust's `Policy::from_json` build a static policy
-    from JSON before any instance or metric exists, so they cannot report. They
-    return their existing invalid-policy error naming the first unknown field,
-    as they already do for `shadowRamp` and invalid values. These helpers are
-    the documented construction boundary where static setup may be rejected.
-- **Status:** Open
+- **Choice:** fail closed. A static default that carries an unknown field
+  (D2) throws, and the exception propagates to the caller, at the point
+  where an invalid static value throws today:
+  - `cached()` throws at registration, so the use case is never registered,
+    as for an invalid TTL in a default.
+  - `getOrLoad()` throws on each invocation. As for an invalid inline default
+    today, this happens even outside an enabled scope, because TypeScript
+    and Python validate the default before checking enablement.
+  - Python's `validate_static_policy` raises `ConfigError`.
+  - Go's `ParsePolicy` and Rust's `Policy::from_json` return their existing
+    invalid-policy error, naming the first unknown member, as they already do
+    for `shadowRamp`.
+  - Go's typed `Policy` and Rust's typed `Policy` cannot carry an unknown
+    field, so nothing else changes in those ports.
+
+  Static defaults therefore never report `config_unknown_field`; only provider
+  replies do (D4).
+- **Status:** Confirmed 2026-10-25, in session: "an issue with cached default
+  shoudl also fail close,d that is throw and let exception propagate up right"
 - **Rejected:**
-  - Throwing at registration in every port, as the strict design planned. Tests
-    would catch typos, but a default loaded from a shared JSON file that
-    carries a newer field would stop an older service at startup. On `main`
-    that service starts.
+  - Reporting instead of throwing, recommended in this record's first draft:
+    one event at `cached()` registration and one per enabled `getOrLoad()`
+    call. Rejected 2026-10-25. A static default is code the service owns, so
+    failing at registration surfaces the typo in tests or at startup, before
+    any traffic, as an invalid static value already does. A registration-time
+    event would be one blip that an alert misses. The cost is accepted: a
+    default loaded from a shared JSON file that carries a field only a newer
+    release knows now stops an older service at startup.
   - Leaving `ParsePolicy` and `Policy::from_json` ignoring unknown members. A Go
-    or Rust static policy loaded from JSON would keep its typos invisible,
-    since no metric can report them.
+    or Rust static policy loaded from JSON would keep its typos invisible.
 
 ### D7. How conformance establishes it
 
@@ -355,52 +369,102 @@ witness or mutant that encodes them changes outcome.
 
 ### D8. Rollout
 
-- **Choice:** ship as an additive change with a release note and an
-  `docs/upgrading.md` entry. No warn-only period is needed, because nothing
-  starts failing. After the upgrade, configs that already carry unknown fields
-  start recording `config_unknown_field`, so an alert on total DialCache errors
-  can fire on the first deploy. The upgrade note tells operators to route the
-  new kind to a warning-level alert before upgrading, then fix or remove the
-  fields it names. The Rust `ErrorKind` enum is exhaustive, so a new variant
-  breaks exhaustive matches in Rust callers. The implementing pull request
-  carries `!` and a `BREAKING CHANGE:` paragraph scoped to that enum, and marks
-  `ErrorKind` and `DisabledReason` `#[non_exhaustive]`, so later kinds are
-  additive.
+- **Choice:** a breaking release with a `BREAKING CHANGE:` paragraph and a
+  `docs/upgrading.md` entry covering three effects:
+  - **Static defaults (D6).** A default with an unknown field that registers
+    on `main` throws after the upgrade, in every port. Such a default can come
+    from a cast object or a JSON file in TypeScript, a mapping with extra keys
+    or both spellings in Python, or `ParsePolicy` or `Policy::from_json` input
+    in Go and Rust. The note tells teams to run their tests or start the
+    service on the new version before deploying, so the error appears there
+    first.
+  - **Provider replies.** Nothing starts failing, so no warn-only period is
+    needed. Replies that already carry unknown fields start recording
+    `config_unknown_field`, and an alert on total DialCache errors can fire on
+    the first deploy. The note tells operators to route the new kind to a
+    warning-level alert before upgrading, then fix the fields it names.
+  - **Rust's `ErrorKind`.** The enum is exhaustive, so a new variant breaks
+    exhaustive matches in Rust callers. The same pull request marks
+    `ErrorKind` and `DisabledReason` `#[non_exhaustive]`, so later kinds are
+    additive.
 - **Status:** Open
 - **Rejected:**
   - Adding the Rust variant without `#[non_exhaustive]`. Every later error kind
     would be another breaking change.
   - No upgrade note. The first deploy would page whoever alerts on error
-    totals, without saying why.
+    totals, or stop a service whose default carries a typo, without saying
+    why.
+
+### D9. Keep the unknown-field check off the hot path
+
+- **Choice:** no per-call key walk. Where a config can carry an unknown field
+  at all, the answer comes from construction or from one integer comparison
+  per map. Only a config that does carry one pays for naming its paths.
+  - **Typed configs never check.** Go's `Policy` and `*PolicyOverlay` and
+    Rust's typed `Policy` cannot hold an unknown field.
+  - **Constructed configs are checked once, at construction.** A TypeScript
+    `DialCacheKeyConfig` and a Python `Policy` keep the stamp or marker that
+    D5 adds, so a provider that returns a cached instance pays one field read
+    per call.
+  - **Raw replies get a size comparison.** These are Go `JSONPolicy` and
+    `RawPolicy`, Rust `RuntimePolicy`, and Python mappings. The merge already
+    looks up every known key at each level: the top level, `ttlSec`, `ramp`,
+    `shadow` and, after #242, `mismatchLogging`. It compares each map's size
+    with the number of known keys it found, an O(1) `len` in each of those
+    languages. A Python mapping counts both spellings it found.
+  - **TypeScript plain objects are remembered by identity.** Counting a plain
+    object's own keys allocates, so the answer is kept in a `WeakMap` keyed by
+    the object, and a provider that returns the same object pays one lookup
+    per call. Remembering by identity is safe here, unlike the strict design's
+    memo (D1), because the answer drives only a diagnostic. An object mutated
+    after its first check can misreport, but it can never change caching.
+  - **Static defaults are checked once,** at `cached()` registration, or in
+    the validation `getOrLoad()` already runs on each invocation (D6).
+  - **Naming the paths is the slow path.** Only when a check fires does the
+    port walk the reply to collect the paths that D3's warning names.
+- **Status:** Open. The maintainer asked in session to "avoid checking for
+  unknown in most places if we dont have to"; the mechanism is this record's
+  proposal.
+- **Rejected:**
+  - A full key walk on every call. It is simple, but it adds string
+    comparisons, and in TypeScript array allocations, to every enabled call,
+    for a condition that is almost always false.
+  - Checking only static defaults and constructed configs, and skipping raw
+    replies. The raw form is how a config service's reply usually arrives (Go
+    `RawPolicy`, Rust `RuntimePolicy::from_json`, a Python dict), so most typos
+    would go unreported.
 
 ## Impact
 
 - **TypeScript:**
   - `src/metrics.ts`: `MetricErrorKind` gains `config_unknown_field`.
   - `src/config.ts`: the construction stamp (D5).
-  - `src/internal/runtime-config.ts`: the scan and the report after a
-    successful merge.
-  - `src/dialcache.ts`: the registration and invocation reports and the
-    warning bound (D3).
+  - `src/internal/runtime-config.ts`: the identity-remembered check for plain
+    objects (D9) and the report after a successful merge.
+  - `src/dialcache.ts`: the per-call report and its warning bound (D3), and
+    the unknown-field throw in `snapshotDefaultConfig` (D6).
   - The Datadog and Prometheus exporter tests, and
     `scripts/test-package.mjs` for the widened public union.
   - Native tests in `dialcache-config-ramp.test.ts` and
     `dialcache-observability-internals.test.ts`. #242's removed prototype
-    (before ed80bbe) is a starting point for the stamp, the scan and its tests.
+    (before ed80bbe) is a starting point for the stamp and its tests; it
+    walked keys on each call, which D9 replaces.
 - **Go:**
-  - `policy.go`: scan `JSONPolicy` and `RawPolicy` members; `ParsePolicy`
-    rejects unknown members (D6).
+  - `policy.go`: the size comparison in `ResolvePolicy` for `JSONPolicy` and
+    `RawPolicy` maps (D9); `ParsePolicy` rejects unknown members (D6).
   - `engine.go`: the event.
   - `internal/testsuite/policy_test.go`.
 - **Rust:**
   - `observe.rs`: the `ErrorKind` variant and `#[non_exhaustive]` (D8).
-  - `policy.rs`: the scan; `from_json` rejects unknown members. The test at
+  - `policy.rs`: the size comparison in `merge_overlay` (D9); `from_json`
+    rejects unknown members. The test at
     `policy.rs:889`, which asserts that unknown members are ignored, gains the
     report.
   - `execution.rs`: the event.
 - **Python:**
-  - `config.py`: the marker, the scan in `normalize_policy`, and a doubled
-    spelling counted as unknown.
+  - `config.py`: the marker set in `Policy.__post_init__`, the size
+    comparison in `normalize_policy` that counts a doubled spelling as
+    unknown (D9), and the `ConfigError` in `validate_static_policy` (D6).
   - `cache.py`: the event and the warning.
   - `tests/test_config.py`.
 - **Docs:**
@@ -419,9 +483,10 @@ witness or mutant that encodes them changes outcome.
   - `go-parity.json`;
   - the regenerated PROFILES, MUTANTS and CHALLENGES views, smoke traces and
     fixture lock.
-- **Upgrade:** additive in TypeScript, Go and Python, which gain one error
-  label value. Breaking in Rust (D8). Existing configs that carry unknown
-  fields start reporting on the first deploy.
+- **Upgrade:** breaking in every port, because a static default with an
+  unknown field now throws (D6), and in Rust also because of the new
+  `ErrorKind` variant (D8). Provider replies that carry unknown fields keep
+  caching and start reporting on the first deploy.
 
 ## Plan
 
@@ -434,16 +499,16 @@ witness or mutant that encodes them changes outcome.
    - the TypeScript reference, then Go, Rust and Python;
    - mutants, docs and the AGENTS.md bullet.
 
-   With D8 it is titled `feat!:` for the Rust variant, with its
-   `BREAKING CHANGE:` paragraph, and it is validated at the Full tier. All four
-   ports land in one pull request because the completion inventory requires
-   every port to replay every generated history.
+   It is titled `feat!:`, with a `BREAKING CHANGE:` paragraph for the
+   static-default throw (D6) and the Rust variant (D8), and it is validated at
+   the Full tier. All four ports land in one pull request because the
+   completion inventory requires every port to replay every generated history.
 
    It follows #242, which is open and edits `config.ts`,
    `runtime-config.ts` and `dialcache.ts`, and adds `shadow.mismatchLogging`,
    which D2 covers. If #243 has not yet ported that group to Go, Rust and
-   Python, the implementing pull request scans the keys those ports have, and
-   #243 adds the group's keys to each port's scan.
+   Python, the implementing pull request checks the groups those ports have,
+   and #243 adds the new group to each port's check.
 
 ## Deviations
 
