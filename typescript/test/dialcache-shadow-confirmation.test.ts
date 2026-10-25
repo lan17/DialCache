@@ -1264,6 +1264,16 @@ describe("DialCache Redis shadow confirmation", () => {
       outcome: "logged",
     },
     {
+      name: "returns a rejected promise whose own then is replaced",
+      useCase: "ShadowMismatchLoggerReplacedThen",
+      warn: () => {
+        const rejected = Promise.reject(new Error("logger transport unavailable"));
+        Object.defineProperty(rejected, "then", { value: () => undefined });
+        return rejected;
+      },
+      outcome: "logger_error",
+    },
+    {
       name: "returns a thenable that rejects",
       useCase: "ShadowMismatchLoggerThenableRejects",
       warn: () => ({
@@ -1364,6 +1374,62 @@ describe("DialCache Redis shadow confirmation", () => {
       ]]);
       expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, outcome)]);
     });
+  });
+
+  it.each([
+    {
+      name: "the hook throws",
+      useCase: "ShadowMismatchHookFailsLoggerPending",
+      shadowMismatchDiff: (): never => {
+        throw new Error("hook failed");
+      },
+      outcome: "hook_error",
+    },
+    {
+      name: "a hook side has no JSON rendering",
+      useCase: "ShadowMismatchRenderFailsLoggerPending",
+      shadowMismatchDiff: () => [{ path: "/version", cached: 1n }],
+      outcome: "render_error",
+    },
+  ] as const)("records $outcome at once when $name while the logger's promise is still pending", async ({
+    useCase,
+    shadowMismatchDiff,
+    outcome,
+  }) => {
+    let warnings = 0;
+    const warn = (): Promise<never> => {
+      warnings += 1;
+      return new Promise<never>(() => undefined);
+    };
+    const { metrics } = await runConfirmedMismatch(
+      useCase,
+      remoteConfig(100, 100, { mismatchLogging: { diff: "values" } }),
+      { warn, shadowMismatchDiff: shadowMismatchDiff as ShadowMismatchDiff<MismatchRecord> },
+    );
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(warnings).toBe(1);
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, outcome)]);
+  });
+
+  it("records no logging outcome while a logger's promise never settles", async () => {
+    let warnings = 0;
+    const warn = (): Promise<never> => {
+      warnings += 1;
+      return new Promise<never>(() => undefined);
+    };
+    const { metrics } = await runConfirmedMismatch(
+      "ShadowMismatchLoggerPending",
+      remoteConfig(100, 100, { logMismatches: true }),
+      { warn },
+    );
+    for (let turn = 0; turn < 5; turn += 1) {
+      await nextImmediate();
+    }
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(warnings).toBe(1);
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([]);
   });
 
   it.each([

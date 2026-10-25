@@ -320,8 +320,9 @@ function runShadowMismatchHook(
     const result: unknown = (hook as (cached: unknown, source: unknown) => unknown)(cachedValue, sourceValue);
     if (isPromiseLike(result)) {
       // The contract is synchronous. Consume an accidental rejecting
-      // thenable without awaiting it, and fail closed.
-      void Promise.resolve(result).catch(() => undefined);
+      // thenable without awaiting it, through the intrinsic then so a replaced
+      // own then cannot skip the handler, and fail closed.
+      void Promise.prototype.then.call(Promise.resolve(result), undefined, () => undefined);
       return null;
     }
     if (!Array.isArray(result)) {

@@ -889,6 +889,11 @@ describe("shadow mismatch log JSON", () => {
               reject(new Error("thenable hook"));
             },
           }),
+          () => {
+            const rejected = Promise.reject(new Error("hook with a replaced then"));
+            Object.defineProperty(rejected, "then", { value: () => undefined });
+            return rejected;
+          },
         ]) {
           expect(renderShadowMismatchLog(PATHS_ONLY, CACHED_USER, SOURCE_USER, hook).failure).toBe("hook_error");
         }

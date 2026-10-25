@@ -316,6 +316,7 @@ const defaultLogger: Logger = console;
 const defaultStaleRecoveryPredicate: StaleRecoveryPredicate =
   (error) => error instanceof FallbackTimeoutError;
 const SHADOW_MISMATCH_WARNING = "DialCache shadow validation mismatch";
+const PROMISE_THEN = Promise.prototype.then;
 
 export class DialCache {
   private readonly context = new DialCacheContext();
@@ -1819,7 +1820,8 @@ function callObserver(record: () => unknown): boolean | Promise<boolean> {
       && (typeof result === "object" || typeof result === "function")
       && typeof (result as { readonly then?: unknown }).then === "function"
     ) {
-      return Promise.resolve(result).then(() => true, () => false);
+      // The intrinsic then, so a promise whose own then was replaced is still observed.
+      return PROMISE_THEN.call(Promise.resolve(result), () => true, () => false) as Promise<boolean>;
     }
     return true;
   } catch {
