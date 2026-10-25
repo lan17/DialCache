@@ -789,11 +789,12 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   `Policy.disabled()` and a merged runtime policy now carry the expanded
   `mismatch_logging` leaves in place of `log_mismatches`. Go and Rust
   replace the old shapes and delete what becomes unused, at the maintainer's
-  direction in session on 2026-10-25 ("Replace and delete"). Go replaces
-  `ResolvedShadow.LogMismatches` with `LogValue` and `LogDiff` and removes
+  direction in session on 2026-10-25 ("Replace and delete"). Go adds
+  `ShadowPolicy.MismatchLogging` and replaces `ResolvedShadow.LogMismatches`
+  with `LogValue` and `LogDiff`, so unkeyed `ShadowPolicy` and
+  `ResolvedShadow` literals stop compiling, and it removes
   `ShadowMismatchLogDetails`, `ShadowMismatchDetails` and
-  `PreviewShadowLogJSON`, so unkeyed `ShadowPolicy` and `ResolvedShadow`
-  literals stop compiling. Rust's `ShadowPolicy` gains a public field, so
+  `PreviewShadowLogJSON`. Rust's `ShadowPolicy` gains a public field, so
   existing struct literals stop compiling; `Operation` gains a private field
   and can no longer be built with a struct literal; `ShadowMismatchDetails`
   and `ResolvedShadow` change shape; and `Event` and `MetricKind` gain
@@ -801,12 +802,13 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   carries neither `!` nor a `BREAKING CHANGE:` footer, at the maintainer's
   request in session on 2026-10-24: "yes lets drop it and not use `!` in
   description since i dont want to increment major version right now". The
-  Go and Rust entries in `docs/upgrading.md` name the changes. In
-  TypeScript, `shadow_mismatch_logging.count` becomes the Datadog adapter's
-  longest metric suffix, so its longest valid namespace drops from 175 to 170
-  characters; the maintainer kept the name in session on 2026-10-24: "lets
-  keep the shadow_mismatch_logging.count and just reduce documented max size
-  ofr namespace". `docs/upgrading.md` and `docs/observability.md` state it.
+  Go and Rust entries in `docs/upgrading.md` name the changes.
+  `shadow_mismatch_logging.count` becomes the longest metric suffix of the
+  Datadog adapters that TypeScript, Go and Rust bundle, so their longest
+  valid namespace drops from 175 to 170 characters; the maintainer kept the
+  name in session on 2026-10-24: "lets keep the shadow_mismatch_logging.count
+  and just reduce documented max size ofr namespace". `docs/upgrading.md` and
+  `docs/observability.md` state it.
 
 ## Plan
 
