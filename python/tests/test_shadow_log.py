@@ -905,6 +905,7 @@ async def coroutine_hook(cached, source):
         lambda cached, source: [{"path": b"/email"}],
         lambda cached, source: [{"path": "/email"}, {"path": None}],
         lambda cached, source: [*({"path": f"/{index}"} for index in range(64)), None],
+        lambda cached, source: [*({"path": f"/{index}"} for index in range(64)), {"path": None}],
         lambda cached, source: [FailingSide(path="/email", cached=1)],
     ],
     ids=[
@@ -923,6 +924,7 @@ async def coroutine_hook(cached, source):
         "bytes-path",
         "invalid-after-valid",
         "invalid-past-the-cut",
+        "invalid-path-past-the-cut",
         "failing-side",
     ],
 )
