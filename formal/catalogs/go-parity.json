@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "f5f7ee357201b343eb00f8f9c783c92af0d722709137edc0f55e0a52b3cdec0a",
     "executionSha256": "29a412f87329347840f000ea44a6e95332464c0b01b92b4e41c615af3c9157cd",
-    "sourceAuditDispositionsSha256": "78d6089731f62de5de24c6e2ab73d3de3f2cf40fb4bb65ffc3e3213632c7b752",
+    "sourceAuditDispositionsSha256": "6c56dacf9c53303984743f82fe5be5cfd3d9987b32d2bb00216e05e396288d75",
     "featureCoverageSha256": "154af616ab7bd06b5465cfdd778be40af20d9e93688315562edcc40e3a92aa71",
     "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
     "profilesSha256": "9df8285820e4fff65f6a7753885bbb192c09f3f476eac8f9c98d130454ae1a28"
@@ -21,7 +21,7 @@
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
-    "sourceDeclarations": 887,
+    "sourceDeclarations": 894,
     "casesWithScheduledChecks": 266,
     "requiredWitnesses": 497,
     "casesWithQuintRegressionReplay": 192,
@@ -3317,7 +3317,7 @@
   "sourceInventory": [
     {
       "path": "typescript/src/config.ts",
-      "sha256": "36c7777cc87959561e2b1293356876aa9a8889f8397641b5a614b1eac6182f52",
+      "sha256": "0df18816c46826950ea8378e6d3c2e0e0a2392e608059ff20f440ccd7a8e84c6",
       "candidateGoFiles": [
         "go/policy.go",
         "go/api.go"
@@ -4010,13 +4010,13 @@
     },
     {
       "path": "typescript/src/internal/runtime-config.ts",
-      "sha256": "507d96016755b7e5bde45d84b270ac49388720593f6d9b88642f55c49d31e4b9",
+      "sha256": "de4d27fd3586d62cfc6865baf93804223f59691dfda083314ddef32e96b49c88",
       "candidateGoFiles": [
         "go/policy.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Runtime policy parsing, leaf-wise inheritance, invocation snapshots and feature-local invalidation map to ParsePolicy, SnapshotPolicy and ResolvePolicy. Nil/Absent whole-provider results inherit while explicit null leaves remain malformed; constructor and wrapper validation occur through Go APIs. Shorthand expansion before the leaf-wise merge, per-leaf mismatch-logging validation and unknown-field reporting are TypeScript-only until the Go port (#243).",
+        "rationale": "Runtime policy parsing, leaf-wise inheritance, invocation snapshots and feature-local invalidation map to ParsePolicy, SnapshotPolicy and ResolvePolicy. Nil/Absent whole-provider results inherit while explicit null leaves remain malformed; constructor and wrapper validation occur through Go APIs. The raw shadow-group merge with the shorthand expanded once at admission, per-leaf mismatch-logging validation and unknown-field reporting are TypeScript-only until the Go port (#243).",
         "nativeAdaptations": [
           "B01",
           "B02"

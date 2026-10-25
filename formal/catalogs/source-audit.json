@@ -675,7 +675,7 @@
     },
     {
       "path": "typescript/test/dialcache-observability-internals.test.ts",
-      "sha256": "d4feb95d65de424faebf3d327f58e6d30a3d2ba0706661a916354c88ce365429",
+      "sha256": "39c6882b6be6532208ad2a853104d99bdeb40b7e63d88c2feff7846176fdaa32",
       "entries": [
         {"title":"merges every runtime policy leaf independently","contracts":["C16"]},
         {"title":"preserves omitted requestLocal and coalesce through a runtime merge","contracts":["C16"]},
@@ -686,6 +686,7 @@
         {"title":"resolves %s to the effective mismatch-logging leaves","contracts":["C21","C60"]},
         {"title":"rejects the removed shadowRamp field without also reporting it as unknown","contracts":["B01","X01"]},
         {"title":"ignores an inherited shadow group or ramp in a raw provider result","contracts":["C16","C60"]},
+        {"title":"resolves every merged combination of shorthand and leaves as each layer expanded first","contracts":["C16","C60"]},
         {"title":"expands the logMismatches shorthand before the same group's leaves override it","contracts":["C16","C60"]},
         {"title":"reports unknown provider fields at %s once and still merges the known fields","contracts":["C16","X01"]},
         {"title":"does not report unknown fields for known-only or null provider results","contracts":["C16","X01"]},
