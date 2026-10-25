@@ -78,8 +78,8 @@ Choice `0` of `beginCall` becomes `{ op: "begin" }`; choice `3` of
 - **[formal-features.test.ts](../../../typescript/test/formal-features.test.ts)**,
   lines 16 to 53: the `replay` loop. Lines 58 to 60: the
   `DIALCACHE_FEATURE_TRACE_FILE` and `DIALCACHE_FEATURE_PROFILE` selectors.
-- **[features.mjs](../../replay/features.mjs)**: `featureInput` (line 615) and
-  `assertFeatureObservation` (line 617), shared by every port through the
+- **[features.mjs](../../replay/features.mjs)**: `featureInput` (line 617) and
+  `assertFeatureObservation` (line 619), shared by every port through the
   coordinator.
 - **[profiles/source-budgets.mjs](../../replay/profiles/source-budgets.mjs)**:
   the fixture by init choice, the setup command, and the action decodings.
