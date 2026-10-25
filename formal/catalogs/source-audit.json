@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "98ce26a5f1758e7a46b559d35469d843aa0d1d1fd142036ea4fc09b71b99c168",
+      "sha256": "07fb8e87278e4b0b7951ce86bb6fee18b603f5b7c21ad85630acac851bff0224",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -1077,7 +1077,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "8102949aaff320207a3876128c76aea3243c7ec0d18ae348cae6f1e14e0df944",
+      "sha256": "15faf388484ace596460fc725e270681f2298e4f4db3bbba66fe0dfb2716915d",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1086,6 +1086,7 @@
         {"title":"computes the expected entries for $name","contracts":["C60","X01"]},
         {"title":"renders the expected diff fields for $name","contracts":["C60","X01"]},
         {"title":"walks own members whose names collide with Object.prototype","contracts":["C60","B03"]},
+        {"title":"compares only own members in a depth-capped pair","contracts":["C60","B03"]},
         {"title":"cuts the entries at 64 in walk order and counts every difference","contracts":["C60","X01"]},
         {"title":"clamps each pointer to 512 bytes without splitting UTF-8 sequences","contracts":["X01"]},
         {"title":"replaces each side over 1 KiB with its clamped JSON text","contracts":["X01"]},
