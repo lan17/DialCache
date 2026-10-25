@@ -2410,7 +2410,7 @@
       "id": "M75",
       "case": "C60.warning-field-groups",
       "description": "Log the difference entries with their values at diff paths",
-      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog and Go go/shadow_log.go renderShadowMismatchLog treat every diff level above off as values, so a warning at diff paths also carries diffJson with each entry's cached and source sides. The paths level, which a cache of user data can leave on in production, therefore logs values. Rust has no twin: its ShadowMismatchDiffDetails carries the level, and a diff_json at paths is not a field the driver or a logger reads.",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog and Go go/shadow_log.go renderShadowMismatchLog treat every diff level above off as values, so a warning at diff paths also carries diffJson with each entry's cached and source sides. The paths level, which a cache of user data can leave on in production, therefore logs values. Rust has no catalog twin: rust/src/observe.rs documents ShadowMismatchDiffDetails.diff_json as None at Paths, and the Rust driver records diffJson only at Values, so no Rust replay can observe the fault.",
       "typescript": {
         "edits": [
           {

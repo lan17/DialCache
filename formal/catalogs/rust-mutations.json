@@ -508,6 +508,7 @@
       ],
       "requiredDetections": [
         "generated",
+        "fixed",
         "portable"
       ],
       "typescriptRequiredDetections": [
