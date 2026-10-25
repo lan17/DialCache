@@ -231,7 +231,8 @@ where
 
     /// The text mismatch warnings log for each value in place of its JSON;
     /// required for value fields under
-    /// [`register_custom`](Self::register_custom). See [`Preview`].
+    /// [`register_custom`](Self::register_custom). Difference fields then
+    /// come only from [`mismatch_diff`](Self::mismatch_diff). See [`Preview`].
     pub fn preview(
         mut self,
         preview: impl Fn(&T) -> Option<String> + Send + Sync + 'static,

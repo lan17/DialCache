@@ -47,9 +47,12 @@ pub type RecoveryPredicate = Arc<dyn Fn(&Error) -> bool + Send + Sync>;
 pub type Comparator<T> = Arc<dyn Fn(&T, &T) -> bool + Send + Sync>;
 /// Renders the text a confirmed-mismatch warning logs for a value when
 /// `mismatch_logging.value` is on, in place of the value's JSON. `None`, or a
-/// panic, logs the field as unavailable with a `render_error` outcome. Runs
-/// through [`Runtime::spawn_blocking`](crate::Runtime::spawn_blocking) after
-/// mismatch confirmation; callbacks may run on a CPU worker thread.
+/// panic, logs the field as unavailable with a `render_error` outcome. A
+/// preview replaces the JSON for the whole warning, so the built-in
+/// difference computation never reads what it leaves out: difference fields
+/// then come only from a [`MismatchDiffHook`]. Runs through
+/// [`Runtime::spawn_blocking`](crate::Runtime::spawn_blocking) after mismatch
+/// confirmation; callbacks may run on a CPU worker thread.
 pub type Preview<T> = Arc<dyn Fn(&T) -> Option<String> + Send + Sync>;
 /// Replaces the built-in difference computation of confirmed-mismatch
 /// warnings for one operation: receives the compared cached and source values
@@ -97,14 +100,16 @@ pub struct Operation<T> {
     /// instance's, which by default admits only the source deadline error.
     pub should_recover: Option<RecoveryPredicate>,
     /// Renders the value fields of mismatch warnings in place of the
-    /// value's JSON. `None` uses the JSON rendering of an operation built with
-    /// [`new`](Operation::new); an operation built with
+    /// value's JSON, and so also turns off the built-in difference
+    /// computation; see [`Preview`]. `None` uses the JSON rendering of an
+    /// operation built with [`new`](Operation::new); an operation built with
     /// [`with_codec`](Operation::with_codec) has no JSON rendering, so its
     /// value fields need a preview.
     pub preview: Option<Preview<T>>,
     /// Replaces the built-in difference computation of mismatch warnings.
     /// `None` runs the built-in walk over the values' JSON, which only an
-    /// operation built with [`new`](Operation::new) has.
+    /// operation built with [`new`](Operation::new) and without a
+    /// [`preview`](Self::preview) has.
     pub mismatch_diff: Option<MismatchDiffHook<T>>,
     /// The JSON rendering captured where `T: Serialize` is known.
     pub(crate) json: Option<JsonRender>,
@@ -140,7 +145,8 @@ impl<T: Serialize + DeserializeOwned + PartialEq + Send + Sync + 'static> Operat
     /// An operation using the JSON codec, `PartialEq` shadow comparison and
     /// the values' JSON for mismatch warnings: their value fields and the
     /// built-in difference computation. The JSON rendering stays when the
-    /// codec or comparator is replaced afterwards.
+    /// codec or comparator is replaced afterwards; a
+    /// [`preview`](Self::preview) replaces it.
     pub fn new(identity: Identity) -> Self {
         Operation {
             identity,
@@ -205,7 +211,9 @@ impl<T: Send + Sync + 'static> Operation<T> {
     }
 
     /// Set the text mismatch warnings log for each value in place of its
-    /// JSON; `None` from the closure logs the field as unavailable.
+    /// JSON; `None` from the closure logs the field as unavailable. Difference
+    /// fields then come only from a [`mismatch_diff`](Self::mismatch_diff)
+    /// hook.
     pub fn preview(
         mut self,
         preview: impl Fn(&T) -> Option<String> + Send + Sync + 'static,

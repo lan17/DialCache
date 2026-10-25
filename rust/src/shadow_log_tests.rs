@@ -37,14 +37,6 @@ const EVERYTHING: LogPlan = LogPlan {
     diff: MismatchDiff::Values,
 };
 
-impl LogPlan {
-    fn with_value(self) -> LogPlan {
-        LogPlan {
-            value: true,
-            ..self
-        }
-    }
-}
 const HOOK_ERROR: Option<ShadowMismatchLoggingOutcome> =
     Some(ShadowMismatchLoggingOutcome::HookError);
 const RENDER_ERROR: Option<ShadowMismatchLoggingOutcome> =
@@ -1293,7 +1285,51 @@ fn an_operation_without_json_needs_a_preview_and_a_hook() {
 }
 
 #[test]
-fn a_preview_replaces_the_value_fields_and_fails_closed_alone() {
+fn a_preview_replaces_the_json_rendering_for_the_whole_warning() {
+    // An id-only preview redacts the email, so the walk must not log it.
+    let redacting: ErasedPreview =
+        Arc::new(|value: &StoredValue| match value.downcast_ref::<V>() {
+            Some(V::User(user)) => Some(format!(r#"{{"id":"{}"}}"#, user.id)),
+            _ => None,
+        });
+    let redacted = values(Some(r#"{"id":"123"}"#), Some(r#"{"id":"123"}"#));
+    let renderers = Renderers {
+        preview: Some(redacting.clone()),
+        ..json_renderers()
+    };
+    assert!(!renderers.runs_code(PATHS_ONLY));
+    assert_eq!(
+        render_with(EVERYTHING, cached_user(), source_user(), &renderers),
+        content(failed_diff(EVERYTHING), redacted.clone(), RENDER_ERROR)
+    );
+    // With a hook, the difference fields come from the hook alone.
+    let hooked = Renderers {
+        preview: Some(redacting),
+        ..with_hook(|_, _| {
+            vec![MismatchEntry {
+                path: "/email".into(),
+                cached: None,
+                source: None,
+            }]
+        })
+    };
+    assert_eq!(
+        render_with(EVERYTHING, cached_user(), source_user(), &hooked),
+        content(
+            diff_fields(
+                MismatchDiff::Values,
+                Some(&["/email"]),
+                Some(1),
+                Some(r#"[{"path":"/email"}]"#)
+            ),
+            redacted,
+            None
+        )
+    );
+}
+
+#[test]
+fn a_preview_fails_closed_per_value_and_receives_the_absent_marker() {
     let preview: ErasedPreview = Arc::new(|value: &StoredValue| match value.downcast_ref::<V>() {
         Some(V::User(user)) if user.email == "new@example.com" => Some("🙂".repeat(10_000)),
         Some(V::User(_)) => None,
@@ -1303,40 +1339,15 @@ fn a_preview_replaces_the_value_fields_and_fails_closed_alone() {
         preview: Some(preview),
         ..json_renderers()
     };
-    // The walk still compares the JSON renderings.
+    let source_field = crate::preview::preview_value(&"🙂".repeat(10_000));
     assert_eq!(
-        render_with(EVERYTHING, cached_user(), source_user(), &renderers),
-        content(
-            diff_fields(
-                MismatchDiff::Values,
-                Some(&["/email"]),
-                Some(1),
-                Some(
-                    r#"[{"path":"/email","cached":"old@example.com","source":"new@example.com"}]"#
-                )
-            ),
-            values(
-                None,
-                Some(&crate::preview::preview_value(&"🙂".repeat(10_000)))
-            ),
-            RENDER_ERROR
-        )
+        render_with(VALUE_ONLY, cached_user(), source_user(), &renderers),
+        content(None, values(None, Some(&source_field)), RENDER_ERROR)
     );
-    // A value the JSON rendering finds absent is never handed to the preview.
+    // No JSON rendering runs, so the preview, which panics here, receives the
+    // test-only absent marker.
     assert_eq!(
-        render_with(
-            PATHS_ONLY.with_value(),
-            V::Absent,
-            source_user(),
-            &renderers
-        ),
-        content(
-            diff_fields(MismatchDiff::Paths, Some(&[""]), Some(1), None),
-            values(
-                None,
-                Some(&crate::preview::preview_value(&"🙂".repeat(10_000)))
-            ),
-            None
-        )
+        render_with(VALUE_ONLY, V::Absent, source_user(), &renderers),
+        content(None, values(None, Some(&source_field)), RENDER_ERROR)
     );
 }

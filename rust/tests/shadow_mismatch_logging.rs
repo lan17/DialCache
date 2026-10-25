@@ -763,6 +763,58 @@ fn a_custom_codec_operation_logs_diff_fields_only_through_its_hook() {
 }
 
 #[test]
+fn a_preview_replaces_the_json_rendering_so_the_walk_never_logs_what_it_redacts() {
+    let redact = |record: &Record| Some(format!(r#"{{"id":"{}"}}"#, record.id));
+    let redacted = values(Some(r#"{"id":"123"}"#), Some(r#"{"id":"123"}"#));
+    let recorder = Arc::new(Recorder::default());
+    let inline = operation("RedactedInline", shadow(Some(true), None)).preview(redact);
+    run(&recorder, None, inline, record(2));
+    assert_warning(
+        &recorder,
+        "RedactedInline",
+        failed_diff(MismatchDiff::Values),
+        redacted.clone(),
+        Some(ShadowMismatchLoggingOutcome::RenderError),
+    );
+    assert_eq!(
+        recorder.logging_outcomes(),
+        vec![ShadowMismatchLoggingOutcome::RenderError]
+    );
+
+    // A hook supplies the difference fields, here for a registered use case.
+    let recorder = Arc::new(Recorder::default());
+    let mut executor = TestExecutor::new(WALL_EPOCH_MS);
+    let cache = cache(&executor, &recorder, None);
+    let use_case = cache
+        .use_case::<(), Record>("user_id", "RedactedRegistered")
+        .policy(shadow(Some(true), None))
+        .key(|_| KeySpec::new("123"))
+        .source(|_, ()| ready(Ok(record(2))))
+        .preview(redact)
+        .mismatch_diff(|_: &Record, _: &Record| {
+            vec![MismatchEntry {
+                path: "/version".into(),
+                cached: None,
+                source: None,
+            }]
+        })
+        .register()
+        .unwrap();
+    executor.block_on(async move {
+        let request = cache.enable_guard();
+        use_case.get(request.scope(), ()).await.unwrap();
+    });
+    executor.drain();
+    assert_warning(
+        &recorder,
+        "RedactedRegistered",
+        paths(MismatchDiff::Values, Some(r#"[{"path":"/version"}]"#)),
+        redacted,
+        None,
+    );
+}
+
+#[test]
 fn an_invalid_runtime_leaf_keeps_the_valid_default_leaf_with_one_config_resolution() {
     let recorder = confirmed(
         "InvalidRuntimeLeaf",

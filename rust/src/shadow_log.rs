@@ -208,11 +208,19 @@ pub(crate) struct Renderers {
 }
 
 impl Renderers {
+    /// The JSON rendering the warning derives from. A preview replaces it for
+    /// the whole warning, so the built-in walk never reads what the value
+    /// fields do not log, and difference fields then need the hook.
+    fn rendering(&self) -> Option<JsonRender> {
+        self.json.filter(|_| self.preview.is_none())
+    }
+
     /// Whether building the plan's fields calls any renderer or hook, and so
     /// belongs on the bounded CPU executor.
     pub(crate) fn runs_code(&self, plan: LogPlan) -> bool {
-        let value = plan.value && (self.preview.is_some() || self.json.is_some());
-        let diff = plan.diff != MismatchDiff::Off && (self.hook.is_some() || self.json.is_some());
+        let json = self.rendering().is_some();
+        let value = plan.value && (self.preview.is_some() || json);
+        let diff = plan.diff != MismatchDiff::Off && (self.hook.is_some() || json);
         value || diff
     }
 }
@@ -244,19 +252,22 @@ impl MismatchContent {
 /// failed hook never falls back to the built-in computation. An absent side
 /// is not a failure: its value field is unavailable, and the built-in
 /// reports the other side whole at the root. The hook replaces the walk, so
-/// with `value` off and a hook neither side is rendered.
+/// with `value` off and a hook neither side is rendered. A preview replaces
+/// the JSON rendering, so with a preview the difference fields come only
+/// from the hook.
 pub(crate) fn render_mismatch_log(
     plan: LogPlan,
     cached: &StoredValue,
     source: &StoredValue,
     renderers: &Renderers,
 ) -> MismatchContent {
+    let json = renderers.rendering();
     let walk = plan.diff != MismatchDiff::Off && renderers.hook.is_none();
     let rendering = |value: &StoredValue| -> Option<Rendering> {
-        let json = renderers.json?;
+        let json = json?;
         if walk {
             Some(json.full(value))
-        } else if plan.value && renderers.preview.is_none() {
+        } else if plan.value {
             Some(json.prefix(value))
         } else {
             None
@@ -306,8 +317,9 @@ pub(crate) fn render_mismatch_log(
                         }
                     }
                 }
-                // A side without a rendering, or an operation without JSON
-                // (lan17/DialCache#245 tracks a renderer for those).
+                // A side without a rendering, or a warning without JSON: an
+                // operation built with a codec (lan17/DialCache#245 tracks a
+                // renderer for those) or one whose preview replaces its JSON.
                 _ => {
                     render_failed = true;
                     None
