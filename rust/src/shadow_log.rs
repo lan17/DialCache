@@ -12,7 +12,7 @@ use crate::observe::{
 use crate::operation::{ErasedMismatchDiff, ErasedPreview, MismatchEntry};
 use crate::policy::MismatchDiff;
 use crate::preview::{
-    clamp_utf8, json_preview, preview_value, SHADOW_LOG_DIFF_MAX_BYTES, SHADOW_MISMATCH_MAX_ENTRIES,
+    clamp_utf8, preview_value, JsonPrefix, SHADOW_LOG_DIFF_MAX_BYTES, SHADOW_MISMATCH_MAX_ENTRIES,
 };
 use crate::protocol::{bound_entry, diff_rendered, MismatchJsonDiff};
 
@@ -65,168 +65,135 @@ fn render_json<T: Serialize + 'static>(value: &StoredValue, prefix: bool) -> Ren
         return Rendering::Failed;
     };
     catch_unwind(AssertUnwindSafe(|| {
-        if is_absent(value) {
-            return Rendering::Absent;
-        }
-        let json = if prefix {
-            json_preview(value)
+        if prefix {
+            let mut json = JsonPrefix::new();
+            match write_json(&mut json, value) {
+                Ok(true) => Rendering::Absent,
+                Ok(false) => Rendering::Json(json.finish()),
+                Err(_) => Rendering::Failed,
+            }
         } else {
-            serde_json::to_string(value).ok()
-        };
-        json.map_or(Rendering::Failed, Rendering::Json)
+            let mut json = Vec::with_capacity(128);
+            match write_json(&mut json, value) {
+                Ok(true) => Rendering::Absent,
+                Ok(false) => String::from_utf8(json).map_or(Rendering::Failed, Rendering::Json),
+                Err(_) => Rendering::Failed,
+            }
+        }
     }))
     .unwrap_or(Rendering::Failed)
 }
 
+/// Serializes `value` as compact JSON; `Ok(true)`, with nothing written, when
+/// the value is the absent marker.
 #[cfg(not(feature = "test-util"))]
-fn is_absent<T: Serialize>(_: &T) -> bool {
-    false
+fn write_json<T: Serialize, W: std::io::Write>(writer: W, value: &T) -> serde_json::Result<bool> {
+    value.serialize(&mut serde_json::Serializer::new(writer))?;
+    Ok(false)
 }
 
+/// Serializes `value` as compact JSON; `Ok(true)`, with nothing written, when
+/// the value is the absent marker.
 #[cfg(feature = "test-util")]
-fn is_absent<T: Serialize>(value: &T) -> bool {
-    value.serialize(absent::Probe).is_ok()
+fn write_json<T: Serialize, W: std::io::Write>(writer: W, value: &T) -> serde_json::Result<bool> {
+    let mut absent = false;
+    value.serialize(absent::TopLevel {
+        json: &mut serde_json::Serializer::new(writer),
+        absent: &mut absent,
+    })?;
+    Ok(absent)
 }
 
-/// Recognizes [`crate::testing::Absent`] at the top level of a value: every
-/// serializer call fails except a unit struct carrying the marker's name, so
-/// the probe stops at the value's first call.
+/// Recognizes [`crate::testing::Absent`] at the top level of a value while
+/// rendering it once: every call goes to the JSON serializer except a unit
+/// struct carrying the marker's name. Nested markers render as `null`.
 #[cfg(feature = "test-util")]
 mod absent {
-    use serde::ser::{Impossible, Serializer};
+    use serde::ser::{Serialize, Serializer};
 
-    #[derive(Debug)]
-    pub(super) struct Present;
+    type Json<'a, W> = &'a mut serde_json::Serializer<W>;
+    type Result<T> = std::result::Result<T, serde_json::Error>;
 
-    impl std::fmt::Display for Present {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("not the absent marker")
-        }
+    pub(super) struct TopLevel<'a, W> {
+        pub json: Json<'a, W>,
+        pub absent: &'a mut bool,
     }
 
-    impl std::error::Error for Present {}
-
-    impl serde::ser::Error for Present {
-        fn custom<T: std::fmt::Display>(_: T) -> Self {
-            Present
-        }
-    }
-
-    pub(super) struct Probe;
-
-    macro_rules! present {
-        ($($name:ident($($arg:ty),*);)*) => {
-            $(fn $name(self, $(_: $arg),*) -> Result<(), Present> { Err(Present) })*
+    macro_rules! forward {
+        ($($name:ident($($arg:ident: $ty:ty),*) -> $ret:ty;)*) => {
+            $(fn $name(self, $($arg: $ty),*) -> Result<$ret> { self.json.$name($($arg),*) })*
         };
     }
 
-    impl Serializer for Probe {
+    impl<'a, W: std::io::Write> Serializer for TopLevel<'a, W> {
         type Ok = ();
-        type Error = Present;
-        type SerializeSeq = Impossible<(), Present>;
-        type SerializeTuple = Impossible<(), Present>;
-        type SerializeTupleStruct = Impossible<(), Present>;
-        type SerializeTupleVariant = Impossible<(), Present>;
-        type SerializeMap = Impossible<(), Present>;
-        type SerializeStruct = Impossible<(), Present>;
-        type SerializeStructVariant = Impossible<(), Present>;
+        type Error = serde_json::Error;
+        type SerializeSeq = <Json<'a, W> as Serializer>::SerializeSeq;
+        type SerializeTuple = <Json<'a, W> as Serializer>::SerializeTuple;
+        type SerializeTupleStruct = <Json<'a, W> as Serializer>::SerializeTupleStruct;
+        type SerializeTupleVariant = <Json<'a, W> as Serializer>::SerializeTupleVariant;
+        type SerializeMap = <Json<'a, W> as Serializer>::SerializeMap;
+        type SerializeStruct = <Json<'a, W> as Serializer>::SerializeStruct;
+        type SerializeStructVariant = <Json<'a, W> as Serializer>::SerializeStructVariant;
 
-        present! {
-            serialize_bool(bool);
-            serialize_i8(i8);
-            serialize_i16(i16);
-            serialize_i32(i32);
-            serialize_i64(i64);
-            serialize_u8(u8);
-            serialize_u16(u16);
-            serialize_u32(u32);
-            serialize_u64(u64);
-            serialize_f32(f32);
-            serialize_f64(f64);
-            serialize_char(char);
-            serialize_str(&str);
-            serialize_bytes(&[u8]);
-            serialize_none();
-            serialize_unit();
-            serialize_unit_variant(&'static str, u32, &'static str);
+        forward! {
+            serialize_bool(v: bool) -> ();
+            serialize_i8(v: i8) -> ();
+            serialize_i16(v: i16) -> ();
+            serialize_i32(v: i32) -> ();
+            serialize_i64(v: i64) -> ();
+            serialize_i128(v: i128) -> ();
+            serialize_u8(v: u8) -> ();
+            serialize_u16(v: u16) -> ();
+            serialize_u32(v: u32) -> ();
+            serialize_u64(v: u64) -> ();
+            serialize_u128(v: u128) -> ();
+            serialize_f32(v: f32) -> ();
+            serialize_f64(v: f64) -> ();
+            serialize_char(v: char) -> ();
+            serialize_str(v: &str) -> ();
+            serialize_bytes(v: &[u8]) -> ();
+            serialize_none() -> ();
+            serialize_unit() -> ();
+            serialize_unit_variant(name: &'static str, index: u32, variant: &'static str) -> ();
+            serialize_seq(len: Option<usize>) -> Self::SerializeSeq;
+            serialize_tuple(len: usize) -> Self::SerializeTuple;
+            serialize_tuple_struct(name: &'static str, len: usize) -> Self::SerializeTupleStruct;
+            serialize_tuple_variant(name: &'static str, index: u32, variant: &'static str, len: usize) -> Self::SerializeTupleVariant;
+            serialize_map(len: Option<usize>) -> Self::SerializeMap;
+            serialize_struct(name: &'static str, len: usize) -> Self::SerializeStruct;
+            serialize_struct_variant(name: &'static str, index: u32, variant: &'static str, len: usize) -> Self::SerializeStructVariant;
         }
 
-        fn serialize_unit_struct(self, name: &'static str) -> Result<(), Present> {
+        fn serialize_unit_struct(self, name: &'static str) -> Result<()> {
             if name == crate::testing::ABSENT_MARKER {
-                Ok(())
-            } else {
-                Err(Present)
+                *self.absent = true;
+                return Ok(());
             }
+            self.json.serialize_unit_struct(name)
         }
 
-        fn serialize_some<T: ?Sized + serde::Serialize>(self, _: &T) -> Result<(), Present> {
-            Err(Present)
+        fn serialize_some<T: ?Sized + Serialize>(self, value: &T) -> Result<()> {
+            self.json.serialize_some(value)
         }
 
-        fn serialize_newtype_struct<T: ?Sized + serde::Serialize>(
+        fn serialize_newtype_struct<T: ?Sized + Serialize>(
             self,
-            _: &'static str,
-            _: &T,
-        ) -> Result<(), Present> {
-            Err(Present)
+            name: &'static str,
+            value: &T,
+        ) -> Result<()> {
+            self.json.serialize_newtype_struct(name, value)
         }
 
-        fn serialize_newtype_variant<T: ?Sized + serde::Serialize>(
+        fn serialize_newtype_variant<T: ?Sized + Serialize>(
             self,
-            _: &'static str,
-            _: u32,
-            _: &'static str,
-            _: &T,
-        ) -> Result<(), Present> {
-            Err(Present)
-        }
-
-        fn serialize_seq(self, _: Option<usize>) -> Result<Self::SerializeSeq, Present> {
-            Err(Present)
-        }
-
-        fn serialize_tuple(self, _: usize) -> Result<Self::SerializeTuple, Present> {
-            Err(Present)
-        }
-
-        fn serialize_tuple_struct(
-            self,
-            _: &'static str,
-            _: usize,
-        ) -> Result<Self::SerializeTupleStruct, Present> {
-            Err(Present)
-        }
-
-        fn serialize_tuple_variant(
-            self,
-            _: &'static str,
-            _: u32,
-            _: &'static str,
-            _: usize,
-        ) -> Result<Self::SerializeTupleVariant, Present> {
-            Err(Present)
-        }
-
-        fn serialize_map(self, _: Option<usize>) -> Result<Self::SerializeMap, Present> {
-            Err(Present)
-        }
-
-        fn serialize_struct(
-            self,
-            _: &'static str,
-            _: usize,
-        ) -> Result<Self::SerializeStruct, Present> {
-            Err(Present)
-        }
-
-        fn serialize_struct_variant(
-            self,
-            _: &'static str,
-            _: u32,
-            _: &'static str,
-            _: usize,
-        ) -> Result<Self::SerializeStructVariant, Present> {
-            Err(Present)
+            name: &'static str,
+            index: u32,
+            variant: &'static str,
+            value: &T,
+        ) -> Result<()> {
+            self.json
+                .serialize_newtype_variant(name, index, variant, value)
         }
     }
 }
