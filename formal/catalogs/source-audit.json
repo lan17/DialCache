@@ -1077,7 +1077,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "b682ea22a049fc6e197e4331c25bf5f91bdd6d7aae6ac77fb33cc52cbf0b0664",
+      "sha256": "8102949aaff320207a3876128c76aea3243c7ec0d18ae348cae6f1e14e0df944",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1085,6 +1085,7 @@
         {"title":"byte-clamps keys and JSON without splitting UTF-8 sequences","contracts":["X01"]},
         {"title":"computes the expected entries for $name","contracts":["C60","X01"]},
         {"title":"renders the expected diff fields for $name","contracts":["C60","X01"]},
+        {"title":"walks own members whose names collide with Object.prototype","contracts":["C60","B03"]},
         {"title":"cuts the entries at 64 in walk order and counts every difference","contracts":["C60","X01"]},
         {"title":"clamps each pointer to 512 bytes without splitting UTF-8 sequences","contracts":["X01"]},
         {"title":"replaces each side over 1 KiB with its clamped JSON text","contracts":["X01"]},
