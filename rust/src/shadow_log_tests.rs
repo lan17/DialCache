@@ -118,7 +118,10 @@ fn previewed(preview: ErasedPreview) -> Renderers {
 
 fn with_hook(hook: impl Fn(&V, &V) -> Vec<MismatchEntry> + Send + Sync + 'static) -> Renderers {
     let hook: ErasedMismatchDiff = Arc::new(move |cached: &StoredValue, source: &StoredValue| {
-        Some(hook(cached.downcast_ref()?, source.downcast_ref()?))
+        hook(
+            cached.downcast_ref().unwrap(),
+            source.downcast_ref().unwrap(),
+        )
     });
     Renderers {
         hook: Some(hook),
@@ -708,16 +711,6 @@ fn a_panicking_hook_fails_closed_with_hook_error_and_no_fallback() {
         render_with(PATHS_ONLY, cached_user(), source_user(), &renderers),
         content(failed_diff(PATHS_ONLY), None, HOOK_ERROR)
     );
-    // A hook given values of another type fails the same way.
-    let foreign: ErasedMismatchDiff = Arc::new(|_: &StoredValue, _: &StoredValue| None);
-    let renderers = Renderers {
-        hook: Some(foreign),
-        ..json_renderers()
-    };
-    assert_eq!(
-        render_with(PATHS_ONLY, cached_user(), source_user(), &renderers),
-        content(failed_diff(PATHS_ONLY), None, HOOK_ERROR)
-    );
 }
 
 #[test]
@@ -853,11 +846,11 @@ fn an_operation_without_json_needs_a_preview_and_a_hook() {
         _ => None,
     });
     let hook: ErasedMismatchDiff = Arc::new(|_: &StoredValue, _: &StoredValue| {
-        Some(vec![MismatchEntry {
+        vec![MismatchEntry {
             path: "/email".into(),
             cached: None,
             source: None,
-        }])
+        }]
     });
     let custom = Renderers {
         hook: Some(hook),

@@ -61,10 +61,10 @@ impl JsonRender {
 }
 
 fn render_json<T: Serialize + 'static>(value: &StoredValue, prefix: bool) -> Rendering {
-    let Some(value) = value.downcast_ref::<T>() else {
-        return Rendering::Failed;
-    };
     catch_unwind(AssertUnwindSafe(|| {
+        let value = value
+            .downcast_ref::<T>()
+            .expect("compared values have the operation's type");
         if prefix {
             let mut json = JsonPrefix::new();
             match write_json(&mut json, value) {
@@ -383,7 +383,7 @@ fn run_hook(
     source: &StoredValue,
     with_values: bool,
 ) -> Option<MismatchJsonDiff> {
-    let entries = catch_unwind(AssertUnwindSafe(|| hook(cached, source))).ok()??;
+    let entries = catch_unwind(AssertUnwindSafe(|| hook(cached, source))).ok()?;
     Some(MismatchJsonDiff {
         count: entries.len() as u64,
         entries: entries

@@ -304,10 +304,12 @@ impl<T: Send + Sync + 'static> Operation<T> {
             value_renderer,
             mismatch_diff: mismatch_diff.map(|hook| {
                 Arc::new(move |cached: &StoredValue, source: &StoredValue| {
-                    match (cached.downcast_ref::<T>(), source.downcast_ref::<T>()) {
-                        (Some(cached), Some(source)) => Some(hook(cached, source)),
-                        _ => None,
-                    }
+                    // The comparator already accepted both values as `T`.
+                    let typed = "compared values have the operation's type";
+                    hook(
+                        cached.downcast_ref::<T>().expect(typed),
+                        source.downcast_ref::<T>().expect(typed),
+                    )
                 }) as ErasedMismatchDiff
             }),
         };
@@ -321,9 +323,8 @@ pub(crate) type ErasedLoad =
 pub(crate) type ErasedCompare =
     Arc<dyn Fn(&StoredValue, &StoredValue) -> Result<bool, BoxError> + Send + Sync>;
 pub(crate) type ErasedPreview = Arc<dyn Fn(&StoredValue) -> Option<String> + Send + Sync>;
-/// `None` when a value is not of the operation's type.
 pub(crate) type ErasedMismatchDiff =
-    Arc<dyn Fn(&StoredValue, &StoredValue) -> Option<Vec<MismatchEntry>> + Send + Sync>;
+    Arc<dyn Fn(&StoredValue, &StoredValue) -> Vec<MismatchEntry> + Send + Sync>;
 pub(crate) type IdentityProvider = Arc<dyn Fn() -> Result<Identity, BoxError> + Send + Sync>;
 
 /// Immutable adapters and policy, shared by every registered invocation.
