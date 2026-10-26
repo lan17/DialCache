@@ -1,7 +1,7 @@
 # Shadow mismatch paths: name the differing fields in confirmed-mismatch warnings
 
-- **Status:** Accepted
-- **Issue:** #243, which tracks the work after the TypeScript reference
+- **Status:** Implemented
+- **Issue:** #243, which tracked the work after the TypeScript reference; #242 completes it
 - **Pull requests:** #242
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
 - **Supersedes:** the design in pull request #138, which is unmerged; the
@@ -874,6 +874,13 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   port. The maintainer kept this behavior as documented in session on
   2026-10-25, and asked for a faster implementation, TypeScript first, as a
   follow-up: #248.
+- **2026-10-26, #242, TypeScript:** the one catch around warning construction
+  logs every requested field as `null` with `render_error`, not the
+  metadata-only warning the Failure handling paragraph names, so the warning
+  keeps the documented rule that each requested field is present. The other
+  ports keep the metadata-only warning on that path, which no supported input
+  reaches. The maintainer's rule for the TypeScript trim (2026-10-26): defensive
+  code only at the config and diff-generator boundaries.
 - **2026-10-24, #242:** TypeScript's `cached()` and `getOrLoad()` throw a
   `TypeError` for a `shadowMismatchDiff` that is not a function, as they do for
   `shouldAttemptStaleRecovery`, rather than letting every warning fail as

@@ -658,7 +658,9 @@ own value field is `null` and the warning carries no `loggingOutcome`. A hook
 that fails makes `mismatchPaths`, `mismatchPathCount`, and `diffJson` `null`;
 DialCache does not fall back to the built-in computation. A hook value without a
 JSON rendering makes `diffJson` alone `null`. Any other failure while building
-the fields leaves the metadata warning. Failures never change the
+the fields still logs the warning, with `render_error`: TypeScript writes every
+requested field as `null`, and Go, Rust and Python log the metadata alone.
+Failures never change the
 `shadowValidation` outcome, and the `shadowMismatchLogging` metric reports each
 warning attempt; see
 [Confirmed mismatch warnings](observability.md#confirmed-mismatch-warnings).

@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "1328cc6e07ad3e9ebe723a59ea6d39d8d005d74ee819919d2624c0eb96c0a5e9",
+      "sha256": "8c9473e5c1a7bc3af380d301bfb16bd983f918cc0813dd1ad548ac9180202317",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
