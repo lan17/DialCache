@@ -454,6 +454,51 @@ func TestShadowMismatchLoggingConfigErrorOncePerAdmittedJob(t *testing.T) {
 	})
 }
 
+func TestShadowMismatchWarningKeepsTheShadowSlot(t *testing.T) {
+	// A confirmed mismatch keeps its slot until its warning is logged, so
+	// capacity bounds a slow hook as it bounds a slow comparator.
+	synctest.Test(t, func(t *testing.T) {
+		payload, _ := (JSONCodec[mismatchRecord]{}).Encode(mismatchCachedRecord)
+		frame := Frame{CreatedAtMS: uint64(time.Now().UnixMilli()), Payload: payload.Bytes}
+		remote := boundaryRemote{read: func(context.Context) (ReadResult, error) { return ReadResult{Kind: "hit", Frame: frame}, nil }}
+		recorder := &warningRecorder{}
+		cache := MustNew(WithRemote(remote), WithLogger(recorder), WithObserver(recorder.observe), WithShadowOutcomes(func(Event) {}), WithShadowCapacity(1))
+		release := make(chan struct{})
+		hook := func(mismatchRecord, mismatchRecord) ([]MismatchEntry, error) { <-release; return nil, nil }
+		call := func(id string) {
+			op := Operation[mismatchRecord]{Identity: Identity{KeyType: "user_id", ID: id, UseCase: "Capacity"}, MismatchDiff: hook,
+				Policy: shadowLogging(ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffPaths)}})}
+			if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+				_, err := GetOrLoad(ctx, cache, op, func(context.Context) (mismatchRecord, error) { return mismatchSourceRecord, nil })
+				return err
+			}); err != nil {
+				t.Error(err)
+			}
+		}
+		// The first job confirms its mismatch and blocks in the hook; a job for
+		// another key finds no free slot.
+		call("123")
+		synctest.Wait()
+		call("456")
+		synctest.Wait()
+		verdicts := recorder.outcomes("shadowValidation")
+		close(release)
+		synctest.Wait()
+		if !reflect.DeepEqual(verdicts, []string{"mismatch", "dropped"}) {
+			t.Fatalf("verdicts while the hook runs: %v", verdicts)
+		}
+		// Once the warning is logged, the slot admits the next job.
+		call("789")
+		synctest.Wait()
+		if verdicts := recorder.outcomes("shadowValidation"); !reflect.DeepEqual(verdicts, []string{"mismatch", "dropped", "mismatch"}) {
+			t.Fatalf("verdicts: %v", verdicts)
+		}
+		if outcomes := recorder.outcomes("shadowMismatchLogging"); !reflect.DeepEqual(outcomes, []string{"logged", "logged"}) {
+			t.Fatalf("logging outcomes: %v", outcomes)
+		}
+	})
+}
+
 func TestShadowMismatchLoggingExporters(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		registry := prometheus.NewRegistry()

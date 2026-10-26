@@ -124,6 +124,10 @@ func (x *execution[T]) warnShadowMismatch(v shadowVerdict[T]) {
 
 func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[T], started time.Duration) {
 	clock := x.cache.settings.clock
+	// The verdict and its mismatch warning keep the slot too, so capacity
+	// bounds the hook and the built-in walk as it bounds the comparator.
+	reported := make(chan struct{})
+	defer close(reported)
 	if source == nil {
 		started = elapsedNow(clock)
 	}
@@ -175,6 +179,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 				for _, r := range reads {
 					<-r.done
 				}
+				<-reported
 				x.cache.mu.Lock()
 				if x.cache.shadows[x.key] == f {
 					delete(x.cache.shadows, x.key)
