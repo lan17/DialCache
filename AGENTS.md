@@ -47,8 +47,8 @@ Classify before editing, because the type sets the design record, the steps and 
 - **Mutations:** Replay plus the TypeScript, Go and Rust mutation campaigns (`-f mode=mutations`),
   which plant catalogued bugs in a port and require its tests to catch them; about 50 minutes.
 - **Full:** Mutations plus the Quint model checks and the model-fault campaign (`-f mode=full`),
-  which plants bugs in the models and requires an invariant to catch each one; about two and a
-  half hours. The campaign reads only the models, the challenge catalog and the Quint toolchain,
+  which plants bugs in the models and requires an invariant to catch each one; about three
+  hours. The campaign reads only the models, the challenge catalog and the Quint toolchain,
   so a change confined to the ports or their replay drivers never needs it. `-f exploration=true`
   adds a fresh-seed generation and replay in an isolated copy of the source; a move needs it, and
   the weekly run on `main` includes it.

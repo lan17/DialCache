@@ -47,8 +47,8 @@ Complete replay, mutation measurement and exploration run through the manual
 and weekly formal workflow, using the same Make targets as local runs. Its
 `mode` input selects `replay` (the generated corpus in every port, about 15
 minutes), `mutations` (plus the port mutation campaigns, about 50 minutes) or
-`full` (plus the model checks and the model-fault campaign, about two and a
-half hours). Before merge, run `replay` for changes to port behavior or a
+`full` (plus the model checks and the model-fault campaign, about three
+hours). Before merge, run `replay` for changes to port behavior or a
 replay driver, and `mutations` when the change also edits a file a catalogued
 mutant rewrites. Run `full` for changes to a model's transitions, invariants
 or challenges, the kernel library, `formal/tools/` or the Quint toolchain, and

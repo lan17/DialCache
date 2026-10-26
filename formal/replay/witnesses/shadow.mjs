@@ -196,7 +196,10 @@ function warningLabels(recorder, step, previous, before, after, fixture, reporte
   if (listed && warning.count === 1 && warning.paths.length === 1 && warning.paths[0] === "") recorder.credit("differing-renderings-log-root-entry");
   const hookRan = before.diffHook && accepted.diff !== "off", unrenderable = before.sourceValue === UNRENDERABLE;
   if (unrenderable && valueLogged && warning.sourceValue === 0) recorder.credit("unrenderable-source-logs-null");
-  if (hookRan && unrenderable && outcome === "hook_error") recorder.credit("hook-error-over-render-error");
+  // Once the hook replaces the walk only the value fields need the source's
+  // rendering, so the precedence shows only where they were logged and the
+  // source's field is null.
+  if (hookRan && unrenderable && valueLogged && warning.sourceValue === 0 && outcome === "hook_error") recorder.credit("hook-error-over-render-error");
   if (hookRan && before.loggerFailed && outcome === "hook_error") recorder.credit("hook-error-over-logger-error");
   if (!hookRan && unrenderable && before.loggerFailed && outcome === "render_error") recorder.credit("render-error-over-logger-error");
   if (before.diffHook && accepted.diff === "off" && outcome !== "hook_error") recorder.credit("hook-skipped-at-diff-off");

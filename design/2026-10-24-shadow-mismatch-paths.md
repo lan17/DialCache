@@ -294,16 +294,18 @@ fails resolution like a malformed layer map. `logMismatches` keeps its type in e
   does not assert them, so `make differential` still compares those profiles
   against reference traces that lack them.
   `dialcache-shadow-conformance.qnt` gains starting and runtime choices
-  for each `diff` level, `value` and the shorthand. It restates
-  `invalidLoggingCannotBeCaptured` per leaf, because an invalid leaf beside a
-  valid one leaves the valid leaf on: a leaf whose effective value came from
-  an invalid input is off. It adds invariants (one outcome per warning
-  attempt, none with logging off, field groups matching the captured leaves)
-  and regressions for the four-row table and for each failure outcome alone
-  and combined. Served-hit jobs reach the same warning code as dark jobs in
-  every port, so the profile's dark jobs stand for both; a hook's successful
-  entries stay pinned by native tests. The shadow profile version goes from 3
-  to 4, so `make differential` reports it as an intended divergence; unchanged
+  for each `diff` level, `value` and the shorthand. It states each captured
+  leaf per leaf (`capturedLoggingFollowsLayers`), because an invalid leaf
+  beside a valid one leaves the valid leaf on: a leaf whose effective value
+  came from an invalid input is off. That invariant implies `main`'s
+  `invalidLoggingCannotBeCaptured`, which is deleted. It adds invariants
+  (one outcome per warning attempt, none with logging off, field groups
+  matching the captured leaves) and regressions for the four-row table and
+  for each failure outcome alone and combined. Served-hit jobs reach the same
+  warning code as dark jobs in every port, so the profile's dark jobs stand
+  for both; a hook's successful entries stay pinned by native tests. The
+  shadow profile version goes from 3 to 4, so `make differential` reports it
+  as an intended divergence; unchanged
   behavior is shown by the existing regressions, which keep their warning
   counts, and by the profiles that keep their versions. Until the last port
   lands, the `logPolicy` choices in `formal/replay/features.mjs` and the five

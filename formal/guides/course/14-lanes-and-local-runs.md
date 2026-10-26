@@ -26,7 +26,7 @@ four shards. These are gates on a change, not a completion claim.
 for any branch. Its jobs are the six stages of lesson 1 as separate lanes:
 
 - `check-models` (`make formal-check`): typecheck and run every model, every
-  regression and every challenge; budget 150 minutes.
+  regression and every challenge; budget 210 minutes.
 - `generate` (`make formal-generate`): the corpus and the witness evidence.
 - One parity lane per port: `make formal-ts`, `formal-go`, `formal-rust` and
   `formal-python`.

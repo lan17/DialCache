@@ -1515,6 +1515,11 @@
     {"name":"absent cached side against a present source","source":{"plan":"pro"},"entries":[{"path":"","source":{"plan":"pro"}}],"count":1},
     {"name":"present cached side against an absent source","cached":{"version":2},"entries":[{"path":"","cached":{"version":2}}],"count":1},
     {"name":"absent cached side against a null source","source":null,"entries":[{"path":"","source":null}],"count":1},
-    {"name":"two absent sides","entries":[],"count":0}
+    {"name":"two absent sides","entries":[],"count":0},
+    {"name":"numbers compare as doubles: 1 and 1.0","cached":{"n":1},"source":{"n":1.0},"entries":[],"count":0},
+    {"name":"a bool never equals a number: true and 1","cached":true,"source":1,"entries":[{"path":"","cached":true,"source":1}],"count":1},
+    {"name":"a bool never equals a number: false and 0","cached":false,"source":0,"entries":[{"path":"","cached":false,"source":0}],"count":1},
+    {"name":"numbers compare as doubles: 0 and -0","cached":0,"source":-0,"entries":[],"count":0},
+    {"name":"numbers compare as doubles: 2^53 + 1 and 2^53","cached":{"id":9007199254740993},"source":{"id":9007199254740992},"entries":[],"count":0}
   ]
 }

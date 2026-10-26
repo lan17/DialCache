@@ -107,7 +107,7 @@ inputs before merge, at the tier those inputs need. The manual workflow,
 one. `replay` generates the corpus, completes every port replay and runs the
 symbolic lane, about 15 minutes. `mutations` adds the TypeScript, Go and Rust mutation campaigns,
 about 50 minutes. `full`, the default, adds `check-models` with the
-model-fault campaign, about two and a half hours. Port, replay-driver and
+model-fault campaign, about three hours. Port, replay-driver and
 regression-only changes need `replay`, or `mutations` when they edit a file a
 catalogued mutant rewrites. A change to a model's transitions, invariants or
 challenges, the kernel library or the Quint toolchain needs `full`, because

@@ -96,7 +96,7 @@ type needs once, on the final candidate.
   port and require its tests to catch them, in about 50 minutes. A change that edits a file a
   catalogued mutant rewrites, or a mutant catalog itself, needs it.
 - **Full** adds the Quint model checks and the model-fault campaign, which plants bugs in the
-  models themselves and requires an invariant to catch each one, in about two and a half hours.
+  models themselves and requires an invariant to catch each one, in about three hours.
   The campaign reads only the models, the challenge catalog and the Quint toolchain, so a change
   confined to the ports or their replay drivers never needs it.
 - **Full with exploration** also generates histories from a fresh random seed in an isolated copy
