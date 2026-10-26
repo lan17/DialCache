@@ -34,8 +34,7 @@ func write(message string, details any) {
 // escapeControls: encoding/json escapes C0 controls, U+2028 and U+2029 and
 // replaces bytes that are not UTF-8 with U+FFFD, DEL is written as \u007f here,
 // and escapeControls writes C1 controls as \u0080 to \u009f. An error, or any
-// other details value, prints as fmt.Sprint does; a map[string]any has no
-// methods, so it is never an error.
+// other details value, prints as fmt.Sprint does.
 func renderDetails(details any) string {
 	fields, ok := details.(map[string]any)
 	if !ok {
@@ -44,9 +43,9 @@ func renderDetails(details any) string {
 	var encoded bytes.Buffer
 	encoder := json.NewEncoder(&encoded)
 	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(fields); err != nil {
-		return fmt.Sprint(details)
-	}
+	// Only the library logs here, and its warning fields (strings, finite
+	// numbers, string lists and nulls) always encode.
+	_ = encoder.Encode(fields)
 	return strings.ReplaceAll(strings.TrimSuffix(encoded.String(), "\n"), "\x7f", `\u007f`)
 }
 
