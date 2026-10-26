@@ -896,11 +896,11 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   hook already recover their panics, so no native test reaches it.
 - **2026-10-25, #242, Rust:** the built-in walk parses each rendering back
   with `serde_json`, and a rendering it cannot parse fails the walk with
-  `hook_error` where TypeScript compares it: one nested more than 128 levels,
-  past `serde_json`'s parser recursion limit, or, in a build that enables
-  `serde_json`'s `raw_value` feature without `arbitrary_precision`, one whose
-  `Serialize` writes a `RawValue` number outside double range. The vectors
-  nest at most 40 levels.
+  `hook_error` where TypeScript compares it: one nested 128 or more levels
+  deep, which reaches `serde_json`'s parser recursion limit, or, in a build
+  that enables `serde_json`'s `raw_value` feature without
+  `arbitrary_precision`, one whose `Serialize` writes a `RawValue` number
+  outside double range. The vectors nest at most 40 levels.
 - **2026-10-25, #242, Rust:** `diffJson` sides from the built-in walk are
   parsed `serde_json::Value`s, whose objects render members in UTF-8 byte
   order of their names, not the source order TypeScript keeps; a side over

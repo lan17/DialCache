@@ -606,8 +606,8 @@ only `logger_error`.
 Observers receive `Event::ShadowMismatchLogging` with the use-case labels and a
 `ShadowMismatchLoggingOutcome`, and `MetricKind::ShadowMismatchLogging` maps it
 to the names above. `hook_error` means the `mismatch_diff` hook panicked, or
-the built-in computation could not parse a rendering back: one nested more than
-128 levels deep, or, with `serde_json`'s `raw_value` feature on and
+the built-in computation could not parse a rendering back: one nested 128 or
+more levels deep, or, with `serde_json`'s `raw_value` feature on and
 `arbitrary_precision` off, a `RawValue` number outside double range.
 `render_error` also covers a selected field the operation has no renderer for
 and work the bounded CPU executor rejected. A `Logger` panic is the

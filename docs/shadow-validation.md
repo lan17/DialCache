@@ -743,8 +743,8 @@ redacting preview leaves out. A field logged without its renderer, or a
 A value whose `Serialize` fails has no rendering, so its value field and the
 built-in diff fields are unavailable with `render_error`. The built-in
 computation parses each rendering back with `serde_json` and fails with
-`hook_error` on one it cannot parse: a rendering nested more than 128 levels
-deep, past the parser's recursion limit, or, in a build that enables
+`hook_error` on one it cannot parse: a rendering nested 128 or more levels
+deep, which reaches the parser's recursion limit, or, in a build that enables
 `serde_json`'s `raw_value` feature without `arbitrary_precision`, a `RawValue`
 holding a number outside double range. Rust's default codec stores no top-level
 undefined value, so an absent side does not arise for native values.
