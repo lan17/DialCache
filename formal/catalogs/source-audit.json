@@ -217,7 +217,7 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "b52155b4505aca801509f0a624ce20dfcf9fd7e3f9c687ed72ab748e7bcf6420",
+      "sha256": "61eda3022f04eb70fd70ff8d4ea49959914599dc02802c1778e56e9b0c09adcf",
       "entries": [
         {"title":"Maintainer guide","contracts":["B01"]},
         {"title":"Validation","contracts":["B01"]},
@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "f126a5bcda58689658f2ba8fe2361e8e1bc66d8533d7fdec72d36efd2e7a3202",
+      "sha256": "d090e143e086592857cee1ebf9faabc86d8004a4ca7244739637c8d817b7dbba",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "8d961ca61a88a4e8cce437c6ed3ef873ec5ec87a89739ddb8893de28f522b01f",
+      "sha256": "26e3f3eb9b1643b1c0644ae6a18daa15f38f78a21c32614cb8a745813cce3a27",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "7d6dc07e4a73283514edc78b6f5dba3466874daf13ef89fbeb15132720683a00",
+      "sha256": "148f3086ffd495126b60227e94013e6e005024c61258d1adbccc02e4a642fd36",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -1081,7 +1081,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "0734fbc588946ecaeff7e21d99994459a207c218be8db7e7004aa7314039f39a",
+      "sha256": "6774cc0c94a041f9e6d942a70e6e5bea68ff20218b40fa7f60d80c923d0abd67",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1093,6 +1093,7 @@
         {"title":"compares only own members in a depth-capped pair","contracts":["W10","C60","B03"]},
         {"title":"cuts the entries at 64 in walk order and counts every difference","contracts":["W10","C60","X01"]},
         {"title":"clamps each pointer to 512 bytes without splitting UTF-8 sequences","contracts":["W10","X01"]},
+        {"title":"builds each kept pointer only as far as its clamp reads, however long the member names above it","contracts":["W10","X01"]},
         {"title":"replaces each side over 1 KiB with its clamped JSON text","contracts":["W10","X01"]},
         {"title":"caps the walk at 32 reference tokens however deep the difference lies","contracts":["W10","C60","X01"]},
         {"title":"compares equal containers past the depth cap regardless of member order and depth","contracts":["W10","C60","X01"]},
@@ -1153,7 +1154,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "bf25fe2eecc7cd3a2bd9ae297a66bbd76aefb00ba12eb377f6eec599d633d913",
+      "sha256": "a27fae8c54e7f257437d72738ef610cc309233066a9d0fccea26255630130c13",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1326,7 +1327,7 @@
     },
     {
       "path": "formal/guides/CONTRACTS.md",
-      "sha256": "eacdb1b51a787d72377aa18c0995a7bfc58896aadaf3669ecaaed6bf6da56e99",
+      "sha256": "b9bad07a7d1cc8485cf91dda40937231efb2548519c63ecdb4dee0e80b8627c1",
       "entries": [
         {"title":"Portable contract inventory"},
         {"title":"Where the boundary lies"},
@@ -1766,7 +1767,7 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "17639637c18e28fc7870978f830250a114a9b2d7407654d6f58d826197b92f0e",
+      "sha256": "da0f7d2bffaa110f7945d92897220366384dfc93d96af7171d809ffdda2e5a0e",
       "entries": [
         {"title":"Validation and evidence"},
         {"title":"Prerequisites"},
@@ -1799,7 +1800,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "fa465c2a7e53b4fe3ea2045708510c81ea5304e62533f99726d9bcdf1ba9c079",
+      "sha256": "0d77c6caf885d508febae846a4a06dc33cd63e0d2b18faccdfc4ac8781d271fb",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},

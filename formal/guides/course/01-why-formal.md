@@ -78,13 +78,13 @@ Six stages turn a rule into evidence. Every later lesson sits in one of them:
    "models": 32,
    "libraries": 34,
    "profiles": 17,
-   "invariants": 259,
+   "invariants": 258,
    "regressions": 489,
    ```
 
    Read it as: `"models": 32` Quint models, `"profiles": 17` of them
    [profiles](../GLOSSARY.md#profile-conformance-profile) that ports replay,
-   `"invariants": 259` checked invariants and `"regressions": 489` named runs.
+   `"invariants": 258` checked invariants and `"regressions": 489` named runs.
 
 2. Ask where C23 lives:
 

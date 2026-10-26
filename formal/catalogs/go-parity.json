@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "252390acc79bddd47b0ceab4fa561623e7d639d4b13c74d12fe5894e7bb5aac4",
-    "executionSha256": "03dca0d8301b7ec1dc716ae15c775ecee24bfa1e26304f267eb3eb9e9959a74f",
-    "sourceAuditDispositionsSha256": "7144faec524f31f6d34a1637ae1c51cf585403fe0b19d922eeab989669bf244e",
-    "featureCoverageSha256": "a55bbd97efa82d9c3bc8bd909d44fcacf0e2b112cfa2d8e0e283da6abba63f17",
+    "semanticCasesSha256": "654e2fc3be90bc2c239397821eabd1a89477bdde9e8a748992fb00e53f8ebc9c",
+    "executionSha256": "d6a37d2df1c3b1d8b6455a9fb9f9ecea93a1f905468355cd59c84a9f4a97f34f",
+    "sourceAuditDispositionsSha256": "c7abc5a170b17c1e17014b123c5302dfd4574364a53bf2c3e6af9ed752c79c52",
+    "featureCoverageSha256": "c74cf1c6f96ffdf97d5fe339b6df4406b3012ab23ca86dcc0e8071ffdd31b1b8",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -21,14 +21,14 @@
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 23,
     "sourceFiles": 28,
-    "sourceDeclarations": 879,
+    "sourceDeclarations": 880,
     "casesWithScheduledChecks": 272,
     "requiredWitnesses": 535,
     "casesWithQuintRegressionReplay": 198,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
-    "scheduledInvariants": 259,
+    "scheduledInvariants": 258,
     "scheduledRegressions": 489,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
@@ -3569,7 +3569,7 @@
               "runShadow",
               "warnShadowMismatch"
             ],
-            "sha256": "c311406937c92c9deb710550a5b89016f4e5dfd2618942299a1233c2a192e2f4"
+            "sha256": "8d29f1a6fdd546e31e08a67056696a4c9c6689479b93a2269f1c74b7cba8050a"
           },
           {
             "path": "go/api.go",
@@ -3585,7 +3585,7 @@
             "symbols": [
               "Logger"
             ],
-            "sha256": "c26312555cbc1980a8af2a714ae58c0dfc8182624c44635f905d4147f5db7624"
+            "sha256": "d982ac9362f50a3df686439a10d0ddc8761de83960ad95cc601239dcd53f5611"
           }
         ]
       }
@@ -3951,7 +3951,7 @@
             "symbols": [
               "runShadow"
             ],
-            "sha256": "c311406937c92c9deb710550a5b89016f4e5dfd2618942299a1233c2a192e2f4"
+            "sha256": "8d29f1a6fdd546e31e08a67056696a4c9c6689479b93a2269f1c74b7cba8050a"
           },
           {
             "path": "go/codec.go",
@@ -4116,7 +4116,7 @@
     },
     {
       "path": "typescript/src/internal/shadow-log-json.ts",
-      "sha256": "b73fc7757703d9710a53f561185f48760576679eac4da496c4d78a39200454e2",
+      "sha256": "5499f8ab14d8100e7b007164719250291c71ef6f7ee15074adcc4eb69c5e85bb",
       "candidateGoFiles": [
         "go/metrics.go",
         "go/codec.go",
@@ -4124,7 +4124,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Warning content renders each compared value once with the Go JSON compatibility writer; the built-in walk runs over the parsed renderings with the same member order, array rule, root cases, depth cap and caps, and the MismatchDiff hook's entries take the same clamps. Byte-bounded UTF-8 output uses the same truncation marker; a failure nulls only the fields it feeds and cannot suppress the verdict or caller result. Native type representation is a codec binding (B03): Go's decoder fails a rendering nested past 10,000 levels as hook_error.",
+        "rationale": "Warning content renders each compared value once with the Go JSON compatibility writer; the built-in walk runs over the parsed renderings with the same member order, array rule, root cases, depth cap (deep equality past it) and caps, materializing only the kept pointers up to their clamp, and the MismatchDiff hook's entries take the same clamps. Byte-bounded UTF-8 output uses the same truncation marker; a failure nulls only the fields it feeds and cannot suppress the verdict or caller result. Native type representation is a codec binding (B03): Go's decoder fails a rendering nested past 10,000 levels as hook_error.",
         "nativeAdaptations": [
           "B03",
           "X01",
@@ -4150,11 +4150,10 @@
             "symbols": [
               "renderShadowMismatchLog",
               "walkJSON",
-              "jsonValuesEqual",
               "runMismatchHook",
               "appendMismatchEntries"
             ],
-            "sha256": "d37d7a403a00d43b8a0f8ad506b25ac4e475d9259b564a2b9afcbf527b656731"
+            "sha256": "87b3fa381c019c6024e5b60800c9b038733b27f7e987239270e6ab355373cf95"
           }
         ]
       }
@@ -4268,7 +4267,7 @@
             "symbols": [
               "shadowEvent"
             ],
-            "sha256": "c311406937c92c9deb710550a5b89016f4e5dfd2618942299a1233c2a192e2f4"
+            "sha256": "8d29f1a6fdd546e31e08a67056696a4c9c6689479b93a2269f1c74b7cba8050a"
           }
         ]
       }
