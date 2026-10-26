@@ -494,22 +494,18 @@ def test_logs_hook_paths_without_rendering_values_at_diff_paths(executor):
     assert harness.logging_events() == [logging_event("logged")]
 
 
-@pytest.mark.parametrize("failing", ["clamp_utf8", "render_shadow_mismatch_log"])
-def test_falls_back_to_a_metadata_warning_when_construction_raises(executor, monkeypatch, failing):
+def test_falls_back_to_a_metadata_warning_when_construction_raises(executor, monkeypatch):
     def fail(*args):
         raise RuntimeError("preview unavailable")
 
-    monkeypatch.setattr(cache_module, failing, fail)
+    monkeypatch.setattr(cache_module, "render_shadow_mismatch_log", fail)
     harness = Harness(executor)
 
     harness.get({"log_mismatches": True})
 
     assert harness.outcomes("shadowValidation") == ["mismatch"]
     (details,) = harness.logger.warnings()
-    expected = warning({"loggingOutcome": "render_error"})
-    if failing == "clamp_utf8":
-        del expected["cacheKey"]
-    assert details == expected
+    assert details == warning({"loggingOutcome": "render_error"})
     assert harness.logging_events() == [logging_event("render_error")]
 
 

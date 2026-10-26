@@ -1231,7 +1231,7 @@ class DialCache:
         if "age" in details and outcome in ("match", "mismatch"):
             age = details.pop("age")
             self._emit("shadowAge", self._labels(key), outcome=outcome, seconds=age)
-        if outcome == "mismatch" and plan is not None and "compared" in details:
+        if outcome == "mismatch" and plan is not None:
             cached, value = details.pop("compared")
             self._warn_shadow_mismatch(key, op, plan, cached, value, age)
 
@@ -1245,13 +1245,17 @@ class DialCache:
         caller. A logger that returns an awaitable settles the event when the
         awaitable does, and one that never settles emits none.
         """
-        warning: dict[str, Any] = {**self._labels(key), "outcome": "mismatch", "cachedValueAgeSeconds": age}
+        warning: dict[str, Any] = {
+            **self._labels(key),
+            "outcome": "mismatch",
+            "cachedValueAgeSeconds": age,
+            "cacheKey": clamp_utf8(key.logical, KEY_MAX_BYTES),
+        }
         try:
-            warning["cacheKey"] = clamp_utf8(key.logical, KEY_MAX_BYTES)
             fields, failure = render_shadow_mismatch_log(plan, cached, source, op.mismatch_diff)
         except (Exception, asyncio.CancelledError):
-            # Construction is fail-closed by design; keep the metadata warning
-            # if anything unforeseen still raises while rendering it.
+            # Last resort: an application value whose rendering raises
+            # CancelledError, or anything unforeseen, still logs the metadata.
             fields, failure = {}, "render_error"
         warning.update(fields)
         if failure is not None:
