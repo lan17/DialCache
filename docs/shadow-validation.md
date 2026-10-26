@@ -315,7 +315,8 @@ Shadow work runs independently of the caller. Native callbacks still consume
 CPU and can outlive the cache's bounded wait. Give dependency calls finite
 context deadlines and bound application concurrency. Mismatch-warning content,
 the built-in walk and `Operation.MismatchDiff` included, runs on the shadow
-job's goroutine after the verdict.
+job's goroutine after the verdict and holds the job's capacity until it
+finishes.
 
 </LanguageContent>
 
@@ -509,7 +510,10 @@ The logger's `Warn` receives the message
 `"DialCache shadow validation mismatch"` and a `map[string]any` with these
 fields, so they have no order. `cachedValueAgeSeconds` is a `float64`,
 `mismatchPaths` a `[]string` and `mismatchPathCount` an `int`; a field that
-failed is a nil interface value.
+failed is a nil interface value. Without `WithLogger`, the standard logger
+writes each warning on one line through the `log` package, with control
+characters, U+2028 and U+2029 written as escape sequences, so a member name
+cannot break the line or send a terminal escape.
 
 </LanguageContent>
 
@@ -602,6 +606,8 @@ fields from past that point. The two renderings are compared structurally:
   align their elements.
 - Any other differing pair is reported at its pointer with both sides, and roots
   of different kinds are reported at the root pointer `""`.
+- Numbers are compared as IEEE doubles, so `1` matches `1.0` and `0` matches
+  `-0`. `true` and `false` never match a number.
 - The comparison descends at most 32 levels: a differing pair of containers 32
   levels down is reported whole at its own pointer.
 
@@ -699,9 +705,11 @@ location sets both sides to `Absent`; a nil slice is an empty list. The hook
 fails by returning an error or panicking.
 
 Rendering, the walk, and the hook run on the shadow job's goroutine after the
-verdict. On one Apple-silicon Mac, a 6.3 MB map of 150,000 members took about
-0.6 seconds per warning at `MismatchDiffPaths`, most of it rendering: the value
-fields alone took about 0.5 seconds.
+verdict and hold the job's shadow capacity until they finish, so while a slow
+hook runs, jobs beyond capacity report `dropped`. On one Apple-silicon Mac, a
+6.3 MB map of 150,000 members took about 0.6 seconds per warning at
+`MismatchDiffPaths`, most of it rendering: the value fields alone took about
+0.5 seconds.
 
 </LanguageContent>
 

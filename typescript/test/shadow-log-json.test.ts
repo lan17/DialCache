@@ -199,6 +199,36 @@ describe("shadow mismatch log JSON", () => {
       });
     });
 
+    it("builds each kept pointer only as far as its clamp reads, however long the member names above it", () => {
+      // Two 1 MiB member names above 70 differing members. Built in full, each
+      // of the 64 kept pointers would carry both names into the clamp.
+      const outer = "o".repeat(1 << 20);
+      const inner = "i".repeat(1 << 20);
+      const chain = (leaf: number): JsonValue => ({
+        [outer]: {
+          [inner]: Object.fromEntries(
+            Array.from({ length: 70 }, (_, index) => [`m${String(index).padStart(2, "0")}`, leaf]),
+          ),
+        },
+      });
+      const encodeInto = vi.spyOn(TextEncoder.prototype, "encodeInto");
+      try {
+        expect(renderShadowMismatchLog(PATHS_ONLY, chain(1), chain(2))).toStrictEqual({
+          fields: {
+            mismatchPaths: Array.from({ length: 64 }, () => `/${"o".repeat(497)}${SHADOW_LOG_TRUNCATION_MARKER}`),
+            mismatchPathCount: 70,
+          },
+          failure: null,
+        });
+        // At "paths" the clamp encodes nothing but the kept pointers.
+        const clamped = encodeInto.mock.calls.map(([text]) => text.length);
+        expect(clamped.length).toBeGreaterThanOrEqual(64);
+        expect(Math.max(...clamped)).toBeLessThanOrEqual(3 * 512 + 1);
+      } finally {
+        encodeInto.mockRestore();
+      }
+    });
+
     it("replaces each side over 1 KiB with its clamped JSON text", () => {
       const list = Array.from({ length: 300 }, () => 1000);
       const cached = {
