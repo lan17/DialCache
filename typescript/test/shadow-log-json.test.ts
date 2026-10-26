@@ -475,24 +475,6 @@ describe("shadow mismatch log JSON", () => {
         { path: "/blob", cached: `"${"x".repeat(1009)}${SHADOW_LOG_TRUNCATION_MARKER}`, source: "y" },
       ]);
     });
-
-    it("fails the built-in walk closed with hook_error when it throws", () => {
-      const parse = vi.spyOn(JSON, "parse").mockImplementation(() => {
-        throw new Error("walk failed");
-      });
-      try {
-        expect(renderShadowMismatchLog(EVERYTHING, CACHED_USER, SOURCE_USER)).toStrictEqual({
-          fields: { ...FAILED_DIFF, cachedValueJson: CACHED_USER_JSON, sourceValueJson: SOURCE_USER_JSON },
-          failure: "hook_error",
-        });
-        expect(renderShadowMismatchLog(PATHS_ONLY, CACHED_USER, SOURCE_USER)).toStrictEqual({
-          fields: { mismatchPaths: null, mismatchPathCount: null },
-          failure: "hook_error",
-        });
-      } finally {
-        parse.mockRestore();
-      }
-    });
   });
 
   describe("mismatch diff hook", () => {

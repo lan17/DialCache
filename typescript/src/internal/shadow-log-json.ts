@@ -56,9 +56,9 @@ export interface ShadowMismatchLogFields {
 }
 
 /**
- * Why warning construction failed: `hook_error` for the difference computation
- * (hook or built-in walk), which ranks above `render_error` for JSON rendering.
- * `null` when every requested field rendered.
+ * Why warning construction failed: `hook_error` when the hook threw or
+ * returned an invalid list, which ranks above `render_error` for JSON
+ * rendering. `null` when every requested field rendered.
  */
 export type ShadowMismatchLogFailure = "hook_error" | "render_error";
 
@@ -102,11 +102,7 @@ export function renderShadowMismatchLog(
       diff = runShadowMismatchHook(hook, cachedValue, sourceValue);
       diffFailed = diff === null;
     } else if (!renderFailed) {
-      try {
-        diff = walkRenderedJson(cachedJson, sourceJson);
-      } catch {
-        diffFailed = true;
-      }
+      diff = walkRenderedJson(cachedJson, sourceJson);
     }
 
     if (diff === null) {
