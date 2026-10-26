@@ -14,7 +14,7 @@ from types import MappingProxyType
 import pytest
 from formal.schema import json_equal
 
-from dialcache import UNDEFINED, _shadow_log
+from dialcache import UNDEFINED, JsonSerializer, _shadow_log
 from dialcache._shadow_log import (
     KEY_MAX_BYTES,
     TRUNCATION_MARKER,
@@ -25,6 +25,7 @@ from dialcache._shadow_log import (
     render_json,
     render_shadow_mismatch_log,
 )
+from dialcache.serializer import JSON_UNDEFINED_SENTINEL
 
 VALUE_ONLY = MismatchLogPlan(value=True, diff="off")
 PATHS_ONLY = MismatchLogPlan(value=False, diff="paths")
@@ -102,6 +103,17 @@ def test_escapes_lone_surrogates_as_ecmascript_json_does():
     assert failure is None
     assert fields["cachedValueJson"] == '{"k":"\\ud800"}'
     assert fields["diffJson"] == '[{"path":"/k","cached":"\\ud800","source":"x"}]'
+
+
+def test_renders_what_json_serializer_stores_except_the_undefined_sentinel():
+    serializer = JsonSerializer()
+    for value in [None, True, 1.5, "雪\ud800", {"k": [1, None, ("t",)]}]:
+        assert render_json(value) == serializer.dump(value)
+    # A negative-cache entry stores the sentinel; as a compared side it is absent.
+    assert serializer.dump(UNDEFINED) == JSON_UNDEFINED_SENTINEL
+    assert render_json(UNDEFINED) is None
+    for value in [math.nan, object(), circular()]:
+        assert render_json(value) is None
 
 
 def test_nulls_each_unrenderable_side_independently():

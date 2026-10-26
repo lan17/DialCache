@@ -16,7 +16,7 @@ from typing import Any
 
 from ._callbacks import discard_awaitable
 from .protocol import utf8_bytes
-from .serializer import UNDEFINED
+from .serializer import UNDEFINED, _native_json
 
 KEY_MAX_BYTES = 2 * 1024
 VALUE_MAX_BYTES = 8 * 1024
@@ -51,16 +51,15 @@ def clamp_utf8(text: str, limit: int) -> str:
 
 
 def render_json(value: Any) -> str | None:
-    """Compact native JSON, or None for a value without a JSON rendering.
+    """The native JSON rendering ``JsonSerializer`` stores, or None for a value without one.
 
-    Lone surrogates are escaped as ``JsonSerializer`` and ECMAScript
-    ``JSON.stringify`` escape them, so the rendering is valid UTF-8.
+    Lone surrogates are escaped, so the rendering is valid UTF-8. A top-level
+    ``UNDEFINED`` has none here: its stored sentinel is not JSON.
     """
     try:
-        text = json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        return _native_json(value)
     except Exception:
         return None
-    return text.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
 def render_shadow_mismatch_log(
