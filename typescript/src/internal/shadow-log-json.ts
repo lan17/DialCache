@@ -189,24 +189,27 @@ function walkRenderedJson(cachedJson: string | null, sourceJson: string | null):
 
 function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff {
   const entries: ShadowMismatchJsonEntry[] = [];
+  // Reference tokens from the root to the current pair; a pointer is built
+  // only for an entry the cut keeps.
+  const tokens: (number | string)[] = [];
   let count = 0;
-  const report = (entry: ShadowMismatchJsonEntry): void => {
+  const report = (sides: { readonly cached?: JsonValue; readonly source?: JsonValue }): void => {
     count += 1;
     if (entries.length < SHADOW_MISMATCH_MAX_ENTRIES) {
-      entries.push(entry);
+      entries.push({ path: tokens.map(pointerToken).join(""), ...sides });
     }
   };
-  const walk = (left: JsonValue, right: JsonValue, path: string, depth: number): void => {
+  const walk = (left: JsonValue, right: JsonValue): void => {
     const kind = jsonKind(left);
     if (kind !== jsonKind(right) || kind === "primitive") {
       if (left !== right) {
-        report({ path, cached: left, source: right });
+        report({ cached: left, source: right });
       }
       return;
     }
-    if (depth >= SHADOW_MISMATCH_MAX_DEPTH) {
+    if (tokens.length >= SHADOW_MISMATCH_MAX_DEPTH) {
       if (!jsonValuesEqual(left, right)) {
-        report({ path, cached: left, source: right });
+        report({ cached: left, source: right });
       }
       return;
     }
@@ -214,11 +217,13 @@ function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff 
       const leftItems = left as readonly JsonValue[];
       const rightItems = right as readonly JsonValue[];
       if (leftItems.length !== rightItems.length) {
-        report({ path, cached: left, source: right });
+        report({ cached: left, source: right });
         return;
       }
       for (let index = 0; index < leftItems.length; index += 1) {
-        walk(leftItems[index]!, rightItems[index]!, childPointer(path, index), depth + 1);
+        tokens.push(index);
+        walk(leftItems[index]!, rightItems[index]!);
+        tokens.pop();
       }
       return;
     }
@@ -233,17 +238,18 @@ function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff 
     // The default sort order is UTF-16 code units.
     names.sort();
     for (const name of names) {
-      const memberPath = childPointer(path, name);
+      tokens.push(name);
       if (!Object.hasOwn(rightMembers, name)) {
-        report({ path: memberPath, cached: leftMembers[name]! });
+        report({ cached: leftMembers[name]! });
       } else if (!Object.hasOwn(leftMembers, name)) {
-        report({ path: memberPath, source: rightMembers[name]! });
+        report({ source: rightMembers[name]! });
       } else {
-        walk(leftMembers[name]!, rightMembers[name]!, memberPath, depth + 1);
+        walk(leftMembers[name]!, rightMembers[name]!);
       }
+      tokens.pop();
     }
   };
-  walk(cached, source, "", 0);
+  walk(cached, source);
   return { entries, count };
 }
 
@@ -296,21 +302,14 @@ function jsonKind(value: JsonValue): "array" | "object" | "primitive" {
 }
 
 /**
- * Appends an array index or a member name to a pointer, building no more of it
- * than the pointer clamp can keep. Each UTF-16 code unit is at least one UTF-8
- * byte, so a pointer longer than `SHADOW_MISMATCH_PATH_MAX_BYTES` code units
- * is clamped to leading bytes that no later token changes: it stops growing
- * there, and a member name is cut to that many code units before escaping.
- * The clamped pointer is unchanged, and each kept entry materializes at most
- * three times the cap however long the member names above it are.
+ * One reference token. A member name is cut to the pointer cap first: the
+ * clamp keeps fewer bytes than that many code units, so the cut never changes
+ * a clamped pointer.
  */
-function childPointer(path: string, token: number | string): string {
-  if (path.length > SHADOW_MISMATCH_PATH_MAX_BYTES) {
-    return path;
-  }
+function pointerToken(token: number | string): string {
   return typeof token === "number"
-    ? `${path}/${token}`
-    : `${path}/${escapePointerToken(token.slice(0, SHADOW_MISMATCH_PATH_MAX_BYTES))}`;
+    ? `/${token}`
+    : `/${escapePointerToken(token.slice(0, SHADOW_MISMATCH_PATH_MAX_BYTES))}`;
 }
 
 function escapePointerToken(name: string): string {

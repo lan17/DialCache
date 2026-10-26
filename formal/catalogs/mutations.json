@@ -2121,7 +2121,7 @@
         "edits": [
           {
             "path": "typescript/src/internal/shadow-log-json.ts",
-            "before": "      if (leftItems.length !== rightItems.length) {\n        report({ path, cached: left, source: right });\n        return;\n      }\n      for (let index = 0; index < leftItems.length; index += 1) {",
+            "before": "      if (leftItems.length !== rightItems.length) {\n        report({ cached: left, source: right });\n        return;\n      }\n      for (let index = 0; index < leftItems.length; index += 1) {",
             "after": "      for (let index = 0; index < Math.min(leftItems.length, rightItems.length); index += 1) {"
           }
         ],
