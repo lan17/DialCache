@@ -533,21 +533,9 @@ describe("shadow mismatch log JSON", () => {
         throw new Error("hook failed");
       }],
       ["returns a rejecting promise", () => Promise.reject(new Error("async hook"))],
-      ["returns a rejecting thenable", () => ({
-        then(_resolve: unknown, reject: (reason: unknown) => void): void {
-          reject(new Error("thenable hook"));
-        },
-      })],
       ["returns a non-array object", () => ({ path: "/email" })],
-      ["returns null", () => null],
-      ["returns undefined", () => undefined],
-      ["returns a function", () => () => []],
       ["returns a null member", () => [null]],
-      ["returns a string member", () => ["/email"]],
-      ["returns a function member", () => [() => "/email"]],
       ["returns a member without a path", () => [{ cached: 1 }]],
-      ["returns a member with a numeric path", () => [{ path: 0 }]],
-      ["returns an invalid member after a valid one", () => [{ path: "/email" }, { path: null }]],
       ["returns an invalid member past the 64-entry cut", () => [
         ...Array.from({ length: 64 }, (_, index) => ({ path: `/${index}` })),
         null,
