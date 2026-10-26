@@ -343,18 +343,12 @@ pub(crate) fn render_mismatch_log(
                 mismatch_path_count: None,
                 diff_json: None,
             },
-            Some(diff) => {
-                let diff_json = with_values.then(|| render_diff_json(&diff.entries));
-                render_failed |= diff_json == Some(None);
-                ShadowMismatchDiffDetails {
-                    level: plan.diff,
-                    mismatch_paths: Some(
-                        diff.entries.into_iter().map(|entry| entry.path).collect(),
-                    ),
-                    mismatch_path_count: Some(diff.count),
-                    diff_json: diff_json.flatten(),
-                }
-            }
+            Some(diff) => ShadowMismatchDiffDetails {
+                level: plan.diff,
+                diff_json: with_values.then(|| render_diff_json(&diff.entries)),
+                mismatch_paths: Some(diff.entries.into_iter().map(|entry| entry.path).collect()),
+                mismatch_path_count: Some(diff.count),
+            },
         }
     });
 
@@ -407,10 +401,8 @@ fn run_hook(
     })
 }
 
-/// The bounded entries as one JSON array, clamped to the field's cap. Entry
-/// sides are JSON values, so the rendering cannot fail.
-fn render_diff_json(entries: &[MismatchEntry]) -> Option<String> {
-    serde_json::to_string(entries)
-        .ok()
-        .map(|json| clamp_utf8(&json, SHADOW_LOG_DIFF_MAX_BYTES))
+/// The bounded entries as one JSON array, clamped to the field's cap.
+fn render_diff_json(entries: &[MismatchEntry]) -> String {
+    let json = serde_json::to_string(entries).expect("JSON values serialize");
+    clamp_utf8(&json, SHADOW_LOG_DIFF_MAX_BYTES)
 }
