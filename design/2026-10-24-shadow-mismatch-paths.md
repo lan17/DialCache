@@ -970,3 +970,11 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   is invalid is captured off. The challenge
   `shadow-logging-invalid-diff-leaf-acts-values` and the two semantic cases
   that cited the deleted invariant point at `capturedLoggingFollowsLayers`.
+- **2026-10-25, #242:** the shorthand expansion, the leaf-wise merge and
+  per-leaf resolution live in a kernel module of their own,
+  `kernel/mismatch-logging.qnt`, imported only by the shadow profile, rather
+  than in `kernel/shadow.qnt` as Contract and model changes says, so faults
+  planted there are not run against the profiles that compose
+  `kernel/shadow.qnt` with logging off. `kernel/shadow.qnt` keeps the
+  captured `Logging` leaves, `LOGGING_OFF`, `logs` and the diff levels, and
+  does not import the new module.
