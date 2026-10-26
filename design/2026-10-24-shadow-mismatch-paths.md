@@ -871,7 +871,9 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   it rejects falls through to the source; at most `shadow_max_in_flight`
   warnings per instance, times the number of instances, contend for it.
   `docs/upgrading.md` and `docs/shadow-validation.md` state the cost in every
-  port; whether to bound it is open with the maintainer.
+  port. The maintainer kept this behavior as documented in session on
+  2026-10-25, and asked for a faster implementation, TypeScript first, as a
+  follow-up: #248.
 - **2026-10-24, #242:** TypeScript's `cached()` and `getOrLoad()` throw a
   `TypeError` for a `shadowMismatchDiff` that is not a function, as they do for
   `shouldAttemptStaleRecovery`, rather than letting every warning fail as
