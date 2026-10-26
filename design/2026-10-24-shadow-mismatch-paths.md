@@ -938,3 +938,35 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   `dialcache::testing::Absent` (feature `test-util`), which only an
   operation's JSON rendering recognizes; a custom `preview` replaces that
   rendering, so the preview receives the value.
+- **2026-10-25, #242:** step 2 of the built-in computation was edited in
+  place during review to say that numbers compare as IEEE doubles and that a
+  boolean never equals a number, and W10 states the same rule. The record as
+  accepted did not say how numbers compare, and the Python port compared
+  integers exactly, so it logged paths that TypeScript, Go and Rust did not.
+  The maintainer confirmed the double rule in session on 2026-10-25:
+  "Confirm doubles". Two integers that differ only beyond a double's
+  precision, such as 9007199254740993 and 9007199254740992, therefore log no
+  path in any port, as a vector pins; exact 64-bit comparison is left for a
+  later change.
+- **2026-10-25, #242, Go:** Failure handling was edited in place during
+  review to name Go among the ports that hold the shadow capacity slot
+  through warning work. On `main`, Go released the slot once the job's reads
+  settled, without waiting for its verdict to be reported, so a slow
+  `MismatchDiff` hook would have kept a goroutine per confirmed mismatch
+  outside the slot and a burst of mismatches would have run walks beyond
+  `WithShadowCapacity`. A job now holds its slot until the verdict is
+  reported: while the `WithShadowOutcomes` hook, observers and metrics
+  adapters receive its `shadowValidation` and `shadowAge` events, and while
+  its mismatch warning is built and logged, the hook and the walk included.
+  So the Proposal's "a runaway hook costs what a runaway comparator costs"
+  holds for Go, and a slow hook, observer or logger now shows as `dropped`
+  jobs beyond capacity; `docs/upgrading.md` states the change.
+- **2026-10-25, #242:** Contract and model changes first said the shadow
+  profile restates `main`'s `invalidLoggingCannotBeCaptured` per leaf, and
+  the paragraph was corrected in place during review. The per-leaf
+  restatement was deleted, because `capturedLoggingFollowsLayers`, which
+  states each captured leaf from its input in force, implies it: both are
+  checked at `beginCall` over the same jobs, and a leaf whose input in force
+  is invalid is captured off. The challenge
+  `shadow-logging-invalid-diff-leaf-acts-values` and the two semantic cases
+  that cited the deleted invariant point at `capturedLoggingFollowsLayers`.
