@@ -15,7 +15,7 @@ use crate::limits::DEFAULT_FALLBACK_TIMEOUT_MS;
 use crate::local::StoredValue;
 use crate::policy::Policy;
 use crate::scope::Scope;
-use crate::shadow_log::JsonRender;
+use crate::shadow_log::{JsonRender, ValueRenderer};
 
 /// The source deadline of one operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -278,11 +278,15 @@ impl<T: Send + Sync + 'static> Operation<T> {
         let comparator = self.comparator;
         // The default preview stands for the JSON rendering. Any other
         // preview replaces it, and `None` leaves the operation without one.
-        let (preview, json) = match (self.preview, self.json) {
+        let value_renderer = match (self.preview, self.json) {
             (Some(preview), Some(json)) if Arc::ptr_eq(&preview, &json.preview) => {
-                (None, Some(json.render))
+                Some(ValueRenderer::Json(json.render))
             }
-            (preview, _) => (preview, None),
+            (preview, _) => preview.map(|preview| {
+                ValueRenderer::Preview(Arc::new(move |value: &StoredValue| {
+                    value.downcast_ref::<T>().and_then(|v| preview(v))
+                }))
+            }),
         };
         let mismatch_diff = self.mismatch_diff;
         let metadata = OperationMetadata {
@@ -297,11 +301,7 @@ impl<T: Send + Sync + 'static> Operation<T> {
                 Ok(comparator(a, b))
             }),
             should_recover: self.should_recover,
-            preview: preview.map(|preview| {
-                Arc::new(move |value: &StoredValue| {
-                    value.downcast_ref::<T>().and_then(|v| preview(v))
-                }) as ErasedPreview
-            }),
+            value_renderer,
             mismatch_diff: mismatch_diff.map(|hook| {
                 Arc::new(move |cached: &StoredValue, source: &StoredValue| {
                     match (cached.downcast_ref::<T>(), source.downcast_ref::<T>()) {
@@ -310,7 +310,6 @@ impl<T: Send + Sync + 'static> Operation<T> {
                     }
                 }) as ErasedMismatchDiff
             }),
-            json,
         };
         (self.identity, Arc::new(metadata))
     }
@@ -335,10 +334,10 @@ pub(crate) struct OperationMetadata {
     pub codec: Arc<dyn ErasedCodec>,
     pub compare: ErasedCompare,
     pub should_recover: Option<RecoveryPredicate>,
-    pub preview: Option<ErasedPreview>,
+    /// The values' JSON while the operation keeps its default preview, the
+    /// preview set in its place, or `None` without either.
+    pub value_renderer: Option<ValueRenderer>,
     pub mismatch_diff: Option<ErasedMismatchDiff>,
-    /// Present only while the operation keeps its default preview.
-    pub json: Option<JsonRender>,
 }
 
 /// The type-erased operation the engine executes.

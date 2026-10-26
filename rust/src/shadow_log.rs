@@ -198,30 +198,40 @@ mod absent {
     }
 }
 
-/// What builds the fields: the operation's JSON rendering, present only
-/// while it keeps its default preview, a preview set in its place, and its
-/// difference hook.
+/// How a warning renders an operation's values: their JSON, which the value
+/// fields log and the built-in walk reads, or a preview set in its place. A
+/// preview replaces the JSON for the whole warning, so the walk never reads
+/// what the value fields do not log, and difference fields then need the
+/// hook.
+#[derive(Clone)]
+pub(crate) enum ValueRenderer {
+    Json(JsonRender),
+    Preview(ErasedPreview),
+}
+
+/// What builds the fields: the operation's value renderer, if it has one,
+/// and its difference hook.
 #[derive(Clone, Default)]
 pub(crate) struct Renderers {
-    pub json: Option<JsonRender>,
-    pub preview: Option<ErasedPreview>,
+    pub value_renderer: Option<ValueRenderer>,
     pub hook: Option<ErasedMismatchDiff>,
 }
 
 impl Renderers {
-    /// The JSON rendering the warning derives from. A preview replaces it for
-    /// the whole warning, so the built-in walk never reads what the value
-    /// fields do not log, and difference fields then need the hook.
-    fn rendering(&self) -> Option<JsonRender> {
-        self.json.filter(|_| self.preview.is_none())
+    /// The JSON rendering the warning derives from, if the values render as
+    /// JSON.
+    fn json(&self) -> Option<JsonRender> {
+        match &self.value_renderer {
+            Some(ValueRenderer::Json(json)) => Some(*json),
+            _ => None,
+        }
     }
 
     /// Whether building the plan's fields calls any renderer or hook, and so
     /// belongs on the bounded CPU executor.
     pub(crate) fn runs_code(&self, plan: LogPlan) -> bool {
-        let json = self.rendering().is_some();
-        let value = plan.value && (self.preview.is_some() || json);
-        let diff = plan.diff != MismatchDiff::Off && (self.hook.is_some() || json);
+        let value = plan.value && self.value_renderer.is_some();
+        let diff = plan.diff != MismatchDiff::Off && (self.hook.is_some() || self.json().is_some());
         value || diff
     }
 }
@@ -262,7 +272,7 @@ pub(crate) fn render_mismatch_log(
     source: &StoredValue,
     renderers: &Renderers,
 ) -> MismatchContent {
-    let json = renderers.rendering();
+    let json = renderers.json();
     let walk = plan.diff != MismatchDiff::Off && renderers.hook.is_none();
     let rendering = |value: &StoredValue| -> Option<Rendering> {
         let json = json?;
@@ -280,14 +290,16 @@ pub(crate) fn render_mismatch_log(
 
     let values = plan.value.then(|| {
         let mut field = |value: &StoredValue, json: &Option<Rendering>| {
-            let text = match (&renderers.preview, json) {
+            let text = match (&renderers.value_renderer, json) {
                 (_, Some(Rendering::Absent)) => return None,
-                (Some(preview), _) => match catch_unwind(AssertUnwindSafe(|| preview(value))) {
-                    Ok(Some(text)) => Some(text),
-                    _ => None,
-                },
-                (None, Some(Rendering::Json(json))) => Some(json.clone()),
-                (None, _) => None,
+                (Some(ValueRenderer::Preview(preview)), _) => {
+                    match catch_unwind(AssertUnwindSafe(|| preview(value))) {
+                        Ok(Some(text)) => Some(text),
+                        _ => None,
+                    }
+                }
+                (_, Some(Rendering::Json(json))) => Some(json.clone()),
+                _ => None,
             };
             render_failed |= text.is_none();
             text.map(|text| preview_value(&text))

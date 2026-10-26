@@ -211,8 +211,7 @@ impl Execution {
         };
         let metadata = &self.op.metadata;
         let renderers = Renderers {
-            json: metadata.json,
-            preview: metadata.preview.clone(),
+            value_renderer: metadata.value_renderer.clone(),
             hook: metadata.mismatch_diff.clone(),
         };
         let content = match verdict.compared {
