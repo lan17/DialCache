@@ -134,9 +134,12 @@ describe("Rust replay report gate", () => {
 describe("Rust validation lanes", () => {
   const directory = "/checkout";
   it("checks formatting, clippy and default tests from inside the crate so rustup honors its toolchain pin", () => {
+    // The second clippy run is the only Rust step that builds the library
+    // without test-util, which replaces shipped code when it is on.
     expect(validationPlan("check-rust", { directory }).map(step => [step.command, ...step.args!])).toEqual([
       ["cargo", "fmt", "--check"],
       ["cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings"],
+      ["cargo", "clippy", "--lib", "--features", "redis,prometheus", "--", "-D", "warnings"],
       ["cargo", "test", "--all-features"],
     ]);
     for (const step of validationPlan("check-rust", { directory })) {
