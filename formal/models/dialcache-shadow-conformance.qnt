@@ -460,18 +460,12 @@ module dialcache_shadow_conformance {
     val overlay = layerLeaf(s.overlayLogging, valueLeaf)
     if (overlay != "") overlay else layerLeaf(s.defaultLogging, valueLeaf)
   }
-  // Restated per leaf at the admitting step, where the layers are as
-  // admission read them: a leaf whose input in force is not a valid value
-  // (written with the wrong type, or standing for a malformed shorthand) is
-  // captured off, whatever the other leaf captures (C60).
-  val invalidLoggingCannotBeCaptured = input.name != "beginCall" or s.jobs.indices().forall(i => {
-    val job = s.jobs.nth(i)
-    (Set("", "true", "false").contains(inForce(true)) or not(job.logging.value))
-      and (Set("", "off", "paths", "values").contains(inForce(false)) or job.logging.diff == "off")
-  })
   // The leaves a job captures at admission (record table and D10): `value`
   // exactly when its input in force is "true", `diff` the level its input
-  // names and off for anything else, and the fixture's diff hook.
+  // names and off for anything else, and the fixture's diff hook. A leaf
+  // whose input in force is not a valid value (written with the wrong type,
+  // or standing for a malformed shorthand) is therefore captured off,
+  // whatever the other leaf captures (C60).
   val capturedLoggingFollowsLayers = input.name != "beginCall" or s.jobs.indices().forall(i => {
     val job = s.jobs.nth(i)
     val diff = inForce(false)

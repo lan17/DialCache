@@ -42,7 +42,7 @@ explains what a challenge measures.
 | `shadow-logging-malformed-shorthand-expands-on` | C60 | kernel/shadow.qnt | `capturedLoggingFollowsLayers` | mapped `M08` | `invalidLoggingKeepsComparisonWithoutWarningTest` | 1 / 4 |
 | `shadow-logging-written-off-leaf-ignored` | C60 | kernel/shadow.qnt | `capturedLoggingFollowsLayers` | mapped `M71` | `runtimeOffDiffOverridesDefaultDiffTest` | 1 / 4 |
 | `shadow-logging-omitted-value-resolves-on` | C60 | kernel/shadow.qnt | `capturedLoggingFollowsLayers` | mapped `M09` | `omittedLoggingKeepsMismatchMetricsOnlyTest` | 1 / 4 |
-| `shadow-logging-invalid-diff-leaf-acts-values` | C60 | kernel/shadow.qnt | `invalidLoggingCannotBeCaptured` | mapped `M76` | `invalidDiffLeafKeepsValueLeafTest` | 1 / 4 |
+| `shadow-logging-invalid-diff-leaf-acts-values` | C60 | kernel/shadow.qnt | `capturedLoggingFollowsLayers` | mapped `M76` | `invalidDiffLeafKeepsValueLeafTest` | 1 / 4 |
 | `shadow-warning-with-logging-off` | C60 | kernel/shadow.qnt | `noWarningWithLoggingOff` | mapped `M74` | `runtimeFalseShorthandOverridesDefaultDiffTest` | 2 / 3 |
 | `shadow-diff-hook-failure-falls-back-to-walk` | C60 | kernel/shadow.qnt | `warningFieldsMatchCapturedLeaves` | mapped `M69` | `hookErrorNullsDiffFieldsTest` | 1 / 4 |
 | `shadow-diff-hook-runs-at-diff-off` | C60 | kernel/shadow.qnt | `loggingOutcomePrecedence` | mapped `M70` | `hookSkippedWithDiffOffTest` | 1 / 4 |

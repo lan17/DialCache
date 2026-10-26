@@ -269,7 +269,7 @@ The coordinator sends an empty fixture; see [core.mjs](../replay/core.mjs) for w
 | Version | 4, inputs `explicit-v1` |
 | Smoke trace | [shadow-smoke.itf.json](./shadow-smoke.itf.json) |
 | Ports claiming it | typescript, go, rust, python |
-| Generation | 1024 sampled histories of at most 60 steps from 4096 samples; 20 scheduled invariants; 61 exported regressions |
+| Generation | 1024 sampled histories of at most 60 steps from 4096 samples; 19 scheduled invariants; 61 exported regressions |
 | Required witnesses | 115 labels in [coverage-witnesses.json](../catalogs/coverage-witnesses.json) |
 
 ### Fixture, by init choice

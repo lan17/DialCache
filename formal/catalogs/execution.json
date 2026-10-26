@@ -179,7 +179,6 @@
         "agesRequireVerdicts",
         "warningsRequireMismatch",
         "expiredSourceWorkSkipsRedis",
-        "invalidLoggingCannotBeCaptured",
         "capturedLoggingFollowsLayers",
         "noWarningWithLoggingOff",
         "oneLoggingOutcomePerWarning",
@@ -1865,7 +1864,7 @@
       "contract": "C60",
       "source": "formal/models/kernel/shadow.qnt",
       "model": "formal/models/dialcache-shadow-conformance.qnt",
-      "invariant": "invalidLoggingCannotBeCaptured",
+      "invariant": "capturedLoggingFollowsLayers",
       "before": "diff: if (levels.contains(merged.diff)) merged.diff else DIFF_OFF }",
       "after": "diff: if (levels.contains(merged.diff)) merged.diff else if (merged.diff == UNWRITTEN) DIFF_OFF else DIFF_VALUES }",
       "reproducer": {
