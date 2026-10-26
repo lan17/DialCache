@@ -302,8 +302,7 @@ def _render_diff_json(entries: list[Entry]) -> str | None:
         if next_entry is None:
             return None
         bounded.append(next_entry)
-    text = render_json(bounded)
-    return None if text is None else clamp_utf8(text, DIFF_MAX_BYTES)
+    return clamp_utf8(_native_json(bounded), DIFF_MAX_BYTES)
 
 
 def _bound_entry(entry: Entry) -> Entry | None:
