@@ -1,7 +1,7 @@
 //! Pins the built-in mismatch walk's pointer cost: it builds pointer text
-//! only for the entries it retains, and only as far as the pointer cap
-//! reads, so a deep chain of long member names over a wide array costs no
-//! copying per visited member.
+//! only for the entries it retains, not for every difference it counts, and
+//! only as far as the pointer cap reads, so a deep chain of long member names
+//! over a wide array costs no copying per visited member.
 //!
 //! A counting allocator measures the bytes the walk allocates on the test's
 //! own thread, so the bound holds however fast the machine is.
@@ -68,7 +68,9 @@ fn long_name_chain(items: Vec<Value>) -> Value {
 #[test]
 fn pointer_text_is_built_only_for_retained_entries_and_only_up_to_the_cap() {
     const ITEMS: usize = 10_000;
-    const DIFFERING: usize = 100;
+    // Far more differences than the walk retains, so text built for each
+    // counted difference costs well over the bound below.
+    const DIFFERING: usize = 5_000;
     let cached = long_name_chain((0..ITEMS).map(|index| json!(index)).collect());
     let source = long_name_chain(
         (0..ITEMS)
@@ -86,7 +88,8 @@ fn pointer_text_is_built_only_for_retained_entries_and_only_up_to_the_cap() {
         .all(|entry| entry.path.len() <= SHADOW_MISMATCH_PATH_MAX_BYTES
             && entry.path.starts_with("/kkk")));
     // Copying the prefix for every visited member allocates over 300 MB here,
-    // and building each retained pointer whole about 4 MB; the walk itself
-    // needs well under 1 MiB.
+    // building a capped pointer for every counted difference about 10 MB, and
+    // building each retained pointer whole about 4 MB; the walk itself needs
+    // well under 1 MiB.
     assert!(bytes < 1 << 20, "the walk allocated {bytes} bytes");
 }
