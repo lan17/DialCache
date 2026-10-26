@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "0613985c965cf1c92ee6c809a7848f199940e992c800664c597936591ac15b3c",
+      "sha256": "ed88c26971eae18b957c0852c02d5ea35fdb814458827d79c7807a7c42c0db19",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "8c9473e5c1a7bc3af380d301bfb16bd983f918cc0813dd1ad548ac9180202317",
+      "sha256": "e318acf6936ad4c9126363eff2c803d00a20596f92a00c543e645cb6ca765c34",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -1080,7 +1080,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "a8080aff1383b0f512984383f8b866c206e53fc750e4d0b283a9a74dda52fe56",
+      "sha256": "2dab2b5558563125f731410b170a41c8c216ff28d54a012b3744ce387c99213f",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1110,6 +1110,7 @@
         {"title":"takes the entries from the hook and never runs the built-in walk","contracts":["C60"]},
         {"title":"renders neither root side when the hook supplies the entries and value is off","contracts":["C60","B03"]},
         {"title":"fails closed with hook_error and no fallback when the hook %s","contracts":["C60","B02"]},
+        {"title":"logs the hook's entries as it returns them and reads only the kept ones","contracts":["C60"]},
         {"title":"consumes a rejecting hook result without an unhandled rejection","contracts":["C30","B02"]},
         {"title":"keeps the hook paths and nulls diffJson when a hook side is %s","contracts":["C60","B03"]},
         {"title":"stops rendering hook sides at the first side with no rendering","contracts":["C60","B03"]},

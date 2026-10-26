@@ -10,8 +10,8 @@
   "inputs": {
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
-    "sourceAuditDispositionsSha256": "fba73a8b7d47618873f10743f27bb9b2e77cb49f9181933535056c3c2bd21f66",
-    "featureCoverageSha256": "8a535690fe1a0022354e3a5276845a47bf75a47a1d35c3c33a16eb005f55ffb4",
+    "sourceAuditDispositionsSha256": "c95ce03c30df574246e5943e2d69e084ed809b5d3e2a3d0f0abf5a2123bc8aaa",
+    "featureCoverageSha256": "3f33092274a0046c2d793790b1b4999021021e018f47ae65c15d3a0313776fd2",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -21,7 +21,7 @@
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 23,
     "sourceFiles": 28,
-    "sourceDeclarations": 881,
+    "sourceDeclarations": 878,
     "casesWithScheduledChecks": 272,
     "requiredWitnesses": 535,
     "casesWithQuintRegressionReplay": 198,
@@ -3499,7 +3499,7 @@
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "3374877a6e99452afa65530e8806dd7d260beaa448d265c4fcfd2e914776aa85",
+      "sha256": "88e1e9bdf70bba085f4c8f2861cfac89ec021a5af318e21dc94e9f54c75b583c",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -4116,7 +4116,7 @@
     },
     {
       "path": "typescript/src/internal/shadow-log-json.ts",
-      "sha256": "4162a90fcdb2df6da7700cd6025a081f8e1f82378732f65e4e639defcef7a654",
+      "sha256": "ddab3366b00b83f19c796f3e457b9a12dc422e61f3f2b1b1d1c41731785687d5",
       "candidateGoFiles": [
         "go/metrics.go",
         "go/codec.go",
@@ -4218,7 +4218,7 @@
     },
     {
       "path": "typescript/src/metrics.ts",
-      "sha256": "b5f3dedd3d6595b909edf4d5bb78968ff6cd42c0ba4ce86a9d38412ea1cbe667",
+      "sha256": "92a149a709de87362ca58059df966d812d23a5915615a57f012ec7ecbc574f09",
       "candidateGoFiles": [
         "go/api.go",
         "go/metrics.go",
