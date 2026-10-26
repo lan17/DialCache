@@ -580,9 +580,10 @@ adapters export it as `dialcache_shadow_mismatch_logging_counter` and
 The optional `shadowMismatchLogging` adapter hook receives the event.
 `hook_error` means `shadowMismatchDiff` threw or returned an invalid list.
 `logged` means the logger's `warn` returned, or the promise it returned
-resolved; `logger_error` means `warn` threw, or that promise rejected. For a
-logger that returns a promise, the event waits for that promise, and one that
-never settles emits nothing.
+resolved; `logger_error` means `warn` threw, or that promise rejected. A
+`hook_error` or `render_error` is recorded at once, without waiting for the
+logger. Otherwise, for a logger that returns a promise, the event waits for
+that promise, and one that never settles emits nothing.
 
 </LanguageContent>
 
@@ -615,9 +616,11 @@ Observers receive an event dictionary whose `event` is
 `shadow_mismatch_diff` raised or returned an invalid list. `logged` means the
 logger's `warning` returned, or the awaitable it returned completed;
 `logger_error` means `warning` raised, or that awaitable raised or was
-cancelled. DialCache awaits an awaitable the logger returns and the event waits
-for it, so one that never settles emits nothing. Python ships no exporter; map
-the event to `dialcache_shadow_mismatch_logging_counter` or
+cancelled. DialCache awaits an awaitable the logger returns. A `hook_error` or
+`render_error` is recorded at once, without waiting for the logger; otherwise
+the event waits for the awaitable, so one that never settles emits nothing.
+Python ships no exporter; map the event to
+`dialcache_shadow_mismatch_logging_counter` or
 `dialcache.shadow_mismatch_logging.count` to match the bundled adapters.
 
 </LanguageContent>
@@ -776,9 +779,13 @@ an optional `supports("shadowValidation")` method can opt out.
 
 The `logger` option accepts a standard Python-compatible warning logger. A
 confirmed-mismatch warning calls `warning(message, details)`; when that returns
-an awaitable, DialCache awaits it on the event loop before recording the
-warning's `shadowMismatchLogging` outcome. See the
-[generated Python API](api.md) for signatures.
+an awaitable, DialCache awaits it in a task of its own on the event loop.
+Unless a `hook_error` or `render_error` was already recorded, the warning's
+`shadowMismatchLogging` outcome waits for that awaitable. An awaitable that
+never settles keeps its task pending, holding the cache key and the awaitable
+but neither compared value, so each such warning retains one task: the cost of
+counting a delivery that fails after `warning` returns as `logger_error`. See
+the [generated Python API](api.md) for signatures.
 
 </LanguageContent>
 
