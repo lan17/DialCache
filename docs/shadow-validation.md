@@ -313,10 +313,12 @@ mismatch-warning rendering and `shadowMismatchDiff`.
 
 Shadow work runs independently of the caller. Native callbacks still consume
 CPU and can outlive the cache's bounded wait. Give dependency calls finite
-context deadlines and bound application concurrency. Mismatch-warning content,
-the built-in walk and `Operation.MismatchDiff` included, runs on the shadow
-job's goroutine after the verdict and holds the job's capacity until it
-finishes.
+context deadlines and bound application concurrency. A job holds its capacity
+until its verdict is reported, on the shadow job's goroutine: while the
+`WithShadowOutcomes` hook, observers and metrics adapters receive its
+`shadowValidation` and `shadowAge` events, and while its mismatch warning is
+built and logged, the built-in walk and `Operation.MismatchDiff` included. A
+slow callback there therefore shows up as `dropped` jobs beyond capacity.
 
 </LanguageContent>
 
@@ -511,9 +513,12 @@ The logger's `Warn` receives the message
 fields, so they have no order. `cachedValueAgeSeconds` is a `float64`,
 `mismatchPaths` a `[]string` and `mismatchPathCount` an `int`; a field that
 failed is a nil interface value. Without `WithLogger`, the standard logger
-writes each warning on one line through the `log` package, with control
-characters, U+2028 and U+2029 written as escape sequences, so a member name
-cannot break the line or send a terminal escape.
+writes each warning on one line through the `log` package, with the fields as
+one JSON object, so `mismatchPaths` `[""]` reads differently from `[]` and a
+failed field is `null`. In that object, control characters, DEL, U+2028 and
+U+2029 are JSON escapes and a byte that is not UTF-8 becomes U+FFFD, so a
+member name cannot break the line or send a terminal escape, and the object
+still parses.
 
 </LanguageContent>
 
@@ -528,8 +533,10 @@ content work does not complete, as when the CPU executor rejects it, both
 groups are `None` whatever the leaves request, and `logging_outcome` is
 `RenderError`.
 Inside a present group, `None` marks an unavailable field. The default
-`Display` writes the fields in the order of the table and leaves unavailable
-ones out.
+`LogFacadeLogger` writes the event's `Display`: `name=value` pairs in the order
+of the table, without `outcome`, with `namespace`, `cachedValue` and
+`sourceValue` in place of `cacheNamespace`, `cachedValueJson` and
+`sourceValueJson`, and with unavailable fields left out.
 
 </LanguageContent>
 
@@ -692,17 +699,26 @@ the value fields alone.
 <LanguageContent language="go">
 
 Each side is rendered with the JSON writer `JSONCodec` uses, not the
-operation's `Codec`, so a struct's `MarshalJSON` runs once. A cycle, a
-`*big.Int`, a channel, a function, or a `MarshalJSON` that fails or panics has
-no rendering, and `Absent` is the absent value. A rendering nested more than
-10,000 levels deep does not parse back, so the built-in computation fails with
-`hook_error`.
+operation's `Codec`. It writes maps, slices, `JSONObject` values and scalars by
+their kind, without calling their `MarshalJSON`, and renders a struct, with
+everything inside it, through `encoding/json`, parsing the output back, so a
+struct's `MarshalJSON` runs once. A cycle, a `*big.Int`, a channel, a function,
+or a struct whose `MarshalJSON` fails, panics or writes a number outside double
+range, or whose JSON nests more than 10,000 levels, has no rendering, and
+`Absent` is the absent value. A map, slice or `JSONObject` nested that deep does
+render, but the built-in computation cannot parse the rendering back and fails
+with `hook_error`.
 
 `Operation.MismatchDiff`, beside `Comparator`, sets the hook:
 `func(cached, source T) ([]MismatchEntry, error)`. A `MismatchEntry` side set
 to `Absent` is omitted and nil is JSON `null`, so an entry that only names a
-location sets both sides to `Absent`; a nil slice is an empty list. The hook
-fails by returning an error or panicking.
+location sets both sides to `Absent`; a nil slice is an empty list. A side
+renders like a compared value, except that the side or any value inside it that
+implements `json.Marshaler`, such as `json.RawMessage` or a redacting type,
+renders through its `MarshalJSON`, whose output is parsed back rather than
+copied. A `MarshalJSON` that fails, panics, or writes invalid JSON or a number
+outside double range leaves the side with no rendering, and a `*big.Int` side
+still has none. The hook fails by returning an error or panicking.
 
 Rendering, the walk, and the hook run on the shadow job's goroutine after the
 verdict and hold the job's shadow capacity until they finish, so while a slow
@@ -725,9 +741,12 @@ fields only from a `mismatch_diff` hook; the built-in walk never reads what a
 redacting preview leaves out. A field logged without its renderer, or a
 `preview` that returns `None` or panics, is unavailable with `render_error`.
 A value whose `Serialize` fails has no rendering, so its value field and the
-built-in diff fields are unavailable with `render_error`. A rendering nested
-more than 128 levels deep exceeds `serde_json`'s parser, so the built-in
-computation fails with `hook_error`. Rust's default codec stores no top-level
+built-in diff fields are unavailable with `render_error`. The built-in
+computation parses each rendering back with `serde_json` and fails with
+`hook_error` on one it cannot parse: a rendering nested 128 or more levels
+deep, which reaches the parser's recursion limit, or, in a build that enables
+`serde_json`'s `raw_value` feature without `arbitrary_precision`, a `RawValue`
+holding a number outside double range. Rust's default codec stores no top-level
 undefined value, so an absent side does not arise for native values.
 
 `Operation::mismatch_diff` and `UseCaseBuilder::mismatch_diff` set the hook,
@@ -743,6 +762,14 @@ groups are `None`, and it carries `render_error`. On one Apple-silicon Mac, a
 6.3 MB map of 150,000 entries took about 0.09 seconds per warning at
 `MismatchDiff::Paths` in a release build, against 0.006 seconds for the value
 fields alone.
+
+By default the executor is one process-wide pool of two worker threads and two
+queued jobs, which every cache instance also uses for zstd decompression and
+for compressing large payloads. While warnings occupy it, a compressed hit
+whose decompression it rejects falls through to the source, and a write whose
+compression it rejects is skipped. At most `shadow_max_in_flight` warnings per
+instance, times the number of instances, contend for it; a custom `Runtime` can
+supply its own executor.
 
 </LanguageContent>
 

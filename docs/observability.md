@@ -592,8 +592,12 @@ that promise, and one that never settles emits nothing.
 Observers and metrics adapters receive an `Event` whose `Kind` is
 `shadowMismatchLogging`, with the outcome in `Event.Outcome`; the
 `WithShadowOutcomes` hook does not receive it. `hook_error` means
-`Operation.MismatchDiff` returned an error or panicked. A Go logger returns
-nothing, so a `Warn` panic is its only `logger_error`.
+`Operation.MismatchDiff` returned an error or panicked, or the built-in
+computation could not parse back a map, slice or `JSONObject` nested more than
+10,000 levels deep. A struct whose `MarshalJSON` writes a number outside double
+range, or whose JSON nests that deep, has no rendering and reports
+`render_error` instead. A Go logger returns nothing, so a `Warn` panic is its
+only `logger_error`.
 
 </LanguageContent>
 
@@ -601,7 +605,10 @@ nothing, so a `Warn` panic is its only `logger_error`.
 
 Observers receive `Event::ShadowMismatchLogging` with the use-case labels and a
 `ShadowMismatchLoggingOutcome`, and `MetricKind::ShadowMismatchLogging` maps it
-to the names above. `hook_error` means the `mismatch_diff` hook panicked.
+to the names above. `hook_error` means the `mismatch_diff` hook panicked, or
+the built-in computation could not parse a rendering back: one nested 128 or
+more levels deep, or, with `serde_json`'s `raw_value` feature on and
+`arbitrary_precision` off, a `RawValue` number outside double range.
 `render_error` also covers a selected field the operation has no renderer for
 and work the bounded CPU executor rejected. A `Logger` panic is the
 `logger_error`.

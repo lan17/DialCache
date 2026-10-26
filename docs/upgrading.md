@@ -267,23 +267,30 @@ names the old shapes:
 - Observers receive the new `shadowMismatchLogging` event kind, and the
   Prometheus adapter registers a twentieth collector,
   `dialcache_shadow_mismatch_logging_counter`.
-- The default logger writes control characters, DEL, U+2028, U+2029 and bytes
-  that are not UTF-8 as Go escape sequences in every line, so a line that held
-  them before now reads differently.
-- Mismatch-warning content, the `MismatchDiff` hook and the built-in walk now
-  run while the shadow job still holds its capacity, so `WithShadowCapacity`
-  bounds them and a slow hook shows up as `dropped` shadow jobs.
+
+The standard logger, used without `WithLogger`, now writes the mismatch
+warning's details as one JSON object in place of Go's `map[...]` text, so a
+pattern that parsed the old lines needs updating. The JSON keeps apart what the
+old text ran together: `mismatchPaths` `[""]`, one difference at the root, no
+longer reads like `[]`, a pointer that holds a space stays one string, and a
+field that failed is `null`. Every line it writes now also escapes control
+characters, DEL, U+2028 and U+2029, so an entry that carried a raw newline or
+terminal escape stays on one line. Inside the JSON details they are JSON
+escapes and a byte that is not UTF-8 becomes U+FFFD, so the details still
+parse; in other entries, such as an error's text, they and bytes that are not
+UTF-8 are written as Go escape sequences.
+
+A shadow job now holds its capacity until its verdict is reported: while the
+`WithShadowOutcomes` hook, observers and metrics adapters receive its
+`shadowValidation` and `shadowAge` events, and while its mismatch warning is
+built and logged, the `MismatchDiff` hook and the built-in walk included.
+`WithShadowCapacity` therefore bounds that work too, and while a slow hook,
+observer or logger runs, jobs beyond capacity report `dropped`.
 
 The value fields cost what they did before, since each side was already
 rendered in full. On one Apple-silicon Mac, a 6.3 MB map of 150,000 members took
 about 0.6 seconds per warning at `MismatchDiffPaths`, against about 0.5 seconds
-for the value fields alone. Warning work now holds the job's shadow capacity
-until it finishes, so while a slow `MismatchDiff` hook runs, jobs beyond
-capacity report `dropped`.
-
-The standard logger, used without `WithLogger`, now writes control characters,
-U+2028 and U+2029 as escape sequences in every entry, so an entry that carried
-a raw newline or terminal escape now stays on one line.
+for the value fields alone.
 
 </LanguageContent>
 
@@ -320,7 +327,14 @@ an operation's warnings carry the fields it cannot build as unavailable, with
 
 On one Apple-silicon Mac, a 6.3 MB map of 150,000 entries took about
 0.09 seconds per warning at `MismatchDiff::Paths` in a release build, against
-0.006 seconds for the value fields alone.
+0.006 seconds for the value fields alone. That time is spent on the bounded CPU
+executor, where previews already ran. By default the executor is one
+process-wide pool of two worker threads and two queued jobs, which every cache
+instance also uses for zstd decompression and for compressing large payloads.
+While warnings occupy it, a compressed hit whose decompression it rejects falls
+through to the source, and a write whose compression it rejects is skipped. At
+most `shadow_max_in_flight` warnings per instance, times the number of
+instances, contend for it; a custom `Runtime` can supply its own executor.
 
 </LanguageContent>
 
