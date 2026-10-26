@@ -325,6 +325,28 @@ type panickingJSON struct{}
 
 func (panickingJSON) MarshalJSON() ([]byte, error) { panic("not serializable") }
 
+// redacted keeps its text out of JSON, as a type that holds a secret does.
+type redacted string
+
+func (redacted) MarshalJSON() ([]byte, error) { return []byte(`"[redacted]"`), nil }
+
+// addressRedacted redacts through its pointer only, which encoding/json calls
+// when the value is addressable, as a slice element is.
+type addressRedacted string
+
+func (*addressRedacted) MarshalJSON() ([]byte, error) { return []byte(`"[redacted]"`), nil }
+
+// marshalingJSON is a named string whose MarshalJSON returns fixed output, or
+// panics when the output is "panic".
+type marshalingJSON string
+
+func (value marshalingJSON) MarshalJSON() ([]byte, error) {
+	if value == "panic" {
+		panic("not serializable")
+	}
+	return []byte(value), nil
+}
+
 // countingJSON counts its renderings and reports the count in each one.
 type countingJSON struct {
 	email   string
@@ -537,7 +559,16 @@ func TestShadowMismatchDiffHook(t *testing.T) {
 	for _, test := range []struct {
 		name         string
 		unrenderable any
-	}{{"a big integer", big.NewInt(1)}, {"a cycle", cycle}, {"a function", func() {}}, {"a failing MarshalJSON", failingJSON{}}} {
+	}{
+		{"a big integer", big.NewInt(1)}, {"a cycle", cycle}, {"a function", func() {}}, {"a failing MarshalJSON", failingJSON{}},
+		// MarshalJSON output is parsed back, never spliced in.
+		{"a named string whose MarshalJSON panics", marshalingJSON("panic")},
+		{"a named string whose MarshalJSON writes no JSON", marshalingJSON("{")},
+		{"a number outside double range from MarshalJSON", marshalingJSON("1e400")},
+		{"an invalid json.RawMessage", json.RawMessage("{")},
+		{"an empty json.RawMessage", json.RawMessage{}},
+		{"an invalid json.RawMessage inside a list", []any{1, json.RawMessage("{")}},
+	} {
 		t.Run("keeps the paths and nulls diffJson when a side is "+test.name, func(t *testing.T) {
 			hook, _ := hookReturning([]MismatchEntry{{Path: "/a", Cached: 1, Source: Absent}, {Path: "/b", Cached: Absent, Source: test.unrenderable}}, nil)
 			fields, failure := renderShadowMismatchLog(false, MismatchDiffValues, cachedUser, sourceUser, hook)
@@ -565,6 +596,37 @@ func TestShadowMismatchDiffHook(t *testing.T) {
 		fields, _ := renderShadowMismatchLog(false, MismatchDiffValues, cachedUser, sourceUser, hook)
 		if want := `[{"path":"/a"},{"path":"/b","cached":1},{"path":"/c","source":null},{"path":"/at","cached":"2026-07-31T00:00:00Z","source":{"ok":true}}]`; fields["diffJson"] != want {
 			t.Fatalf("hook sides: %v", fields["diffJson"])
+		}
+	})
+	t.Run("renders sides through MarshalJSON at every depth", func(t *testing.T) {
+		hook, _ := hookReturning([]MismatchEntry{
+			{Path: "/password", Cached: redacted("old secret"), Source: redacted("new secret")},
+			{Path: "/passwords", Cached: []redacted{"old secret"}, Source: map[string]redacted{"main": "new secret"}},
+			{Path: "/profile", Cached: map[string]any{"password": redacted("old secret"), "history": []any{redacted("older secret")}}, Source: JSONObject{{"password", &[]redacted{"new secret"}[0]}}},
+			{Path: "/raw", Cached: json.RawMessage(`{"b":1e2,"a":"<&>"}`), Source: json.RawMessage(nil)},
+			// encoding/json calls a pointer's MarshalJSON only on an addressable value.
+			{Path: "/address", Cached: []addressRedacted{"old secret"}, Source: addressRedacted("new value")},
+		}, nil)
+		fields, failure := renderShadowMismatchLog(false, MismatchDiffValues, cachedUser, sourceUser, hook)
+		want := `[{"path":"/password","cached":"[redacted]","source":"[redacted]"},` +
+			`{"path":"/passwords","cached":["[redacted]"],"source":{"main":"[redacted]"}},` +
+			`{"path":"/profile","cached":{"history":["[redacted]"],"password":"[redacted]"},"source":{"password":"[redacted]"}},` +
+			`{"path":"/raw","cached":{"a":"<&>","b":100},"source":null},` +
+			`{"path":"/address","cached":["[redacted]"],"source":"new value"}]`
+		if failure != "" || fields["diffJson"] != want {
+			t.Fatalf("hook sides: %q, %v", fields["diffJson"], failure)
+		}
+	})
+	t.Run("leaves the roots in JSONCodec's encoding", func(t *testing.T) {
+		// The value fields and the built-in walk log what the codec stores.
+		fields, failure := renderShadowMismatchLog(true, MismatchDiffValues, map[string]any{"password": redacted("old")}, json.RawMessage(`{}`), nil)
+		expectLog(t, fields, failure, map[string]any{
+			"mismatchPaths": []string{""}, "mismatchPathCount": 1,
+			"diffJson":        `[{"path":"","cached":{"password":"old"},"source":[123,125]}]`,
+			"cachedValueJson": `{"password":"old"}`, "sourceValueJson": `[123,125]`,
+		}, "")
+		if payload, err := (JSONCodec[any]{}).Encode(redacted("old")); err != nil || string(payload.Bytes) != `"old"` {
+			t.Fatalf("JSONCodec stored %q, %v", payload.Bytes, err)
 		}
 	})
 	t.Run("clamps paths and sides and cuts at 64 with the total count", func(t *testing.T) {

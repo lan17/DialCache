@@ -292,6 +292,9 @@ func TestShadowMismatchWarningFailureOutcomes(t *testing.T) {
 	unrenderableSide := func(mismatchRecord, mismatchRecord) ([]MismatchEntry, error) {
 		return []MismatchEntry{{Path: "/version", Cached: big.NewInt(1), Source: Absent}}, nil
 	}
+	panickingSide := func(mismatchRecord, mismatchRecord) ([]MismatchEntry, error) {
+		return []MismatchEntry{{Path: "/version", Cached: Absent, Source: marshalingJSON("panic")}}, nil
+	}
 	failedDiff := map[string]any{"mismatchPaths": nil, "mismatchPathCount": nil, "diffJson": nil}
 	for _, test := range []struct {
 		name        string
@@ -306,6 +309,7 @@ func TestShadowMismatchWarningFailureOutcomes(t *testing.T) {
 		{"the logger panics", ShadowPolicy{LogMismatches: Ptr(true)}, nil, true, mismatchAllFields, "logger_error"},
 		{"the hook fails and the logger panics", ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffValues)}}, hookError, true, failedDiff, "hook_error"},
 		{"a hook side has no rendering and the logger panics", ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffValues)}}, unrenderableSide, true, map[string]any{"mismatchPaths": []string{"/version"}, "mismatchPathCount": 1, "diffJson": nil}, "render_error"},
+		{"a hook side's MarshalJSON panics", ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffValues)}}, panickingSide, false, map[string]any{"mismatchPaths": []string{"/version"}, "mismatchPathCount": 1, "diffJson": nil}, "render_error"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -346,25 +350,37 @@ func TestShadowMismatchWarningRenderFailure(t *testing.T) {
 	})
 }
 
-func TestShadowMismatchWarningDefaultLoggerKeepsOneLine(t *testing.T) {
-	// Pointers carry member names as written; the default logger escapes the
-	// whole line, so a newline or terminal escape in a name cannot forge a line.
-	var output bytes.Buffer
-	writer, flags := log.Writer(), log.Flags()
-	log.SetOutput(&output)
-	log.SetFlags(0)
-	defer func() { log.SetOutput(writer); log.SetFlags(flags) }()
-	synctest.Test(t, func(t *testing.T) {
-		name := "a\nDialCache forged\x1b[2J"
-		recorder, _ := confirmedMismatch[any]{useCase: "DefaultLogger", cached: map[string]any{name: 1}, source: map[string]any{name: 2},
-			policy: shadowLogging(ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffPaths)}}), options: []Option{WithLogger(logging.Logger{})}}.run(t)
-		if outcomes := recorder.outcomes("shadowMismatchLogging"); !reflect.DeepEqual(outcomes, []string{"logged"}) {
-			t.Fatalf("logging outcomes: %v", outcomes)
-		}
-	})
-	want := `DialCache shadow validation mismatch: map[cacheKey:urn:user_id:123#DefaultLogger cacheNamespace:urn cachedValueAgeSeconds:30.5 keyType:user_id mismatchPathCount:1 mismatchPaths:[/a\nDialCache forged\x1b[2J] outcome:mismatch useCase:DefaultLogger]` + "\n"
-	if output.String() != want {
-		t.Fatalf("logged %q, want %q", output.String(), want)
+func TestShadowMismatchWarningDefaultLogger(t *testing.T) {
+	// Pointers carry member names as written. The default logger writes the
+	// details as JSON, so each pointer keeps its bounds, and escapes the whole
+	// line, so a newline or terminal escape in a name cannot forge a line.
+	for _, test := range []struct {
+		name           string
+		cached, source any
+		paths          string
+	}{
+		{"keeps a forged line on one line", map[string]any{"a\nDialCache forged\x1b[2J": 1}, map[string]any{"a\nDialCache forged\x1b[2J": 2}, `["/a\nDialCache forged\u001b[2J"]`},
+		{"quotes the root pointer", 1, "1", `[""]`},
+		{"keeps a pointer holding a space one element", map[string]any{"a b": 1}, map[string]any{"a b": 2}, `["/a b"]`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			writer, flags := log.Writer(), log.Flags()
+			log.SetOutput(&output)
+			log.SetFlags(0)
+			defer func() { log.SetOutput(writer); log.SetFlags(flags) }()
+			synctest.Test(t, func(t *testing.T) {
+				recorder, _ := confirmedMismatch[any]{useCase: "DefaultLogger", cached: test.cached, source: test.source,
+					policy: shadowLogging(ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffPaths)}}), options: []Option{WithLogger(logging.Logger{})}}.run(t)
+				if outcomes := recorder.outcomes("shadowMismatchLogging"); !reflect.DeepEqual(outcomes, []string{"logged"}) {
+					t.Fatalf("logging outcomes: %v", outcomes)
+				}
+			})
+			want := `DialCache shadow validation mismatch: {"cacheKey":"urn:user_id:123#DefaultLogger","cacheNamespace":"urn","cachedValueAgeSeconds":30.5,"keyType":"user_id","mismatchPathCount":1,"mismatchPaths":` + test.paths + `,"outcome":"mismatch","useCase":"DefaultLogger"}` + "\n"
+			if output.String() != want {
+				t.Fatalf("logged %q, want %q", output.String(), want)
+			}
+		})
 	}
 }
 
