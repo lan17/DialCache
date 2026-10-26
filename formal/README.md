@@ -284,7 +284,7 @@ flowchart LR
   each mode adds to the one before it: `replay` runs `generate`, the four
   parity lanes and `symbolic`, about 15 minutes; `mutations` adds the three
   mutation lanes, about 50 minutes; `full`, the default and the weekly mode,
-  adds `check-models`, about two and a half hours, with its wall clock set by
+  adds `check-models`, about three hours, with its wall clock set by
   that job. The parity and mutation lanes wait only for `generate`, each
   mutation lane merges its shards, and the aggregate requires every selected
   lane to pass and every other lane to be skipped. It keeps a summary artifact
