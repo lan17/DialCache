@@ -874,6 +874,17 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   port. The maintainer kept this behavior as documented in session on
   2026-10-25, and asked for a faster implementation, TypeScript first, as a
   follow-up: #248.
+- **2026-10-26, #242, TypeScript and Python:** DialCache no longer validates the
+  hook's entries. D6's rule that a member without a string `path` fails is
+  dropped, at the maintainer's decision in session that day: "ok lets stop
+  being so defensive. if a custom differ returns non correct results its fine".
+  A hook that throws, returns a promise-like or returns a non-array still gives
+  `hook_error` and never falls back to the built-in computation. Only the first
+  64 entries are read, inside the hook's catch, so an entry that throws when
+  read is still `hook_error`. Their paths are logged in string form: TypeScript
+  stringifies any value, and Python stringifies any value under a `"path"` key
+  but fails an entry that has none. Go's and Rust's types already require a
+  string path.
 - **2026-10-26, #242, TypeScript:** the one catch around warning construction
   logs every requested field as `null` with `render_error`, not the
   metadata-only warning the Failure handling paragraph names, so the warning

@@ -93,9 +93,9 @@ export interface ShadowMismatchEntry {
  * warnings, which runs only when `shadow.mismatchLogging.diff` is above
  * `"off"`. Inputs are borrowed snapshots. Like comparators, hooks must be
  * synchronous, deterministic, side-effect-free, non-mutating, and bounded.
- * A throw, a promise-like, a non-array, or a member without a string `path`
- * logs `null` for the paths and the diff; DialCache never falls back to the
- * built-in computation.
+ * A throw, a promise-like or a non-array logs `null` for the paths and the
+ * diff; DialCache never falls back to the built-in computation. Entries are
+ * logged as the hook returns them.
  */
 export type ShadowMismatchDiff<Value> = (
   cachedValue: Value,

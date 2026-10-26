@@ -11,7 +11,7 @@ import asyncio
 import inspect
 import json
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -272,9 +272,9 @@ def _escape_token(name: str) -> str:
 def _run_hook(hook: Callable[[Any, Any], Any], cached: Any, source: Any) -> tuple[list[Entry], int] | None:
     """Run the use case's hook under the comparator's synchronous discipline.
 
-    A raise, an awaitable, a result that is not a list, or a member that is
-    not a mapping with a str ``"path"`` returns None. Members are read here,
-    so a failing mapping counts against the hook rather than against rendering.
+    A raise, an awaitable or a result that is not a list returns None. Only
+    the kept members are read, inside the try, and a path is logged as its
+    str form: a hook that returns wrong entries gets wrong paths.
     """
     try:
         result = hook(cached, source)
@@ -285,18 +285,12 @@ def _run_hook(hook: Callable[[Any, Any], Any], cached: Any, source: Any) -> tupl
         if not isinstance(result, list):
             return None
         entries: list[Entry] = []
-        for member in result:
-            if not isinstance(member, Mapping):
-                return None
-            path = member["path"] if "path" in member else None
-            if not isinstance(path, str):
-                return None
-            if len(entries) < MAX_ENTRIES:
-                entry: Entry = {"path": path}
-                for side in ("cached", "source"):
-                    if side in member and member[side] is not UNDEFINED:
-                        entry[side] = member[side]
-                entries.append(entry)
+        for member in result[:MAX_ENTRIES]:
+            entry: Entry = {"path": str(member["path"])}
+            for side in ("cached", "source"):
+                if side in member and member[side] is not UNDEFINED:
+                    entry[side] = member[side]
+            entries.append(entry)
         return entries, len(result)
     except (Exception, asyncio.CancelledError):
         return None

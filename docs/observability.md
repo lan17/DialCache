@@ -578,9 +578,9 @@ adapters export it as `dialcache_shadow_mismatch_logging_counter` and
 <LanguageContent language="typescript">
 
 The optional `shadowMismatchLogging` adapter hook receives the event.
-`hook_error` means `shadowMismatchDiff` threw or returned an invalid list.
-`logged` means the logger's `warn` returned, or the promise it returned
-resolved; `logger_error` means `warn` threw, or that promise rejected. A
+`hook_error` means `shadowMismatchDiff` threw or returned something other than
+an array. `logged` means the logger's `warn` returned, or the promise it
+returned resolved; `logger_error` means `warn` threw, or that promise rejected. A
 `hook_error` or `render_error` is recorded at once, without waiting for the
 logger. Otherwise, for a logger that returns a promise, the event waits for
 that promise, and one that never settles emits nothing.
@@ -619,9 +619,9 @@ and work the bounded CPU executor rejected. A `Logger` panic is the
 
 Observers receive an event dictionary whose `event` is
 `shadowMismatchLogging`, with `cacheNamespace`, `useCase`, `keyType` and
-`outcome`. `hook_error` means
-`shadow_mismatch_diff` raised or returned an invalid list. `logged` means the
-logger's `warning` returned, or the awaitable it returned completed;
+`outcome`. `hook_error` means `shadow_mismatch_diff` raised or returned something
+other than a list. `logged` means the logger's `warning` returned, or the
+awaitable it returned completed;
 `logger_error` means `warning` raised, or that awaitable raised or was
 cancelled. DialCache awaits an awaitable the logger returns. A `hook_error` or
 `render_error` is recorded at once, without waiting for the logger; otherwise

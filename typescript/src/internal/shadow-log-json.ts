@@ -57,8 +57,8 @@ export interface ShadowMismatchLogFields {
 
 /**
  * Why warning construction failed: `hook_error` when the hook threw or
- * returned an invalid list, which ranks above `render_error` for JSON
- * rendering. `null` when every requested field rendered.
+ * returned something other than an array, which ranks above `render_error`
+ * for JSON rendering. `null` when every requested field rendered.
  */
 export type ShadowMismatchLogFailure = "hook_error" | "render_error";
 
@@ -338,9 +338,9 @@ function escapePointerToken(name: string): string {
 
 /**
  * Runs the use case's hook under the comparator's synchronous discipline. A
- * throw, a promise-like, a non-array, or a member without a string `path`
- * returns `null`. Paths and sides of the retained entries are read here, so
- * hostile getters count against the hook rather than against rendering.
+ * throw, a promise-like or a non-array returns `null`. Only the kept entries
+ * are read, inside the catch, and a path that is not a string is logged as
+ * its string form: a hook that returns wrong entries gets wrong paths.
  */
 function runShadowMismatchHook(
   hook: ShadowMismatchEntriesHook,
@@ -358,28 +358,16 @@ function runShadowMismatchHook(
     if (!Array.isArray(result)) {
       return null;
     }
-    const members = result as readonly unknown[];
     const entries: RawMismatchEntry[] = [];
-    for (let index = 0; index < members.length; index += 1) {
-      const member = members[index];
-      if (member === null || typeof member !== "object") {
-        return null;
-      }
-      const path: unknown = (member as { readonly path?: unknown }).path;
-      if (typeof path !== "string") {
-        return null;
-      }
-      if (entries.length < SHADOW_MISMATCH_MAX_ENTRIES) {
-        const cached: unknown = (member as { readonly cached?: unknown }).cached;
-        const source: unknown = (member as { readonly source?: unknown }).source;
-        entries.push({
-          path,
-          ...(cached === undefined ? {} : { cached }),
-          ...(source === undefined ? {} : { source }),
-        });
-      }
+    for (const member of result.slice(0, SHADOW_MISMATCH_MAX_ENTRIES) as readonly RawMismatchEntry[]) {
+      const { path, cached, source } = member;
+      entries.push({
+        path: String(path),
+        ...(cached === undefined ? {} : { cached }),
+        ...(source === undefined ? {} : { source }),
+      });
     }
-    return { entries, count: members.length };
+    return { entries, count: result.length };
   } catch {
     return null;
   }

@@ -677,9 +677,10 @@ string, so `{"at":"2026-10-24T00:00:00.000Z"}` against
 `mismatchPaths` is `[]`.
 
 `shadowMismatchDiff` sets the hook; `cached()` and `getOrLoad()` throw a
-`TypeError` when it is not a function. A hook that throws or returns a promise,
-a non-array, or an entry without a string `path` fails. This API excerpt
-assumes a `fetchUser` source:
+`TypeError` when it is not a function. A hook that throws, returns a promise or
+returns a non-array fails. DialCache logs the first 64 entries as the hook
+returns them, so a wrong entry logs a wrong path. This API excerpt assumes a
+`fetchUser` source:
 
 ```ts
 const getUser = dialcache.cached(fetchUser, {
@@ -790,9 +791,10 @@ A top-level `UNDEFINED` is the absent value, and `None` is JSON `null`.
 `get_or_load()`, sets the hook. It returns a list of mappings, each with a str
 `"path"` and optional `"cached"` and `"source"` sides; a missing key or
 `UNDEFINED` omits a side. A hook that raises, returns an awaitable (a coroutine
-is closed without running), returns something other than a list, or returns an
-entry that is not a mapping with a str `"path"` fails. A non-callable value
-raises `ConfigError`.
+is closed without running), returns something other than a list, or returns one
+of the first 64 entries without a `"path"` key fails. Other entries are logged
+as returned, with `str()` of each path. A non-callable value raises
+`ConfigError`.
 
 Rendering, the walk, and the hook run on the event loop after the job releases
 its capacity slot. On one Apple-silicon Mac, a 6.3 MB dict of 150,000 members

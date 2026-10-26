@@ -535,11 +535,6 @@ describe("shadow mismatch log JSON", () => {
       ["returns a rejecting promise", () => Promise.reject(new Error("async hook"))],
       ["returns a non-array object", () => ({ path: "/email" })],
       ["returns a null member", () => [null]],
-      ["returns a member without a path", () => [{ cached: 1 }]],
-      ["returns an invalid member past the 64-entry cut", () => [
-        ...Array.from({ length: 64 }, (_, index) => ({ path: `/${index}` })),
-        null,
-      ]],
       ["returns a member whose side getter throws", () => [{
         path: "/email",
         get cached(): never {
@@ -554,6 +549,22 @@ describe("shadow mismatch log JSON", () => {
       expect(renderShadowMismatchLog(PATHS_ONLY, CACHED_USER, SOURCE_USER, hook)).toStrictEqual({
         fields: { mismatchPaths: null, mismatchPathCount: null },
         failure: "hook_error",
+      });
+    });
+
+    it("logs the hook's entries as it returns them and reads only the kept ones", () => {
+      const hook = (): unknown => [
+        { cached: 1 },
+        { path: 7 },
+        ...Array.from({ length: 62 }, (_, index) => ({ path: `/${index}` })),
+        null,
+      ];
+      expect(renderShadowMismatchLog(PATHS_ONLY, CACHED_USER, SOURCE_USER, hook)).toStrictEqual({
+        fields: {
+          mismatchPaths: ["undefined", "7", ...Array.from({ length: 62 }, (_, index) => `/${index}`)],
+          mismatchPathCount: 65,
+        },
+        failure: null,
       });
     });
 

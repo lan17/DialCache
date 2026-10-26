@@ -678,11 +678,6 @@ async def coroutine_hook(cached, source):
         lambda cached, source: ["/email"],
         lambda cached, source: [lambda: "/email"],
         lambda cached, source: [{"cached": 1}],
-        lambda cached, source: [{"path": 0}],
-        lambda cached, source: [{"path": b"/email"}],
-        lambda cached, source: [{"path": "/email"}, {"path": None}],
-        lambda cached, source: [*({"path": f"/{index}"} for index in range(64)), None],
-        lambda cached, source: [*({"path": f"/{index}"} for index in range(64)), {"path": None}],
         lambda cached, source: [FailingSide(path="/email", cached=1)],
     ],
     ids=[
@@ -697,11 +692,6 @@ async def coroutine_hook(cached, source):
         "string-member",
         "callable-member",
         "member-without-path",
-        "numeric-path",
-        "bytes-path",
-        "invalid-after-valid",
-        "invalid-past-the-cut",
-        "invalid-path-past-the-cut",
         "failing-side",
     ],
 )
@@ -717,6 +707,16 @@ def test_fails_closed_with_hook_error_and_no_fallback(hook):
             "hook_error",
         )
         gc.collect()
+
+
+def test_logs_the_hook_entries_as_returned_and_reads_only_the_kept_ones():
+    def hook(cached, source):
+        return [{"path": 7}, *({"path": f"/{index}"} for index in range(63)), None]
+
+    assert render_shadow_mismatch_log(PATHS_ONLY, CACHED_USER, SOURCE_USER, hook) == (
+        {"mismatchPaths": ["7", *(f"/{index}" for index in range(63))], "mismatchPathCount": 65},
+        None,
+    )
 
 
 def test_closes_a_coroutine_hook_result_without_running_it():
