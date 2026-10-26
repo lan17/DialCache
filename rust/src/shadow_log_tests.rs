@@ -20,7 +20,9 @@ use crate::preview::{
     SHADOW_LOG_DIFF_MAX_BYTES, SHADOW_LOG_TRUNCATION_MARKER, SHADOW_LOG_VALUE_MAX_BYTES,
 };
 use crate::protocol::diff_shadow_mismatch_json;
-use crate::shadow_log::{render_mismatch_log, JsonRender, LogPlan, MismatchContent, Renderers};
+use crate::shadow_log::{
+    render_mismatch_log, JsonRender, LogPlan, MismatchContent, Renderers, ValueRenderer,
+};
 
 const VALUE_ONLY: LogPlan = LogPlan {
     value: true,
@@ -102,7 +104,14 @@ fn stored(value: V) -> StoredValue {
 
 fn json_renderers() -> Renderers {
     Renderers {
-        json: Some(JsonRender::of::<V>()),
+        value_renderer: Some(ValueRenderer::Json(JsonRender::of::<V>())),
+        ..Renderers::default()
+    }
+}
+
+fn previewed(preview: ErasedPreview) -> Renderers {
+    Renderers {
+        value_renderer: Some(ValueRenderer::Preview(preview)),
         ..Renderers::default()
     }
 }
@@ -851,9 +860,8 @@ fn an_operation_without_json_needs_a_preview_and_a_hook() {
         }])
     });
     let custom = Renderers {
-        json: None,
-        preview: Some(preview),
         hook: Some(hook),
+        ..previewed(preview)
     };
     assert!(custom.runs_code(PATHS_ONLY));
     assert_eq!(
@@ -883,10 +891,7 @@ fn a_preview_replaces_the_json_rendering_for_the_whole_warning() {
             _ => None,
         });
     let redacted = values(Some(r#"{"id":"123"}"#), Some(r#"{"id":"123"}"#));
-    let renderers = Renderers {
-        preview: Some(redacting.clone()),
-        ..json_renderers()
-    };
+    let renderers = previewed(redacting.clone());
     assert!(!renderers.runs_code(PATHS_ONLY));
     assert_eq!(
         render_with(EVERYTHING, cached_user(), source_user(), &renderers),
@@ -894,7 +899,7 @@ fn a_preview_replaces_the_json_rendering_for_the_whole_warning() {
     );
     // With a hook, the difference fields come from the hook alone.
     let hooked = Renderers {
-        preview: Some(redacting),
+        value_renderer: Some(ValueRenderer::Preview(redacting)),
         ..with_hook(|_, _| {
             vec![MismatchEntry {
                 path: "/email".into(),
@@ -925,10 +930,7 @@ fn a_preview_fails_closed_per_value_and_receives_the_absent_marker() {
         Some(V::User(_)) => None,
         _ => panic!("preview panicked"),
     });
-    let renderers = Renderers {
-        preview: Some(preview),
-        ..json_renderers()
-    };
+    let renderers = previewed(preview);
     let source_field = crate::preview::preview_value(&"🙂".repeat(10_000));
     assert_eq!(
         render_with(VALUE_ONLY, cached_user(), source_user(), &renderers),
