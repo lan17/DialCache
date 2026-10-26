@@ -200,15 +200,19 @@ describe("shadow mismatch log JSON", () => {
     });
 
     it("builds each kept pointer only as far as its clamp reads, however long the member names above it", () => {
-      // Two 1 MiB member names above 70 differing members. Built in full, each
-      // of the 64 kept pointers would carry both names into the clamp.
+      // Three 1 MiB member names above 70 differing members. Built in full,
+      // each of the 64 kept pointers would carry all three names into the
+      // clamp; even each name cut to the cap would pass the bound below.
       const outer = "o".repeat(1 << 20);
+      const middle = "d".repeat(1 << 20);
       const inner = "i".repeat(1 << 20);
       const chain = (leaf: number): JsonValue => ({
         [outer]: {
-          [inner]: Object.fromEntries(
-            Array.from({ length: 70 }, (_, index) => [`m${String(index).padStart(2, "0")}`, leaf]),
-          ),
+          [middle]: {
+            [inner]: Object.fromEntries(
+              Array.from({ length: 70 }, (_, index) => [`m${String(index).padStart(2, "0")}`, leaf]),
+            ),
+          },
         },
       });
       const encodeInto = vi.spyOn(TextEncoder.prototype, "encodeInto");
