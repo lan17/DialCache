@@ -504,6 +504,28 @@ describe("full formal workflow shape", () => {
     for (const lane of lanes) expect(needsOf(jobs[lane]!), lane).toEqual(["generate"]);
   });
 
+  it("gives the model check room for every catalogued model fault on a hosted runner", async () => {
+    // make formal-check runs every scheduled model, then measures every catalogued model fault on
+    // the Quint pool, then checks the lint baseline and the kernel fixtures; setup and the evidence
+    // upload take under a minute. Run 39239127644 on main spent 6.0 minutes on the models, 528
+    // worker-minutes on its 79 challenges (6.7 each) and 2.3 minutes on the rest. Run 40245022083
+    // spent 6.2 minutes on the models and finished 78 of 90 challenges at 7.1 worker-minutes each,
+    // the longest 13, before the former 150-minute timeout. The pool finishes the campaign within
+    // its worker-minutes over the workers plus one challenge's straggling share (list scheduling),
+    // so growing the catalog fails here until the timeout grows.
+    const { resolveConcurrency } = await import(new URL("../../formal/tools/quint-pool.mjs", import.meta.url).href) as {
+      resolveConcurrency(env: Record<string, string | undefined>, available?: number, memory?: number): number;
+    };
+    const challenges = (JSON.parse(readFileSync(new URL("../../formal/catalogs/execution.json", import.meta.url), "utf8")) as { challenges: unknown[] }).challenges.length;
+    // A hosted ubuntu-latest runner: four cores and 16 GB, at 2 GiB a worker.
+    const workers = resolveConcurrency({}, 4, 16e9);
+    expect(workers).toBe(4);
+    const setupMinutes = 1, modelMinutes = 6.5, workerMinutesPerChallenge = 7.1, longestChallengeMinutes = 13, closingMinutes = 2.5;
+    const campaign = challenges * workerMinutesPerChallenge / workers + longestChallengeMinutes * (1 - 1 / workers);
+    expect(setupMinutes + modelMinutes + campaign + closingMinutes, `${challenges} challenges`)
+      .toBeLessThanOrEqual(jobs["check-models"]!["timeout-minutes"]!);
+  });
+
   it("shards both mutation lanes so every shard fits its timeout on the slow runner class, and gates the aggregate on their merges", () => {
     const uploadOf = (job: Job) => job.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!;
     const downloadsOf = (job: Job) => job.steps.filter(step => step.uses?.startsWith("actions/download-artifact")).map(step => step.with);
