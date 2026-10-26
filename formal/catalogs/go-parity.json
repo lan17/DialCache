@@ -8,8 +8,8 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "654e2fc3be90bc2c239397821eabd1a89477bdde9e8a748992fb00e53f8ebc9c",
-    "executionSha256": "d6a37d2df1c3b1d8b6455a9fb9f9ecea93a1f905468355cd59c84a9f4a97f34f",
+    "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
+    "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
     "sourceAuditDispositionsSha256": "c7abc5a170b17c1e17014b123c5302dfd4574364a53bf2c3e6af9ed752c79c52",
     "featureCoverageSha256": "c74cf1c6f96ffdf97d5fe339b6df4406b3012ab23ca86dcc0e8071ffdd31b1b8",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
@@ -3425,7 +3425,7 @@
               "RecoveryPredicate",
               "MismatchEntry"
             ],
-            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           }
         ]
       }
@@ -3578,14 +3578,14 @@
               "Operation",
               "Event"
             ],
-            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/internal/logging/logging.go",
             "symbols": [
               "Logger"
             ],
-            "sha256": "d982ac9362f50a3df686439a10d0ddc8761de83960ad95cc601239dcd53f5611"
+            "sha256": "5b28d6d885e0bf4852849c2d6d5910aa6282b483aaf67911931402f69a6d7253"
           }
         ]
       }
@@ -3613,7 +3613,7 @@
               "CallbackPanicError",
               "ErrNoRemote"
             ],
-            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/redis_adapter.go",
@@ -3652,7 +3652,7 @@
               "Codec",
               "Remote"
             ],
-            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/bindings.go",
@@ -3687,7 +3687,7 @@
             "symbols": [
               "JSONCodec"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
           }
         ]
       }
@@ -3751,7 +3751,7 @@
               "EscapeRawPayload",
               "firstZstdFrame"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
           }
         ]
       }
@@ -3790,7 +3790,7 @@
               "TimerClock",
               "DeferredExecutor"
             ],
-            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           }
         ]
       }
@@ -3878,7 +3878,7 @@
           },
           {
             "path": "go/api.go",
-            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f",
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d",
             "symbols": [
               "systemClock",
               "newSystemClock"
@@ -3959,7 +3959,7 @@
               "CompressPayload",
               "DecompressPayload"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
           },
           {
             "path": "go/redis_adapter.go",
@@ -4124,7 +4124,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Warning content renders each compared value once with the Go JSON compatibility writer; the built-in walk runs over the parsed renderings with the same member order, array rule, root cases, depth cap (deep equality past it) and caps, materializing only the kept pointers up to their clamp, and the MismatchDiff hook's entries take the same clamps. Byte-bounded UTF-8 output uses the same truncation marker; a failure nulls only the fields it feeds and cannot suppress the verdict or caller result. Native type representation is a codec binding (B03): Go's decoder fails a rendering nested past 10,000 levels as hook_error.",
+        "rationale": "Warning content renders each compared value once with the Go JSON compatibility writer; the built-in walk runs over the parsed renderings with the same member order, array rule, root cases, depth cap (deep equality past it) and caps, materializing only the kept pointers up to their clamp, and the MismatchDiff hook's entries take the same clamps. Byte-bounded UTF-8 output uses the same truncation marker; a failure nulls only the fields it feeds and cannot suppress the verdict or caller result. Native type representation is a codec binding (B03): Go's decoder fails a rendering nested past 10,000 levels as hook_error. Hook entry sides honor json.Marshaler at every depth, as TypeScript sides honor toJSON, while the codec stored encoding reaches MarshalJSON only through a struct.",
         "nativeAdaptations": [
           "B03",
           "X01",
@@ -4143,7 +4143,7 @@
             "symbols": [
               "appendJSON"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
           },
           {
             "path": "go/shadow_log.go",
@@ -4153,7 +4153,7 @@
               "runMismatchHook",
               "appendMismatchEntries"
             ],
-            "sha256": "87b3fa381c019c6024e5b60800c9b038733b27f7e987239270e6ab355373cf95"
+            "sha256": "f7ddb1edd7e9b3b7319818f0adf1ecaf42a023d18aa8427a0602709f65921ff1"
           }
         ]
       }
@@ -4241,7 +4241,7 @@
               "Option",
               "Logger"
             ],
-            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/metrics.go",
@@ -4352,7 +4352,7 @@
               "Remote",
               "ReadBudget"
             ],
-            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/protocol.go",
@@ -4428,7 +4428,7 @@
               "Codec",
               "ContextCodec"
             ],
-            "sha256": "0d944d10113f0321f46897b5358304b66b01627422c243d7e98ef438c0237a7f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/codec.go",
@@ -4440,7 +4440,7 @@
               "SemanticEqual",
               "validateJSONScalarStrings"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
           }
         ]
       }

@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "d090e143e086592857cee1ebf9faabc86d8004a4ca7244739637c8d817b7dbba",
+      "sha256": "0613985c965cf1c92ee6c809a7848f199940e992c800664c597936591ac15b3c",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "26e3f3eb9b1643b1c0644ae6a18daa15f38f78a21c32614cb8a745813cce3a27",
+      "sha256": "1328cc6e07ad3e9ebe723a59ea6d39d8d005d74ee819919d2624c0eb96c0a5e9",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "148f3086ffd495126b60227e94013e6e005024c61258d1adbccc02e4a642fd36",
+      "sha256": "f35d61a95ac2f9ad9dcc5d1f86c5b151b1260f7e7679f75a161777cbe39e8e84",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
