@@ -201,10 +201,10 @@ describe("shadow mismatch log JSON", () => {
       });
     });
 
-    it("keeps each kept pointer bounded however long the member names above it", () => {
-      // Three 1 MiB member names above 70 differing members. Each of the 64
-      // kept pointers carries the three names cut to the pointer cap, never
-      // in full.
+    it("builds each kept pointer only as far as its clamp reads, however long the member names above it", () => {
+      // Three 1 MiB member names above 70 differing members. Built in full,
+      // each of the 64 kept pointers would carry all three names into the
+      // clamp; even each name cut to the cap would pass the bound below.
       const outer = "o".repeat(1 << 20);
       const middle = "d".repeat(1 << 20);
       const inner = "i".repeat(1 << 20);
@@ -229,7 +229,7 @@ describe("shadow mismatch log JSON", () => {
         // At "paths" the clamp encodes nothing but the kept pointers.
         const clamped = encodeInto.mock.calls.map(([text]) => text.length);
         expect(clamped.length).toBeGreaterThanOrEqual(64);
-        expect(Math.max(...clamped)).toBeLessThanOrEqual(4 * (SHADOW_MISMATCH_PATH_MAX_BYTES + 1));
+        expect(Math.max(...clamped)).toBeLessThanOrEqual(3 * SHADOW_MISMATCH_PATH_MAX_BYTES + 1);
       } finally {
         encodeInto.mockRestore();
       }

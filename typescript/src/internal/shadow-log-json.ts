@@ -205,7 +205,7 @@ function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff 
   const report = (sides: { readonly cached?: JsonValue; readonly source?: JsonValue }): void => {
     count += 1;
     if (entries.length < SHADOW_MISMATCH_MAX_ENTRIES) {
-      entries.push({ path: tokens.map(pointerToken).join(""), ...sides });
+      entries.push({ path: keptPointer(tokens), ...sides });
     }
   };
   const walk = (left: JsonValue, right: JsonValue): void => {
@@ -311,14 +311,25 @@ function jsonKind(value: JsonValue): "array" | "object" | "primitive" {
 }
 
 /**
- * One reference token. A member name is cut to the pointer cap first: the
- * clamp keeps fewer bytes than that many code units, so the cut never changes
- * a clamped pointer.
+ * Joins reference tokens into a pointer, building no more of it than the
+ * pointer clamp can keep. Each UTF-16 code unit is at least one UTF-8 byte, so
+ * a pointer longer than `SHADOW_MISMATCH_PATH_MAX_BYTES` code units is clamped
+ * to leading bytes that no later token changes: it stops growing there, and a
+ * member name is cut to that many code units before escaping. The clamped
+ * pointer is unchanged, and each kept entry materializes at most three times
+ * the cap however deep it is or however long the member names above it are.
  */
-function pointerToken(token: number | string): string {
-  return typeof token === "number"
-    ? `/${token}`
-    : `/${escapePointerToken(token.slice(0, SHADOW_MISMATCH_PATH_MAX_BYTES))}`;
+function keptPointer(tokens: readonly (number | string)[]): string {
+  let path = "";
+  for (const token of tokens) {
+    if (path.length > SHADOW_MISMATCH_PATH_MAX_BYTES) {
+      break;
+    }
+    path += typeof token === "number"
+      ? `/${token}`
+      : `/${escapePointerToken(token.slice(0, SHADOW_MISMATCH_PATH_MAX_BYTES))}`;
+  }
+  return path;
 }
 
 function escapePointerToken(name: string): string {
