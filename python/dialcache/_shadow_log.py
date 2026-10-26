@@ -72,12 +72,12 @@ def render_shadow_mismatch_log(
     """Build the content fields the plan requests for one confirmed mismatch.
 
     Returns the fields, each requested one present and None when it failed
-    closed, and the failure: ``"hook_error"`` for the difference computation
-    (hook or built-in walk), which ranks above ``"render_error"`` for JSON
-    rendering, or None. Each side is rendered at most once. A failed hook never
-    falls back to the built-in walk. A top-level ``UNDEFINED``, which a
-    negative-cache entry stores, is an absent side rather than a failure: its
-    value field is None, and the walk reports the other side whole at ``""``.
+    closed, and the failure: ``"hook_error"`` for the hook, which ranks above
+    ``"render_error"`` for JSON rendering, or None. Each side is rendered at
+    most once. A failed hook never falls back to the built-in walk. A
+    top-level ``UNDEFINED``, which a negative-cache entry stores, is an absent
+    side rather than a failure: its value field is None, and the walk reports
+    the other side whole at ``""``.
     """
     render_sides = plan.value or (plan.diff != "off" and hook is None)
     cached_json = render_json(cached) if render_sides else None
@@ -95,10 +95,7 @@ def render_shadow_mismatch_log(
             diff = _run_hook(hook, cached, source)
             diff_failed = diff is None
         elif not render_failed:
-            try:
-                diff = _walk_rendered(cached_json, source_json)
-            except Exception:
-                diff_failed = True
+            diff = _walk_rendered(cached_json, source_json)
         if diff is None:
             fields["mismatchPaths"] = None
             fields["mismatchPathCount"] = None
