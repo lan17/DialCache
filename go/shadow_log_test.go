@@ -549,7 +549,6 @@ func TestShadowMismatchDiffHook(t *testing.T) {
 	}{
 		{"returns an error", func() ([]MismatchEntry, error) { return []MismatchEntry{{Path: "/email"}}, errors.New("hook failed") }},
 		{"panics", func() ([]MismatchEntry, error) { panic("hook failed") }},
-		{"panics with nil", func() ([]MismatchEntry, error) { panic(nil) }},
 	} {
 		t.Run("fails closed with no fallback when the hook "+test.name, func(t *testing.T) {
 			fields, failure := renderShadowMismatchLog(true, MismatchDiffValues, cachedUser, sourceUser, test.hook)

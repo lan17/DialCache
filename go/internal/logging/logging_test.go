@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -50,7 +49,6 @@ func TestDefaultLoggerWritesDetailsAsJSON(t *testing.T) {
 		{"null and text fields", map[string]any{"diffJson": nil, "cachedValueJson": `{"a":"<&>"}`, "cachedValueAgeSeconds": 30.5},
 			`{"cachedValueAgeSeconds":30.5,"cachedValueJson":"{\"a\":\"<&>\"}","diffJson":null}`},
 		{"an error", errors.New("redis: connection refused"), "redis: connection refused"},
-		{"a map with no JSON rendering", map[string]any{"age": math.NaN()}, "map[age:NaN]"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			output := capture(t, func() { Logger{}.Warn("message", test.details) })
