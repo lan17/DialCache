@@ -761,6 +761,14 @@ groups are `None`, and it carries `render_error`. On one Apple-silicon Mac, a
 `MismatchDiff::Paths` in a release build, against 0.006 seconds for the value
 fields alone.
 
+By default the executor is one process-wide pool of two worker threads and two
+queued jobs, which every cache instance also uses for zstd decompression and
+for compressing large payloads. While warnings occupy it, a compressed hit
+whose decompression it rejects falls through to the source, and a write whose
+compression it rejects is skipped. At most `shadow_max_in_flight` warnings per
+instance, times the number of instances, contend for it; a custom `Runtime` can
+supply its own executor.
+
 </LanguageContent>
 
 <LanguageContent language="python">

@@ -327,7 +327,14 @@ an operation's warnings carry the fields it cannot build as unavailable, with
 
 On one Apple-silicon Mac, a 6.3 MB map of 150,000 entries took about
 0.09 seconds per warning at `MismatchDiff::Paths` in a release build, against
-0.006 seconds for the value fields alone.
+0.006 seconds for the value fields alone. That time is spent on the bounded CPU
+executor, where previews already ran. By default the executor is one
+process-wide pool of two worker threads and two queued jobs, which every cache
+instance also uses for zstd decompression and for compressing large payloads.
+While warnings occupy it, a compressed hit whose decompression it rejects falls
+through to the source, and a write whose compression it rejects is skipped. At
+most `shadow_max_in_flight` warnings per instance, times the number of
+instances, contend for it; a custom `Runtime` can supply its own executor.
 
 </LanguageContent>
 
