@@ -313,10 +313,12 @@ mismatch-warning rendering and `shadowMismatchDiff`.
 
 Shadow work runs independently of the caller. Native callbacks still consume
 CPU and can outlive the cache's bounded wait. Give dependency calls finite
-context deadlines and bound application concurrency. Mismatch-warning content,
-the built-in walk and `Operation.MismatchDiff` included, runs on the shadow
-job's goroutine after the verdict and holds the job's capacity until it
-finishes.
+context deadlines and bound application concurrency. A job holds its capacity
+until its verdict is reported, on the shadow job's goroutine: while the
+`WithShadowOutcomes` hook, observers and metrics adapters receive its
+`shadowValidation` and `shadowAge` events, and while its mismatch warning is
+built and logged, the built-in walk and `Operation.MismatchDiff` included. A
+slow callback there therefore shows up as `dropped` jobs beyond capacity.
 
 </LanguageContent>
 
@@ -511,9 +513,12 @@ The logger's `Warn` receives the message
 fields, so they have no order. `cachedValueAgeSeconds` is a `float64`,
 `mismatchPaths` a `[]string` and `mismatchPathCount` an `int`; a field that
 failed is a nil interface value. Without `WithLogger`, the standard logger
-writes each warning on one line through the `log` package, with control
-characters, U+2028 and U+2029 written as escape sequences, so a member name
-cannot break the line or send a terminal escape.
+writes each warning on one line through the `log` package, with the fields as
+one JSON object, so `mismatchPaths` `[""]` reads differently from `[]` and a
+failed field is `null`. In that object, control characters, DEL, U+2028 and
+U+2029 are JSON escapes and a byte that is not UTF-8 becomes U+FFFD, so a
+member name cannot break the line or send a terminal escape, and the object
+still parses.
 
 </LanguageContent>
 
