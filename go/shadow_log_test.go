@@ -176,6 +176,22 @@ func TestBuiltInMismatchWalkCaps(t *testing.T) {
 			t.Fatalf("diffJson pointer clamp: %#v", entries)
 		}
 	})
+	t.Run("a retained pointer logs as the whole pointer would", func(t *testing.T) {
+		// The walk copies at most 516 bytes of a kept pointer. Cutting there,
+		// inside a character or not, must log the same clamped text.
+		for _, char := range []string{"k", "é", "€", "💡"} {
+			for pad := 0; pad < len(char); pad++ {
+				for repeats := 120; repeats <= 540/len(char); repeats++ {
+					name := strings.Repeat("k", pad) + strings.Repeat(char, repeats)
+					entries, count := walkJSON(map[string]any{"a": map[string]any{name: 1.0}}, map[string]any{"a": map[string]any{name: 2.0}})
+					whole := "/a/" + name
+					if count != 1 || len(entries[0].Path) > shadowMismatchPointerCopyBytes || clampLogUTF8(entries[0].Path, shadowMismatchPathMaxBytes) != clampLogUTF8(whole, shadowMismatchPathMaxBytes) {
+						t.Fatalf("a %d-byte pointer kept %q", len(whole), entries[0].Path)
+					}
+				}
+			}
+		}
+	})
 	t.Run("each side over 1 KiB replaced by its clamped JSON text", func(t *testing.T) {
 		list := make([]any, 300)
 		for index := range list {
@@ -221,12 +237,14 @@ func TestBuiltInMismatchWalkCaps(t *testing.T) {
 	})
 }
 
-func TestBuiltInMismatchWalkBuildsOnlyRetainedPointers(t *testing.T) {
+func TestBuiltInMismatchWalkCopiesBoundedRetainedPointers(t *testing.T) {
 	// A chain of member names above a wide object and a long array makes every
 	// pointer below it long. Half their members and elements are equal, and all
 	// but 64 of the differing ones fall past the cut. Lengthening the names must
-	// cost only the retained pointers, never a copy of the prefix per visited
-	// member or element, which would take over a gigabyte here.
+	// cost only the token stack: never a copy of the prefix per visited member
+	// or element, which would take over a gigabyte here, nor a whole copy per
+	// retained entry, about 64 times the prefix, since the warning keeps only
+	// each pointer's first 512 bytes.
 	walk := func(nameBytes int) (allocated uint64, prefixBytes int) {
 		name := strings.Repeat("k", nameBytes)
 		side := func(differing float64) any {
@@ -247,16 +265,22 @@ func TestBuiltInMismatchWalkBuildsOnlyRetainedPointers(t *testing.T) {
 		entries, count := walkJSON(cached, source)
 		runtime.ReadMemStats(&after)
 		prefix := strings.Repeat("/"+name, 30)
-		if count != 5_000 || len(entries) != shadowMismatchMaxEntries || entries[0].Path != prefix+"/items/1" || entries[63].Path != prefix+"/items/127" {
+		logged := func(entry MismatchEntry) string { return clampLogUTF8(entry.Path, shadowMismatchPathMaxBytes) }
+		if count != 5_000 || len(entries) != shadowMismatchMaxEntries || logged(entries[0]) != clampLogUTF8(prefix+"/items/1", shadowMismatchPathMaxBytes) || logged(entries[63]) != clampLogUTF8(prefix+"/items/127", shadowMismatchPathMaxBytes) {
 			t.Fatalf("walk under %d-byte names: %d entries, count %d", nameBytes, len(entries), count)
+		}
+		for _, entry := range entries {
+			if len(entry.Path) > shadowMismatchPointerCopyBytes {
+				t.Fatalf("a retained pointer kept %d bytes", len(entry.Path))
+			}
 		}
 		return after.TotalAlloc - before.TotalAlloc, len(prefix)
 	}
 	shortAllocated, shortPrefix := walk(1)
 	longAllocated, longPrefix := walk(4096)
-	retained := uint64(shadowMismatchMaxEntries * (longPrefix - shortPrefix))
-	if longAllocated > shortAllocated+2*retained {
-		t.Fatalf("lengthening the pointers by %d bytes allocated %d more bytes, want at most %d", longPrefix-shortPrefix, longAllocated-shortAllocated, 2*retained)
+	// The token stack's growth costs about 5 times the prefix it reaches.
+	if bound := shortAllocated + 16*uint64(longPrefix-shortPrefix); longAllocated > bound {
+		t.Fatalf("lengthening the pointers by %d bytes allocated %d more bytes, want at most %d", longPrefix-shortPrefix, longAllocated-shortAllocated, bound-shortAllocated)
 	}
 }
 

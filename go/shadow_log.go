@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Bounds of the confirmed-mismatch difference fields.
@@ -18,6 +19,11 @@ const (
 	// shadowMismatchMaxDepth counts the reference tokens in the deepest pointer
 	// the built-in walk reports.
 	shadowMismatchMaxDepth = 32
+	// shadowMismatchPointerCopyBytes bounds the pointer the walk copies into a
+	// kept entry. A longer pointer still exceeds shadowMismatchPathMaxBytes once
+	// cut there, even when the cut splits a character, so it clamps to the same
+	// text as the whole pointer.
+	shadowMismatchPointerCopyBytes = shadowMismatchPathMaxBytes + utf8.UTFMax
 )
 
 // Why warning construction failed: the difference computation (hook or
@@ -179,12 +185,15 @@ func walkJSON(cached, source any) (entries []MismatchEntry, count int) {
 	// each container appends a child's token and cuts it off again. Only a
 	// retained entry copies it into a string, so a member that compares equal or
 	// falls past the cut never copies its ancestors' tokens, and a deep chain of
-	// long names keeps the walk linear in the renderings.
+	// long names keeps the walk linear in the renderings. The copy stops at
+	// shadowMismatchPointerCopyBytes: the warning clamps every pointer to
+	// shadowMismatchPathMaxBytes, which keeps only bytes inside that prefix.
 	var pointer []byte
 	report := func(cachedSide, sourceSide any) {
 		count++
 		if len(entries) < shadowMismatchMaxEntries {
-			entries = append(entries, MismatchEntry{Path: string(pointer), Cached: cachedSide, Source: sourceSide})
+			kept := pointer[:min(len(pointer), shadowMismatchPointerCopyBytes)]
+			entries = append(entries, MismatchEntry{Path: string(kept), Cached: cachedSide, Source: sourceSide})
 		}
 	}
 	var walk func(left, right any, depth int)
