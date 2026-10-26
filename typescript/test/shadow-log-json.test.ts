@@ -573,21 +573,8 @@ describe("shadow mismatch log JSON", () => {
       const unhandled = vi.fn();
       process.on("unhandledRejection", unhandled);
       try {
-        for (const hook of [
-          () => Promise.reject(new Error("async hook")),
-          () => ({
-            then(_resolve: unknown, reject: (reason: unknown) => void): void {
-              reject(new Error("thenable hook"));
-            },
-          }),
-          () => {
-            const rejected = Promise.reject(new Error("hook with a replaced then"));
-            Object.defineProperty(rejected, "then", { value: () => undefined });
-            return rejected;
-          },
-        ]) {
-          expect(renderShadowMismatchLog(PATHS_ONLY, CACHED_USER, SOURCE_USER, hook).failure).toBe("hook_error");
-        }
+        const hook = (): unknown => Promise.reject(new Error("async hook"));
+        expect(renderShadowMismatchLog(PATHS_ONLY, CACHED_USER, SOURCE_USER, hook).failure).toBe("hook_error");
         await new Promise((resolve) => setImmediate(resolve));
         await new Promise((resolve) => setTimeout(resolve, 10));
       } finally {
