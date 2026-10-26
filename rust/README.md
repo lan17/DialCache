@@ -198,7 +198,13 @@ payloads remain inline; synchronous protocol helpers remain synchronous.
 The default CPU executor is shared across cache instances: two worker threads
 and two queued jobs. Admission never waits for queue space. Saturation or worker
 creation failure fails open: a read falls through to the source, and a failed
-compression skips the write while preserving the source result. Custom runtimes
+compression skips the write while preserving the source result. Shadow mismatch
+warnings share this executor with caller reads: rendering a warning's content
+and running its `mismatch_diff` hook queue beside the zstd decompression of
+cache hits, so a burst of warnings can reject a compressed hit and send that
+read to the source. Each instance runs at most `shadow_max_in_flight` shadow
+jobs (default 1), so that setting and the number of instances in the process
+bound how many warnings contend. Custom runtimes
 may supply their own bounded CPU executor. `StepRuntime` queues these jobs on its
 controlled executor for deterministic tests. A shadow job retains its capacity
 until its admitted CPU work finishes or is discarded, including after a deadline
