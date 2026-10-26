@@ -14,7 +14,7 @@ from types import MappingProxyType
 import pytest
 from formal.schema import json_equal
 
-from dialcache import UNDEFINED, _shadow_log
+from dialcache import UNDEFINED, JsonSerializer, _shadow_log
 from dialcache._shadow_log import (
     KEY_MAX_BYTES,
     TRUNCATION_MARKER,
@@ -25,6 +25,7 @@ from dialcache._shadow_log import (
     render_json,
     render_shadow_mismatch_log,
 )
+from dialcache.serializer import JSON_UNDEFINED_SENTINEL
 
 VALUE_ONLY = MismatchLogPlan(value=True, diff="off")
 PATHS_ONLY = MismatchLogPlan(value=False, diff="paths")
@@ -102,6 +103,17 @@ def test_escapes_lone_surrogates_as_ecmascript_json_does():
     assert failure is None
     assert fields["cachedValueJson"] == '{"k":"\\ud800"}'
     assert fields["diffJson"] == '[{"path":"/k","cached":"\\ud800","source":"x"}]'
+
+
+def test_renders_what_json_serializer_stores_except_the_undefined_sentinel():
+    serializer = JsonSerializer()
+    for value in [None, True, 1.5, "雪\ud800", {"k": [1, None, ("t",)]}]:
+        assert render_json(value) == serializer.dump(value)
+    # A negative-cache entry stores the sentinel; as a compared side it is absent.
+    assert serializer.dump(UNDEFINED) == JSON_UNDEFINED_SENTINEL
+    assert render_json(UNDEFINED) is None
+    for value in [math.nan, object(), circular()]:
+        assert render_json(value) is None
 
 
 def test_nulls_each_unrenderable_side_independently():
@@ -213,17 +225,33 @@ def test_compares_numbers_as_doubles_and_never_as_bools(cached, source, entries)
     assert_entries(json.loads(fields["diffJson"]), entries)
 
 
-def test_compares_integers_beyond_the_double_range_exactly():
-    # Only Python renders such integers, and float() cannot convert them.
+def test_compares_integers_beyond_the_double_range_as_doubles():
+    # Only Python renders such integers. TypeScript parses their digits to the
+    # infinity of their sign, rounding to nearest, so they compare as that.
     huge = 10**400
-    assert diff_shadow_mismatch_json({"n": huge}, {"n": huge}) == ([], 0)
-    actual, count = diff_shadow_mismatch_json({"n": huge}, {"n": huge + 1})
-    assert_entries(actual, [{"path": "/n", "cached": huge, "source": huge + 1}])
-    assert count == 1
-    actual, count = diff_shadow_mismatch_json(1e308, huge)
-    assert_entries(actual, [{"path": "", "cached": 1e308, "source": huge}])
-    assert count == 1
-    assert diff_shadow_mismatch_json(nest_members(34, huge), nest_members(34, huge)) == ([], 0)
+    # The least integer that rounds to infinity, and the one below it.
+    rounds_up, rounds_down = 2**1024 - 2**970, 2**1024 - 2**970 - 1
+    for cached, source in [
+        (huge, huge + 1),
+        (rounds_up, huge),
+        (-rounds_up, -huge),
+        (rounds_down, 1.7976931348623157e308),
+    ]:
+        assert diff_shadow_mismatch_json({"n": cached}, {"n": source}) == ([], 0)
+        assert diff_shadow_mismatch_json(nest_members(34, cached), nest_members(34, source)) == ([], 0)
+    for cached, source in [(huge, -huge), (1e308, huge), (rounds_down, huge)]:
+        actual, count = diff_shadow_mismatch_json({"n": cached}, {"n": source})
+        assert_entries(actual, [{"path": "/n", "cached": cached, "source": source}])
+        assert count == 1
+        actual, count = diff_shadow_mismatch_json(nest_members(34, cached), nest_members(34, source))
+        expected = {"path": "/n" * 32, "cached": nest_members(2, cached), "source": nest_members(2, source)}
+        assert_entries(actual, [expected])
+        assert count == 1
+
+    # The renderings differ, so the warning walks them and finds no difference.
+    fields, failure = render_shadow_mismatch_log(VALUES_ONLY, {"n": huge}, {"n": huge + 1})
+    assert failure is None
+    assert fields == {"mismatchPaths": [], "mismatchPathCount": 0, "diffJson": "[]"}
 
 
 def test_compares_json_primitives_by_type_past_the_depth_cap():
@@ -253,6 +281,29 @@ def test_walks_members_named_like_javascript_prototype_members():
     assert failure is None
     assert fields["mismatchPaths"] == [entry["path"] for entry in entries]
     assert_entries(json.loads(fields["diffJson"]), entries)
+
+
+def test_orders_lone_surrogate_member_names_by_utf16_code_unit():
+    # Cached JSON can carry lone surrogates, as ECMAScript strings do. By code
+    # unit they sort around the pair D83D DE00 of the emoji; code-point order
+    # would put U+DC00 and U+E000 ahead of it.
+    order = ["\ud800", "😀", "\udc00", ""]
+    cached = {name: 1 for name in reversed(order)}
+    source = {name: 2 for name in order}
+    entries = [{"path": f"/{name}", "cached": 1, "source": 2} for name in order]
+
+    actual, count = diff_shadow_mismatch_json(cached, source)
+    assert_entries(actual, entries)
+    assert count == 4
+    fields, failure = render_shadow_mismatch_log(VALUES_ONLY, cached, source)
+    assert failure is None
+    assert fields["mismatchPaths"] == [entry["path"] for entry in entries]
+    assert fields["mismatchPathCount"] == 4
+    # Each lone unit is escaped, so the field is valid UTF-8 JSON.
+    assert fields["diffJson"] == (
+        '[{"path":"/\\ud800","cached":1,"source":2},{"path":"/😀","cached":1,"source":2},'
+        '{"path":"/\\udc00","cached":1,"source":2},{"path":"/","cached":1,"source":2}]'
+    )
 
 
 def test_compares_own_members_in_a_depth_capped_pair():

@@ -10,13 +10,14 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from ._callbacks import discard_awaitable
 from .protocol import utf8_bytes
-from .serializer import UNDEFINED
+from .serializer import UNDEFINED, _native_json
 
 KEY_MAX_BYTES = 2 * 1024
 VALUE_MAX_BYTES = 8 * 1024
@@ -51,16 +52,15 @@ def clamp_utf8(text: str, limit: int) -> str:
 
 
 def render_json(value: Any) -> str | None:
-    """Compact native JSON, or None for a value without a JSON rendering.
+    """The native JSON rendering ``JsonSerializer`` stores, or None for a value without one.
 
-    Lone surrogates are escaped as ``JsonSerializer`` and ECMAScript
-    ``JSON.stringify`` escape them, so the rendering is valid UTF-8.
+    Lone surrogates are escaped, so the rendering is valid UTF-8. A top-level
+    ``UNDEFINED`` has none here: its stored sentinel is not JSON.
     """
     try:
-        text = json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        return _native_json(value)
     except Exception:
         return None
-    return text.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
 def render_shadow_mismatch_log(
@@ -141,14 +141,14 @@ def diff_shadow_mismatch_json(cached: Any, source: Any) -> tuple[list[Entry | No
 
 def _walk_rendered(cached_json: str | None, source_json: str | None) -> tuple[list[Entry], int]:
     # None is an absent side; a side that failed to render never reaches here.
-    if cached_json == source_json:
-        return [], 0
     # Each string came from a successful native rendering, so this is the one
     # boundary from arbitrary values to the closed JSON domain.
     if cached_json is None:
-        return [{"path": "", "source": json.loads(source_json)}], 1
+        return ([], 0) if source_json is None else ([{"path": "", "source": json.loads(source_json)}], 1)
     if source_json is None:
         return [{"path": "", "cached": json.loads(cached_json)}], 1
+    if cached_json == source_json:
+        return [], 0
     return _walk(json.loads(cached_json), json.loads(source_json))
 
 
@@ -245,13 +245,19 @@ def _same_primitive(left: Any, right: Any) -> bool:
         return isinstance(left, str) and isinstance(right, str) and left == right
     if isinstance(left, (int, float)) and isinstance(right, (int, float)):
         # Numbers compare as IEEE doubles, as the other ports parse them, so
-        # precision beyond a double is not a difference. Only Python renders
-        # integers beyond the double range; those compare exactly.
-        try:
-            return float(left) == float(right)
-        except OverflowError:
-            return left == right
+        # precision beyond a double is not a difference.
+        return _as_double(left) == _as_double(right)
     return False
+
+
+def _as_double(number: int | float) -> float:
+    # float() rounds an int to nearest and raises exactly when IEEE rounding
+    # gives an infinity, the value TypeScript parses from the rendered digits.
+    # math.copysign would raise too: it converts the int to a float first.
+    try:
+        return float(number)
+    except OverflowError:
+        return math.inf if number > 0 else -math.inf
 
 
 def _utf16_order(name: str) -> bytes:

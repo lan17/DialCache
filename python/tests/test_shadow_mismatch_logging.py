@@ -553,16 +553,32 @@ async def logger_coroutine_delivers():
     return None
 
 
+class Uninspectable:
+    """A logger result that raises when the awaitable check reads its class."""
+
+    @property
+    def __class__(self):
+        raise RuntimeError("logger result unavailable")
+
+
 @pytest.mark.parametrize(
     ("deliver", "outcome"),
     [
         (logger_raises, "logger_error"),
         (logger_cancels, "logger_error"),
         (logger_coroutine_fails, "logger_error"),
+        (Uninspectable, "logger_error"),
         (logger_coroutine_delivers, "logged"),
         (lambda: "ignored", "logged"),
     ],
-    ids=["raises", "raises-cancelled", "coroutine-fails", "coroutine-delivers", "returns-a-value"],
+    ids=[
+        "raises",
+        "raises-cancelled",
+        "coroutine-fails",
+        "returns-an-uninspectable-value",
+        "coroutine-delivers",
+        "returns-a-value",
+    ],
 )
 def test_records_the_logger_outcome_and_leaves_the_caller_unaffected(executor, deliver, outcome):
     harness = Harness(executor, logger=Logger(deliver))
