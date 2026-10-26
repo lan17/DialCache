@@ -20,7 +20,7 @@ import (
 type mismatchPathVector struct {
 	Name           string          `json:"name"`
 	Cached, Source json.RawMessage // nil when the row omits the side
-	Entries        []any           `json:"entries"`
+	Entries        json.RawMessage `json:"entries"`
 	Count          int             `json:"count"`
 }
 
@@ -102,25 +102,38 @@ func nestMembers(depth int, leaf any) any {
 	return value
 }
 
-// An absent side reaches the walk only through rendering, as Absent.
+// checkMismatchPathVector replays one row: the walk, its entries compared as
+// parsed JSON, and both projections of one entry list in the warning fields,
+// the paths and count at diff "paths" and the entries with their values at
+// "values". An omitted side is Absent (D13) and reaches the walk only through
+// rendering.
+func checkMismatchPathVector(t *testing.T, vector mismatchPathVector) {
+	t.Helper()
+	cached, source := mismatchVectorSide(t, vector.Cached), mismatchVectorSide(t, vector.Source)
+	entries, ok := parseJSONValue(t, string(vector.Entries)).([]any)
+	if !ok {
+		t.Fatal("vector entries are not an array")
+	}
+	if !IsAbsent(cached) && !IsAbsent(source) {
+		walked, count := walkJSON(cached, source)
+		if count != vector.Count || !reflect.DeepEqual(boundedEntries(t, walked), entries) {
+			t.Fatalf("walk: %d %s, want %d %s", count, bjson(boundedEntries(t, walked)), vector.Count, vector.Entries)
+		}
+	}
+	paths := entryPaths(entries)
+	values, failure := renderMismatch(false, MismatchDiffValues, cached, source)
+	diffJSON, rendered := values["diffJson"].(string)
+	if failure != "" || !rendered || len(values) != 3 || values["mismatchPathCount"] != vector.Count ||
+		!reflect.DeepEqual(values["mismatchPaths"], paths) || !reflect.DeepEqual(parseJSONValue(t, diffJSON), entries) {
+		t.Fatalf("diff values fields: %#v %q", values, failure)
+	}
+	fields, failure := renderMismatch(false, MismatchDiffPaths, cached, source)
+	expectLog(t, fields, failure, map[string]any{"mismatchPaths": paths, "mismatchPathCount": vector.Count}, "")
+}
+
 func TestBuiltInMismatchPathVectors(t *testing.T) {
 	for _, vector := range sharedMismatchPathVectors(t) {
-		t.Run(vector.Name, func(t *testing.T) {
-			cached, source := mismatchVectorSide(t, vector.Cached), mismatchVectorSide(t, vector.Source)
-			if !IsAbsent(cached) && !IsAbsent(source) {
-				entries, count := walkJSON(cached, source)
-				if count != vector.Count || !reflect.DeepEqual(boundedEntries(t, entries), append([]any{}, vector.Entries...)) {
-					t.Fatalf("walk: %d %#v, want %d %#v", count, boundedEntries(t, entries), vector.Count, vector.Entries)
-				}
-			}
-			fields, failure := renderMismatch(false, MismatchDiffValues, cached, source)
-			diffJSON, _ := fields["diffJson"].(string)
-			if failure != "" || fields["mismatchPathCount"] != vector.Count || !reflect.DeepEqual(fields["mismatchPaths"], entryPaths(vector.Entries)) || !reflect.DeepEqual(parseJSONValue(t, diffJSON), append([]any{}, vector.Entries...)) {
-				t.Fatalf("diff values fields: %#v %q", fields, failure)
-			}
-			paths, failure := renderMismatch(false, MismatchDiffPaths, cached, source)
-			expectLog(t, paths, failure, map[string]any{"mismatchPaths": fields["mismatchPaths"], "mismatchPathCount": vector.Count}, "")
-		})
+		t.Run(vector.Name, func(t *testing.T) { checkMismatchPathVector(t, vector) })
 	}
 }
 
