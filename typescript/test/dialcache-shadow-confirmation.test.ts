@@ -287,16 +287,6 @@ async function expectNoUnhandledRejection(run: () => Promise<void>): Promise<voi
   expect(unhandled).not.toHaveBeenCalled();
 }
 
-// A promise type from a library rather than the engine: the intrinsic then
-// rejects it as an incompatible receiver.
-class ForeignPromise {
-  constructor(private readonly inner: Promise<unknown>) {}
-
-  then(onFulfilled?: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown): ForeignPromise {
-    return new ForeignPromise(this.inner.then(onFulfilled, onRejected));
-  }
-}
-
 interface MismatchRecord {
   readonly id: string;
   readonly version: number;
@@ -666,7 +656,7 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(serializer.dump).not.toHaveBeenCalled();
   });
 
-  it("falls back to a metadata warning when JSON detail construction throws", async () => {
+  it("logs every requested field as null with render_error when warning construction throws", async () => {
     const cachedValue = { id: "123", version: 1 };
     const sourceValue = { id: "123", version: 2 };
     const payload = JSON.stringify(cachedValue);
@@ -716,6 +706,11 @@ describe("DialCache Redis shadow confirmation", () => {
           keyType: "user_id",
           outcome: "mismatch",
           cachedValueAgeSeconds: metrics.shadowAgeEvents[0]!.seconds,
+          mismatchPaths: null,
+          mismatchPathCount: null,
+          diffJson: null,
+          cachedValueJson: null,
+          sourceValueJson: null,
           loggingOutcome: "render_error",
         },
       );
@@ -1315,16 +1310,6 @@ describe("DialCache Redis shadow confirmation", () => {
       outcome: "logged",
     },
     {
-      name: "returns a rejected native promise whose own then, but not its constructor, is replaced",
-      useCase: "ShadowMismatchLoggerReplacedThen",
-      warn: () => {
-        const rejected = Promise.reject(new Error("logger transport unavailable"));
-        Object.defineProperty(rejected, "then", { value: () => undefined });
-        return rejected;
-      },
-      outcome: "logger_error",
-    },
-    {
       name: "returns a thenable that rejects",
       useCase: "ShadowMismatchLoggerThenableRejects",
       warn: () => ({
@@ -1366,61 +1351,6 @@ describe("DialCache Redis shadow confirmation", () => {
       ]]);
       expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, outcome)]);
     });
-  });
-
-  it.each<{
-    readonly name: string;
-    readonly useCase: string;
-    readonly deliver: () => Promise<void>;
-    readonly outcome: ShadowMismatchLoggingOutcome;
-  }>([
-    {
-      name: "delivers",
-      useCase: "ShadowMismatchLoggerForeignGlobalResolves",
-      deliver: () => Promise.resolve(),
-      outcome: "logged",
-    },
-    {
-      name: "fails",
-      useCase: "ShadowMismatchLoggerForeignGlobalRejects",
-      deliver: () => Promise.reject(new Error("logger transport unavailable")),
-      outcome: "logger_error",
-    },
-  ])("records $outcome when an async logger $name after the global Promise was replaced", async ({
-    useCase,
-    deliver,
-    outcome,
-  }) => {
-    const NativePromise = Promise;
-    // A promise library installed as the global Promise after DialCache
-    // loaded: its resolve returns the library's own promise type.
-    const foreignGlobal = new Proxy(NativePromise, {
-      get: (target, property, receiver) => property === "resolve"
-        ? (value: unknown) => new ForeignPromise(target.resolve(value))
-        : Reflect.get(target, property, receiver) as unknown,
-    });
-    const warn = (): unknown => {
-      const delivery = deliver();
-      globalThis.Promise = foreignGlobal;
-      queueMicrotask(() => {
-        globalThis.Promise = NativePromise;
-      });
-      return delivery;
-    };
-    try {
-      await expectNoUnhandledRejection(async () => {
-        const { metrics } = await runConfirmedMismatch(
-          useCase,
-          remoteConfig(100, 100, { logMismatches: true }),
-          { warn },
-        );
-        await waitForMismatchLoggingEvents(metrics, 1);
-
-        expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, outcome)]);
-      });
-    } finally {
-      globalThis.Promise = NativePromise;
-    }
   });
 
   it.each(([

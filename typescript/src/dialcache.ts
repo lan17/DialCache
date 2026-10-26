@@ -8,6 +8,7 @@ import {
   type CacheConfigProvider,
   type DialCacheConfig,
   type Logger,
+  type ShadowConfig,
   type StaleRecoveryPredicate,
 } from "./config.js";
 import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
@@ -52,6 +53,7 @@ import {
   type ResolvedRemoteLayerConfig,
 } from "./internal/runtime-config.js";
 import {
+  failedShadowMismatchLogFields,
   previewShadowLogKey,
   renderShadowMismatchLog,
   type ShadowMismatchLogContent,
@@ -978,7 +980,7 @@ export class DialCache {
       return;
     }
 
-    const resolvedShadowConfig = shadowConfig as Record<string, unknown>;
+    const resolvedShadowConfig = shadowConfig as ShadowConfig;
     const shadowPercentage: unknown = resolvedShadowConfig.ramp;
     if (shadowPercentage === undefined || shadowPercentage === 0) {
       return;
@@ -1030,7 +1032,7 @@ export class DialCache {
   /** The leaves captured at admission; `null` when both are off. */
   private resolveShadowLogging(
     key: DialCacheKey,
-    shadowConfig: Record<string, unknown>,
+    shadowConfig: ShadowConfig,
   ): ShadowMismatchLogPlan | null {
     const { value, diff, invalid } = resolveMismatchLogging(shadowConfig);
     if (invalid) {
@@ -1317,8 +1319,6 @@ export class DialCache {
     details: ShadowMismatchDetails,
     valueAgeSeconds: number | undefined,
   ): void {
-    // Built from the key rather than from metric labels, which an adapter may
-    // have mutated.
     const metadata = {
       cacheNamespace: key.namespace,
       useCase: key.useCase,
@@ -1337,9 +1337,8 @@ export class DialCache {
         details.mismatchDiff,
       );
     } catch {
-      // Construction is fail-closed by design; keep the metadata warning if
-      // anything unforeseen still throws while rendering it.
-      content = { fields: {}, failure: "render_error" };
+      // Last resort: nothing may escape into the detached verdict handler.
+      content = { fields: failedShadowMismatchLogFields(details.logPlan), failure: "render_error" };
     }
     const failure = content.failure;
     const delivered = this.logger.warn(SHADOW_MISMATCH_WARNING, {

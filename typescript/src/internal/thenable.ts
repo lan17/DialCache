@@ -10,14 +10,7 @@ export function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
     && typeof (value as { readonly then?: unknown }).then === "function";
 }
 
-/**
- * Resolves whether a value fulfilled, and never rejects. `await` adopts a
- * native promise whose `constructor` is the intrinsic Promise without reading
- * its `then`, so a replaced own `then` on such a promise, or a global
- * `Promise` replaced after load, cannot skip the handler. Every other
- * promise-like, a native promise whose own `constructor` is also replaced
- * included, is adopted through its own `then`, which can withhold settlement.
- */
+/** Resolves to whether `value` fulfilled. Never rejects, so a rejection is never left unhandled. */
 export async function fulfills(value: unknown): Promise<boolean> {
   try {
     await value;

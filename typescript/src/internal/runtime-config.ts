@@ -183,11 +183,9 @@ export function isShadowMismatchDiffLevel(value: unknown): value is ShadowMismat
  * group's `mismatchLogging` override them. A malformed shorthand expands to
  * both leaves off and is marked invalid.
  */
-export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
-  const { logMismatches: shorthand, mismatchLogging: group } = shadow as {
-    readonly logMismatches?: unknown;
-    readonly mismatchLogging?: unknown;
-  };
+export function expandMismatchLogging(shadow: ShadowConfig): MismatchLoggingLeaves {
+  // Runtime leaves stay unvalidated until resolution, so they are read as unknown.
+  const shorthand: unknown = shadow.logMismatches;
   const expanded: MismatchLoggingLeaves = shorthand === undefined
     ? {}
     : shorthand === true
@@ -195,14 +193,10 @@ export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
       : shorthand === false
         ? { value: false, diff: "off" }
         : { value: false, diff: "off", invalid: true };
-  if (group === undefined) {
+  const written: { readonly value?: unknown; readonly diff?: unknown } | undefined = shadow.mismatchLogging;
+  if (written === undefined) {
     return expanded;
   }
-  if (group === null || typeof group !== "object" || Array.isArray(group)) {
-    // Construction, merging and default snapshots reject this shape first.
-    return { value: false, diff: "off", invalid: true };
-  }
-  const written = group as { readonly value?: unknown; readonly diff?: unknown };
   const leaves: { value?: unknown; diff?: unknown; invalid?: true } = {};
   const value = written.value !== undefined ? written.value : expanded.value;
   const diff = written.diff !== undefined ? written.diff : expanded.diff;
@@ -223,7 +217,7 @@ export function expandMismatchLogging(shadow: object): MismatchLoggingLeaves {
  * leaf validates independently: an omitted leaf is off, an invalid leaf acts
  * off, and `invalid` reports that the group needs one config_resolution.
  */
-export function resolveMismatchLogging(shadow: object): MismatchLoggingResolution {
+export function resolveMismatchLogging(shadow: ShadowConfig): MismatchLoggingResolution {
   const leaves = expandMismatchLogging(shadow);
   const value = resolveValueLeaf(leaves.value);
   const diff = resolveDiffLeaf(leaves.diff);

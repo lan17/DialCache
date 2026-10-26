@@ -668,7 +668,7 @@
     },
     {
       "path": "typescript/test/dialcache-observability-internals.test.ts",
-      "sha256": "22518efc602318654b65d7b59c0d5b2fc9e31958d16e5daaa4740704c4aa53be",
+      "sha256": "6c8965b7c155d8740d47424c70d4bf43543fcd0c6aac15b267d4e7cc9be02041",
       "entries": [
         {"title":"merges every runtime policy leaf independently","contracts":["C16"]},
         {"title":"preserves omitted requestLocal and coalesce through a runtime merge","contracts":["C16"]},
@@ -758,7 +758,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "a549cdd4e73557a487c6b5f7605bc36f93d406d4e3c26123c1ecc5e69771069c",
+      "sha256": "db7d43c1428fbf4a84bcde1dc3876a1b56508b26309c25faf99d4ae95d7145a1",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -766,7 +766,7 @@
         {"title":"does not log confirmed mismatches when logging is omitted","contracts":["C60"]},
         {"title":"logs one bounded JSON warning for a served-hit confirmed mismatch","contracts":["C60"]},
         {"title":"logs the logical key and compared values for a ramped-down confirmed mismatch","contracts":["C60"]},
-        {"title":"falls back to a metadata warning when JSON detail construction throws","contracts":["C60","B03"]},
+        {"title":"logs every requested field as null with render_error when warning construction throws","contracts":["C60","B03"]},
         {"title":"clamps the logical key and both JSON strings before handing details to the logger","contracts":["X01"]},
         {"title":"logs only the paths and their count at diff paths","contracts":["C60"]},
         {"title":"logs the paths and diffJson without whole-value JSON at diff values with value false","contracts":["C60"]},
@@ -782,7 +782,6 @@
         {"title":"passes an absent cached side to shadowMismatchDiff as the raw undefined","contracts":["C60","B03"]},
         {"title":"logs hook paths without rendering values at diff paths, even for a bigint source value","contracts":["C60","B03"]},
         {"title":"records $outcome and leaves the caller unaffected when the logger $name","contracts":["C30","C60"]},
-        {"title":"records $outcome when an async logger $name after the global Promise was replaced","contracts":["C30","C60"]},
         {"title":"records $outcome rather than logger_error when $name and the logger $loggerFailure","contracts":["C30","C60"]},
         {"title":"records $outcome at once when $name while the logger's promise is still pending","contracts":["C30","C60"]},
         {"title":"records no logging outcome while a logger's promise never settles","contracts":["C30","C60"]},
@@ -1081,7 +1080,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "6774cc0c94a041f9e6d942a70e6e5bea68ff20218b40fa7f60d80c923d0abd67",
+      "sha256": "a8080aff1383b0f512984383f8b866c206e53fc750e4d0b283a9a74dda52fe56",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1106,8 +1105,8 @@
         {"title":"reports an absent root as one side at the root pointer, not as a render failure","contracts":["W10","C60","B03"]},
         {"title":"runs each side's toJSON once for every field it feeds","contracts":["C60","B03"]},
         {"title":"clamps diffJson to 8 KiB with the truncation marker","contracts":["X01"]},
+        {"title":"fails every field %s requests closed to null, in rendering order","contracts":["C60"]},
         {"title":"clamps each built-in diffJson side to 1 KiB","contracts":["X01"]},
-        {"title":"fails the built-in walk closed with hook_error when it throws","contracts":["C60","X01"]},
         {"title":"takes the entries from the hook and never runs the built-in walk","contracts":["C60"]},
         {"title":"renders neither root side when the hook supplies the entries and value is off","contracts":["C60","B03"]},
         {"title":"fails closed with hook_error and no fallback when the hook %s","contracts":["C60","B02"]},

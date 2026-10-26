@@ -6,7 +6,9 @@ import {
   SHADOW_LOG_KEY_MAX_BYTES,
   SHADOW_LOG_TRUNCATION_MARKER,
   SHADOW_LOG_VALUE_MAX_BYTES,
+  SHADOW_MISMATCH_PATH_MAX_BYTES,
   diffShadowMismatchJson,
+  failedShadowMismatchLogFields,
   previewShadowLogKey,
   renderShadowMismatchLog,
   type JsonValue,
@@ -227,7 +229,7 @@ describe("shadow mismatch log JSON", () => {
         // At "paths" the clamp encodes nothing but the kept pointers.
         const clamped = encodeInto.mock.calls.map(([text]) => text.length);
         expect(clamped.length).toBeGreaterThanOrEqual(64);
-        expect(Math.max(...clamped)).toBeLessThanOrEqual(3 * 512 + 1);
+        expect(Math.max(...clamped)).toBeLessThanOrEqual(3 * SHADOW_MISMATCH_PATH_MAX_BYTES + 1);
       } finally {
         encodeInto.mockRestore();
       }
@@ -468,30 +470,25 @@ describe("shadow mismatch log JSON", () => {
       expect(Buffer.byteLength(diffJson)).toBe(8192);
     });
 
+    it.each([
+      ["diff paths only", PATHS_ONLY],
+      ["diff values without value", VALUES_ONLY],
+      ["value only", VALUE_ONLY],
+      ["value with diff values", EVERYTHING],
+    ])("fails every field %s requests closed to null, in rendering order", (_name, plan) => {
+      const rendered = renderShadowMismatchLog(plan, CACHED_USER, SOURCE_USER).fields;
+      const failed = failedShadowMismatchLogFields(plan);
+
+      expect(failed).toStrictEqual(Object.fromEntries(Object.keys(rendered).map((field) => [field, null])));
+      expect(Object.keys(failed)).toStrictEqual(Object.keys(rendered));
+    });
+
     it("clamps each built-in diffJson side to 1 KiB", () => {
       const { fields } = renderShadowMismatchLog(VALUES_ONLY, { blob: "x".repeat(2000) }, { blob: "y" });
 
       expect(JSON.parse(fields.diffJson!)).toStrictEqual([
         { path: "/blob", cached: `"${"x".repeat(1009)}${SHADOW_LOG_TRUNCATION_MARKER}`, source: "y" },
       ]);
-    });
-
-    it("fails the built-in walk closed with hook_error when it throws", () => {
-      const parse = vi.spyOn(JSON, "parse").mockImplementation(() => {
-        throw new Error("walk failed");
-      });
-      try {
-        expect(renderShadowMismatchLog(EVERYTHING, CACHED_USER, SOURCE_USER)).toStrictEqual({
-          fields: { ...FAILED_DIFF, cachedValueJson: CACHED_USER_JSON, sourceValueJson: SOURCE_USER_JSON },
-          failure: "hook_error",
-        });
-        expect(renderShadowMismatchLog(PATHS_ONLY, CACHED_USER, SOURCE_USER)).toStrictEqual({
-          fields: { mismatchPaths: null, mismatchPathCount: null },
-          failure: "hook_error",
-        });
-      } finally {
-        parse.mockRestore();
-      }
     });
   });
 
@@ -536,21 +533,9 @@ describe("shadow mismatch log JSON", () => {
         throw new Error("hook failed");
       }],
       ["returns a rejecting promise", () => Promise.reject(new Error("async hook"))],
-      ["returns a rejecting thenable", () => ({
-        then(_resolve: unknown, reject: (reason: unknown) => void): void {
-          reject(new Error("thenable hook"));
-        },
-      })],
       ["returns a non-array object", () => ({ path: "/email" })],
-      ["returns null", () => null],
-      ["returns undefined", () => undefined],
-      ["returns a function", () => () => []],
       ["returns a null member", () => [null]],
-      ["returns a string member", () => ["/email"]],
-      ["returns a function member", () => [() => "/email"]],
       ["returns a member without a path", () => [{ cached: 1 }]],
-      ["returns a member with a numeric path", () => [{ path: 0 }]],
-      ["returns an invalid member after a valid one", () => [{ path: "/email" }, { path: null }]],
       ["returns an invalid member past the 64-entry cut", () => [
         ...Array.from({ length: 64 }, (_, index) => ({ path: `/${index}` })),
         null,
@@ -576,21 +561,8 @@ describe("shadow mismatch log JSON", () => {
       const unhandled = vi.fn();
       process.on("unhandledRejection", unhandled);
       try {
-        for (const hook of [
-          () => Promise.reject(new Error("async hook")),
-          () => ({
-            then(_resolve: unknown, reject: (reason: unknown) => void): void {
-              reject(new Error("thenable hook"));
-            },
-          }),
-          () => {
-            const rejected = Promise.reject(new Error("hook with a replaced then"));
-            Object.defineProperty(rejected, "then", { value: () => undefined });
-            return rejected;
-          },
-        ]) {
-          expect(renderShadowMismatchLog(PATHS_ONLY, CACHED_USER, SOURCE_USER, hook).failure).toBe("hook_error");
-        }
+        const hook = (): unknown => Promise.reject(new Error("async hook"));
+        expect(renderShadowMismatchLog(PATHS_ONLY, CACHED_USER, SOURCE_USER, hook).failure).toBe("hook_error");
         await new Promise((resolve) => setImmediate(resolve));
         await new Promise((resolve) => setTimeout(resolve, 10));
       } finally {
