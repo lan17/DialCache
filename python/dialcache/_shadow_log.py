@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -244,13 +245,19 @@ def _same_primitive(left: Any, right: Any) -> bool:
         return isinstance(left, str) and isinstance(right, str) and left == right
     if isinstance(left, (int, float)) and isinstance(right, (int, float)):
         # Numbers compare as IEEE doubles, as the other ports parse them, so
-        # precision beyond a double is not a difference. Only Python renders
-        # integers beyond the double range; those compare exactly.
-        try:
-            return float(left) == float(right)
-        except OverflowError:
-            return left == right
+        # precision beyond a double is not a difference.
+        return _as_double(left) == _as_double(right)
     return False
+
+
+def _as_double(number: int | float) -> float:
+    # float() rounds an int to nearest and raises exactly when IEEE rounding
+    # gives an infinity, the value TypeScript parses from the rendered digits.
+    # math.copysign would raise too: it converts the int to a float first.
+    try:
+        return float(number)
+    except OverflowError:
+        return math.inf if number > 0 else -math.inf
 
 
 def _utf16_order(name: str) -> bytes:

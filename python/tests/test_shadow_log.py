@@ -225,17 +225,33 @@ def test_compares_numbers_as_doubles_and_never_as_bools(cached, source, entries)
     assert_entries(json.loads(fields["diffJson"]), entries)
 
 
-def test_compares_integers_beyond_the_double_range_exactly():
-    # Only Python renders such integers, and float() cannot convert them.
+def test_compares_integers_beyond_the_double_range_as_doubles():
+    # Only Python renders such integers. TypeScript parses their digits to the
+    # infinity of their sign, rounding to nearest, so they compare as that.
     huge = 10**400
-    assert diff_shadow_mismatch_json({"n": huge}, {"n": huge}) == ([], 0)
-    actual, count = diff_shadow_mismatch_json({"n": huge}, {"n": huge + 1})
-    assert_entries(actual, [{"path": "/n", "cached": huge, "source": huge + 1}])
-    assert count == 1
-    actual, count = diff_shadow_mismatch_json(1e308, huge)
-    assert_entries(actual, [{"path": "", "cached": 1e308, "source": huge}])
-    assert count == 1
-    assert diff_shadow_mismatch_json(nest_members(34, huge), nest_members(34, huge)) == ([], 0)
+    # The least integer that rounds to infinity, and the one below it.
+    rounds_up, rounds_down = 2**1024 - 2**970, 2**1024 - 2**970 - 1
+    for cached, source in [
+        (huge, huge + 1),
+        (rounds_up, huge),
+        (-rounds_up, -huge),
+        (rounds_down, 1.7976931348623157e308),
+    ]:
+        assert diff_shadow_mismatch_json({"n": cached}, {"n": source}) == ([], 0)
+        assert diff_shadow_mismatch_json(nest_members(34, cached), nest_members(34, source)) == ([], 0)
+    for cached, source in [(huge, -huge), (1e308, huge), (rounds_down, huge)]:
+        actual, count = diff_shadow_mismatch_json({"n": cached}, {"n": source})
+        assert_entries(actual, [{"path": "/n", "cached": cached, "source": source}])
+        assert count == 1
+        actual, count = diff_shadow_mismatch_json(nest_members(34, cached), nest_members(34, source))
+        expected = {"path": "/n" * 32, "cached": nest_members(2, cached), "source": nest_members(2, source)}
+        assert_entries(actual, [expected])
+        assert count == 1
+
+    # The renderings differ, so the warning walks them and finds no difference.
+    fields, failure = render_shadow_mismatch_log(VALUES_ONLY, {"n": huge}, {"n": huge + 1})
+    assert failure is None
+    assert fields == {"mismatchPaths": [], "mismatchPathCount": 0, "diffJson": "[]"}
 
 
 def test_compares_json_primitives_by_type_past_the_depth_cap():
