@@ -222,7 +222,7 @@ function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff 
         return;
       }
       for (let index = 0; index < leftItems.length; index += 1) {
-        walk(leftItems[index]!, rightItems[index]!, `${path}/${index}`, depth + 1);
+        walk(leftItems[index]!, rightItems[index]!, childPointer(path, index), depth + 1);
       }
       return;
     }
@@ -237,7 +237,7 @@ function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff 
     // The default sort order is UTF-16 code units.
     names.sort();
     for (const name of names) {
-      const memberPath = `${path}/${escapePointerToken(name)}`;
+      const memberPath = childPointer(path, name);
       if (!Object.hasOwn(rightMembers, name)) {
         report({ path: memberPath, cached: leftMembers[name]! });
       } else if (!Object.hasOwn(leftMembers, name)) {
@@ -297,6 +297,24 @@ function jsonKind(value: JsonValue): "array" | "object" | "primitive" {
     return "array";
   }
   return value !== null && typeof value === "object" ? "object" : "primitive";
+}
+
+/**
+ * Appends an array index or a member name to a pointer, building no more of it
+ * than the pointer clamp can keep. Each UTF-16 code unit is at least one UTF-8
+ * byte, so a pointer longer than `SHADOW_MISMATCH_PATH_MAX_BYTES` code units
+ * is clamped to leading bytes that no later token changes: it stops growing
+ * there, and a member name is cut to that many code units before escaping.
+ * The clamped pointer is unchanged, and each kept entry materializes at most
+ * three times the cap however long the member names above it are.
+ */
+function childPointer(path: string, token: number | string): string {
+  if (path.length > SHADOW_MISMATCH_PATH_MAX_BYTES) {
+    return path;
+  }
+  return typeof token === "number"
+    ? `${path}/${token}`
+    : `${path}/${escapePointerToken(token.slice(0, SHADOW_MISMATCH_PATH_MAX_BYTES))}`;
 }
 
 function escapePointerToken(name: string): string {
