@@ -533,8 +533,10 @@ content work does not complete, as when the CPU executor rejects it, both
 groups are `None` whatever the leaves request, and `logging_outcome` is
 `RenderError`.
 Inside a present group, `None` marks an unavailable field. The default
-`Display` writes the fields in the order of the table and leaves unavailable
-ones out.
+`LogFacadeLogger` writes the event's `Display`: `name=value` pairs in the order
+of the table, without `outcome`, with `namespace`, `cachedValue` and
+`sourceValue` in place of `cacheNamespace`, `cachedValueJson` and
+`sourceValueJson`, and with unavailable fields left out.
 
 </LanguageContent>
 
