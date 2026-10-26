@@ -61,7 +61,7 @@ def key_from(vector):
 
 def test_schemas_provenance_and_inventory():
     assert all(corpus["schemaVersion"] == 3 for corpus in CORPORA)
-    expected_counts = [184, 457, 589, 297]
+    expected_counts = [189, 457, 589, 297]
     for corpus, expected in zip(CORPORA, expected_counts, strict=True):
         rows = [row for value in corpus.values() if isinstance(value, list) for row in value]
         assert len(rows) == expected

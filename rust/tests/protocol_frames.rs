@@ -63,7 +63,7 @@ const GROUPS: [(&str, usize, Check); 9] = [
     ),
     (
         "mismatchPathVectors",
-        50,
+        55,
         mismatch_vectors::check_mismatch_path_vector,
     ),
 ];

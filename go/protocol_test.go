@@ -536,7 +536,7 @@ func TestProtocolRemainingVectors(t *testing.T) {
 	selection := os.Getenv("DIALCACHE_PROTOCOL_CORPUS")
 	expected := 0
 	if selection != "generated" {
-		expected = 184
+		expected = 189
 	}
 	if selection != "fixed" {
 		for _, rows := range generatedProtocolGroups(t) {
