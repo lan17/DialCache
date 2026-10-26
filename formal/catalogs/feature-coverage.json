@@ -1547,19 +1547,19 @@
           "test": "byte-clamps keys and JSON without splitting UTF-8 sequences",
           "path": "typescript/test/shadow-log-json.test.ts",
           "scope": "Asserts that the TypeScript binding byte-clamps keys and JSON without splitting UTF-8 sequences.",
-          "sha256": "6774cc0c94a041f9e6d942a70e6e5bea68ff20218b40fa7f60d80c923d0abd67"
+          "sha256": "48c35d5ff7e8384e8b7a814ed007c1999b31bc4f0b0e7153535f8434fc899a1a"
         },
         {
           "test": "catches user JSON hook failures",
           "path": "typescript/test/shadow-log-json.test.ts",
           "scope": "Asserts that the TypeScript binding catches user JSON hook failures.",
-          "sha256": "6774cc0c94a041f9e6d942a70e6e5bea68ff20218b40fa7f60d80c923d0abd67"
+          "sha256": "48c35d5ff7e8384e8b7a814ed007c1999b31bc4f0b0e7153535f8434fc899a1a"
         },
         {
           "test": "returns null independently for values that native JSON cannot serialize",
           "path": "typescript/test/shadow-log-json.test.ts",
           "scope": "Asserts that the TypeScript binding returns null independently for values that native JSON cannot serialize.",
-          "sha256": "6774cc0c94a041f9e6d942a70e6e5bea68ff20218b40fa7f60d80c923d0abd67"
+          "sha256": "48c35d5ff7e8384e8b7a814ed007c1999b31bc4f0b0e7153535f8434fc899a1a"
         }
       ],
       "go": [

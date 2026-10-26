@@ -10,8 +10,8 @@
   "inputs": {
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
-    "sourceAuditDispositionsSha256": "c7abc5a170b17c1e17014b123c5302dfd4574364a53bf2c3e6af9ed752c79c52",
-    "featureCoverageSha256": "c74cf1c6f96ffdf97d5fe339b6df4406b3012ab23ca86dcc0e8071ffdd31b1b8",
+    "sourceAuditDispositionsSha256": "c448c683e6e87c0282b56245971ab878fe317197d404b37dc46fa7353486a7d7",
+    "featureCoverageSha256": "b51d2b8f104df5901c9f872d5e09d725fe0f88f4dc68a37190e166228486f921",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -21,7 +21,7 @@
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 23,
     "sourceFiles": 28,
-    "sourceDeclarations": 880,
+    "sourceDeclarations": 881,
     "casesWithScheduledChecks": 272,
     "requiredWitnesses": 535,
     "casesWithQuintRegressionReplay": 198,
@@ -3499,7 +3499,7 @@
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "a970f8a32c50cef6a2f882268816465fa8447c5040352799f24038f27ff19bb8",
+      "sha256": "3374877a6e99452afa65530e8806dd7d260beaa448d265c4fcfd2e914776aa85",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -4086,7 +4086,7 @@
     },
     {
       "path": "typescript/src/internal/runtime-config.ts",
-      "sha256": "c4c213f1c6c471bf55fe24dcf7c30368e069419ea9436c1a0734f397349acc00",
+      "sha256": "ff7542dcc67816453eeb1c85e54f00aa7d32aad61278891ee431ff9ae1ebb37f",
       "candidateGoFiles": [
         "go/policy.go"
       ],
@@ -4116,7 +4116,7 @@
     },
     {
       "path": "typescript/src/internal/shadow-log-json.ts",
-      "sha256": "5499f8ab14d8100e7b007164719250291c71ef6f7ee15074adcc4eb69c5e85bb",
+      "sha256": "201ee7a8a7c39397a7a43e033719854cc8544f285bd6a902cbee6ec90fc67058",
       "candidateGoFiles": [
         "go/metrics.go",
         "go/codec.go",
@@ -4160,7 +4160,7 @@
     },
     {
       "path": "typescript/src/internal/thenable.ts",
-      "sha256": "d828b19ef11d1d34b2cabd8eec099c7fd678c82b0571749f1c37605fb73b1c8b",
+      "sha256": "359a72f7b3b3c05979dca303bc7450f49282505c0ff7dfd987519e7550767919",
       "candidateGoFiles": [
         "go/deadline.go",
         "go/metrics.go"
@@ -4218,7 +4218,7 @@
     },
     {
       "path": "typescript/src/metrics.ts",
-      "sha256": "8e84d97e317173d6ec0472ac6a986c67cb4ce1a9452a71df650abaa419f21577",
+      "sha256": "b5f3dedd3d6595b909edf4d5bb78968ff6cd42c0ba4ce86a9d38412ea1cbe667",
       "candidateGoFiles": [
         "go/api.go",
         "go/metrics.go",
