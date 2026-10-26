@@ -1,8 +1,10 @@
 package dialcache
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
 	"math/big"
 	"reflect"
 	"sync"
@@ -10,6 +12,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/lan17/DialCache/go/internal/logging"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -341,6 +344,28 @@ func TestShadowMismatchWarningRenderFailure(t *testing.T) {
 		recorder, _ := confirmedMismatch[any]{useCase: "HookPaths", cached: map[string]any{"id": "123"}, source: failingJSON{}, policy: shadowLogging(ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffPaths)}}), hook: hook}.run(t)
 		expectWarning(t, recorder, mismatchWarning("HookPaths", map[string]any{"mismatchPaths": []string{"/version"}, "mismatchPathCount": 1}), "logged")
 	})
+}
+
+func TestShadowMismatchWarningDefaultLoggerKeepsOneLine(t *testing.T) {
+	// Pointers carry member names as written; the default logger escapes the
+	// whole line, so a newline or terminal escape in a name cannot forge a line.
+	var output bytes.Buffer
+	writer, flags := log.Writer(), log.Flags()
+	log.SetOutput(&output)
+	log.SetFlags(0)
+	defer func() { log.SetOutput(writer); log.SetFlags(flags) }()
+	synctest.Test(t, func(t *testing.T) {
+		name := "a\nDialCache forged\x1b[2J"
+		recorder, _ := confirmedMismatch[any]{useCase: "DefaultLogger", cached: map[string]any{name: 1}, source: map[string]any{name: 2},
+			policy: shadowLogging(ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffPaths)}}), options: []Option{WithLogger(logging.Logger{})}}.run(t)
+		if outcomes := recorder.outcomes("shadowMismatchLogging"); !reflect.DeepEqual(outcomes, []string{"logged"}) {
+			t.Fatalf("logging outcomes: %v", outcomes)
+		}
+	})
+	want := `DialCache shadow validation mismatch: map[cacheKey:urn:user_id:123#DefaultLogger cacheNamespace:urn cachedValueAgeSeconds:30.5 keyType:user_id mismatchPathCount:1 mismatchPaths:[/a\nDialCache forged\x1b[2J] outcome:mismatch useCase:DefaultLogger]` + "\n"
+	if output.String() != want {
+		t.Fatalf("logged %q, want %q", output.String(), want)
+	}
 }
 
 func TestShadowMismatchWarningAbsentCachedValue(t *testing.T) {
