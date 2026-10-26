@@ -333,6 +333,11 @@ func appendJSON(dst []byte, value reflect.Value, seen map[visit]bool, marshalers
 	case reflect.Struct:
 		// Native structs opt into Go's public JSON field/tag conventions, then the
 		// resulting JSON domain uses the same portable number/string encoding.
+		// A hook side marshals an addressable struct through its pointer, so a
+		// field's pointer-receiver MarshalJSON runs as encoding/json runs it.
+		if marshalers && value.CanAddr() {
+			return appendReparsed(dst, value.Addr().Interface(), seen)
+		}
 		return appendReparsed(dst, value.Interface(), seen)
 	default:
 		return nil, fmt.Errorf("unsupported JSON value %s", value.Kind())

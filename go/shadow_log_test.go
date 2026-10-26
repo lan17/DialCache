@@ -336,6 +336,10 @@ type addressRedacted string
 
 func (*addressRedacted) MarshalJSON() ([]byte, error) { return []byte(`"[redacted]"`), nil }
 
+// addressHolder keeps an addressRedacted field, which encoding/json redacts
+// whenever the holder itself is addressable.
+type addressHolder struct{ Secret addressRedacted }
+
 // marshalingJSON is a named string whose MarshalJSON returns fixed output, or
 // panics when the output is "panic".
 type marshalingJSON string
@@ -606,13 +610,17 @@ func TestShadowMismatchDiffHook(t *testing.T) {
 			{Path: "/raw", Cached: json.RawMessage(`{"b":1e2,"a":"<&>"}`), Source: json.RawMessage(nil)},
 			// encoding/json calls a pointer's MarshalJSON only on an addressable value.
 			{Path: "/address", Cached: []addressRedacted{"old secret"}, Source: addressRedacted("new value")},
+			{Path: "/holder", Cached: &addressHolder{"old secret"}, Source: []addressHolder{{"new secret"}}},
+			{Path: "/held", Cached: map[string]any{"user": &addressHolder{"old secret"}}, Source: addressHolder{"copied value"}},
 		}, nil)
 		fields, failure := renderShadowMismatchLog(false, MismatchDiffValues, cachedUser, sourceUser, hook)
 		want := `[{"path":"/password","cached":"[redacted]","source":"[redacted]"},` +
 			`{"path":"/passwords","cached":["[redacted]"],"source":{"main":"[redacted]"}},` +
 			`{"path":"/profile","cached":{"history":["[redacted]"],"password":"[redacted]"},"source":{"password":"[redacted]"}},` +
 			`{"path":"/raw","cached":{"a":"<&>","b":100},"source":null},` +
-			`{"path":"/address","cached":["[redacted]"],"source":"new value"}]`
+			`{"path":"/address","cached":["[redacted]"],"source":"new value"},` +
+			`{"path":"/holder","cached":{"Secret":"[redacted]"},"source":[{"Secret":"[redacted]"}]},` +
+			`{"path":"/held","cached":{"user":{"Secret":"[redacted]"}},"source":{"Secret":"copied value"}}]`
 		if failure != "" || fields["diffJson"] != want {
 			t.Fatalf("hook sides: %q, %v", fields["diffJson"], failure)
 		}
