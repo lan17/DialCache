@@ -15,7 +15,7 @@ module shadow {
   // - Comparison: the comparator the drivers install and the elapsed time it consumes.
   // - Shadowing: the shadow policy in force for a call, passed at admission.
   // - Malformed: whether the ramp or a logging input failed to resolve, passed to `beginDark`.
-  // - Logging, LoggingInput: the leaves a job captures, and one config layer's written inputs.
+  // - Logging: the leaves a job captures, resolved from the written inputs by `mismatch_logging`.
   // - Job: one job's record, kept while it is pending.
   // - Jobs[r]: the per-instance registry of bounded capacity both kinds share, over the clock.
   // - Shadowed[r]: the atomic lifecycle over `remote_writes::Writing`, shadow-layers' shape.
@@ -67,51 +67,6 @@ module shadow {
   type Logging = { value: bool, diff: str }
   pure val LOGGING_OFF: Logging = { value: false, diff: DIFF_OFF }
   pure def logs(logging: Logging): bool = logging.value or logging.diff != DIFF_OFF
-  // One config layer's inputs as written, before expansion: the
-  // `logMismatches` shorthand and the two `mismatchLogging` leaves, each
-  // UNWRITTEN, the spelling of a valid value ("true", "false", a level) or
-  // any other string, a value of the wrong type.
-  pure val UNWRITTEN = ""
-  type LoggingInput = { shorthand: str, value: str, diff: str }
-  pure val NO_LOGGING_INPUT: LoggingInput = { shorthand: UNWRITTEN, value: UNWRITTEN, diff: UNWRITTEN }
-  // A layer expanded (D10): its shorthand stands for leaves, `true` for
-  // `{ value: true, diff: "values" }` and `false` for both off, while a
-  // malformed one stands for both off and is marked invalid; a leaf written
-  // beside the shorthand then overrides what it stands for.
-  pure def expandLogging(written: LoggingInput): { value: str, diff: str, invalid: bool } = {
-    val stands = if (written.shorthand == "true") { value: "true", diff: DIFF_VALUES }
-      else if (written.shorthand == UNWRITTEN) { value: UNWRITTEN, diff: UNWRITTEN }
-      else { value: "false", diff: DIFF_OFF }
-    {
-      value: if (written.value != UNWRITTEN) written.value else stands.value,
-      diff: if (written.diff != UNWRITTEN) written.diff else stands.diff,
-      invalid: not(Set(UNWRITTEN, "true", "false").contains(written.shorthand))
-    }
-  }
-  // The runtime overlay over the defaults, leaf by leaf, each layer expanded
-  // first: a runtime shorthand replaces both inherited leaves, and a leaf the
-  // overlay leaves unwritten falls through to the default's. Registration
-  // rejects a malformed static input, so only the overlay marks the merge.
-  pure def mergeLogging(defaults: LoggingInput, overlay: LoggingInput): { value: str, diff: str, invalid: bool } = {
-    val inherited = expandLogging(defaults)
-    val written = expandLogging(overlay)
-    {
-      value: if (written.value != UNWRITTEN) written.value else inherited.value,
-      diff: if (written.diff != UNWRITTEN) written.diff else inherited.diff,
-      invalid: written.invalid
-    }
-  }
-  // Each leaf resolved on its own: an unwritten leaf is off and a value of the
-  // wrong type acts off, so an invalid leaf beside a valid one leaves the
-  // valid one on; one configuration error covers every invalid input.
-  pure def resolveLogging(merged: { value: str, diff: str, invalid: bool }): { logging: Logging, invalid: bool } = {
-    val levels = Set(DIFF_OFF, DIFF_PATHS, DIFF_VALUES)
-    {
-      logging: { value: merged.value == "true", diff: if (levels.contains(merged.diff)) merged.diff else DIFF_OFF },
-      invalid: merged.invalid or not(Set(UNWRITTEN, "true", "false").contains(merged.value))
-        or not(levels.contains(merged.diff) or merged.diff == UNWRITTEN)
-    }
-  }
 
   // The shadow policy in force for a call: whether the outcome hook is
   // installed (C47), whether the key's cohort is selected, the per-instance
