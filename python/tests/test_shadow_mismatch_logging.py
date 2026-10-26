@@ -450,6 +450,35 @@ def test_logs_a_cached_undefined_entry_as_an_absent_side(executor):
     assert harness.logging_events() == [logging_event("logged")]
 
 
+def test_passes_an_absent_cached_side_to_the_hook_as_the_raw_undefined(executor):
+    inputs = []
+
+    def hook(cached, source):
+        inputs.append((cached, source))
+        return [{"path": "", "source": source}]
+
+    harness = Harness(executor, payload=JSON_UNDEFINED_SENTINEL)
+
+    result = harness.get({"mismatch_logging": {"diff": "values"}}, source={"id": "123"}, shadow_mismatch_diff=hook)
+
+    assert result is UNDEFINED
+    # D13: the hook receives the raw values, so an absent side stays UNDEFINED
+    # rather than becoming None, which is JSON null.
+    ((cached, source),) = inputs
+    assert cached is UNDEFINED
+    assert source == {"id": "123"}
+    assert harness.logger.warnings() == [
+        warning(
+            {
+                "mismatchPaths": [""],
+                "mismatchPathCount": 1,
+                "diffJson": '[{"path":"","source":{"id":"123"}}]',
+            }
+        )
+    ]
+    assert harness.logging_events() == [logging_event("logged")]
+
+
 def test_logs_hook_paths_without_rendering_values_at_diff_paths(executor):
     harness = Harness(executor)
 
