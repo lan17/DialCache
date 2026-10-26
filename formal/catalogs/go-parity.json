@@ -3414,7 +3414,7 @@
               "MismatchLoggingPolicy",
               "MismatchDiffLevel"
             ],
-            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           },
           {
             "path": "go/api.go",
@@ -3585,7 +3585,7 @@
             "symbols": [
               "Logger"
             ],
-            "sha256": "5b28d6d885e0bf4852849c2d6d5910aa6282b483aaf67911931402f69a6d7253"
+            "sha256": "70900d17293a0931fbcd11811bc389563d6dad9788b69fa01fb539e9f44a2428"
           }
         ]
       }
@@ -3673,7 +3673,7 @@
             "symbols": [
               "Policy"
             ],
-            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           },
           {
             "path": "go/protocol.go",
@@ -3827,7 +3827,7 @@
               "policyTTLMS",
               "ValidatePolicy"
             ],
-            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           }
         ]
       }
@@ -3911,7 +3911,7 @@
             "symbols": [
               "ResolvePolicy"
             ],
-            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           }
         ]
       }
@@ -4109,7 +4109,7 @@
               "resolveValueLeaf",
               "resolveDiffLeaf"
             ],
-            "sha256": "d1a1a97054f3b2b2f9264a5896c59bad197c38be903ec63827c153fa7d5018be"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           }
         ]
       }
