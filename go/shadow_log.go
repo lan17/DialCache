@@ -210,7 +210,7 @@ func walkJSON(cached, source any) (entries []MismatchEntry, count int) {
 			return
 		}
 		if depth >= shadowMismatchMaxDepth {
-			if !jsonValuesEqual(left, right) {
+			if !reflect.DeepEqual(left, right) {
 				report(left, right)
 			}
 			return
@@ -257,43 +257,6 @@ func walkJSON(cached, source any) (entries []MismatchEntry, count int) {
 	}
 	walk(cached, source, 0)
 	return entries, count
-}
-
-// jsonValuesEqual compares a depth-capped pair structurally. It is iterative,
-// so a subtree as deep as rendering allows cannot exhaust the stack.
-func jsonValuesEqual(cached, source any) bool {
-	pending := [][2]any{{cached, source}}
-	for len(pending) > 0 {
-		pair := pending[len(pending)-1]
-		pending = pending[:len(pending)-1]
-		switch left := pair[0].(type) {
-		case []any:
-			right, ok := pair[1].([]any)
-			if !ok || len(left) != len(right) {
-				return false
-			}
-			for index := range left {
-				pending = append(pending, [2]any{left[index], right[index]})
-			}
-		case map[string]any:
-			right, ok := pair[1].(map[string]any)
-			if !ok || len(left) != len(right) {
-				return false
-			}
-			for name, member := range left {
-				other, present := right[name]
-				if !present {
-					return false
-				}
-				pending = append(pending, [2]any{member, other})
-			}
-		default:
-			if kindOfJSON(pair[1]) != jsonPrimitive || pair[0] != pair[1] {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func escapePointerToken(name string) string {

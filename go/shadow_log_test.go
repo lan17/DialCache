@@ -225,9 +225,10 @@ func TestBuiltInMismatchWalkCaps(t *testing.T) {
 			t.Fatalf("deep depth cap: %#v", boundedEntries(t, entries))
 		}
 	})
-	t.Run("equal containers past the cap compare structurally at any depth", func(t *testing.T) {
+	t.Run("equal containers past the cap compare structurally as deep as JSON parses", func(t *testing.T) {
+		// encoding/json parses at most 10,000 levels of nesting.
 		var cached, source any = "leaf", "leaf"
-		for level := 0; level < 100_000; level++ {
+		for level := 0; level < 9_999; level++ {
 			cached = map[string]any{"a": float64(level), "next": cached}
 			source = map[string]any{"next": source, "a": float64(level)}
 		}
