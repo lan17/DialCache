@@ -2161,6 +2161,41 @@
           "id": "hookErrorOutranksBothFailuresTest",
           "regression": "hookErrorOutranksBothFailuresTest",
           "projection": "shadow"
+        },
+        {
+          "id": "hookErrorOutranksRenderErrorTest",
+          "regression": "hookErrorOutranksRenderErrorTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "renderErrorOutranksLoggerErrorTest",
+          "regression": "renderErrorOutranksLoggerErrorTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "hookSkippedWithDiffOffTest",
+          "regression": "hookSkippedWithDiffOffTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "identicalRenderingsLogNoPathsTest",
+          "regression": "identicalRenderingsLogNoPathsTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "invalidDiffLeafKeepsValueLeafTest",
+          "regression": "invalidDiffLeafKeepsValueLeafTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "invalidValueLeafKeepsDiffLeafTest",
+          "regression": "invalidValueLeafKeepsDiffLeafTest",
+          "projection": "shadow"
+        },
+        {
+          "id": "invalidShorthandKeepsDiffLeafBesideItTest",
+          "regression": "invalidShorthandKeepsDiffLeafBesideItTest",
+          "projection": "shadow"
         }
       ]
     },

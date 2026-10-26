@@ -39,6 +39,18 @@ type Warning = Record<string, unknown>;
 function finalWarning(states: State[]): Warning {
   return (finalDiagnostics(states).mismatchWarnings as Warning[])[0]!;
 }
+// hookErrorOutranksRenderErrorTest with `value` written false at runtime
+// (logPolicy 12) over the default `logMismatches: true`: the warning carries
+// only the null diff fields, so nothing but the hook needed the source's
+// rendering and the history cannot show hook_error outranking render_error.
+function valueOffPrecedenceStates(): State[] {
+  const states = statesOf("hookErrorOutranksRenderErrorTest");
+  const overlay = structuredClone(states[0]!);
+  overlay.input = { name: "logPolicy", choice: integer(12) };
+  states.splice(1, 0, overlay);
+  Object.assign(finalWarning(states), { cachedValue: integer(-1), sourceValue: integer(-1) });
+  return states;
+}
 
 describe("shadow warning witness labels", () => {
   it("credits each failure outcome from the public outcome, not the inputs alone", () => {
@@ -109,6 +121,130 @@ describe("shadow warning witness labels", () => {
     expect(labels(states)).toContain("logger-error-keeps-warning-content");
     finalWarning(states).diffNull = true;
     expect(labels(states)).not.toContain("logger-error-keeps-warning-content");
+  });
+
+  it("requires logged value fields with a null source for hook_error over render_error", () => {
+    const states = statesOf("hookErrorOutranksRenderErrorTest");
+    expect(labels(states)).toContain("hook-error-over-render-error");
+    const valueOff = valueOffPrecedenceStates();
+    expect(labels(valueOff)).toContain("logging-outcome:hook_error");
+    expect(labels(valueOff)).not.toContain("hook-error-over-render-error");
+    finalWarning(states).sourceValue = integer(2);
+    expect(labels(states)).not.toContain("hook-error-over-render-error");
+  });
+
+  it("requires a public render_error, a failing logger and no diff hook for render_error over logger_error", () => {
+    const states = statesOf("renderErrorOutranksLoggerErrorTest");
+    expect(labels(states)).toContain("render-error-over-logger-error");
+    finalDiagnostics(states).loggingOutcomes = ["logger_error"];
+    expect(labels(states)).not.toContain("render-error-over-logger-error");
+    const loggerOff = statesOf("renderErrorOutranksLoggerErrorTest");
+    loggerOff.find(state => state.input.name === "loggerFault")!.input.choice = integer(0);
+    expect(labels(loggerOff)).not.toContain("render-error-over-logger-error");
+    // Fixture 13 is fixture 4 with the throwing diff hook, whose failure would outrank.
+    const hooked = statesOf("renderErrorOutranksLoggerErrorTest");
+    hooked[0]!.input.choice = integer(13);
+    expect(labels(hooked)).not.toContain("render-error-over-logger-error");
+  });
+
+  it("requires a present diff hook and an outcome it did not name for a hook skipped at diff off", () => {
+    const states = statesOf("hookSkippedWithDiffOffTest");
+    expect(labels(states)).toContain("hook-skipped-at-diff-off");
+    finalDiagnostics(states).loggingOutcomes = ["hook_error"];
+    finalWarning(states).loggingOutcome = "hook_error";
+    expect(labels(states)).not.toContain("hook-skipped-at-diff-off");
+    // Fixture 4 is fixture 13 without the hook: nothing was there to skip.
+    const noHook = statesOf("hookSkippedWithDiffOffTest");
+    noHook[0]!.input.choice = integer(4);
+    expect(labels(noHook)).not.toContain("hook-skipped-at-diff-off");
+  });
+
+  it("requires listed diff fields with no path for identical renderings and one root path for differing ones", () => {
+    expect(labels(statesOf("identicalRenderingsLogNoPathsTest"))).toContain("identical-renderings-log-no-paths");
+    const rootEntry = { count: integer(1), paths: [""], entries: [{ path: "", cached: integer(1), source: integer(1) }] };
+    for (const corrupt of [rootEntry, { count: integer(1) }, { diffNull: true }]) {
+      const changed = statesOf("identicalRenderingsLogNoPathsTest");
+      Object.assign(finalWarning(changed), corrupt);
+      expect(labels(changed), JSON.stringify(corrupt)).not.toContain("identical-renderings-log-no-paths");
+    }
+    const differing = statesOf("falseShorthandWithDiffPathsLogsPathsOnlyTest");
+    expect(labels(differing)).toContain("differing-renderings-log-root-entry");
+    for (const corrupt of [{ paths: ["/n"] }, { count: integer(2) }, { diffNull: true }]) {
+      const changed = statesOf("falseShorthandWithDiffPathsLogsPathsOnlyTest");
+      Object.assign(finalWarning(changed), corrupt);
+      expect(labels(changed), JSON.stringify(corrupt)).not.toContain("differing-renderings-log-root-entry");
+    }
+  });
+
+  it("credits the field groups the warning carries, not the leaves the inputs capture", () => {
+    const states = statesOf("loggerErrorStillDeliversWarningTest");
+    expect(labels(states)).toContain("warning-fields:value+values");
+    const withFields = (fields: Warning) => {
+      const changed = statesOf("loggerErrorStillDeliversWarningTest");
+      Object.assign(finalWarning(changed), fields);
+      return labels(changed);
+    };
+    const omitted = { cachedValue: integer(-1), sourceValue: integer(-1) };
+    const noDiff = { diff: "off", count: integer(0), paths: [], entries: [] };
+    for (const [fields, label] of [[omitted, "warning-fields:values"], [noDiff, "warning-fields:value"],
+      [{ diff: "paths", entries: [] }, "warning-fields:value+paths"]] as const) {
+      const changed = withFields(fields);
+      expect(changed, label).toContain(label);
+      expect(changed, label).not.toContain("warning-fields:value+values");
+    }
+  });
+
+  it("requires the shorthand rows' inputs and public fields", () => {
+    const row2 = statesOf("falseShorthandWithDiffPathsLogsPathsOnlyTest");
+    expect(labels(row2)).toContain("shorthand-row:2");
+    Object.assign(finalWarning(row2), { cachedValue: integer(1), sourceValue: integer(2) });
+    expect(labels(row2)).not.toContain("shorthand-row:2");
+    const row2Values = statesOf("falseShorthandWithDiffPathsLogsPathsOnlyTest");
+    Object.assign(finalWarning(row2Values), { diff: "values", entries: [{ path: "", cached: integer(1), source: integer(2) }] });
+    expect(labels(row2Values)).not.toContain("shorthand-row:2");
+    // logPolicy 3 writes diff paths without the false shorthand: the same warning.
+    const row2Unwritten = statesOf("falseShorthandWithDiffPathsLogsPathsOnlyTest");
+    row2Unwritten.find(state => state.input.name === "logPolicy")!.input.choice = integer(3);
+    expect(labels(row2Unwritten)).not.toContain("shorthand-row:2");
+    const row4 = statesOf("runtimeTrueShorthandOverridesDefaultValueTest");
+    expect(labels(row4)).toContain("shorthand-row:4");
+    Object.assign(finalWarning(row4), { cachedValue: integer(-1), sourceValue: integer(-1) });
+    expect(labels(row4)).not.toContain("shorthand-row:4");
+    // Fixture 0 is fixture 15 without the value false default the shorthand replaces.
+    const row4Uninherited = statesOf("runtimeTrueShorthandOverridesDefaultValueTest");
+    row4Uninherited[0]!.input.choice = integer(0);
+    expect(labels(row4Uninherited)).not.toContain("shorthand-row:4");
+  });
+
+  it("requires the reported configuration error, the invalid input and the one valid leaf it keeps", () => {
+    const unreported = (states: State[]) => {
+      const admission = states.findIndex(state => state.input.name === "beginCall");
+      for (const state of states.slice(admission)) state.s.d.configErrors = integer(0);
+      return states;
+    };
+    for (const regression of ["invalidDiffLeafKeepsValueLeafTest", "invalidValueLeafKeepsDiffLeafTest"]) {
+      expect(labels(statesOf(regression)), regression).toContain("invalid-leaf-keeps-valid-leaf");
+      expect(labels(unreported(statesOf(regression))), regression).not.toContain("invalid-leaf-keeps-valid-leaf");
+      const both = statesOf(regression);
+      finalDiagnostics(both).mismatchWarnings = [finalWarning(statesOf("runtimeTrueShorthandOverridesDefaultValueTest"))];
+      expect(labels(both), regression).not.toContain("invalid-leaf-keeps-valid-leaf");
+    }
+    // logPolicy 5 writes value true and the false shorthand, valid inputs that log the same value fields.
+    const valid = statesOf("invalidDiffLeafKeepsValueLeafTest");
+    valid.find(state => state.input.name === "logPolicy")!.input.choice = integer(5);
+    expect(labels(valid)).not.toContain("invalid-leaf-keeps-valid-leaf");
+    const shorthand = statesOf("invalidShorthandKeepsDiffLeafBesideItTest");
+    expect(labels(shorthand)).toContain("invalid-shorthand-keeps-written-leaf");
+    expect(labels(unreported(statesOf("invalidShorthandKeepsDiffLeafBesideItTest")))).not.toContain("invalid-shorthand-keeps-written-leaf");
+    for (const corrupt of [{ cachedValue: integer(1), sourceValue: integer(2) }, { diff: "paths", entries: [] }]) {
+      const changed = statesOf("invalidShorthandKeepsDiffLeafBesideItTest");
+      Object.assign(finalWarning(changed), corrupt);
+      expect(labels(changed), JSON.stringify(corrupt)).not.toContain("invalid-shorthand-keeps-written-leaf");
+    }
+    // logPolicy 4 writes diff values without the malformed shorthand: the same warning.
+    const wellFormed = statesOf("invalidShorthandKeepsDiffLeafBesideItTest");
+    wellFormed.find(state => state.input.name === "logPolicy")!.input.choice = integer(4);
+    expect(labels(wellFormed)).not.toContain("invalid-shorthand-keeps-written-leaf");
   });
 });
 
@@ -236,5 +372,9 @@ describe("shadow warning regressions replayed in TypeScript", () => {
     const states = statesOf("hookErrorNullsDiffFieldsTest");
     states[0]!.input.choice = integer(4);
     await expect(replayThroughCoordinator("shadow", write("noHook", states))).rejects.toThrow(/expected[\s\S]*actual/);
+  });
+
+  it("replays the value-off history the hook_error over render_error label refuses", async () => {
+    await expect(replayThroughCoordinator("shadow", write("valueOffPrecedence", valueOffPrecedenceStates()))).resolves.toMatchObject({});
   });
 });
