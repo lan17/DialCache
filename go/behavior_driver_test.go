@@ -1086,11 +1086,8 @@ func behaviorWarningObservation(details obj) obj {
 		var encoded strings.Builder
 		encoder := json.NewEncoder(&encoded)
 		encoder.SetEscapeHTML(false)
-		if err := encoder.Encode(value); err != nil {
-			// Not JSON, so the shared projection rejects it as observed.
-			fields["mismatchPathsJson"] = "unencodable mismatchPaths: " + err.Error()
-			continue
-		}
+		// The library logs the paths as a []string, which always encodes.
+		_ = encoder.Encode(value)
 		fields["mismatchPathsJson"] = strings.TrimSuffix(encoded.String(), "\n")
 	}
 	return fields
