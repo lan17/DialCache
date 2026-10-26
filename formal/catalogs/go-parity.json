@@ -3687,7 +3687,7 @@
             "symbols": [
               "JSONCodec"
             ],
-            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
           }
         ]
       }
@@ -3751,7 +3751,7 @@
               "EscapeRawPayload",
               "firstZstdFrame"
             ],
-            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
           }
         ]
       }
@@ -3959,7 +3959,7 @@
               "CompressPayload",
               "DecompressPayload"
             ],
-            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
           },
           {
             "path": "go/redis_adapter.go",
@@ -4143,7 +4143,7 @@
             "symbols": [
               "appendJSON"
             ],
-            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
           },
           {
             "path": "go/shadow_log.go",
@@ -4440,7 +4440,7 @@
               "SemanticEqual",
               "validateJSONScalarStrings"
             ],
-            "sha256": "dafd699f40d15827cee3c2082fcf3e64b3bbbbec80bd2b833fe9684a2485469c"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
           }
         ]
       }
