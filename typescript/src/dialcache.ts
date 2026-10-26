@@ -53,6 +53,7 @@ import {
   type ResolvedRemoteLayerConfig,
 } from "./internal/runtime-config.js";
 import {
+  failedShadowMismatchLogFields,
   previewShadowLogKey,
   renderShadowMismatchLog,
   type ShadowMismatchLogContent,
@@ -1318,8 +1319,6 @@ export class DialCache {
     details: ShadowMismatchDetails,
     valueAgeSeconds: number | undefined,
   ): void {
-    // Built from the key rather than from metric labels, which an adapter may
-    // have mutated.
     const metadata = {
       cacheNamespace: key.namespace,
       useCase: key.useCase,
@@ -1338,9 +1337,8 @@ export class DialCache {
         details.mismatchDiff,
       );
     } catch {
-      // Construction is fail-closed by design; keep the metadata warning if
-      // anything unforeseen still throws while rendering it.
-      content = { fields: {}, failure: "render_error" };
+      // Last resort: nothing may escape into the detached verdict handler.
+      content = { fields: failedShadowMismatchLogFields(details.logPlan), failure: "render_error" };
     }
     const failure = content.failure;
     const delivered = this.logger.warn(SHADOW_MISMATCH_WARNING, {

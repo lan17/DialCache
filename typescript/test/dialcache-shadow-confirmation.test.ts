@@ -666,7 +666,7 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(serializer.dump).not.toHaveBeenCalled();
   });
 
-  it("falls back to a metadata warning when JSON detail construction throws", async () => {
+  it("logs every requested field as null with render_error when warning construction throws", async () => {
     const cachedValue = { id: "123", version: 1 };
     const sourceValue = { id: "123", version: 2 };
     const payload = JSON.stringify(cachedValue);
@@ -716,6 +716,11 @@ describe("DialCache Redis shadow confirmation", () => {
           keyType: "user_id",
           outcome: "mismatch",
           cachedValueAgeSeconds: metrics.shadowAgeEvents[0]!.seconds,
+          mismatchPaths: null,
+          mismatchPathCount: null,
+          diffJson: null,
+          cachedValueJson: null,
+          sourceValueJson: null,
           loggingOutcome: "render_error",
         },
       );

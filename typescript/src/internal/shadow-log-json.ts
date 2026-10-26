@@ -140,6 +140,15 @@ export function renderShadowMismatchLog(
   };
 }
 
+/** Every field the plan requests, failed closed to `null`, in rendering order. */
+export function failedShadowMismatchLogFields(plan: ShadowMismatchLogPlan): ShadowMismatchLogFields {
+  return {
+    ...(plan.diff === "off" ? {} : { mismatchPaths: null, mismatchPathCount: null }),
+    ...(plan.diff === "values" ? { diffJson: null } : {}),
+    ...(plan.value ? { cachedValueJson: null, sourceValueJson: null } : {}),
+  };
+}
+
 /**
  * The built-in difference computation over two JSON values. Objects recurse
  * over the union of their member names in UTF-16 code-unit order, and a member

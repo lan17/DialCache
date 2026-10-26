@@ -8,6 +8,7 @@ import {
   SHADOW_LOG_VALUE_MAX_BYTES,
   SHADOW_MISMATCH_PATH_MAX_BYTES,
   diffShadowMismatchJson,
+  failedShadowMismatchLogFields,
   previewShadowLogKey,
   renderShadowMismatchLog,
   type JsonValue,
@@ -467,6 +468,19 @@ describe("shadow mismatch log JSON", () => {
         failure: null,
       });
       expect(Buffer.byteLength(diffJson)).toBe(8192);
+    });
+
+    it.each([
+      ["diff paths only", PATHS_ONLY],
+      ["diff values without value", VALUES_ONLY],
+      ["value only", VALUE_ONLY],
+      ["value with diff values", EVERYTHING],
+    ])("fails every field %s requests closed to null, in rendering order", (_name, plan) => {
+      const rendered = renderShadowMismatchLog(plan, CACHED_USER, SOURCE_USER).fields;
+      const failed = failedShadowMismatchLogFields(plan);
+
+      expect(failed).toStrictEqual(Object.fromEntries(Object.keys(rendered).map((field) => [field, null])));
+      expect(Object.keys(failed)).toStrictEqual(Object.keys(rendered));
     });
 
     it("clamps each built-in diffJson side to 1 KiB", () => {
