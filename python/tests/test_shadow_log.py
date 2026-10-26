@@ -255,6 +255,29 @@ def test_walks_members_named_like_javascript_prototype_members():
     assert_entries(json.loads(fields["diffJson"]), entries)
 
 
+def test_orders_lone_surrogate_member_names_by_utf16_code_unit():
+    # Cached JSON can carry lone surrogates, as ECMAScript strings do. By code
+    # unit they sort around the pair D83D DE00 of the emoji; code-point order
+    # would put U+DC00 and U+E000 ahead of it.
+    order = ["\ud800", "😀", "\udc00", ""]
+    cached = {name: 1 for name in reversed(order)}
+    source = {name: 2 for name in order}
+    entries = [{"path": f"/{name}", "cached": 1, "source": 2} for name in order]
+
+    actual, count = diff_shadow_mismatch_json(cached, source)
+    assert_entries(actual, entries)
+    assert count == 4
+    fields, failure = render_shadow_mismatch_log(VALUES_ONLY, cached, source)
+    assert failure is None
+    assert fields["mismatchPaths"] == [entry["path"] for entry in entries]
+    assert fields["mismatchPathCount"] == 4
+    # Each lone unit is escaped, so the field is valid UTF-8 JSON.
+    assert fields["diffJson"] == (
+        '[{"path":"/\\ud800","cached":1,"source":2},{"path":"/😀","cached":1,"source":2},'
+        '{"path":"/\\udc00","cached":1,"source":2},{"path":"/","cached":1,"source":2}]'
+    )
+
+
 def test_compares_own_members_in_a_depth_capped_pair():
     def nest(leaf):
         return json.loads('{"a":' * 32 + leaf + "}" * 32)
