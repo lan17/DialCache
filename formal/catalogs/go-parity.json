@@ -10,8 +10,8 @@
   "inputs": {
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
-    "sourceAuditDispositionsSha256": "c448c683e6e87c0282b56245971ab878fe317197d404b37dc46fa7353486a7d7",
-    "featureCoverageSha256": "b51d2b8f104df5901c9f872d5e09d725fe0f88f4dc68a37190e166228486f921",
+    "sourceAuditDispositionsSha256": "fba73a8b7d47618873f10743f27bb9b2e77cb49f9181933535056c3c2bd21f66",
+    "featureCoverageSha256": "8a535690fe1a0022354e3a5276845a47bf75a47a1d35c3c33a16eb005f55ffb4",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -4116,7 +4116,7 @@
     },
     {
       "path": "typescript/src/internal/shadow-log-json.ts",
-      "sha256": "201ee7a8a7c39397a7a43e033719854cc8544f285bd6a902cbee6ec90fc67058",
+      "sha256": "4162a90fcdb2df6da7700cd6025a081f8e1f82378732f65e4e639defcef7a654",
       "candidateGoFiles": [
         "go/metrics.go",
         "go/codec.go",

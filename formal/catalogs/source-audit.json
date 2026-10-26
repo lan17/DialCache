@@ -1080,7 +1080,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "48c35d5ff7e8384e8b7a814ed007c1999b31bc4f0b0e7153535f8434fc899a1a",
+      "sha256": "a8080aff1383b0f512984383f8b866c206e53fc750e4d0b283a9a74dda52fe56",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1092,7 +1092,7 @@
         {"title":"compares only own members in a depth-capped pair","contracts":["W10","C60","B03"]},
         {"title":"cuts the entries at 64 in walk order and counts every difference","contracts":["W10","C60","X01"]},
         {"title":"clamps each pointer to 512 bytes without splitting UTF-8 sequences","contracts":["W10","X01"]},
-        {"title":"keeps each kept pointer bounded however long the member names above it","contracts":["W10","X01"]},
+        {"title":"builds each kept pointer only as far as its clamp reads, however long the member names above it","contracts":["W10","X01"]},
         {"title":"replaces each side over 1 KiB with its clamped JSON text","contracts":["W10","X01"]},
         {"title":"caps the walk at 32 reference tokens however deep the difference lies","contracts":["W10","C60","X01"]},
         {"title":"compares equal containers past the depth cap regardless of member order and depth","contracts":["W10","C60","X01"]},
