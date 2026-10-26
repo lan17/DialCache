@@ -460,15 +460,17 @@ class DialCache:
 
         Returns whether the call returned without raising. An awaitable it
         returns is driven in a task of its own, returned instead, which
-        settles to whether the awaitable completed without raising.
+        settles to whether the awaitable completed without raising. The
+        awaitable check reads the result's class, which application code can
+        make raise, so a raise there is a failed call too.
         """
         try:
             delivered = self.logger.warning(message, *args)
+            if not inspect.isawaitable(delivered):
+                return True
         except (Exception, asyncio.CancelledError):
             return False
-        if inspect.isawaitable(delivered):
-            return self._spawn(_completes(delivered))
-        return True
+        return self._spawn(_completes(delivered))
 
     def _labels(self, key: Key | _Operation, layer: str | None = None) -> dict[str, Any]:
         labels = {"cacheNamespace": self.namespace, "useCase": key.use_case, "keyType": key.key_type}
