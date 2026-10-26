@@ -180,7 +180,8 @@ receives the same verdict event the observers do, so wire an exporter through
 one of those paths to avoid double-counting it.
 `WithRecoveryOutcomes` is an optional separate recovery hook. Prometheus and
 DogStatsD adapters preserve metric names, labels, units and buckets; logical
-keys never become labels. `WithLogger` replaces the standard logger; either is
+keys never become labels. `WithLogger` replaces the standard logger, which
+writes each entry on one line with control characters escaped; either is
 failure-isolated. Mismatch logging is opt-in, confirmed, and bounded.
 
 Prometheus adapters reuse collectors created by an earlier adapter with the

@@ -271,7 +271,13 @@ names the old shapes:
 The value fields cost what they did before, since each side was already
 rendered in full. On one Apple-silicon Mac, a 6.3 MB map of 150,000 members took
 about 0.6 seconds per warning at `MismatchDiffPaths`, against about 0.5 seconds
-for the value fields alone.
+for the value fields alone. Warning work now holds the job's shadow capacity
+until it finishes, so while a slow `MismatchDiff` hook runs, jobs beyond
+capacity report `dropped`.
+
+The standard logger, used without `WithLogger`, now writes control characters,
+U+2028 and U+2029 as escape sequences in every entry, so an entry that carried
+a raw newline or terminal escape now stays on one line.
 
 </LanguageContent>
 
