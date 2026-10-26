@@ -133,6 +133,15 @@ type Operation[T any] struct {
 // Absent omits a side the field does not have, as the built-in computation
 // does for a member present on one side only; set both sides to Absent when
 // only the location is known. A nil side is JSON null.
+//
+// A side renders as JSONCodec writes it, except that a value implementing
+// json.Marshaler, json.RawMessage included, renders at any depth as its
+// MarshalJSON output parsed back, so a type that redacts itself stays redacted
+// in diffJson. As in encoding/json, a pointer's MarshalJSON runs only for an
+// addressable value, such as a slice element. A side with no rendering (a
+// cycle, a *big.Int, a function, or a MarshalJSON that fails, panics or
+// returns output that is not JSON or holds a number outside double range)
+// logs a null diffJson with render_error and keeps the paths.
 type MismatchEntry struct {
 	Path           string
 	Cached, Source any

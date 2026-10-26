@@ -97,12 +97,13 @@ func renderShadowMismatchLog(logValue bool, diff MismatchDiffLevel, cached, sour
 	return fields, failure
 }
 
-// renderJSON renders one value to native JSON. A value with no rendering,
-// including one whose MarshalJSON panics, reports false.
-func renderJSON(value any) (encoded []byte, rendered bool) {
+// renderJSON renders one value to native JSON, honoring json.Marshaler at
+// every depth when marshalers is set. A value with no rendering, including one
+// whose MarshalJSON panics, reports false.
+func renderJSON(value any, marshalers bool) (encoded []byte, rendered bool) {
 	// A panic skips the return, leaving both results zero.
 	defer func() { _ = recover() }()
-	encoded, err := appendJSON(nil, reflect.ValueOf(value), make(map[visit]bool))
+	encoded, err := appendJSON(nil, reflect.ValueOf(value), make(map[visit]bool), marshalers)
 	return encoded, err == nil
 }
 
@@ -112,7 +113,7 @@ func renderRoot(value any) (encoded []byte, failed bool) {
 	if IsAbsent(value) {
 		return nil, false
 	}
-	encoded, rendered := renderJSON(value)
+	encoded, rendered := renderJSON(value, false)
 	return encoded, !rendered
 }
 
@@ -281,8 +282,11 @@ func runMismatchHook(hook func() ([]MismatchEntry, error)) (entries []MismatchEn
 // appendMismatchEntries renders entries with their bounded sides, the one
 // clamp rule for built-in and hook entries: each pointer is clamped, and each
 // side that is not Absent is rendered once and kept as JSON, or as its clamped
-// text when the rendering exceeds the side cap. rendered is false at the first
-// side with no JSON rendering, and later sides are not rendered.
+// text when the rendering exceeds the side cap. A side honors json.Marshaler at
+// every depth, which only a hook's sides can hold, so a redacting MarshalJSON
+// keeps its secret out of diffJson; the roots keep JSONCodec's encoding.
+// rendered is false at the first side with no JSON rendering, and later sides
+// are not rendered.
 func appendMismatchEntries(dst []byte, entries []MismatchEntry) (encoded []byte, rendered bool) {
 	dst = append(dst, '[')
 	for index, entry := range entries {
@@ -298,7 +302,7 @@ func appendMismatchEntries(dst []byte, entries []MismatchEntry) (encoded []byte,
 			if IsAbsent(side.value) {
 				continue
 			}
-			rendering, ok := renderJSON(side.value)
+			rendering, ok := renderJSON(side.value, true)
 			if !ok {
 				return nil, false
 			}

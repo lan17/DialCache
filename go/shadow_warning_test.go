@@ -292,6 +292,9 @@ func TestShadowMismatchWarningFailureOutcomes(t *testing.T) {
 	unrenderableSide := func(mismatchRecord, mismatchRecord) ([]MismatchEntry, error) {
 		return []MismatchEntry{{Path: "/version", Cached: big.NewInt(1), Source: Absent}}, nil
 	}
+	panickingSide := func(mismatchRecord, mismatchRecord) ([]MismatchEntry, error) {
+		return []MismatchEntry{{Path: "/version", Cached: Absent, Source: marshalingJSON("panic")}}, nil
+	}
 	failedDiff := map[string]any{"mismatchPaths": nil, "mismatchPathCount": nil, "diffJson": nil}
 	for _, test := range []struct {
 		name        string
@@ -306,6 +309,7 @@ func TestShadowMismatchWarningFailureOutcomes(t *testing.T) {
 		{"the logger panics", ShadowPolicy{LogMismatches: Ptr(true)}, nil, true, mismatchAllFields, "logger_error"},
 		{"the hook fails and the logger panics", ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffValues)}}, hookError, true, failedDiff, "hook_error"},
 		{"a hook side has no rendering and the logger panics", ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffValues)}}, unrenderableSide, true, map[string]any{"mismatchPaths": []string{"/version"}, "mismatchPathCount": 1, "diffJson": nil}, "render_error"},
+		{"a hook side's MarshalJSON panics", ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffValues)}}, panickingSide, false, map[string]any{"mismatchPaths": []string{"/version"}, "mismatchPathCount": 1, "diffJson": nil}, "render_error"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
