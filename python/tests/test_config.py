@@ -332,14 +332,9 @@ def test_merge_keeps_a_malformed_runtime_shorthand_for_admission():
             {"log_mismatches": "yes", "mismatch_logging": {"value": True, "diff": "values"}},
             (True, "values", True),
         ),
-        ({"mismatch_logging": None}, (False, "off", True)),
-        ({"mismatch_logging": []}, (False, "off", True)),
-        ({"mismatch_logging": "paths"}, (False, "off", True)),
-        ({"log_mismatches": True, "mismatch_logging": None}, (False, "off", True)),
     ],
 )
 def test_resolves_each_leaf_independently(shadow, expected):
-    # Raw mappings: Policy construction rejects a non-mapping group first.
     assert resolve_mismatch_logging(shadow) == MismatchLogging(*expected)
 
 

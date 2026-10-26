@@ -232,7 +232,7 @@ def _merge_shadow(base: Any, overlay: Any) -> Any:
     # Only the runtime layer can carry a malformed shorthand: static validation
     # rejects one in the operation's defaults. It stays raw, so admission
     # records its config_resolution; its expanded leaves already won the merge.
-    if written.get("invalid") and "log_mismatches" in runtime:
+    if written.get("invalid"):
         merged["log_mismatches"] = runtime["log_mismatches"]
     group = {
         leaf: written[leaf] if leaf in written else inherited[leaf]
@@ -277,9 +277,6 @@ def expand_mismatch_logging(shadow: Mapping[str, Any]) -> dict[str, Any]:
     if "mismatch_logging" not in shadow:
         return expanded
     group = shadow["mismatch_logging"]
-    if not isinstance(group, Mapping):
-        # Policy construction rejects this shape first.
-        return {"value": False, "diff": "off", "invalid": True}
     return {**expanded, **{leaf: group[leaf] for leaf in ("value", "diff") if leaf in group}}
 
 

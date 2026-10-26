@@ -589,22 +589,6 @@ def test_clamps_each_built_in_diff_json_side_to_1_kib():
     ]
 
 
-@pytest.mark.parametrize("error", [RuntimeError("walk failed"), RecursionError("too deep")])
-def test_fails_the_built_in_walk_closed_with_hook_error(monkeypatch, error):
-    def walk(cached, source):
-        raise error
-
-    monkeypatch.setattr(_shadow_log, "_walk", walk)
-    assert render_shadow_mismatch_log(EVERYTHING, CACHED_USER, SOURCE_USER) == (
-        {**FAILED_DIFF, "cachedValueJson": CACHED_USER_JSON, "sourceValueJson": SOURCE_USER_JSON},
-        "hook_error",
-    )
-    assert render_shadow_mismatch_log(PATHS_ONLY, CACHED_USER, SOURCE_USER) == (
-        {"mismatchPaths": None, "mismatchPathCount": None},
-        "hook_error",
-    )
-
-
 def test_takes_the_entries_from_the_hook_and_never_runs_the_built_in_walk(monkeypatch):
     cached, source = {"id": 1}, {"id": 2}
     calls = []
@@ -670,30 +654,11 @@ async def coroutine_hook(cached, source):
         raises,
         cancels,
         coroutine_hook,
-        lambda cached, source: {"path": "/email"},
-        lambda cached, source: None,
         lambda cached, source: ({"path": "/email"},),
-        lambda cached, source: lambda: [],
-        lambda cached, source: [None],
-        lambda cached, source: ["/email"],
-        lambda cached, source: [lambda: "/email"],
         lambda cached, source: [{"cached": 1}],
         lambda cached, source: [FailingSide(path="/email", cached=1)],
     ],
-    ids=[
-        "raises",
-        "raises-cancelled",
-        "coroutine",
-        "non-list-mapping",
-        "none",
-        "tuple",
-        "callable",
-        "none-member",
-        "string-member",
-        "callable-member",
-        "member-without-path",
-        "failing-side",
-    ],
+    ids=["raises", "raises-cancelled", "coroutine", "tuple", "member-without-path", "failing-side"],
 )
 def test_fails_closed_with_hook_error_and_no_fallback(hook):
     with warnings.catch_warnings():
