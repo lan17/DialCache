@@ -8,6 +8,7 @@ import {
   type CacheConfigProvider,
   type DialCacheConfig,
   type Logger,
+  type ShadowConfig,
   type StaleRecoveryPredicate,
 } from "./config.js";
 import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
@@ -978,7 +979,7 @@ export class DialCache {
       return;
     }
 
-    const resolvedShadowConfig = shadowConfig as Record<string, unknown>;
+    const resolvedShadowConfig = shadowConfig as ShadowConfig;
     const shadowPercentage: unknown = resolvedShadowConfig.ramp;
     if (shadowPercentage === undefined || shadowPercentage === 0) {
       return;
@@ -1030,7 +1031,7 @@ export class DialCache {
   /** The leaves captured at admission; `null` when both are off. */
   private resolveShadowLogging(
     key: DialCacheKey,
-    shadowConfig: Record<string, unknown>,
+    shadowConfig: ShadowConfig,
   ): ShadowMismatchLogPlan | null {
     const { value, diff, invalid } = resolveMismatchLogging(shadowConfig);
     if (invalid) {

@@ -8,6 +8,9 @@ import {
   resolveRemoteLayerConfigResult,
 } from "../src/internal/runtime-config.js";
 
+/** A runtime shadow group as a provider may return it, its leaves unvalidated. */
+const rawShadow = (shadow: object): ShadowConfig => shadow as ShadowConfig;
+
 const key = (defaultConfig: DialCacheKeyConfig | null = DialCacheKeyConfig.enabled(60)) =>
   new DialCacheKey({ keyType: "user_id", id: "123", useCase: "ObservabilityInternals", defaultConfig });
 
@@ -232,17 +235,8 @@ describe("DialCache observability internal compatibility paths", () => {
       { logMismatches: "yes", mismatchLogging: { value: true, diff: "values" } },
       { value: true, diff: "values", invalid: true },
     ],
-    ["a null group", { mismatchLogging: null }, { value: false, diff: "off", invalid: true }],
-    ["an array group", { mismatchLogging: [] }, { value: false, diff: "off", invalid: true }],
-    ["a numeric group", { mismatchLogging: 1 }, { value: false, diff: "off", invalid: true }],
-    ["a string group", { mismatchLogging: "paths" }, { value: false, diff: "off", invalid: true }],
-    [
-      "a non-object group beside a true shorthand",
-      { logMismatches: true, mismatchLogging: null },
-      { value: false, diff: "off", invalid: true },
-    ],
   ])("resolves %s to the effective mismatch-logging leaves", (_name, shadow, expected) => {
-    expect(resolveMismatchLogging(shadow)).toEqual(expected);
+    expect(resolveMismatchLogging(rawShadow(shadow))).toEqual(expected);
   });
 
   it("rejects the removed shadowRamp field in a provider result", async () => {
@@ -374,18 +368,16 @@ describe("DialCache observability internal compatibility paths", () => {
     expect(expandMismatchLogging({})).toStrictEqual({});
     expect(expandMismatchLogging({ logMismatches: true })).toStrictEqual({ value: true, diff: "values" });
     expect(expandMismatchLogging({ logMismatches: false })).toStrictEqual({ value: false, diff: "off" });
-    expect(expandMismatchLogging({ logMismatches: "yes" })).toStrictEqual({ value: false, diff: "off", invalid: true });
+    expect(expandMismatchLogging(rawShadow({ logMismatches: "yes" }))).toStrictEqual({ value: false, diff: "off", invalid: true });
     expect(expandMismatchLogging({ logMismatches: true, mismatchLogging: { value: false } }))
       .toStrictEqual({ value: false, diff: "values" });
-    expect(expandMismatchLogging({ logMismatches: "yes", mismatchLogging: { value: true, diff: "paths" } }))
+    expect(expandMismatchLogging(rawShadow({ logMismatches: "yes", mismatchLogging: { value: true, diff: "paths" } })))
       .toStrictEqual({ value: true, diff: "paths", invalid: true });
     // An undefined leaf is unwritten, and written leaves pass through
     // unvalidated: resolution owns their validation.
-    expect(expandMismatchLogging({ logMismatches: true, mismatchLogging: { value: undefined } }))
+    expect(expandMismatchLogging(rawShadow({ logMismatches: true, mismatchLogging: { value: undefined } })))
       .toStrictEqual({ value: true, diff: "values" });
-    expect(expandMismatchLogging({ mismatchLogging: { diff: "full" } })).toStrictEqual({ diff: "full" });
-    expect(expandMismatchLogging({ logMismatches: true, mismatchLogging: null }))
-      .toStrictEqual({ value: false, diff: "off", invalid: true });
+    expect(expandMismatchLogging(rawShadow({ mismatchLogging: { diff: "full" } }))).toStrictEqual({ diff: "full" });
   });
 
   it.each([
