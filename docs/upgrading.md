@@ -267,6 +267,12 @@ names the old shapes:
 - Observers receive the new `shadowMismatchLogging` event kind, and the
   Prometheus adapter registers a twentieth collector,
   `dialcache_shadow_mismatch_logging_counter`.
+- The default logger writes control characters, DEL, U+2028, U+2029 and bytes
+  that are not UTF-8 as Go escape sequences in every line, so a line that held
+  them before now reads differently.
+- Mismatch-warning content, the `MismatchDiff` hook and the built-in walk now
+  run while the shadow job still holds its capacity, so `WithShadowCapacity`
+  bounds them and a slow hook shows up as `dropped` shadow jobs.
 
 The value fields cost what they did before, since each side was already
 rendered in full. On one Apple-silicon Mac, a 6.3 MB map of 150,000 members took

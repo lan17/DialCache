@@ -777,15 +777,16 @@ dictionaries use the shared names and camelCase labels, such as `cacheNamespace`
 `useCase` and `keyType`. Supplying an observer enables shadow-outcome reporting;
 an optional `supports("shadowValidation")` method can opt out.
 
-The `logger` option accepts a standard Python-compatible warning logger. A
-confirmed-mismatch warning calls `warning(message, details)`; when that returns
-an awaitable, DialCache awaits it in a task of its own on the event loop.
-Unless a `hook_error` or `render_error` was already recorded, the warning's
-`shadowMismatchLogging` outcome waits for that awaitable. An awaitable that
-never settles keeps its task pending, holding the cache key and the awaitable
-but neither compared value, so each such warning retains one task: the cost of
-counting a delivery that fails after `warning` returns as `logger_error`. See
-the [generated Python API](api.md) for signatures.
+The `logger` option accepts a standard Python-compatible warning logger.
+DialCache calls `warning(message, details)`, and when any warning's call returns
+an awaitable, DialCache drives it in a task of its own on the event loop. Unless
+a `hook_error` or `render_error` was already recorded, a confirmed-mismatch
+warning's `shadowMismatchLogging` outcome waits for that awaitable. An awaitable
+that never settles keeps its task pending, holding the awaitable and, for a
+confirmed mismatch, its namespace, use-case and key-type labels, but neither
+compared value. Each such warning retains one task: the cost of counting a
+delivery that fails after `warning` returns as `logger_error`. See the
+[generated Python API](api.md) for signatures.
 
 </LanguageContent>
 
