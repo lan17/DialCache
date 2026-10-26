@@ -244,7 +244,13 @@ def _same_primitive(left: Any, right: Any) -> bool:
     if isinstance(left, str) or isinstance(right, str):
         return isinstance(left, str) and isinstance(right, str) and left == right
     if isinstance(left, (int, float)) and isinstance(right, (int, float)):
-        return left == right
+        # Numbers compare as IEEE doubles, as the other ports parse them, so
+        # precision beyond a double is not a difference. Only Python renders
+        # integers beyond the double range; those compare exactly.
+        try:
+            return float(left) == float(right)
+        except OverflowError:
+            return left == right
     return False
 
 

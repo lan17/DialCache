@@ -169,8 +169,6 @@ def test_renders_the_expected_diff_fields(vector):
         ),
         (None, False, [{"path": "", "cached": None, "source": False}]),
         ("1", 1, [{"path": "", "cached": "1", "source": 1}]),
-        (1, 1.0, []),
-        ({"n": -0.0}, {"n": 0}, []),
     ],
 )
 def test_compares_json_primitives_by_json_type(cached, source, entries):
@@ -180,12 +178,62 @@ def test_compares_json_primitives_by_json_type(cached, source, entries):
     assert count == len(entries)
 
 
+@pytest.mark.parametrize(
+    ("cached", "source", "entries"),
+    [
+        ('{"n":1}', '{"n":1.0}', []),
+        ("true", "1", [{"path": "", "cached": True, "source": 1}]),
+        ("false", "0", [{"path": "", "cached": False, "source": 0}]),
+        ("0", "-0", []),
+        ("0", "-0.0", []),
+        ('{"id":9007199254740993}', '{"id":9007199254740992}', []),
+    ],
+    ids=[
+        "int-and-float",
+        "true-and-1",
+        "false-and-0",
+        "zero-and-negative-zero",
+        "zero-and-float-negative-zero",
+        "beyond-double-precision",
+    ],
+)
+def test_compares_numbers_as_doubles_and_never_as_bools(cached, source, entries):
+    # The number rule the other ports follow by parsing JSON numbers as
+    # doubles: precision beyond a double is not a difference, and a bool is
+    # never a number.
+    cached, source = json.loads(cached), json.loads(source)
+
+    actual, count = diff_shadow_mismatch_json(cached, source)
+    assert_entries(actual, entries)
+    assert count == len(entries)
+    fields, failure = render_shadow_mismatch_log(VALUES_ONLY, cached, source)
+    assert failure is None
+    assert fields["mismatchPaths"] == [entry["path"] for entry in entries]
+    assert fields["mismatchPathCount"] == len(entries)
+    assert_entries(json.loads(fields["diffJson"]), entries)
+
+
+def test_compares_integers_beyond_the_double_range_exactly():
+    # Only Python renders such integers, and float() cannot convert them.
+    huge = 10**400
+    assert diff_shadow_mismatch_json({"n": huge}, {"n": huge}) == ([], 0)
+    actual, count = diff_shadow_mismatch_json({"n": huge}, {"n": huge + 1})
+    assert_entries(actual, [{"path": "/n", "cached": huge, "source": huge + 1}])
+    assert count == 1
+    actual, count = diff_shadow_mismatch_json(1e308, huge)
+    assert_entries(actual, [{"path": "", "cached": 1e308, "source": huge}])
+    assert count == 1
+    assert diff_shadow_mismatch_json(nest_members(34, huge), nest_members(34, huge)) == ([], 0)
+
+
 def test_compares_json_primitives_by_type_past_the_depth_cap():
     path = "/n" * 32
     entries, count = diff_shadow_mismatch_json(nest_members(34, True), nest_members(34, 1))
     assert_entries(entries, [{"path": path, "cached": nest_members(2, True), "source": nest_members(2, 1)}])
     assert count == 1
     assert diff_shadow_mismatch_json(nest_members(34, [1, None]), nest_members(34, [1.0, None])) == ([], 0)
+    precise, rounded = nest_members(34, 9007199254740993), nest_members(34, 9007199254740992)
+    assert diff_shadow_mismatch_json(precise, rounded) == ([], 0)
 
 
 def test_walks_members_named_like_javascript_prototype_members():
