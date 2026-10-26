@@ -864,8 +864,14 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   released; Go about 0.6 s against 0.5 s on the shadow job's goroutine
   holding the slot, most of it the JSON rendering the value fields already
   paid; Rust about 0.09 s against 0.006 s in a release build, on the bounded
-  CPU executor holding the slot. `docs/upgrading.md` and `docs/shadow-validation.md` state the cost in
-  every port; whether to bound it is open with the maintainer.
+  CPU executor holding the slot. By default that executor is one
+  process-wide pool of two worker threads and two queued jobs, which every
+  cache instance also uses for zstd decompression and for compressing large
+  payloads, so while warnings occupy it, a compressed hit whose decompression
+  it rejects falls through to the source; at most `shadow_max_in_flight`
+  warnings per instance, times the number of instances, contend for it.
+  `docs/upgrading.md` and `docs/shadow-validation.md` state the cost in every
+  port; whether to bound it is open with the maintainer.
 - **2026-10-24, #242:** TypeScript's `cached()` and `getOrLoad()` throw a
   `TypeError` for a `shadowMismatchDiff` that is not a function, as they do for
   `shouldAttemptStaleRecovery`, rather than letting every warning fail as
@@ -873,20 +879,28 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   follows its existing rule for non-callable options.
 - **2026-10-25, #242, Go:** the built-in walk parses each rendering with
   `encoding/json`, whose decoder rejects nesting deeper than 10,000 levels, so
-  a value that deep renders but fails the walk as `hook_error`; TypeScript's
-  parser has no fixed limit. A `diffJson` side clipped at 1 KiB orders object
-  members in UTF-16 order, since the walk holds parsed Go maps, while
-  `cachedValueJson` keeps a `JSONObject`'s insertion order; the parsed entries
-  are unaffected. Both are B03 rendering details.
+  a map, slice or `JSONObject` nested that deep renders but fails the walk as
+  `hook_error`; TypeScript's parser has no fixed limit. Depth is the only
+  reason a Go rendering does not parse back: a struct renders through
+  `encoding/json` and is parsed back while it renders, so a struct whose JSON
+  nests that deep, or whose `MarshalJSON` writes a number outside double
+  range, has no rendering and reports `render_error` before any walk. A
+  `diffJson` side clipped at 1 KiB orders object members in UTF-16 order,
+  since the walk holds parsed Go maps, while `cachedValueJson` keeps a
+  `JSONObject`'s insertion order; the parsed entries are unaffected. These are
+  B03 rendering details.
 - **2026-10-25, #242, Go:** a Go hook fails by returning an error or
   panicking; Go's types rule out a promise, a non-array and a member without a
   string path, and a nil slice is an empty list. The metadata-only warning for
   a construction failure is kept as a defensive recover, but rendering and the
   hook already recover their panics, so no native test reaches it.
-- **2026-10-25, #242, Rust:** a rendering nested more than 128 levels exceeds
-  `serde_json`'s parser recursion limit, so the built-in walk fails with
-  `hook_error` where TypeScript compares it. The vectors nest at most 40
-  levels.
+- **2026-10-25, #242, Rust:** the built-in walk parses each rendering back
+  with `serde_json`, and a rendering it cannot parse fails the walk with
+  `hook_error` where TypeScript compares it: one nested more than 128 levels,
+  past `serde_json`'s parser recursion limit, or, in a build that enables
+  `serde_json`'s `raw_value` feature without `arbitrary_precision`, one whose
+  `Serialize` writes a `RawValue` number outside double range. The vectors
+  nest at most 40 levels.
 - **2026-10-25, #242, Rust:** `diffJson` sides from the built-in walk are
   parsed `serde_json::Value`s, whose objects render members in UTF-8 byte
   order of their names, not the source order TypeScript keeps; a side over
