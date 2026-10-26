@@ -202,7 +202,12 @@ impl Execution {
     /// caller.
     async fn log_shadow_mismatch(&self, verdict: Verdict, slot: Arc<ShadowSlot>) {
         let shadow = self.policy.shadow;
-        if verdict.outcome != ShadowOutcome::Mismatch || !shadow.logs_mismatches() {
+        let (ShadowOutcome::Mismatch, Some((cached, source)), Some(age_ms)) =
+            (verdict.outcome, verdict.compared, verdict.age_ms)
+        else {
+            return;
+        };
+        if !shadow.logs_mismatches() {
             return;
         }
         let plan = LogPlan {
@@ -214,22 +219,20 @@ impl Execution {
             value_renderer: metadata.value_renderer.clone(),
             hook: metadata.mismatch_diff.clone(),
         };
-        let content = match verdict.compared {
-            Some((cached, source)) if renderers.runs_code(plan) => {
-                let cpu_slot = slot.clone();
-                crate::blocking::run(self.core.runtime.as_ref(), move || {
-                    // Raw diagnostic work keeps capacity even if the awaiting
-                    // async task is dropped during runtime shutdown.
-                    let _slot = cpu_slot;
-                    Ok(render_mismatch_log(plan, &cached, &source, &renderers))
-                })
-                .await
-                // Rejected, panicked or dropped CPU work keeps the metadata warning.
-                .unwrap_or_else(|_| MismatchContent::failed())
-            }
+        let content = if renderers.runs_code(plan) {
+            let cpu_slot = slot.clone();
+            crate::blocking::run(self.core.runtime.as_ref(), move || {
+                // Raw diagnostic work keeps capacity even if the awaiting
+                // async task is dropped during runtime shutdown.
+                let _slot = cpu_slot;
+                Ok(render_mismatch_log(plan, &cached, &source, &renderers))
+            })
+            .await
+            // Rejected, panicked or dropped CPU work keeps the metadata warning.
+            .unwrap_or_else(|_| MismatchContent::failed())
+        } else {
             // Nothing to run: every requested field is unavailable.
-            Some((cached, source)) => render_mismatch_log(plan, &cached, &source, &renderers),
-            None => MismatchContent::failed(),
+            render_mismatch_log(plan, &cached, &source, &renderers)
         };
         let delivered = self
             .core
@@ -237,7 +240,7 @@ impl Execution {
                 namespace: self.labels.namespace.clone(),
                 use_case: self.labels.use_case.clone(),
                 key_type: self.labels.key_type.clone(),
-                cached_value_age_seconds: verdict.age_ms.map_or(0.0, age_seconds),
+                cached_value_age_seconds: age_seconds(age_ms),
                 cache_key: preview_key(&self.keys.logical),
                 diff: content.diff,
                 values: content.values,

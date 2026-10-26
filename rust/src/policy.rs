@@ -687,11 +687,11 @@ fn merge_shadow(
     if let Some(ramp) = incoming.get("ramp").or_else(|| inherited.get("ramp")) {
         output.insert("ramp".to_string(), ramp.clone());
     }
-    // The static group always holds an object: `Policy::to_json` writes it.
-    let base = expand_mismatch_logging(inherited).unwrap_or_default();
-    let written = expand_mismatch_logging(incoming).ok_or_else(|| {
-        PolicyError("DialCache shadow mismatchLogging config must be an object".to_string())
-    })?;
+    if let Some(group) = incoming.get("mismatchLogging") {
+        policy_object(group, "shadow mismatchLogging config")?;
+    }
+    let base = expand_mismatch_logging(inherited);
+    let written = expand_mismatch_logging(incoming);
     // Only the runtime layer can carry a malformed shorthand: a static one is
     // a typed boolean. It stays raw, so resolution records the one
     // `config_resolution` it owes; its expanded leaves already won the merge.
@@ -726,8 +726,8 @@ struct MismatchLeaves {
 /// stands for, `true` as value on with diff `values` and `false` as both off,
 /// then let the leaves written in the same group's `mismatchLogging` override
 /// them. A malformed shorthand expands to both leaves off and is marked
-/// invalid. `None` when `mismatchLogging` is not an object.
-fn expand_mismatch_logging(shadow: &Map<String, Value>) -> Option<MismatchLeaves> {
+/// invalid.
+fn expand_mismatch_logging(shadow: &Map<String, Value>) -> MismatchLeaves {
     let expanded = |value: bool, diff: MismatchDiff, invalid: bool| MismatchLeaves {
         value: Some(Value::Bool(value)),
         diff: Some(Value::from(diff.as_str())),
@@ -739,8 +739,7 @@ fn expand_mismatch_logging(shadow: &Map<String, Value>) -> Option<MismatchLeaves
         Some(Value::Bool(false)) => expanded(false, MismatchDiff::Off, false),
         Some(_) => expanded(false, MismatchDiff::Off, true),
     };
-    if let Some(group) = shadow.get("mismatchLogging") {
-        let group = group.as_object()?;
+    if let Some(group) = shadow.get("mismatchLogging").and_then(Value::as_object) {
         if let Some(value) = group.get("value") {
             leaves.value = Some(value.clone());
         }
@@ -748,7 +747,7 @@ fn expand_mismatch_logging(shadow: &Map<String, Value>) -> Option<MismatchLeaves
             leaves.diff = Some(diff.clone());
         }
     }
-    Some(leaves)
+    leaves
 }
 
 /// The effective mismatch-logging leaves of one merged shadow group.
@@ -762,14 +761,7 @@ struct MismatchLoggingResolution {
 /// acts off, and `invalid` reports that the group owes one
 /// `config_resolution`, however many of its inputs were invalid.
 fn resolve_mismatch_logging(shadow: &Map<String, Value>) -> MismatchLoggingResolution {
-    let Some(leaves) = expand_mismatch_logging(shadow) else {
-        // Merging rejects this shape first.
-        return MismatchLoggingResolution {
-            value: false,
-            diff: MismatchDiff::Off,
-            invalid: true,
-        };
-    };
+    let leaves = expand_mismatch_logging(shadow);
     let value = match &leaves.value {
         None => Some(false),
         Some(leaf) => leaf.as_bool(),
