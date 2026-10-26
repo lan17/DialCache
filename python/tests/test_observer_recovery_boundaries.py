@@ -79,6 +79,41 @@ def test_mismatch_details_are_logger_only(executor, log, observer_failure):
         assert warnings == []
 
 
+@pytest.mark.parametrize("logger_fails", [False, True], ids=["completes", "raises"])
+def test_drives_an_async_logger_for_a_warning_outside_shadow_validation(executor, logger_fails):
+    # One logger boundary owns every warning's awaitable, so a coroutine
+    # logger runs instead of being dropped unawaited, and its failure reaches
+    # neither the caller nor the loop's unhandled-exception handler.
+    logged = []
+    config_error = RuntimeError("policy unavailable")
+
+    class Logger:
+        async def warning(self, *args):
+            await asyncio.sleep(0)
+            logged.append(args)
+            if logger_fails:
+                raise RuntimeError("logger transport unavailable")
+
+    def provider(key):
+        raise config_error
+
+    cache = DialCache(clock=executor.clock, policy_provider=provider, logger=Logger())
+    with cache.enable():
+        result = executor.finish(
+            cache.get_or_load(
+                lambda: "source",
+                key="entity-id",
+                key_type="entity",
+                use_case="AsyncLogger",
+                default_config=Policy(ttl_sec={"local": 10}),
+            )
+        )
+    executor.drain()
+
+    assert result == "source"
+    assert logged == [("Could not resolve DialCache policy: %s", config_error)]
+
+
 def failing_recovery_call(executor, cache, failure):
     def source():
         raise failure

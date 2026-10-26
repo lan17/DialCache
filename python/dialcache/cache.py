@@ -73,6 +73,15 @@ async def _call_dependency(callback: Callable[..., Any], *args: Any) -> Any:
         raise RuntimeError("DialCache dependency was cancelled") from error
 
 
+async def _completes(delivered: Awaitable[Any]) -> bool:
+    """Await a logger's awaitable; whether it completed without raising."""
+    try:
+        await _call_dependency(lambda: delivered)
+    except Exception:
+        return False
+    return True
+
+
 def _valid_integer(value: Any, minimum: int = 0, maximum: int = MAX_SAFE) -> bool:
     return (
         isinstance(value, (int, float))
@@ -177,10 +186,12 @@ class DialCache:
     reference and should be treated as immutable.
 
     ``logger`` receives ``warning(message, details)`` calls and defaults to
-    the ``dialcache`` standard-library logger. A confirmed shadow-mismatch
-    warning records its ``shadowMismatchLogging`` outcome after the call
-    returns, or after an awaitable it returns settles: ``logger_error`` when
-    either raises.
+    the ``dialcache`` standard-library logger. Nothing it raises reaches the
+    caller, and an awaitable it returns for any warning is driven in a task
+    of its own. A confirmed shadow-mismatch warning without an earlier
+    ``hook_error`` or ``render_error`` records its ``shadowMismatchLogging``
+    outcome after the call returns, or after that awaitable settles:
+    ``logger_error`` when either raises.
     """
 
     def __init__(
@@ -444,11 +455,20 @@ class DialCache:
     def _emit(self, event: str, labels: Mapping[str, Any], **fields: Any) -> None:
         emit_metric(self.metrics, {"event": event, **labels, **fields})
 
-    def _log(self, message: str, error: Any = None) -> None:
+    def _log(self, message: str, *args: Any) -> bool | asyncio.Task[bool]:
+        """Call ``logger.warning`` so that nothing it does reaches the caller.
+
+        Returns whether the call returned without raising. An awaitable it
+        returns is driven in a task of its own, returned instead, which
+        settles to whether the awaitable completed without raising.
+        """
         try:
-            self.logger.warning(message, error) if error is not None else self.logger.warning(message)
+            delivered = self.logger.warning(message, *args)
         except (Exception, asyncio.CancelledError):
-            pass
+            return False
+        if inspect.isawaitable(delivered):
+            return self._spawn(_completes(delivered))
+        return True
 
     def _labels(self, key: Key | _Operation, layer: str | None = None) -> dict[str, Any]:
         labels = {"cacheNamespace": self.namespace, "useCase": key.use_case, "keyType": key.key_type}
@@ -1234,28 +1254,22 @@ class DialCache:
         warning.update(fields)
         if failure is not None:
             warning["loggingOutcome"] = failure
-        try:
-            delivered = self.logger.warning(SHADOW_MISMATCH_WARNING, warning)
-        except (Exception, asyncio.CancelledError):
-            delivered, failure = None, failure or "logger_error"
+        delivered = self._log(SHADOW_MISMATCH_WARNING, warning)
+        labels = self._labels(key)
         if failure is not None:
-            # An earlier failure wins whatever the logger does.
-            self._emit("shadowMismatchLogging", self._labels(key), outcome=failure)
-        if inspect.isawaitable(delivered):
-            # Awaited in a task of its own that holds only the key, so a
-            # logger that never settles retains neither compared value.
-            self._spawn(self._settle_shadow_warning(key, delivered, failure is None))
-        elif failure is None:
-            self._emit("shadowMismatchLogging", self._labels(key), outcome="logged")
+            # An earlier failure is recorded at once, whatever the logger does.
+            self._emit("shadowMismatchLogging", labels, outcome=failure)
+        elif isinstance(delivered, bool):
+            self._emit("shadowMismatchLogging", labels, outcome="logged" if delivered else "logger_error")
+        else:
+            # The logger's task holds only its awaitable and this callback
+            # only the labels, so a logger that never settles retains
+            # neither compared value.
+            def settled(done: asyncio.Task[bool]) -> None:
+                if not done.cancelled() and done.exception() is None:
+                    self._emit("shadowMismatchLogging", labels, outcome="logged" if done.result() else "logger_error")
 
-    async def _settle_shadow_warning(self, key: Key, delivered: Awaitable[Any], record: bool) -> None:
-        outcome = "logged"
-        try:
-            await _call_dependency(lambda: delivered)
-        except Exception:
-            outcome = "logger_error"
-        if record:
-            self._emit("shadowMismatchLogging", self._labels(key), outcome=outcome)
+            delivered.add_done_callback(settled)
 
     @staticmethod
     def _payload_bytes(value: str | bytes) -> bytes:
