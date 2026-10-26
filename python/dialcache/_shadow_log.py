@@ -140,14 +140,14 @@ def diff_shadow_mismatch_json(cached: Any, source: Any) -> tuple[list[Entry | No
 
 def _walk_rendered(cached_json: str | None, source_json: str | None) -> tuple[list[Entry], int]:
     # None is an absent side; a side that failed to render never reaches here.
-    if cached_json == source_json:
-        return [], 0
     # Each string came from a successful native rendering, so this is the one
     # boundary from arbitrary values to the closed JSON domain.
     if cached_json is None:
-        return [{"path": "", "source": json.loads(source_json)}], 1
+        return ([], 0) if source_json is None else ([{"path": "", "source": json.loads(source_json)}], 1)
     if source_json is None:
         return [{"path": "", "cached": json.loads(cached_json)}], 1
+    if cached_json == source_json:
+        return [], 0
     return _walk(json.loads(cached_json), json.loads(source_json))
 
 
