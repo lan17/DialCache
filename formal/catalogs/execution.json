@@ -1746,7 +1746,7 @@
     {
       "id": "shadow-logging-true-shorthand-expands-off",
       "contract": "C60",
-      "source": "formal/models/kernel/shadow.qnt",
+      "source": "formal/models/kernel/mismatch-logging.qnt",
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "invariant": "capturedLoggingFollowsLayers",
       "before": "val stands = if (written.shorthand == \"true\") { value: \"true\", diff: DIFF_VALUES }",
@@ -1759,23 +1759,18 @@
         "profiles": [
           "shadow"
         ],
-        "exclusions": {
-          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M65",
-        "text": "M65 is the native twin of kernel/shadow.qnt expandLogging letting a true logMismatches stand for both leaves off: both ports expand a true shorthand to value false and diff off, so a runtime true over a default value false captures nothing and a confirmed mismatch logs no warning."
+        "text": "M65 is the native twin of kernel/mismatch-logging.qnt expandLogging letting a true logMismatches stand for both leaves off: both ports expand a true shorthand to value false and diff off, so a runtime true over a default value false captures nothing and a confirmed mismatch logs no warning."
       }
     },
     {
       "id": "shadow-logging-malformed-shorthand-expands-on",
       "contract": "C60",
-      "source": "formal/models/kernel/shadow.qnt",
+      "source": "formal/models/kernel/mismatch-logging.qnt",
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "invariant": "capturedLoggingFollowsLayers",
       "before": "      else { value: \"false\", diff: DIFF_OFF }\n    {",
@@ -1788,23 +1783,18 @@
         "profiles": [
           "shadow"
         ],
-        "exclusions": {
-          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M08",
-        "text": "M08 is the native twin of kernel/shadow.qnt expandLogging letting a malformed logMismatches stand for both leaves on while still marking it invalid: both ports expand it to value true and diff values, so admission records the config_resolution error and the confirmed mismatch warns instead of comparing silently."
+        "text": "M08 is the native twin of kernel/mismatch-logging.qnt expandLogging letting a malformed logMismatches stand for both leaves on while still marking it invalid: both ports expand it to value true and diff values, so admission records the config_resolution error and the confirmed mismatch warns instead of comparing silently."
       }
     },
     {
       "id": "shadow-logging-written-off-leaf-ignored",
       "contract": "C60",
-      "source": "formal/models/kernel/shadow.qnt",
+      "source": "formal/models/kernel/mismatch-logging.qnt",
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "invariant": "capturedLoggingFollowsLayers",
       "before": "      value: if (written.value != UNWRITTEN) written.value else stands.value,\n      diff: if (written.diff != UNWRITTEN) written.diff else stands.diff,",
@@ -1817,23 +1807,18 @@
         "profiles": [
           "shadow"
         ],
-        "exclusions": {
-          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M71",
-        "text": "M71 is the native twin of kernel/shadow.qnt expandLogging treating a leaf written off as unwritten: both ports drop a written value false or diff off, so a runtime diff off over a default logMismatches true inherits diff values and the warning carries difference fields it should not."
+        "text": "M71 is the native twin of kernel/mismatch-logging.qnt expandLogging treating a leaf written off as unwritten: both ports drop a written value false or diff off, so a runtime diff off over a default logMismatches true inherits diff values and the warning carries difference fields it should not."
       }
     },
     {
       "id": "shadow-logging-omitted-value-resolves-on",
       "contract": "C60",
-      "source": "formal/models/kernel/shadow.qnt",
+      "source": "formal/models/kernel/mismatch-logging.qnt",
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "invariant": "capturedLoggingFollowsLayers",
       "before": "logging: { value: merged.value == \"true\",",
@@ -1846,23 +1831,18 @@
         "profiles": [
           "shadow"
         ],
-        "exclusions": {
-          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M09",
-        "text": "M09 is the native twin of kernel/shadow.qnt resolveLogging capturing an unwritten value leaf as on: both ports resolve an omitted value leaf to true, so a shadow policy that writes no logging input warns with both values at a confirmed mismatch."
+        "text": "M09 is the native twin of kernel/mismatch-logging.qnt resolveLogging capturing an unwritten value leaf as on: both ports resolve an omitted value leaf to true, so a shadow policy that writes no logging input warns with both values at a confirmed mismatch."
       }
     },
     {
       "id": "shadow-logging-invalid-diff-leaf-acts-values",
       "contract": "C60",
-      "source": "formal/models/kernel/shadow.qnt",
+      "source": "formal/models/kernel/mismatch-logging.qnt",
       "model": "formal/models/dialcache-shadow-conformance.qnt",
       "invariant": "capturedLoggingFollowsLayers",
       "before": "diff: if (levels.contains(merged.diff)) merged.diff else DIFF_OFF }",
@@ -1875,17 +1855,12 @@
         "profiles": [
           "shadow"
         ],
-        "exclusions": {
-          "admission": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "dark-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-layers": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run.",
-          "shadow-read-deadlines": "Composes the module with the constant Shadow::LOGGING_OFF policy and no diff hook: it writes no mismatch-logging input, so the mutated expansion and resolution never run."
-        }
+        "exclusions": {}
       },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M76",
-        "text": "M76 is the native twin of kernel/shadow.qnt resolveLogging capturing an invalid diff leaf as values: both ports resolve a diff leaf of the wrong type to values while recording its config_resolution, so an invalid leaf beside value true adds the entries with their values to the warning."
+        "text": "M76 is the native twin of kernel/mismatch-logging.qnt resolveLogging capturing an invalid diff leaf as values: both ports resolve a diff leaf of the wrong type to values while recording its config_resolution, so an invalid leaf beside value true adds the entries with their values to the warning."
       }
     },
     {

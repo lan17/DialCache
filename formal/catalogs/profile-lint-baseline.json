@@ -18,6 +18,7 @@
     "local_storage",
     "markers",
     "metrics",
+    "mismatch_logging",
     "payloads",
     "policy_gate",
     "policy_overlay",
@@ -120,6 +121,8 @@
       "module": "dialcache_shadow_conformance",
       "libraryTransitions": [
         "clock::shiftWall",
+        "mismatch_logging::mergeLogging",
+        "mismatch_logging::resolveLogging",
         "remote_frames::seedFrame",
         "remote_io::latestOrdinal",
         "remote_writes::latestDump",
@@ -130,14 +133,12 @@
         "shadow::decoderOf",
         "shadow::latestLoad",
         "shadow::latestRead",
-        "shadow::mergeLogging",
         "shadow::readerOf",
         "shadow::recordVerdictInputs",
         "shadow::releaseDump",
         "shadow::releaseLoad",
         "shadow::releaseReadWithLogger",
         "shadow::releaseWrite",
-        "shadow::resolveLogging",
         "shadow::settleHeld"
       ],
       "compositionViolations": 0

@@ -7,6 +7,7 @@ module dialcache_shadow_conformance {
   import serving as Serving from "./kernel/serving"
   import remote_io as RemoteIO from "./kernel/remote-io"
   import remote_writes as Writes from "./kernel/remote-writes"
+  import mismatch_logging.* from "./kernel/mismatch-logging"
   import shadow as Shadow from "./kernel/shadow"
   import deadlines as Deadlines from "./kernel/deadlines"
   import diagnostics as Diagnostics from "./kernel/diagnostics"
@@ -35,7 +36,8 @@ module dialcache_shadow_conformance {
   // caller's source deadline and the layer its failure is attributed to), the
   // held fill (remote_writes), the frames a seed stores and the watermark an
   // invalidation raises with its future buffer (remote_frames, serving), the
-  // wall skew (clock). This module owns the bounded state, the fixture
+  // wall skew (clock), and the logging inputs resolved to the leaves a job
+  // captures (mismatch_logging). This module owns the bounded state, the fixture
   // decoding (the comparator, its elapsed time and the source work an init
   // choice names; the hooks and the default logging inputs; the payload code a
   // seed choice names; the policy facts and logging inputs a runtime overlay
@@ -119,7 +121,7 @@ module dialcache_shadow_conformance {
   // fixture's policy or in a runtime overlay): the `logMismatches` shorthand,
   // then the `mismatchLogging` leaves `value` and `diff`. "invalid" is a value
   // of the wrong type for any of them; "" leaves it unwritten.
-  pure def loggingInput(shorthand: str, value: str, diff: str): Shadow::LoggingInput =
+  pure def loggingInput(shorthand: str, value: str, diff: str): LoggingInput =
     { shorthand: shorthand, value: value, diff: diff }
   pure val LOG_MISMATCHES = loggingInput("true", "", "")
   // The runtime logging overlays by `logPolicy` choice; choices 6 and 7 are
@@ -153,7 +155,7 @@ module dialcache_shadow_conformance {
     sourceBudget: int, deadlines: List[Deadlines::Due], drained: List[bool], sourceLayers: List[str],
     dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite], jobs: List[Shadow::Job],
     comparator: int, comparisonMs: int, sourceWorkMs: int, hook: bool, diffHook: bool,
-    defaultLogging: Shadow::LoggingInput, selected: bool, rampInvalid: bool, overlayLogging: Shadow::LoggingInput,
+    defaultLogging: LoggingInput, selected: bool, rampInvalid: bool, overlayLogging: LoggingInput,
     loggerFailed: bool, verdicts: List[Shadow::Verdict]
   }
   var s: State
@@ -177,11 +179,11 @@ module dialcache_shadow_conformance {
     else if (choice == FIXTURE_SOURCE_WORK_BEFORE_DEADLINE) JOB_BUDGET_MS - 1 else 0
   pure def hookOf(choice: int): bool = choice != FIXTURE_NO_HOOK
   pure def diffHookOf(choice: int): bool = choice == FIXTURE_DIFF_HOOK
-  pure def defaultLoggingOf(choice: int): Shadow::LoggingInput =
+  pure def defaultLoggingOf(choice: int): LoggingInput =
     if ((choice >= FIRST_LOGGING_FIXTURE and choice < FIXTURE_NO_HOOK) or choice == FIXTURE_DIFF_HOOK) LOG_MISMATCHES
     else if (choice == FIXTURE_DEFAULT_PATHS) loggingInput("", "", "paths")
     else if (choice == FIXTURE_DEFAULT_VALUE_FALSE) loggingInput("", "false", "")
-    else Shadow::NO_LOGGING_INPUT
+    else NO_LOGGING_INPUT
   // The payload a seed choice stores, and the choice naming the other form of
   // a stored payload (the drivers' `reencode`).
   pure def seedPayload(choice: int): int =
@@ -208,7 +210,7 @@ module dialcache_shadow_conformance {
     dumps: List(), writes: List(), jobs: List(),
     comparator: comparatorOf(choice), comparisonMs: comparisonMsOf(choice), sourceWorkMs: sourceWorkOf(choice),
     hook: hookOf(choice), diffHook: diffHookOf(choice), defaultLogging: defaultLoggingOf(choice),
-    selected: true, rampInvalid: false, overlayLogging: Shadow::NO_LOGGING_INPUT, loggerFailed: false, verdicts: List()
+    selected: true, rampInvalid: false, overlayLogging: NO_LOGGING_INPUT, loggerFailed: false, verdicts: List()
   }
   action initialize(choice: int): bool = all {
     input' = { name: "init", choice: choice },
@@ -238,12 +240,12 @@ module dialcache_shadow_conformance {
     s' = Shadow::beginDark(s, LAYOUT, CALL, DARK, TTLS, Deadlines::UNBOUNDED,
       {
         hook: s.hook, selected: s.selected, capacity: 1, budgetMs: JOB_BUDGET_MS,
-        logging: Shadow::resolveLogging(Shadow::mergeLogging(s.defaultLogging, s.overlayLogging)).logging,
+        logging: resolveLogging(mergeLogging(s.defaultLogging, s.overlayLogging)).logging,
         diffHook: s.diffHook
       },
       {
         ramp: s.rampInvalid,
-        logging: Shadow::resolveLogging(Shadow::mergeLogging(s.defaultLogging, s.overlayLogging)).invalid
+        logging: resolveLogging(mergeLogging(s.defaultLogging, s.overlayLogging)).invalid
       },
       s.sourceWorkMs)
   }
@@ -367,7 +369,7 @@ module dialcache_shadow_conformance {
     input' = { name: "shadowPolicy", choice: choice },
     s' = {
       selected: choice == SHADOW_ENABLED, rampInvalid: choice == SHADOW_INVALID,
-      overlayLogging: Shadow::NO_LOGGING_INPUT, ...s
+      overlayLogging: NO_LOGGING_INPUT, ...s
     }
   }
   action shadowPolicy = {
@@ -445,14 +447,15 @@ module dialcache_shadow_conformance {
   val warningsRequireMismatch = s.d.warnings <= s.o.shadow.select(x => x == "mismatch").length()
   val expiredSourceWorkSkipsRedis = s.sourceWorkMs < JOB_BUDGET_MS or s.o.reads == 0
   // The logging inputs in force for each leaf, written independently of
-  // shadow::mergeLogging: the overlay's own leaf when written, else what its
-  // shorthand stands for, else the default's leaf, else its shorthand's. A
-  // `true` shorthand stands for "true" and "values", `false` for "false" and
-  // "off", and a malformed one for "invalid", the input it came from.
+  // mismatch_logging::mergeLogging: the overlay's own leaf when written, else
+  // what its shorthand stands for, else the default's leaf, else its
+  // shorthand's. A `true` shorthand stands for "true" and "values", `false`
+  // for "false" and "off", and a malformed one for "invalid", the input it
+  // came from.
   pure def standsFor(shorthand: str, valueLeaf: bool): str =
     if (shorthand == "") "" else if (shorthand == "true") (if (valueLeaf) "true" else "values")
     else if (shorthand == "false") (if (valueLeaf) "false" else "off") else "invalid"
-  pure def layerLeaf(written: Shadow::LoggingInput, valueLeaf: bool): str = {
+  pure def layerLeaf(written: LoggingInput, valueLeaf: bool): str = {
     val leaf = if (valueLeaf) written.value else written.diff
     if (leaf != "") leaf else standsFor(written.shorthand, valueLeaf)
   }
@@ -650,14 +653,14 @@ module dialcache_shadow_conformance {
   // Omission and an explicit false reply are distinct environment inputs. Both
   // keep diagnostic metrics, while neither authorizes a mismatch warning.
   run omittedLoggingKeepsMismatchMetricsOnlyTest = initialize(2)
-    .expect(s.defaultLogging == Shadow::NO_LOGGING_INPUT and s.overlayLogging == Shadow::NO_LOGGING_INPUT)
+    .expect(s.defaultLogging == NO_LOGGING_INPUT and s.overlayLogging == NO_LOGGING_INPUT)
     .then(seedAt(1)).then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
     .then(releaseLoad).then(releaseRead)
     .expect(s.o.shadow == List("mismatch") and s.d.ages == List(0)
       and s.d.warnings == 0 and s.d.configErrors == 0 and s.o.comparisons == 1)
 
   run explicitFalseLoggingOverridesEnabledDefaultTest = initialize(FIRST_LOGGING_FIXTURE + 2)
-    .expect(s.defaultLogging == LOG_MISMATCHES and s.overlayLogging == Shadow::NO_LOGGING_INPUT)
+    .expect(s.defaultLogging == LOG_MISMATCHES and s.overlayLogging == NO_LOGGING_INPUT)
     .then(setLogging(LOGGING_DISABLED)).then(seedAt(1)).then(beginCall)
     .then(releaseRead).then(resolveAt(VALUE_TWO)).then(releaseLoad).then(releaseRead)
     .expect(s.o.shadow == List("mismatch") and s.d.ages == List(0)

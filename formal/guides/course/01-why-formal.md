@@ -76,7 +76,7 @@ Six stages turn a rule into evidence. Every later lesson sits in one of them:
 
    ```text
    "models": 32,
-   "libraries": 34,
+   "libraries": 35,
    "profiles": 17,
    "invariants": 258,
    "regressions": 489,

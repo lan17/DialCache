@@ -38,11 +38,11 @@ explains what a challenge measures.
 | `stale-recovery-candidate-stamped-at-read` | C44 | cache-contract.qnt | `retainedCandidateWasEligible` | mapped `M44` | `compressedRecoveryRechecksMaximumAfterDecodeTest` | 3 / 8 |
 | `shadow-fenced-fill-writes` | C53 | kernel/remote-writes.qnt | `fillsClearTheirFence` | mapped `M04` (cross-contract) | `fenceRejudgedAtDumpReleaseAfterRollbackTest` | 3 / 3 |
 | `shadow-fill-before-source` | C49 | kernel/shadow.qnt | `fillsRequireMissAndAcceptedSource` | mapped `M47` | `darkReadBeforeSourceWaitsForItTest` | 3 / 2 |
-| `shadow-logging-true-shorthand-expands-off` | C60 | kernel/shadow.qnt | `capturedLoggingFollowsLayers` | mapped `M65` | `runtimeTrueShorthandOverridesDefaultValueTest` | 1 / 4 |
-| `shadow-logging-malformed-shorthand-expands-on` | C60 | kernel/shadow.qnt | `capturedLoggingFollowsLayers` | mapped `M08` | `invalidLoggingKeepsComparisonWithoutWarningTest` | 1 / 4 |
-| `shadow-logging-written-off-leaf-ignored` | C60 | kernel/shadow.qnt | `capturedLoggingFollowsLayers` | mapped `M71` | `runtimeOffDiffOverridesDefaultDiffTest` | 1 / 4 |
-| `shadow-logging-omitted-value-resolves-on` | C60 | kernel/shadow.qnt | `capturedLoggingFollowsLayers` | mapped `M09` | `omittedLoggingKeepsMismatchMetricsOnlyTest` | 1 / 4 |
-| `shadow-logging-invalid-diff-leaf-acts-values` | C60 | kernel/shadow.qnt | `capturedLoggingFollowsLayers` | mapped `M76` | `invalidDiffLeafKeepsValueLeafTest` | 1 / 4 |
+| `shadow-logging-true-shorthand-expands-off` | C60 | kernel/mismatch-logging.qnt | `capturedLoggingFollowsLayers` | mapped `M65` | `runtimeTrueShorthandOverridesDefaultValueTest` | 1 / 0 |
+| `shadow-logging-malformed-shorthand-expands-on` | C60 | kernel/mismatch-logging.qnt | `capturedLoggingFollowsLayers` | mapped `M08` | `invalidLoggingKeepsComparisonWithoutWarningTest` | 1 / 0 |
+| `shadow-logging-written-off-leaf-ignored` | C60 | kernel/mismatch-logging.qnt | `capturedLoggingFollowsLayers` | mapped `M71` | `runtimeOffDiffOverridesDefaultDiffTest` | 1 / 0 |
+| `shadow-logging-omitted-value-resolves-on` | C60 | kernel/mismatch-logging.qnt | `capturedLoggingFollowsLayers` | mapped `M09` | `omittedLoggingKeepsMismatchMetricsOnlyTest` | 1 / 0 |
+| `shadow-logging-invalid-diff-leaf-acts-values` | C60 | kernel/mismatch-logging.qnt | `capturedLoggingFollowsLayers` | mapped `M76` | `invalidDiffLeafKeepsValueLeafTest` | 1 / 0 |
 | `shadow-warning-with-logging-off` | C60 | kernel/shadow.qnt | `noWarningWithLoggingOff` | mapped `M74` | `runtimeFalseShorthandOverridesDefaultDiffTest` | 2 / 3 |
 | `shadow-diff-hook-failure-falls-back-to-walk` | C60 | kernel/shadow.qnt | `warningFieldsMatchCapturedLeaves` | mapped `M69` | `hookErrorNullsDiffFieldsTest` | 1 / 4 |
 | `shadow-diff-hook-runs-at-diff-off` | C60 | kernel/shadow.qnt | `loggingOutcomePrecedence` | mapped `M70` | `hookSkippedWithDiffOffTest` | 1 / 4 |
