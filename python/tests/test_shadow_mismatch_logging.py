@@ -459,7 +459,9 @@ def test_passes_an_absent_cached_side_to_the_hook_as_the_raw_undefined(executor)
 
     harness = Harness(executor, payload=JSON_UNDEFINED_SENTINEL)
 
-    result = harness.get({"mismatch_logging": {"diff": "values"}}, source={"id": "123"}, shadow_mismatch_diff=hook)
+    result = harness.get(
+        {"mismatch_logging": {"diff": "values"}}, source={"id": "123"}, shadow_mismatch_diff=hook
+    )
 
     assert result is UNDEFINED
     # D13: the hook receives the raw values, so an absent side stays UNDEFINED

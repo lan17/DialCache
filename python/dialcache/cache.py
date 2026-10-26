@@ -1267,7 +1267,9 @@ class DialCache:
             # neither compared value.
             def settled(done: asyncio.Task[bool]) -> None:
                 if not done.cancelled() and done.exception() is None:
-                    self._emit("shadowMismatchLogging", labels, outcome="logged" if done.result() else "logger_error")
+                    self._emit(
+                        "shadowMismatchLogging", labels, outcome="logged" if done.result() else "logger_error"
+                    )
 
             delivered.add_done_callback(settled)
 
