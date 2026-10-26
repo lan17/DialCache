@@ -566,7 +566,8 @@ func expandMismatchLogging(shadow map[string]any) (mismatchLeaves, error) {
 	return leaves, nil
 }
 
-// overlaidBy lets each leaf a runtime group wrote win over the inherited one.
+// overlaidBy lets each leaf a runtime group wrote win over the inherited
+// static one, whose typed shorthand is never invalid.
 func (inherited mismatchLeaves) overlaidBy(written mismatchLeaves) mismatchLeaves {
 	if IsAbsent(written.value) {
 		written.value = inherited.value
@@ -574,7 +575,6 @@ func (inherited mismatchLeaves) overlaidBy(written mismatchLeaves) mismatchLeave
 	if IsAbsent(written.diff) {
 		written.diff = inherited.diff
 	}
-	written.invalid = written.invalid || inherited.invalid
 	return written
 }
 
@@ -632,10 +632,8 @@ func ResolvePolicy(base Policy, overlay RuntimePolicy, identity Identity, defaul
 	}
 	merged := staticPolicyMap(base)
 	staticShadow, _ := merged["shadow"].(map[string]any)
-	logging, err := expandMismatchLogging(staticShadow)
-	if err != nil {
-		return resolved, err
-	}
+	// The static group is written from typed fields, so it always expands.
+	logging, _ := expandMismatchLogging(staticShadow)
 	var raw any
 	if overlay != nil {
 		var err error
