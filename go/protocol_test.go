@@ -479,48 +479,14 @@ func TestProtocolRemainingVectors(t *testing.T) {
 			}
 		})
 	}
-	// W10: the built-in walk over two JSON values, its entries compared as
-	// parsed JSON. An omitted cached or source member is an absent side (D13),
-	// Go's Absent. Both projections of one entry list are checked: the paths
-	// and count at diff "paths", and the entries with their values at "values".
-	var mismatches []struct {
-		Name           string          `json:"name"`
-		Cached, Source json.RawMessage // nil when the member is omitted
-		Entries        json.RawMessage `json:"entries"`
-		Count          int             `json:"count"`
-	}
+	// W10: the built-in walk over two JSON values and the warning fields
+	// derived from it.
+	var mismatches []mismatchPathVector
 	if err := json.Unmarshal(groups["mismatchPathVectors"], &mismatches); err != nil {
 		t.Fatal(err)
 	}
 	for _, v := range mismatches {
-		t.Run(v.Name, func(t *testing.T) {
-			side := func(raw json.RawMessage) any {
-				if raw == nil {
-					return Absent
-				}
-				return parseJSONValue(t, string(raw))
-			}
-			cached, source := side(v.Cached), side(v.Source)
-			entries, ok := parseJSONValue(t, string(v.Entries)).([]any)
-			if !ok {
-				t.Fatal("vector entries are not an array")
-			}
-			if !IsAbsent(cached) && !IsAbsent(source) {
-				walked, count := walkJSON(cached, source)
-				if count != v.Count || !reflect.DeepEqual(boundedEntries(t, walked), entries) {
-					t.Fatalf("walk: %d %s, want %d %s", count, bjson(boundedEntries(t, walked)), v.Count, v.Entries)
-				}
-			}
-			paths := entryPaths(entries)
-			values, failure := renderShadowMismatchLog(false, MismatchDiffValues, cached, source, nil)
-			diffJSON, rendered := values["diffJson"].(string)
-			if failure != "" || !rendered || len(values) != 3 || values["mismatchPathCount"] != v.Count ||
-				!reflect.DeepEqual(values["mismatchPaths"], paths) || !reflect.DeepEqual(parseJSONValue(t, diffJSON), entries) {
-				t.Fatalf("diff values fields: %#v %q", values, failure)
-			}
-			fields, failure := renderShadowMismatchLog(false, MismatchDiffPaths, cached, source, nil)
-			expectLog(t, fields, failure, map[string]any{"mismatchPaths": paths, "mismatchPathCount": v.Count}, "")
-		})
+		t.Run(v.Name, func(t *testing.T) { checkMismatchPathVector(t, v) })
 	}
 	count := 0
 	for group, raw := range groups {

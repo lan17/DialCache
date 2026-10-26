@@ -1845,8 +1845,8 @@
         "edits": [
           {
             "path": "go/shadow.go",
-            "before": "if err != nil {\n\t\tverdict = shadowVerdict{outcome: \"timeout\"}\n\t}",
-            "after": "if err != nil {\n\t\tverdict = shadowVerdict{outcome: \"timeout\"}\n\t\tx.cache.mu.Lock()\n\t\tif x.cache.shadows[x.key] == f {\n\t\t\tdelete(x.cache.shadows, x.key)\n\t\t}\n\t\tx.cache.mu.Unlock()\n\t}"
+            "before": "if err != nil {\n\t\tverdict = shadowVerdict[T]{outcome: \"timeout\"}\n\t}",
+            "after": "if err != nil {\n\t\tverdict = shadowVerdict[T]{outcome: \"timeout\"}\n\t\tx.cache.mu.Lock()\n\t\tif x.cache.shadows[x.key] == f {\n\t\t\tdelete(x.cache.shadows, x.key)\n\t\t}\n\t\tx.cache.mu.Unlock()\n\t}"
           }
         ],
         "requiredDetections": [

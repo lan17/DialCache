@@ -20,7 +20,7 @@ import (
 type mismatchPathVector struct {
 	Name           string          `json:"name"`
 	Cached, Source json.RawMessage // nil when the row omits the side
-	Entries        []any           `json:"entries"`
+	Entries        json.RawMessage `json:"entries"`
 	Count          int             `json:"count"`
 }
 
@@ -102,25 +102,38 @@ func nestMembers(depth int, leaf any) any {
 	return value
 }
 
-// An absent side reaches the walk only through rendering, as Absent.
+// checkMismatchPathVector replays one row: the walk, its entries compared as
+// parsed JSON, and both projections of one entry list in the warning fields,
+// the paths and count at diff "paths" and the entries with their values at
+// "values". An omitted side is Absent (D13) and reaches the walk only through
+// rendering.
+func checkMismatchPathVector(t *testing.T, vector mismatchPathVector) {
+	t.Helper()
+	cached, source := mismatchVectorSide(t, vector.Cached), mismatchVectorSide(t, vector.Source)
+	entries, ok := parseJSONValue(t, string(vector.Entries)).([]any)
+	if !ok {
+		t.Fatal("vector entries are not an array")
+	}
+	if !IsAbsent(cached) && !IsAbsent(source) {
+		walked, count := walkJSON(cached, source)
+		if count != vector.Count || !reflect.DeepEqual(boundedEntries(t, walked), entries) {
+			t.Fatalf("walk: %d %s, want %d %s", count, bjson(boundedEntries(t, walked)), vector.Count, vector.Entries)
+		}
+	}
+	paths := entryPaths(entries)
+	values, failure := renderMismatch(false, MismatchDiffValues, cached, source)
+	diffJSON, rendered := values["diffJson"].(string)
+	if failure != "" || !rendered || len(values) != 3 || values["mismatchPathCount"] != vector.Count ||
+		!reflect.DeepEqual(values["mismatchPaths"], paths) || !reflect.DeepEqual(parseJSONValue(t, diffJSON), entries) {
+		t.Fatalf("diff values fields: %#v %q", values, failure)
+	}
+	fields, failure := renderMismatch(false, MismatchDiffPaths, cached, source)
+	expectLog(t, fields, failure, map[string]any{"mismatchPaths": paths, "mismatchPathCount": vector.Count}, "")
+}
+
 func TestBuiltInMismatchPathVectors(t *testing.T) {
 	for _, vector := range sharedMismatchPathVectors(t) {
-		t.Run(vector.Name, func(t *testing.T) {
-			cached, source := mismatchVectorSide(t, vector.Cached), mismatchVectorSide(t, vector.Source)
-			if !IsAbsent(cached) && !IsAbsent(source) {
-				entries, count := walkJSON(cached, source)
-				if count != vector.Count || !reflect.DeepEqual(boundedEntries(t, entries), append([]any{}, vector.Entries...)) {
-					t.Fatalf("walk: %d %#v, want %d %#v", count, boundedEntries(t, entries), vector.Count, vector.Entries)
-				}
-			}
-			fields, failure := renderMismatch(false, MismatchDiffValues, cached, source)
-			diffJSON, _ := fields["diffJson"].(string)
-			if failure != "" || fields["mismatchPathCount"] != vector.Count || !reflect.DeepEqual(fields["mismatchPaths"], entryPaths(vector.Entries)) || !reflect.DeepEqual(parseJSONValue(t, diffJSON), append([]any{}, vector.Entries...)) {
-				t.Fatalf("diff values fields: %#v %q", fields, failure)
-			}
-			paths, failure := renderMismatch(false, MismatchDiffPaths, cached, source)
-			expectLog(t, paths, failure, map[string]any{"mismatchPaths": fields["mismatchPaths"], "mismatchPathCount": vector.Count}, "")
-		})
+		t.Run(vector.Name, func(t *testing.T) { checkMismatchPathVector(t, vector) })
 	}
 }
 
@@ -176,6 +189,22 @@ func TestBuiltInMismatchWalkCaps(t *testing.T) {
 			t.Fatalf("diffJson pointer clamp: %#v", entries)
 		}
 	})
+	t.Run("a retained pointer logs as the whole pointer would", func(t *testing.T) {
+		// The walk copies at most 516 bytes of a kept pointer. Cutting there,
+		// inside a character or not, must log the same clamped text.
+		for _, char := range []string{"k", "é", "€", "💡"} {
+			for pad := 0; pad < len(char); pad++ {
+				for repeats := 120; repeats <= 540/len(char); repeats++ {
+					name := strings.Repeat("k", pad) + strings.Repeat(char, repeats)
+					entries, count := walkJSON(map[string]any{"a": map[string]any{name: 1.0}}, map[string]any{"a": map[string]any{name: 2.0}})
+					whole := "/a/" + name
+					if count != 1 || len(entries[0].Path) > shadowMismatchPointerCopyBytes || clampLogUTF8(entries[0].Path, shadowMismatchPathMaxBytes) != clampLogUTF8(whole, shadowMismatchPathMaxBytes) {
+						t.Fatalf("a %d-byte pointer kept %q", len(whole), entries[0].Path)
+					}
+				}
+			}
+		}
+	})
 	t.Run("each side over 1 KiB replaced by its clamped JSON text", func(t *testing.T) {
 		list := make([]any, 300)
 		for index := range list {
@@ -209,9 +238,10 @@ func TestBuiltInMismatchWalkCaps(t *testing.T) {
 			t.Fatalf("deep depth cap: %#v", boundedEntries(t, entries))
 		}
 	})
-	t.Run("equal containers past the cap compare structurally at any depth", func(t *testing.T) {
+	t.Run("equal containers past the cap compare structurally as deep as JSON parses", func(t *testing.T) {
+		// encoding/json parses at most 10,000 levels of nesting.
 		var cached, source any = "leaf", "leaf"
-		for level := 0; level < 100_000; level++ {
+		for level := 0; level < 9_999; level++ {
 			cached = map[string]any{"a": float64(level), "next": cached}
 			source = map[string]any{"next": source, "a": float64(level)}
 		}
@@ -221,12 +251,14 @@ func TestBuiltInMismatchWalkCaps(t *testing.T) {
 	})
 }
 
-func TestBuiltInMismatchWalkBuildsOnlyRetainedPointers(t *testing.T) {
+func TestBuiltInMismatchWalkCopiesBoundedRetainedPointers(t *testing.T) {
 	// A chain of member names above a wide object and a long array makes every
 	// pointer below it long. Half their members and elements are equal, and all
 	// but 64 of the differing ones fall past the cut. Lengthening the names must
-	// cost only the retained pointers, never a copy of the prefix per visited
-	// member or element, which would take over a gigabyte here.
+	// cost only the token stack: never a copy of the prefix per visited member
+	// or element, which would take over a gigabyte here, nor a whole copy per
+	// retained entry, about 64 times the prefix, since the warning keeps only
+	// each pointer's first 512 bytes.
 	walk := func(nameBytes int) (allocated uint64, prefixBytes int) {
 		name := strings.Repeat("k", nameBytes)
 		side := func(differing float64) any {
@@ -247,16 +279,22 @@ func TestBuiltInMismatchWalkBuildsOnlyRetainedPointers(t *testing.T) {
 		entries, count := walkJSON(cached, source)
 		runtime.ReadMemStats(&after)
 		prefix := strings.Repeat("/"+name, 30)
-		if count != 5_000 || len(entries) != shadowMismatchMaxEntries || entries[0].Path != prefix+"/items/1" || entries[63].Path != prefix+"/items/127" {
+		logged := func(entry MismatchEntry) string { return clampLogUTF8(entry.Path, shadowMismatchPathMaxBytes) }
+		if count != 5_000 || len(entries) != shadowMismatchMaxEntries || logged(entries[0]) != clampLogUTF8(prefix+"/items/1", shadowMismatchPathMaxBytes) || logged(entries[63]) != clampLogUTF8(prefix+"/items/127", shadowMismatchPathMaxBytes) {
 			t.Fatalf("walk under %d-byte names: %d entries, count %d", nameBytes, len(entries), count)
+		}
+		for _, entry := range entries {
+			if len(entry.Path) > shadowMismatchPointerCopyBytes {
+				t.Fatalf("a retained pointer kept %d bytes", len(entry.Path))
+			}
 		}
 		return after.TotalAlloc - before.TotalAlloc, len(prefix)
 	}
 	shortAllocated, shortPrefix := walk(1)
 	longAllocated, longPrefix := walk(4096)
-	retained := uint64(shadowMismatchMaxEntries * (longPrefix - shortPrefix))
-	if longAllocated > shortAllocated+2*retained {
-		t.Fatalf("lengthening the pointers by %d bytes allocated %d more bytes, want at most %d", longPrefix-shortPrefix, longAllocated-shortAllocated, 2*retained)
+	// The token stack's growth costs about 5 times the prefix it reaches.
+	if bound := shortAllocated + 16*uint64(longPrefix-shortPrefix); longAllocated > bound {
+		t.Fatalf("lengthening the pointers by %d bytes allocated %d more bytes, want at most %d", longPrefix-shortPrefix, longAllocated-shortAllocated, bound-shortAllocated)
 	}
 }
 

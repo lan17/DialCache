@@ -1,8 +1,10 @@
 package dialcache
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
 	"math/big"
 	"reflect"
 	"sync"
@@ -10,6 +12,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/lan17/DialCache/go/internal/logging"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -343,6 +346,28 @@ func TestShadowMismatchWarningRenderFailure(t *testing.T) {
 	})
 }
 
+func TestShadowMismatchWarningDefaultLoggerKeepsOneLine(t *testing.T) {
+	// Pointers carry member names as written; the default logger escapes the
+	// whole line, so a newline or terminal escape in a name cannot forge a line.
+	var output bytes.Buffer
+	writer, flags := log.Writer(), log.Flags()
+	log.SetOutput(&output)
+	log.SetFlags(0)
+	defer func() { log.SetOutput(writer); log.SetFlags(flags) }()
+	synctest.Test(t, func(t *testing.T) {
+		name := "a\nDialCache forged\x1b[2J"
+		recorder, _ := confirmedMismatch[any]{useCase: "DefaultLogger", cached: map[string]any{name: 1}, source: map[string]any{name: 2},
+			policy: shadowLogging(ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffPaths)}}), options: []Option{WithLogger(logging.Logger{})}}.run(t)
+		if outcomes := recorder.outcomes("shadowMismatchLogging"); !reflect.DeepEqual(outcomes, []string{"logged"}) {
+			t.Fatalf("logging outcomes: %v", outcomes)
+		}
+	})
+	want := `DialCache shadow validation mismatch: map[cacheKey:urn:user_id:123#DefaultLogger cacheNamespace:urn cachedValueAgeSeconds:30.5 keyType:user_id mismatchPathCount:1 mismatchPaths:[/a\nDialCache forged\x1b[2J] outcome:mismatch useCase:DefaultLogger]` + "\n"
+	if output.String() != want {
+		t.Fatalf("logged %q, want %q", output.String(), want)
+	}
+}
+
 func TestShadowMismatchWarningAbsentCachedValue(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		// The default codec stores a negative-cache entry as Absent.
@@ -426,6 +451,51 @@ func TestShadowMismatchLoggingConfigErrorOncePerAdmittedJob(t *testing.T) {
 			t.Fatalf("config_resolution errors: %v", errors)
 		}
 		expectNoWarning(t, recorder)
+	})
+}
+
+func TestShadowMismatchWarningKeepsTheShadowSlot(t *testing.T) {
+	// A confirmed mismatch keeps its slot until its warning is logged, so
+	// capacity bounds a slow hook as it bounds a slow comparator.
+	synctest.Test(t, func(t *testing.T) {
+		payload, _ := (JSONCodec[mismatchRecord]{}).Encode(mismatchCachedRecord)
+		frame := Frame{CreatedAtMS: uint64(time.Now().UnixMilli()), Payload: payload.Bytes}
+		remote := boundaryRemote{read: func(context.Context) (ReadResult, error) { return ReadResult{Kind: "hit", Frame: frame}, nil }}
+		recorder := &warningRecorder{}
+		cache := MustNew(WithRemote(remote), WithLogger(recorder), WithObserver(recorder.observe), WithShadowOutcomes(func(Event) {}), WithShadowCapacity(1))
+		release := make(chan struct{})
+		hook := func(mismatchRecord, mismatchRecord) ([]MismatchEntry, error) { <-release; return nil, nil }
+		call := func(id string) {
+			op := Operation[mismatchRecord]{Identity: Identity{KeyType: "user_id", ID: id, UseCase: "Capacity"}, MismatchDiff: hook,
+				Policy: shadowLogging(ShadowPolicy{MismatchLogging: &MismatchLoggingPolicy{Diff: Ptr(MismatchDiffPaths)}})}
+			if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+				_, err := GetOrLoad(ctx, cache, op, func(context.Context) (mismatchRecord, error) { return mismatchSourceRecord, nil })
+				return err
+			}); err != nil {
+				t.Error(err)
+			}
+		}
+		// The first job confirms its mismatch and blocks in the hook; a job for
+		// another key finds no free slot.
+		call("123")
+		synctest.Wait()
+		call("456")
+		synctest.Wait()
+		verdicts := recorder.outcomes("shadowValidation")
+		close(release)
+		synctest.Wait()
+		if !reflect.DeepEqual(verdicts, []string{"mismatch", "dropped"}) {
+			t.Fatalf("verdicts while the hook runs: %v", verdicts)
+		}
+		// Once the warning is logged, the slot admits the next job.
+		call("789")
+		synctest.Wait()
+		if verdicts := recorder.outcomes("shadowValidation"); !reflect.DeepEqual(verdicts, []string{"mismatch", "dropped", "mismatch"}) {
+			t.Fatalf("verdicts: %v", verdicts)
+		}
+		if outcomes := recorder.outcomes("shadowMismatchLogging"); !reflect.DeepEqual(outcomes, []string{"logged", "logged"}) {
+			t.Fatalf("logging outcomes: %v", outcomes)
+		}
 	})
 }
 

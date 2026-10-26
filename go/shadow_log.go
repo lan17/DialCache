@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Bounds of the confirmed-mismatch difference fields.
@@ -18,6 +19,11 @@ const (
 	// shadowMismatchMaxDepth counts the reference tokens in the deepest pointer
 	// the built-in walk reports.
 	shadowMismatchMaxDepth = 32
+	// shadowMismatchPointerCopyBytes bounds the pointer the walk copies into a
+	// kept entry. A longer pointer still exceeds shadowMismatchPathMaxBytes once
+	// cut there, even when the cut splits a character, so it clamps to the same
+	// text as the whole pointer.
+	shadowMismatchPointerCopyBytes = shadowMismatchPathMaxBytes + utf8.UTFMax
 )
 
 // Why warning construction failed: the difference computation (hook or
@@ -179,12 +185,15 @@ func walkJSON(cached, source any) (entries []MismatchEntry, count int) {
 	// each container appends a child's token and cuts it off again. Only a
 	// retained entry copies it into a string, so a member that compares equal or
 	// falls past the cut never copies its ancestors' tokens, and a deep chain of
-	// long names keeps the walk linear in the renderings.
+	// long names keeps the walk linear in the renderings. The copy stops at
+	// shadowMismatchPointerCopyBytes: the warning clamps every pointer to
+	// shadowMismatchPathMaxBytes, which keeps only bytes inside that prefix.
 	var pointer []byte
 	report := func(cachedSide, sourceSide any) {
 		count++
 		if len(entries) < shadowMismatchMaxEntries {
-			entries = append(entries, MismatchEntry{Path: string(pointer), Cached: cachedSide, Source: sourceSide})
+			kept := pointer[:min(len(pointer), shadowMismatchPointerCopyBytes)]
+			entries = append(entries, MismatchEntry{Path: string(kept), Cached: cachedSide, Source: sourceSide})
 		}
 	}
 	var walk func(left, right any, depth int)
@@ -201,7 +210,7 @@ func walkJSON(cached, source any) (entries []MismatchEntry, count int) {
 			return
 		}
 		if depth >= shadowMismatchMaxDepth {
-			if !jsonValuesEqual(left, right) {
+			if !reflect.DeepEqual(left, right) {
 				report(left, right)
 			}
 			return
@@ -248,43 +257,6 @@ func walkJSON(cached, source any) (entries []MismatchEntry, count int) {
 	}
 	walk(cached, source, 0)
 	return entries, count
-}
-
-// jsonValuesEqual compares a depth-capped pair structurally. It is iterative,
-// so a subtree as deep as rendering allows cannot exhaust the stack.
-func jsonValuesEqual(cached, source any) bool {
-	pending := [][2]any{{cached, source}}
-	for len(pending) > 0 {
-		pair := pending[len(pending)-1]
-		pending = pending[:len(pending)-1]
-		switch left := pair[0].(type) {
-		case []any:
-			right, ok := pair[1].([]any)
-			if !ok || len(left) != len(right) {
-				return false
-			}
-			for index := range left {
-				pending = append(pending, [2]any{left[index], right[index]})
-			}
-		case map[string]any:
-			right, ok := pair[1].(map[string]any)
-			if !ok || len(left) != len(right) {
-				return false
-			}
-			for name, member := range left {
-				other, present := right[name]
-				if !present {
-					return false
-				}
-				pending = append(pending, [2]any{member, other})
-			}
-		default:
-			if kindOfJSON(pair[1]) != jsonPrimitive || pair[0] != pair[1] {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func escapePointerToken(name string) string {
