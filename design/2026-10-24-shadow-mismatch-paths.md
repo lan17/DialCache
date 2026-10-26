@@ -156,7 +156,8 @@ The built-in computation:
    for key arguments); a member present on one side only is reported at its
    pointer. Arrays of equal length recurse by index; arrays of different
    length are reported once at the array's own pointer without descending.
-   Any other pair that differs is reported at its pointer. Nesting deeper
+   Any other pair that differs is reported at its pointer; numbers compare
+   as IEEE doubles, and a boolean never equals a number. Nesting deeper
    than 32 levels is reported at the container's pointer without descending.
    Each entry carries the two values at its pointer as the walk holds them:
    one side when the member exists on one side only, the whole containers
@@ -185,10 +186,11 @@ construction is caught and degrades to the metadata-only warning, and a
 logger exception is isolated as today. So the rule is fail-open for the
 caller, who is never affected, and fail-closed for exposure, since a failure
 logs less, never more. Whether the diff computation holds the shadow capacity
-slot stays a port detail, as it is today: TypeScript renders after the slot
-is released, Rust holds it through the bounded CPU executor. The caps bound
-the built-in; a hook is user code under the comparator's discipline, so a
-runaway hook costs what a runaway comparator costs.
+slot stays a port detail: TypeScript and Python render after the slot is
+released, Go holds it on the shadow job's goroutine until the warning work
+finishes, and Rust holds it through the bounded CPU executor.
+The caps bound the built-in; a hook is user code under the comparator's
+discipline, so a runaway hook costs what a runaway comparator costs.
 
 Each warning attempt, a confirmed mismatch with logging on, emits one
 `shadowMismatchLogging` metric event with the cache labels and an `outcome`:
@@ -263,10 +265,10 @@ fails resolution like a malformed layer map. `logMismatches` keeps its type in e
   logging off, and `hook_error` over `render_error` over `logger_error`. Its
   native clause stays: JSON conversion of native values, exact truncation text
   and the logger backend remain B03/X01.
-- **New obligation** (ID assigned when CONTRACTS.md assigns one): the
-  built-in computation in the Proposal, as a portable function over JSON
-  values, with the array rule, the root cases, the ordering and the caps.
-  Evidence is a hand-authored `mismatchPathVectors` group in
+- **W10**, a new obligation: the built-in computation in the Proposal, as a
+  portable function over JSON values, with the array rule, the root cases,
+  the ordering and the caps.
+  W10's evidence is a hand-authored `mismatchPathVectors` group in
   [protocol-vectors.json](../formal/catalogs/protocol-vectors.json), each
   vector a pair of JSON values with the expected entries, paths and values
   compared as parsed JSON so each port's string rendering stays a B03
@@ -760,7 +762,7 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
 - **Python:** `config.py`, `cache.py`, the new `_shadow_log.py`,
   `_callbacks.py`, `tests/formal/driver.py`, `tests/test_protocol_vectors.py`,
   `test_config.py`, `test_shadow_log.py`.
-- **Formal:** `CONTRACTS.md` (C60 wording, the new row, the page and test
+- **Formal:** `CONTRACTS.md` (C60 wording, the W10 row, the page and test
   inventories), `SPEC.md` (mismatch logging rows), `PORTING.md` (observation
   row), `GO-PARITY.md`, `behavioral-scenarios.json` (five fixtures),
   `features.mjs` (fixture and `logPolicy` encoding), `semantic-cases.json`
@@ -831,7 +833,7 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
    in session: "we should just implement these ports in same pr once we are
    satsified ok with typescript".
 4. With the last port, #242 adds the vector group, its `semantic-cases.json`
-   mapping, the new contract row and C60's outcome rule; under D12, the
+   mapping, the new contract row (W10) and C60's outcome rule; under D12, the
    kernel's captured leaves, the shadow profile's starting and runtime
    choices for each `diff` level, `value` and the shorthand with their
    fixture and `logPolicy` encodings, its warning and outcome predictions,
@@ -857,10 +859,10 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   a 6.3 MB object of 150,000 string members at `diff: "paths"`, against the
   value fields alone: TypeScript about 0.12 s against 0.06 s and Python about
   0.18 s against 0.04 s, both on the event loop after the shadow slot is
-  released; Go about 0.6 s against 0.5 s on the shadow job's goroutine, most
-  of it the JSON rendering the value fields already paid; Rust about 0.09 s
-  against 0.006 s in a release build, on the bounded CPU executor holding the
-  slot. `docs/upgrading.md` and `docs/shadow-validation.md` state the cost in
+  released; Go about 0.6 s against 0.5 s on the shadow job's goroutine
+  holding the slot, most of it the JSON rendering the value fields already
+  paid; Rust about 0.09 s against 0.006 s in a release build, on the bounded
+  CPU executor holding the slot. `docs/upgrading.md` and `docs/shadow-validation.md` state the cost in
   every port; whether to bound it is open with the maintainer.
 - **2026-10-24, #242:** TypeScript's `cached()` and `getOrLoad()` throw a
   `TypeError` for a `shadowMismatchDiff` that is not a function, as they do for
