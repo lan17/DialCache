@@ -5,6 +5,8 @@ export type {
   LayerConfig,
   Logger,
   ShadowConfig,
+  ShadowMismatchDiffLevel,
+  ShadowMismatchLoggingConfig,
   StaleRecoveryPredicate,
 } from "./config.js";
 export { DialCacheContext } from "./context.js";
@@ -25,6 +27,8 @@ export type {
   MetricLayer,
   MissMetricLabels,
   SerializationMetricLabels,
+  ShadowMismatchLoggingMetricLabels,
+  ShadowMismatchLoggingOutcome,
   ShadowValidationMetricLabels,
   ShadowValidationOutcome,
   StaleRecoveryMetricLabels,
@@ -47,6 +51,8 @@ export type {
   GetOrLoadOptions,
   ProcessCoalescingState,
   ShadowComparator,
+  ShadowMismatchDiff,
+  ShadowMismatchEntry,
 } from "./dialcache.js";
 export { DialCacheKey, invalidationPrefix, normalizeArgs, redisClusterHashTag } from "./key.js";
 export type { DialCacheKeyInit } from "./key.js";

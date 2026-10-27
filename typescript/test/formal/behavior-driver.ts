@@ -23,7 +23,7 @@ export type Recovery = "allow" | "deny" | "error";
 export type EventName = "readContext" | "readAbort" | "request" | "miss" | "disabled" | "error"
   | "coalesced" | "invalidation" | "shadowAge" | "recoveryAge" | "futureOffset"
   | "size" | "storedSize" | "compression" | "get" | "fallback" | "serialization"
-  | "mismatchWarning" | "writeDispatch" | "marker" | "coalescingState";
+  | "mismatchWarning" | "shadowMismatchLogging" | "writeDispatch" | "marker" | "coalescingState";
 export interface ObservedEvent { event: EventName; [field: string]: string | number | boolean | null }
 // JSON-shaped adapter observations deliberately include malformed replies. A
 // strongly typed port can reject these at its adapter boundary instead.
@@ -38,6 +38,7 @@ export interface Fixture {
   shadowMaxInFlight?: number;
   recovery?: Recovery | "default";
   comparator?: "equal" | "unequal" | "error";
+  mismatchDiff?: "error";
   comparisonMs?: number;
   sourceWorkMs?: number;
   shadowHook?: boolean;
@@ -48,12 +49,12 @@ export interface Fixture {
 }
 export interface Faults {
   localStorage: boolean;
-  read: boolean; write: boolean; dump: boolean; load: boolean; policy: boolean; observer: boolean;
+  read: boolean; write: boolean; dump: boolean; load: boolean; policy: boolean; observer: boolean; logger: boolean;
   holdReads: boolean; holdWrites: boolean; holdDumps: boolean; holdLoads: boolean; holdPolicies: boolean;
 }
 export type Input =
   | { op: "begin"; key?: string; useCase?: string; instance?: string; scope?: string; outside?: boolean; disabled?: boolean; recovery?: Recovery }
-  | { op: "resolve"; loader: number; value?: Value }
+  | { op: "resolve"; loader: number; value?: Value; unrenderable?: true }
   | { op: "reject"; loader: number; error?: "timeout" }
   | { op: "advance"; ms: number; deliverTimers?: boolean }
   | { op: "shiftWall"; ms: number }
@@ -68,7 +69,7 @@ export type Input =
   | { op: "openScope"; id: string; parent?: string; disabled?: boolean; instance?: string }
   | { op: "closeScope"; id: string };
 
-export type CallResult = { status: "pending" } | { status: "value"; value: Value | { absent: true } }
+export type CallResult = { status: "pending" } | { status: "value"; value: Value | { absent: true } | { unrenderable: true } }
   | { status: "error"; error: string };
 export interface Observation {
   events?: ObservedEvent[];
@@ -101,6 +102,11 @@ function deferred<T>() {
   };
 }
 type Gate = ReturnType<typeof deferred<void>>;
+// The source result with no JSON rendering (D13): its toJSON throws, so every
+// JSON rendering of it fails. The driver knows it by identity and observes a
+// call that returns it as { unrenderable: true }.
+const UNRENDERABLE_VALUE = { toJSON(): never { throw new Error("Controlled unrenderable value"); } };
+type SourceValue = Value | undefined | typeof UNRENDERABLE_VALUE;
 type Scope = { instance: string; run: <T>(fn: () => T) => T; gate: Gate; lifetime: Promise<void> };
 
 // The first observation member whose encoding differs between two snapshots.
@@ -126,13 +132,13 @@ export class BehaviorDriver {
   private readonly sourceByInvocation = new Map<number, number>();
   private fallbackFailed = false;
   private adapterReply: { value: AdapterReply } | undefined;
-  private readonly loaders: Array<ReturnType<typeof deferred<Value | undefined>>> = [];
+  private readonly loaders: Array<ReturnType<typeof deferred<SourceValue>>> = [];
   private readonly sourceErrors: Error[] = [];
   private readonly timeoutErrors: unknown[] = [];
   private readonly scopes = new Map<string, Scope>();
   private readonly effects = { read: new Map<number, Gate>(), write: new Map<number, Gate>(),
     dump: new Map<number, Gate>(), load: new Map<number, Gate>(), policy: new Map<number, Gate>() };
-  private readonly faults: Faults = { localStorage: false, read: false, write: false, dump: false, load: false, policy: false, observer: false,
+  private readonly faults: Faults = { localStorage: false, read: false, write: false, dump: false, load: false, policy: false, observer: false, logger: false,
     holdReads: false, holdWrites: false, holdDumps: false, holdLoads: false, holdPolicies: false };
   private runtimePolicy: Policy | null = {};
   private wallOffset = 0;
@@ -254,12 +260,13 @@ export class BehaviorDriver {
         },
         observeSerialization: (labels, seconds) => { this.record("serialization", { ...labels, seconds }); noop(); },
         ...(fixture.shadowHook === false ? {} : { shadowValidation: ({ outcome }: { outcome: string }) => { this.observed.shadow.push(outcome); noop(); } }),
-        staleRecovery: ({ outcome }) => { this.observed.recovery.push(outcome); noop(); } },
+        staleRecovery: ({ outcome }) => { this.observed.recovery.push(outcome); noop(); }, shadowMismatchLogging: (labels) => { this.record("shadowMismatchLogging", labels); noop(); } },
       logger: { debug: noop, warn: (message, details) => {
         if (message === "DialCache shadow validation mismatch" && typeof details === "object" && details !== null) {
-          this.record("mismatchWarning", details);
+          this.record("mismatchWarning", warningObservation(details));
         }
         noop();
+        if (this.faults.logger) throw new Error("Controlled logger failure");
       }, error: noop },
       ...this.overrides,
     });
@@ -305,7 +312,7 @@ export class BehaviorDriver {
             atMs: performance.now(), budgetMs: sourceBudget });
           this.history.push({ event: "sourceStart", id: this.loaders.length, atMs: performance.now() });
           if (this.fixture.probeSourceScope) this.observed.sourceScopes.push(cache.isEnabled());
-          const gate = deferred<Value | undefined>();
+          const gate = deferred<SourceValue>();
           this.loaders.push(gate);
           this.sourceErrors.push(new Error(`Source failure ${this.sourceErrors.length}`));
           this.observed.loaders++;
@@ -315,6 +322,9 @@ export class BehaviorDriver {
           return gate.promise;
         }, { keyType: "id", key: input.key ?? "1", useCase: input.useCase ?? "Behavior", serializer: this.serializer,
           ...(input.recovery === undefined ? {} : { shouldAttemptStaleRecovery: this.classifier(input.recovery) }),
+          ...(this.fixture.mismatchDiff === undefined ? {} : { shadowMismatchDiff: () => {
+            throw new Error("Controlled mismatch diff failure");
+          } }),
           ...(this.fixture.comparator === undefined ? {} : { shadowComparator: () => {
             this.observed.comparisons++;
             // Observe elapsed external comparison work without delivering timers.
@@ -337,13 +347,14 @@ export class BehaviorDriver {
         const result = input.scope !== undefined ? this.scope(input.scope).run(execute)
           : input.outside ? execute() : cache.enable(execute);
         void result.then(
-          (value) => { this.observed.calls[index] = { status: "value", value: value === undefined ? { absent: true } : value }; },
+          (value) => { this.observed.calls[index] = { status: "value", value: value === undefined ? { absent: true }
+            : value === UNRENDERABLE_VALUE ? { unrenderable: true } : value as Value }; },
           (error: unknown) => { this.observed.calls[index] = { status: "error", error: this.classifyError(error) }; },
         );
         break;
       }
       case "resolve":
-        this.loader(input.loader).resolve(input.value);
+        this.loader(input.loader).resolve(input.unrenderable ? UNRENDERABLE_VALUE : input.value);
         this.history.push({ event: "sourceSettlement", id: input.loader, atMs: performance.now(), outcome: "resolve" });
         this.causalHistory.push({ event: "sourceSettlement", id: input.loader, atMs: performance.now(), outcome: "resolve" });
         break;
@@ -526,4 +537,14 @@ export class BehaviorDriver {
     }
     return `unexpected:${String(error)}`;
   }
+}
+
+// The warning's fields as logged, each present exactly when the warning
+// carries it; the mismatchPaths array crosses the wire as one JSON string so
+// every observed field stays a primitive (PORTING.md, mismatchWarning).
+function warningObservation(details: object): Record<string, unknown> {
+  const { mismatchPaths, ...fields } = details as Record<string, unknown>;
+  return Object.hasOwn(details, "mismatchPaths")
+    ? { ...fields, mismatchPathsJson: mismatchPaths === null ? null : JSON.stringify(mismatchPaths) }
+    : fields;
 }

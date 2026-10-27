@@ -204,6 +204,153 @@ compatible, use a serializer that validates and rejects old shapes, or move to
 a new identity. Mutually incompatible validating readers can continually replace
 each other's values while they overlap.
 
+## Shadow mismatch warnings
+
+`shadow.logMismatches` stays in every port, so no config needs a migration: a
+config that sets it to `true` keeps logging every confirmed mismatch. Go and
+Rust code that names the changed types needs the edits listed for that language
+below.
+
+`logMismatches` is now shorthand for
+`shadow.mismatchLogging: { value: true, diff: "values" }` (`false` for both
+leaves off), so its warnings also carry `cachedValueAgeSeconds`,
+`mismatchPaths`, `mismatchPathCount`, and `diffJson`. The new fields derive from
+the same native-JSON renderings as `cachedValueJson` and `sourceValueJson`, so
+a member those renderings omit stays omitted. They are not cut at the 8 KiB
+value cap, though: for a larger value, `mismatchPaths` and `diffJson` can log
+differing fields past the point where `cachedValueJson` is clipped. Computing
+them parses and walks both renderings in full, so each confirmed mismatch costs
+more CPU time and memory, growing with the rendered size of the values and the
+number of members they hold. A warning can carry up to about 40 KiB more field
+bytes than before, counted before any escaping by the logger: 64 pointers of up
+to 512 bytes and an 8 KiB `diffJson`.
+
+To log only the previous fields plus `cachedValueAgeSeconds`, write
+`mismatchLogging: { diff: "off" }` beside `logMismatches: true`. To log the
+differing fields without values, replace `logMismatches` with
+`mismatchLogging: { diff: "paths" }`: a leaf written beside
+`logMismatches: true` leaves the other expanded leaf on, and a service still on
+an earlier DialCache version reads only `logMismatches` from the same config.
+See [Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging)
+for how the shorthand and the leaves combine across config layers.
+
+Each warning attempt also emits a new `shadowMismatchLogging` metric event. The
+bundled Datadog adapters' `shadow_mismatch_logging.count` metric is their
+longest name, which lowers the longest valid Datadog namespace from 175 to 170
+characters.
+
+<LanguageContent language="typescript">
+
+`DialCacheKeyConfig.disabled()` now turns logging off with
+`shadow.mismatchLogging: { value: false, diff: "off" }` in place of
+`shadow.logMismatches: false`. On one Apple-silicon Mac, a 6.3 MB object of
+150,000 members took about 0.12 seconds per warning at `diff: "paths"`, against
+0.06 seconds for the value fields alone.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+`ShadowPolicy.LogMismatches` expands to `ShadowPolicy.MismatchLogging` with
+`Value` true and `Diff` `MismatchDiffValues`. These changes break code that
+names the old shapes:
+
+- `ResolvedShadow.LogMismatches` is replaced by the effective leaves
+  `ResolvedShadow.LogValue` and `ResolvedShadow.LogDiff`, and
+  `LoggingConfigError` now covers every invalid leaf and shorthand. Unkeyed
+  `ShadowPolicy` and `ResolvedShadow` literals no longer compile.
+- `ShadowMismatchLogDetails`, `ShadowMismatchDetails` and
+  `PreviewShadowLogJSON` are removed, since each value now renders once for
+  every field; `PreviewShadowLogKey` and the `ShadowLog*` constants remain.
+- `FailureIsolatedLogger` returns an already isolated logger unchanged, so a
+  `Warn` panic stays observable as `logger_error`.
+- Observers receive the new `shadowMismatchLogging` event kind, and the
+  Prometheus adapter registers a twentieth collector,
+  `dialcache_shadow_mismatch_logging_counter`.
+
+The standard logger, used without `WithLogger`, now writes the mismatch
+warning's details as one JSON object in place of Go's `map[...]` text, so a
+pattern that parsed the old lines needs updating. The JSON keeps apart what the
+old text ran together: `mismatchPaths` `[""]`, one difference at the root, no
+longer reads like `[]`, a pointer that holds a space stays one string, and a
+field that failed is `null`. Every line it writes now also escapes control
+characters, DEL, U+2028 and U+2029, so an entry that carried a raw newline or
+terminal escape stays on one line. Inside the JSON details they are JSON
+escapes and a byte that is not UTF-8 becomes U+FFFD, so the details still
+parse; in other entries, such as an error's text, they and bytes that are not
+UTF-8 are written as Go escape sequences.
+
+A shadow job now holds its capacity until its verdict is reported: while the
+`WithShadowOutcomes` hook, observers and metrics adapters receive its
+`shadowValidation` and `shadowAge` events, and while its mismatch warning is
+built and logged, the `MismatchDiff` hook and the built-in walk included.
+`WithShadowCapacity` therefore bounds that work too, and while a slow hook,
+observer or logger runs, jobs beyond capacity report `dropped`.
+
+The value fields cost what they did before, since each side was already
+rendered in full. On one Apple-silicon Mac, a 6.3 MB map of 150,000 members took
+about 0.6 seconds per warning at `MismatchDiffPaths`, against about 0.5 seconds
+for the value fields alone.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+`log_mismatches: Some(true)` expands to
+`mismatch_logging: Some(MismatchLogging { value: Some(true), diff: Some(MismatchDiff::Values) })`.
+These changes break code that names the old shapes:
+
+- `ShadowPolicy` gained `mismatch_logging`; add `..ShadowPolicy::default()` to
+  struct literals. `Policy::disabled()` now sets `mismatch_logging` to
+  `value: Some(false)` and `diff: Some(MismatchDiff::Off)` in place of
+  `log_mismatches: Some(false)`.
+- `ResolvedShadow::log_mismatches` is replaced by `mismatch_value` and
+  `mismatch_diff`, with `logs_mismatches()`.
+- `ShadowMismatchDetails` moved `cached_value_json` and `source_value_json`
+  into its `values` group, gained `cached_value_age_seconds`, `diff` and
+  `logging_outcome`, and no longer implements `Eq`.
+- `Operation` gained `mismatch_diff` and a private field, so it can no longer
+  be built with a struct literal; use `Operation::new` or
+  `Operation::with_codec` and assign fields afterwards.
+- `Event::ShadowMismatchLogging` and `MetricKind::ShadowMismatchLogging` are new
+  variants, so exhaustive matches need an arm. `PrometheusObserver` registers
+  twenty collectors, adding `dialcache_shadow_mismatch_logging_counter`.
+
+Only an operation built with `Operation::new` or `register` and left with its
+default `preview` feeds the built-in diff. A custom `preview` still replaces the
+JSON in the value fields, and a `preview` set to `None` still logs no values,
+but neither, nor a `with_codec` or `register_custom` operation, gets difference
+fields without a `mismatch_diff` hook. Under `log_mismatches: Some(true)`, such
+an operation's warnings carry the fields it cannot build as unavailable, with
+`logging_outcome: render_error`, as they do for a `preview` that returns
+`None`. Add a hook, or select only leaves the operation can build.
+
+On one Apple-silicon Mac, a 6.3 MB map of 150,000 entries took about
+0.09 seconds per warning at `MismatchDiff::Paths` in a release build, against
+0.006 seconds for the value fields alone. That time is spent on the bounded CPU
+executor, where previews already ran. By default the executor is one
+process-wide pool of two worker threads and two queued jobs, which every cache
+instance also uses for zstd decompression and for compressing large payloads.
+While warnings occupy it, a compressed hit whose decompression it rejects falls
+through to the source, and a write whose compression it rejects is skipped. At
+most `shadow_max_in_flight` warnings per instance, times the number of
+instances, contend for it; a custom `Runtime` can supply its own executor.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+`Policy.disabled()` now sets
+`shadow={"ramp": 0, "mismatch_logging": {"value": False, "diff": "off"}}` in
+place of `"log_mismatches": False`, and a policy merged from runtime overlays
+carries the expanded `mismatch_logging` leaves rather than the shorthand.
+`cachedValueJson` and `sourceValueJson` now escape lone surrogates as `\uXXXX`,
+as `JsonSerializer` does. On one Apple-silicon Mac, a 6.3 MB dict of 150,000
+members took about 0.18 seconds per warning at `"paths"`, on the event loop,
+against 0.04 seconds for the value fields alone.
+
+</LanguageContent>
+
 ## Metric migrations
 
 Miss metrics carry a required bounded `reason`: `value_absent`, `expired`,
@@ -238,7 +385,9 @@ Update exhaustive public-union mappings: `tracked_ttl_clamped` is a
 `ShadowValidationOutcome`. Recovery has `served`, `miss`, and
 `deserialization_error` outcomes. Custom `miss` handlers now receive
 `MissMetricLabels`; broader handlers may ignore the additional reason, while
-exact label mappings and direct calls need to include it.
+exact label mappings and direct calls need to include it. The optional
+`shadowMismatchLogging` hook reports a `ShadowMismatchLoggingOutcome`: `logged`,
+`hook_error`, `render_error`, or `logger_error`.
 
 </LanguageContent>
 
@@ -247,7 +396,9 @@ exact label mappings and direct calls need to include it.
 Update exhaustive event/outcome handling when the shared metric catalogue gains
 a variant. `tracked_ttl_clamped`, shadow `fill_fenced`, and recovery `served`,
 `miss`, `deserialization_error` must retain their shared meaning and bounded
-labels. Native Go adapter contracts are in the [API reference](api.md).
+labels. The `shadowMismatchLogging` event kind reports `logged`, `hook_error`,
+`render_error`, or `logger_error`. Native Go adapter contracts are in the
+[API reference](api.md).
 
 </LanguageContent>
 
@@ -255,15 +406,18 @@ labels. Native Go adapter contracts are in the [API reference](api.md).
 
 Update exhaustive matches over public events, metric kinds and outcomes when
 upgrading. Preserve the shared `tracked_ttl_clamped`, `fill_fenced` and recovery
-outcomes, names and units. Native types are in the [API reference](api.md).
+outcomes, names and units. The `ShadowMismatchLogging` event reports a
+`ShadowMismatchLoggingOutcome`: `logged`, `hook_error`, `render_error`, or
+`logger_error`. Native types are in the [API reference](api.md).
 
 </LanguageContent>
 
 <LanguageContent language="python">
 
-Update event dictionary handling for new outcomes and labels. Preserve
-`tracked_ttl_clamped`, `fill_fenced` and recovery outcomes with their shared
-units. See the [Python API](api.md).
+Update event dictionary handling for new outcomes, labels and events, such as
+`shadowMismatchLogging` with its `logged`, `hook_error`, `render_error` and
+`logger_error` outcomes. Preserve `tracked_ttl_clamped`, `fill_fenced` and
+recovery outcomes with their shared units. See the [Python API](api.md).
 
 </LanguageContent>
 

@@ -269,7 +269,9 @@ The Datadog metric namespace must:
 - produce final metric names no longer than 200 characters.
 
 The adapter rejects invalid namespaces and overlong final names instead of
-relying on client-side normalization.
+relying on client-side normalization. The longest name it builds is
+`<namespace>.shadow_mismatch_logging.count`, so the namespace can be at most 170
+characters.
 
 <LanguageContent language="typescript">
 
@@ -316,6 +318,7 @@ and bytes without unit conversion:
 | `dialcache.coalesced.count` | Count | `dialcache_coalesced_counter` |
 | `dialcache.shadow.count` | Count | `dialcache_shadow_validation_counter` |
 | `dialcache.shadow.value_age` | Distribution or histogram | `dialcache_shadow_value_age_histogram` |
+| `dialcache.shadow_mismatch_logging.count` | Count | `dialcache_shadow_mismatch_logging_counter` |
 | `dialcache.future_timestamp_offset` | Distribution or histogram | `dialcache_future_timestamp_offset_histogram` |
 | `dialcache.stale_recovery.count` | Count | `dialcache_stale_recovery_counter` |
 | `dialcache.stale_recovery.value_age` | Distribution or histogram | `dialcache_stale_recovery_value_age_histogram` |
@@ -334,8 +337,8 @@ Labels and meanings are shared with the [metric catalog](#metric-catalog).
 
 Synchronous client throws are isolated when DialCache invokes the adapter.
 DialCache also consumes thenables returned by adapter hooks, but this adapter does
-not forward every client return value: only `shadowValidation` and
-`staleRecovery` return the counter call's result. A custom DogStatsD client must
+not forward every client return value: only `shadowValidation`,
+`shadowMismatchLogging`, and `staleRecovery` return the counter call's result. A custom DogStatsD client must
 handle its own asynchronous delivery failures, including rejected promises.
 Direct adapter calls do not have DialCache's observer guard. Configure client error
 handling and shutdown as part of application ownership.
@@ -379,6 +382,7 @@ This table uses Prometheus names and types, without the optional prefix.
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
 | `dialcache_shadow_value_age_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `outcome` | Age in seconds of the validated Redis value at shadow verdict time, recorded for `match` and `mismatch` |
+| `dialcache_shadow_mismatch_logging_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Confirmed-mismatch warning attempts: `logged`, `hook_error`, `render_error`, or `logger_error` |
 | `dialcache_future_timestamp_offset_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Positive offset in seconds for a valid frame dated after the observing process clock |
 | `dialcache_stale_recovery_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Classifier-authorized stale-recovery checks: `served`, `miss`, or `deserialization_error` |
 | `dialcache_stale_recovery_value_age_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `outcome` | Actual return-time age in seconds of a retained value, recorded only for `served` |
@@ -542,14 +546,91 @@ Rust's bounded CPU executor), the envelope and mixed-version rollout.
 ## Confirmed mismatch warnings
 
 Shadow metrics remain bounded and contain no cache ids or values. A use case can
-separately set `shadow.logMismatches: true` to emit one warning after a terminal
-`mismatch` is confirmed. Logging is default-off, does not replace the outcome
-metric, and does not activate shadow work without an enabled shadow-outcome hook.
+separately opt into one warning after a terminal `mismatch` is confirmed.
+Logging is default-off, does not replace the outcome metric, and does not
+activate shadow work without an enabled shadow-outcome hook.
 
-The warning contains stable metadata, the logical cache key capped at 2 KiB,
-and independently generated native-JSON strings for the cached and source
-comparator inputs capped at 8 KiB each. Those fields are value-bearing, and
-truncation is not redaction.
+The warning contains stable metadata and the logical cache key capped at 2 KiB,
+plus what the use case's logging policy selects, such as native-JSON strings for
+the cached and source comparator inputs capped at 8 KiB each. Value-bearing
+fields are not redacted by truncation.
+
+The policy can also select the JSON Pointers of the fields that differ, alone or
+with the differing values. Each warning attempt, a confirmed mismatch while
+logging is on, emits one `shadowMismatchLogging` event with the use-case labels
+and an `outcome`:
+
+| `outcome` | Meaning |
+| --- | --- |
+| `logged` | Every selected field was built and the logger accepted the warning |
+| `hook_error` | The use case's diff hook or the built-in diff failed |
+| `render_error` | A value or a hook entry's side had no JSON rendering |
+| `logger_error` | The logger failed |
+
+When several fail, `hook_error` ranks above `render_error`, which ranks above
+`logger_error`. When the outcome is not `logged`, the warning carries it as
+`loggingOutcome`, except for `logger_error`, which the logger never received.
+With logging off nothing is emitted, so the metric never counts mismatches; use
+[Shadow outcomes](#shadow-outcomes) for that. The bundled Prometheus and Datadog
+adapters export it as `dialcache_shadow_mismatch_logging_counter` and
+`dialcache.shadow_mismatch_logging.count`.
+
+<LanguageContent language="typescript">
+
+The optional `shadowMismatchLogging` adapter hook receives the event.
+`hook_error` means `shadowMismatchDiff` threw or returned something other than
+an array. `logged` means the logger's `warn` returned, or the promise it
+returned resolved; `logger_error` means `warn` threw, or that promise rejected. A
+`hook_error` or `render_error` is recorded at once, without waiting for the
+logger. Otherwise, for a logger that returns a promise, the event waits for
+that promise, and one that never settles emits nothing.
+
+</LanguageContent>
+
+<LanguageContent language="go">
+
+Observers and metrics adapters receive an `Event` whose `Kind` is
+`shadowMismatchLogging`, with the outcome in `Event.Outcome`; the
+`WithShadowOutcomes` hook does not receive it. `hook_error` means
+`Operation.MismatchDiff` returned an error or panicked, or the built-in
+computation could not parse back a map, slice or `JSONObject` nested more than
+10,000 levels deep. A struct whose `MarshalJSON` writes a number outside double
+range, or whose JSON nests that deep, has no rendering and reports
+`render_error` instead. A Go logger returns nothing, so a `Warn` panic is its
+only `logger_error`.
+
+</LanguageContent>
+
+<LanguageContent language="rust">
+
+Observers receive `Event::ShadowMismatchLogging` with the use-case labels and a
+`ShadowMismatchLoggingOutcome`, and `MetricKind::ShadowMismatchLogging` maps it
+to the names above. `hook_error` means the `mismatch_diff` hook panicked, or
+the built-in computation could not parse a rendering back: one nested 128 or
+more levels deep, or, with `serde_json`'s `raw_value` feature on and
+`arbitrary_precision` off, a `RawValue` number outside double range.
+`render_error` also covers a selected field the operation has no renderer for
+and work the bounded CPU executor rejected. A `Logger` panic is the
+`logger_error`.
+
+</LanguageContent>
+
+<LanguageContent language="python">
+
+Observers receive an event dictionary whose `event` is
+`shadowMismatchLogging`, with `cacheNamespace`, `useCase`, `keyType` and
+`outcome`. `hook_error` means `shadow_mismatch_diff` raised or returned something
+other than a list. `logged` means the logger's `warning` returned, or the
+awaitable it returned completed;
+`logger_error` means `warning` raised, or that awaitable raised or was
+cancelled. DialCache awaits an awaitable the logger returns. A `hook_error` or
+`render_error` is recorded at once, without waiting for the logger; otherwise
+the event waits for the awaitable, so one that never settles emits nothing.
+Python ships no exporter; map the event to
+`dialcache_shadow_mismatch_logging_counter` or
+`dialcache.shadow_mismatch_logging.count` to match the bundled adapters.
+
+</LanguageContent>
 
 See
 [Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging)
@@ -601,7 +682,7 @@ raw details remain available through the configured logger; not every metric
 error or shadow outcome has a matching log entry.
 
 The explicitly opted-in confirmed-mismatch warning is a separate value-bearing
-log and does not alter the metric schema.
+log. Its outcome metric carries labels only.
 
 `in_fallback` remains the explicit distinction between cache plumbing and
 application fallback failures.
@@ -623,6 +704,7 @@ Implement `DialCacheMetricsAdapter` and pass it through
 | `coalesced(labels)` | no | One follower that joined request-local or process-scoped work. |
 | `shadowValidation(labels)` | no | One terminal sampled-shadow outcome. This hook must be implemented for shadow jobs to execute. |
 | `observeShadowValueAge(labels, seconds)` | no | Age for shadow match/mismatch verdicts; does not gate admission. |
+| `shadowMismatchLogging(labels)` | no | One confirmed-mismatch warning attempt with a bounded `outcome`; emitted only while mismatch logging is on. |
 | `observeFutureTimestampOffset(labels, seconds)` | no | Positive decoded-frame clock offset; does not change read decisions. |
 | `staleRecovery(labels)` | no | One authorized recovery outcome; omission does not disable recovery. |
 | `observeStaleRecoveryValueAge(labels, seconds)` | no | Return-time age for served recovery only. |
@@ -638,6 +720,7 @@ Implement `DialCacheMetricsAdapter` and pass it through
 The root package exports `DialCacheMetricsAdapter` and every associated label,
 reason, error-kind, layer, scope, and shadow-outcome type, including
 `ShadowValidationMetricLabels`, `ShadowValidationOutcome`,
+`ShadowMismatchLoggingMetricLabels`, `ShadowMismatchLoggingOutcome`,
 `CompressionMetricLabels`, `CompressionOperationMetricLabels`, and
 `CompressionOutcome`, `CacheMissReason`, `MissMetricLabels`,
 `StaleRecoveryMetricLabels`, and `StaleRecoveryOutcome`.
@@ -672,6 +755,8 @@ outcomes; `WithRecoveryOutcomes` is an optional recovery observer. Missing the
 recovery hook does not disable recovery. Avoid forwarding an event both through
 `WithMetrics` and an outcome hook to the same exporter.
 
+A confirmed-mismatch warning attempt emits a `shadowMismatchLogging` event
+whose `Outcome` is `logged`, `hook_error`, `render_error`, or `logger_error`.
 Use the [generated Go API](api.md) for event and adapter types. Preserve the
 bounded metric names, labels and units in the catalogue above.
 
@@ -681,6 +766,8 @@ bounded metric names, labels and units in the catalogue above.
 
 Implement `Observer` and attach it through the cache builder. It receives typed
 `Event` values; `MetricKind` maps them to the shared names, labels and units.
+Exhaustive matches over `Event` and `MetricKind` need a `ShadowMismatchLogging`
+arm.
 Opt into shadow outcomes through `observes_shadow_outcomes` to admit jobs. The
 bundled exporters do this; merely logging mismatch warnings does not.
 
@@ -698,7 +785,15 @@ dictionaries use the shared names and camelCase labels, such as `cacheNamespace`
 an optional `supports("shadowValidation")` method can opt out.
 
 The `logger` option accepts a standard Python-compatible warning logger.
-See the [generated Python API](api.md) for signatures.
+DialCache calls `warning(message, details)`, and when any warning's call returns
+an awaitable, DialCache drives it in a task of its own on the event loop. Unless
+a `hook_error` or `render_error` was already recorded, a confirmed-mismatch
+warning's `shadowMismatchLogging` outcome waits for that awaitable. An awaitable
+that never settles keeps its task pending, holding the awaitable and, for a
+confirmed mismatch, its namespace, use-case and key-type labels, but neither
+compared value. Each such warning retains one task: the cost of counting a
+delivery that fails after `warning` returns as `logger_error`. See the
+[generated Python API](api.md) for signatures.
 
 </LanguageContent>
 

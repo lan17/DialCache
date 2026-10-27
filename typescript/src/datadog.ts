@@ -9,6 +9,7 @@ import type {
   InvalidationMetricLabels,
   MissMetricLabels,
   SerializationMetricLabels,
+  ShadowMismatchLoggingMetricLabels,
   ShadowValidationMetricLabels,
   StaleRecoveryMetricLabels,
 } from "./metrics.js";
@@ -36,7 +37,10 @@ export interface DatadogMetricsOptions {
 
 type CacheTag = "cache_namespace" | "use_case" | "key_type" | "layer";
 type DatadogTags = Record<string, string>;
-type OutcomeMetricLabels = ShadowValidationMetricLabels | StaleRecoveryMetricLabels;
+type OutcomeMetricLabels =
+  | ShadowValidationMetricLabels
+  | ShadowMismatchLoggingMetricLabels
+  | StaleRecoveryMetricLabels;
 type Observation = (name: string, value: number, tags: DatadogTags) => void;
 
 const DEFAULT_NAMESPACE = "dialcache";
@@ -52,6 +56,7 @@ const METRIC_SUFFIXES = {
   coalesced: "coalesced.count",
   shadowValidation: "shadow.count",
   shadowValueAge: "shadow.value_age",
+  shadowMismatchLogging: "shadow_mismatch_logging.count",
   futureTimestampOffset: "future_timestamp_offset",
   staleRecovery: "stale_recovery.count",
   staleRecoveryValueAge: "stale_recovery.value_age",
@@ -132,6 +137,10 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
     this.observe(this.metricNames.shadowValueAge, seconds, outcomeTags(labels));
+  }
+
+  shadowMismatchLogging(labels: ShadowMismatchLoggingMetricLabels): void {
+    return this.increment(this.metricNames.shadowMismatchLogging, outcomeTags(labels));
   }
 
   observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {

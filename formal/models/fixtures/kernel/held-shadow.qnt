@@ -35,7 +35,9 @@ module held_shadow {
   pure val LAYOUT: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 1, operationsPerEntity: 1, probeSourceScope: true, policyProvider: true }
   pure val REMOTE: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: true }
   pure val TTLS: Ttls = { localMs: 0, freshMs: 1000, retentionMs: 5000 }
-  pure val SHADOWING: Shadow::Shadowing = { hook: true, selected: true, capacity: 1, budgetMs: 100, logging: false }
+  pure val SHADOWING: Shadow::Shadowing = {
+    hook: true, selected: true, capacity: 1, budgetMs: 100, logging: Shadow::LOGGING_OFF, diffHook: false
+  }
   pure val READ_BUDGET = 50
   pure def call(key: int): Call = { instance: 0, key: key, context: 1, enabled: true, keyFailed: false }
   // A call inside the one persistent scope, the one a run can hold a reply for.

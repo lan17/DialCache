@@ -19,6 +19,12 @@ import {
 
 import { compressPayload, decompressPayload, escapeRawPayload } from "../src/internal/compression.js";
 import { deterministicRampSample, deterministicShadowRampSample } from "../src/internal/ramp.js";
+import {
+  diffShadowMismatchJson,
+  renderShadowMismatchLog,
+  type JsonValue,
+  type ShadowMismatchJsonEntry,
+} from "../src/internal/shadow-log-json.js";
 
 interface KeyVector {
   readonly name: string;
@@ -93,6 +99,10 @@ interface ProtocolVectors {
   }>;
   readonly rampVectors: ReadonlyArray<{
     name: string; input: KeyVector["input"]; layer: "local" | "remote" | "shadow"; sample: number;
+  }>;
+  // An omitted cached or source member is an absent side (D13), TypeScript undefined.
+  readonly mismatchPathVectors: ReadonlyArray<{
+    name: string; cached?: JsonValue; source?: JsonValue; entries: readonly ShadowMismatchJsonEntry[]; count: number;
   }>;
 }
 
@@ -250,6 +260,27 @@ describe("formal protocol conformance vectors", () => {
         outcome: vector.outcome ?? "decompressed",
         payload: vector.payloadType === "binary" ? Buffer.from(vector.payloadHex!, "hex") : vector.payloadUtf8,
       });
+    });
+  }
+
+  // W10: the built-in walk over two JSON values, its entries compared as
+  // parsed JSON. Both projections of one entry list are checked: the paths
+  // and count at diff "paths", and the entries with their values at "values".
+  for (const vector of vectors.mismatchPathVectors) {
+    it(`computes mismatch paths: ${vector.name}`, () => {
+      const cached = Object.hasOwn(vector, "cached") ? vector.cached : undefined;
+      const source = Object.hasOwn(vector, "source") ? vector.source : undefined;
+      if (cached !== undefined && source !== undefined) {
+        expect(diffShadowMismatchJson(cached, source)).toStrictEqual({ entries: vector.entries, count: vector.count });
+      }
+      const paths = vector.entries.map((entry) => entry.path);
+      const values = renderShadowMismatchLog({ value: false, diff: "values" }, cached, source);
+      expect(values.failure).toBeNull();
+      expect(values.fields.mismatchPaths).toStrictEqual(paths);
+      expect(values.fields.mismatchPathCount).toBe(vector.count);
+      expect(JSON.parse(values.fields.diffJson!)).toStrictEqual(vector.entries);
+      expect(renderShadowMismatchLog({ value: false, diff: "paths" }, cached, source))
+        .toStrictEqual({ fields: { mismatchPaths: paths, mismatchPathCount: vector.count }, failure: null });
     });
   }
 

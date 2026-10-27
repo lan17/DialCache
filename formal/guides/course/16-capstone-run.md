@@ -59,7 +59,7 @@ point is that the same integer means the same command in every port.
   lines 256 to 260: `abandonedSourceCannotReplaceSuccessfulRetryTest`, the
   nearest existing run; compare its shape with the new one.
 - **[conformance-observations.qnt](../../models/conformance-observations.qnt)**,
-  lines 8 to 17: the caller outcome codes, `CALL_PENDING` first.
+  lines 8 to 19: the caller outcome codes, `CALL_PENDING` first.
 - **[deadlines.qnt](../../models/kernel/deadlines.qnt)**, lines 181 to 197:
   `releaseLocal` stamps the retry's deadline from `state.now`; `advanceLocal`
   delivers it.

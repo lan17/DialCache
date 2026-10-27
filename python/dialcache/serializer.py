@@ -38,11 +38,7 @@ class JsonSerializer:
     def dump(self, value: object) -> str:
         if value is UNDEFINED:
             return JSON_UNDEFINED_SENTINEL
-        payload = json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-        # JSON must escape lone surrogate units before the frame's UTF-8 text
-        # boundary replaces malformed text. This preserves JSON string values
-        # in the same way as well-formed ECMAScript JSON.stringify.
-        return payload.encode("utf-8", errors="backslashreplace").decode("utf-8")
+        return _native_json(value)
 
     def load(self, value: Payload) -> object:
         payload = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
@@ -53,3 +49,15 @@ class JsonSerializer:
     @staticmethod
     def _reject_constant(value: str) -> object:
         raise ValueError(f"Invalid JSON constant: {value}")
+
+
+def _native_json(value: object) -> str:
+    """Compact native JSON with lone surrogate units escaped; raises for values outside JSON.
+
+    The one rendering both stored payloads and shadow-mismatch warnings use.
+    JSON must escape lone surrogate units before a UTF-8 text boundary
+    replaces malformed text. This preserves JSON string values in the same way
+    as well-formed ECMAScript JSON.stringify.
+    """
+    payload = json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    return payload.encode("utf-8", errors="backslashreplace").decode("utf-8")

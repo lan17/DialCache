@@ -526,6 +526,7 @@
         "C58",
         "C59",
         "C60",
+        "W10",
         "X01"
       ],
       "cases": [
@@ -546,7 +547,13 @@
         "C58.request-follower-trail",
         "C58.late-rejection-not-recounted",
         "C59.compression-read-telemetry",
-        "C60.logging-explicit-off"
+        "C60.logging-explicit-off",
+        "C60.warning-field-groups",
+        "C60.shorthand-table",
+        "C60.invalid-input-isolation",
+        "C60.logging-outcomes",
+        "C60.outcome-precedence",
+        "W10.mismatch-paths"
       ],
       "nativeCases": [
         "X01.prometheus-schema",
@@ -584,7 +591,7 @@
           "test": "captures an immutable default policy snapshot when the use case is registered",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding captures an immutable default policy snapshot when the use case is registered.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         }
       ],
       "go": [
@@ -723,25 +730,25 @@
           "test": "accepts disabled and exact-maximum static stale-on-error policy",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding accepts disabled and exact-maximum static stale-on-error policy.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects unsupported runtime TTLs before cache or serialization work",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding rejects unsupported runtime TTLs before cache or serialization work.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects $0 in the public config constructor",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Malformed policy objects, layer maps, boolean leaves, and shadow shapes reject at public configuration construction.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects a malformed static defaultConfig with $0 at registration",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Invalid static TTLs, ramps, recovery limits, and policy shapes reject before reserving the use case; a corrected policy may reuse the same name.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects invalid fallbackTimeoutMs value %s without reserving the use case",
@@ -773,13 +780,13 @@
           "test": "TestPolicyStaticValidation",
           "path": "go/internal/testsuite/policy_test.go",
           "scope": "Malformed option types and combinations reject; the maximum supported remote TTL/read budget is accepted and fractional-second static TTL is rejected.",
-          "sha256": "91439ed1fd62de50007188a14751d45a2c5424be384d6ac393a8226644793c57"
+          "sha256": "2550c855d7a0c923f691704e317bce25d3f08b590199654ffc8c451736cffd55"
         },
         {
           "test": "TestRuntimePolicyFailureScopes",
           "path": "go/internal/testsuite/policy_test.go",
           "scope": "Malformed invocation-wide leaves fail resolution; invalid layer/recovery leaves retain the other active layers and their failure categories.",
-          "sha256": "91439ed1fd62de50007188a14751d45a2c5424be384d6ac393a8226644793c57"
+          "sha256": "2550c855d7a0c923f691704e317bce25d3f08b590199654ffc8c451736cffd55"
         }
       ],
       "adaptation": "Native number and optional-value encodings differ; each binding must distinguish absent, explicitly disabled, malformed, and boundary values.",
@@ -801,31 +808,31 @@
           "test": "preserves requestLocal omission until baseline and runtime config are merged",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding preserves requestLocal omission until baseline and runtime config are merged.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "preserves coalesce omission until baseline and runtime config are merged",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding preserves coalesce omission until baseline and runtime config are merged.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "clones the supplied shadow policy",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding clones the supplied shadow policy.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "preserves stale-on-error omission and explicit disable values",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Absent stale recovery remains absent while explicit zero and positive maximum age retain their distinct construction values.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "preserves shadow omission and explicit kill-switch values",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Absent shadow remains absent; an empty shadow overlay and explicit zero ramp/false logging remain distinct sparse construction values.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         }
       ],
       "go": [
@@ -833,7 +840,7 @@
           "test": "TestPolicySparseResolutionAndSnapshots",
           "path": "go/internal/testsuite/policy_test.go",
           "scope": "Nested runtime leaves merge independently, omitted leaves inherit, and captured nested pointer-valued defaults survive caller mutation.",
-          "sha256": "91439ed1fd62de50007188a14751d45a2c5424be384d6ac393a8226644793c57"
+          "sha256": "2550c855d7a0c923f691704e317bce25d3f08b590199654ffc8c451736cffd55"
         }
       ],
       "adaptation": "Eager defaulting can erase inherited leaves even when ordinary effective-policy examples pass.",
@@ -861,7 +868,7 @@
           "test": "accepts a positive shadowMaxInFlight",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding accepts a positive shadowMaxInFlight.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "allows localMaxSize zero to disable local storage",
@@ -879,7 +886,7 @@
           "test": "rejects invalid shadowMaxInFlight value %s",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Null, zero, negative, fractional, non-finite, and unsafe shadow capacities reject under the positive safe-integer constraint.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         }
       ],
       "go": [
@@ -1026,7 +1033,7 @@
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
           "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
         }
       ],
       "adaptation": "Observability must remain diagnostic even when both the primary operation and logger fail.",
@@ -1331,21 +1338,21 @@
           "test": "preserves the public collector schema",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding preserves the public collector schema.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
         },
         {
           "test": "exports every bounded error category without rewriting labels",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding exports every bounded error category without rewriting labels.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
         }
       ],
       "go": [
         {
           "test": "TestPrometheusWireSchemaMatchesTypeScriptBinding",
           "path": "go/metrics_test.go",
-          "scope": "All nineteen Go collector names, help text, label order, kinds and bucket boundaries are checked against the TS binding schema.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "scope": "All twenty Go collector names, help text, label order, kinds and bucket boundaries are checked against the TS binding schema.",
+          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
         }
       ],
       "adaptation": "Exporter schema changes break dashboards even when portable event semantics still pass; current Go schema check derives its expectation from TS source, not Quint.",
@@ -1365,19 +1372,19 @@
           "test": "keeps default DialCache construction detached from Prometheus",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding keeps default DialCache construction detached from Prometheus.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
         },
         {
           "test": "registers collectors only in the caller-owned registry",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding registers collectors only in the caller-owned registry.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
         },
         {
           "test": "reuses existing collectors when multiple adapters share a registry",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding reuses existing collectors when multiple adapters share a registry.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
         }
       ],
       "go": [
@@ -1385,7 +1392,7 @@
           "test": "TestPrometheusReuseAndConflictIsolation",
           "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
         }
       ],
       "adaptation": "Registry ownership and collector reuse avoid global pollution and duplicate collectors in multi-instance deployments.",
@@ -1405,19 +1412,19 @@
           "test": "rejects a pre-registered legacy miss collector before registering anything",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding rejects a pre-registered legacy miss collector before registering anything.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
         },
         {
           "test": "rejects exemplar-enabled collectors before registering anything",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding rejects exemplar-enabled collectors before registering anything.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
         },
         {
           "test": "reuses a pre-registered current-schema miss collector",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding reuses a pre-registered current-schema miss collector.",
-          "sha256": "1c081c00ca8642c8ed5e7a3fd5a5faa2d5d06d333f99c2fb0832ead0057c1602"
+          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
         }
       ],
       "go": [
@@ -1425,19 +1432,19 @@
           "test": "TestPrometheusReuseAndConflictIsolation",
           "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
         },
         {
           "test": "TestPrometheusExplicitBindingsPreserveExistingObservations",
           "path": "go/metrics_test.go",
           "scope": "Explicit compatible externally created collectors preserve pre-existing counter and histogram observations when bound by an adapter.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
         },
         {
           "test": "TestPrometheusBindingsRejectIncompatibleOrUnregisteredCollectors",
           "path": "go/metrics_test.go",
           "scope": "Explicit collector bindings reject malformed schema, conflicting registry state or unregistered collector identities.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
         }
       ],
       "adaptation": "Go requires explicit collector bindings/schema because client_golang cannot expose empty histogram bucket schema; no destructive compatibility probing is permitted.",
@@ -1459,19 +1466,19 @@
           "test": "maps every DialCache metric to the default metric namespace with exact names, values, and tags",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding maps every DialCache metric to the default metric namespace with exact names, values, and tags.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "2c953d1fa3f861dd2d036105856a4d8bfed72887b8fc77f0c7354ababff7a747"
         },
         {
           "test": "emits hot-shots histogram datagrams when explicitly selected",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding emits hot-shots histogram datagrams when explicitly selected.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "2c953d1fa3f861dd2d036105856a4d8bfed72887b8fc77f0c7354ababff7a747"
         },
         {
           "test": "requires an explicit observation metric type",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding requires an explicit observation metric type.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "2c953d1fa3f861dd2d036105856a4d8bfed72887b8fc77f0c7354ababff7a747"
         }
       ],
       "go": [
@@ -1479,7 +1486,7 @@
           "test": "TestDatadogMetricNamesUnitsAndLabels",
           "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
         }
       ],
       "adaptation": "Different observation modes have different backend semantics and require a namespace migration; current schema source remains native integration code.",
@@ -1500,19 +1507,19 @@
           "test": "never emits cache ids, arguments, Redis keys, or raw errors as Datadog tags",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding never emits cache ids, arguments, Redis keys, or raw errors as Datadog tags.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "2c953d1fa3f861dd2d036105856a4d8bfed72887b8fc77f0c7354ababff7a747"
         },
         {
           "test": "enforces Datadog's 200-character final metric-name limit",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding enforces Datadog's 200-character final metric-name limit.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "2c953d1fa3f861dd2d036105856a4d8bfed72887b8fc77f0c7354ababff7a747"
         },
         {
           "test": "validates every required DogStatsD method before emitting metrics",
           "path": "typescript/test/datadog.test.ts",
           "scope": "Asserts that the TypeScript binding validates every required DogStatsD method before emitting metrics.",
-          "sha256": "8b50a81e6baa8d3d1eb4854cb9d84d83cc48493bca4efc0b656e0f0714f66d65"
+          "sha256": "2c953d1fa3f861dd2d036105856a4d8bfed72887b8fc77f0c7354ababff7a747"
         }
       ],
       "go": [
@@ -1520,7 +1527,7 @@
           "test": "TestDatadogMetricNamesUnitsAndLabels",
           "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
         }
       ],
       "adaptation": "Typed Go methods replace TS duck-typed method validation, but namespace and cardinality constraints remain observable integration contracts.",
@@ -1540,19 +1547,19 @@
           "test": "byte-clamps keys and JSON without splitting UTF-8 sequences",
           "path": "typescript/test/shadow-log-json.test.ts",
           "scope": "Asserts that the TypeScript binding byte-clamps keys and JSON without splitting UTF-8 sequences.",
-          "sha256": "97d2a80d23bbe76574f97b0f569307a203279de4fa770a253603648325801467"
+          "sha256": "2dab2b5558563125f731410b170a41c8c216ff28d54a012b3744ce387c99213f"
         },
         {
           "test": "catches user JSON hook failures",
           "path": "typescript/test/shadow-log-json.test.ts",
           "scope": "Asserts that the TypeScript binding catches user JSON hook failures.",
-          "sha256": "97d2a80d23bbe76574f97b0f569307a203279de4fa770a253603648325801467"
+          "sha256": "2dab2b5558563125f731410b170a41c8c216ff28d54a012b3744ce387c99213f"
         },
         {
           "test": "returns null independently for values that native JSON cannot serialize",
           "path": "typescript/test/shadow-log-json.test.ts",
           "scope": "Asserts that the TypeScript binding returns null independently for values that native JSON cannot serialize.",
-          "sha256": "97d2a80d23bbe76574f97b0f569307a203279de4fa770a253603648325801467"
+          "sha256": "2dab2b5558563125f731410b170a41c8c216ff28d54a012b3744ce387c99213f"
         }
       ],
       "go": [
@@ -1560,7 +1567,7 @@
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
           "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "48f62015286274c2c3a0d778907a3ba6ced73c9bcd9e19b438cf5e372d1a41f3"
+          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
         }
       ],
       "adaptation": "C60 covers whether a warning happens; bounded formatting and native JSON failures are separate observability behavior.",
@@ -2046,7 +2053,7 @@
           "test": "rejects the removed public ramp sampler override",
           "path": "typescript/test/dialcache-config-ramp.test.ts",
           "scope": "Asserts that the TypeScript binding rejects the removed public ramp sampler override.",
-          "sha256": "8375f7c9f7cb492b59177a263ac1b3e2279d85577fd9a16c461ec118bbea3dfa"
+          "sha256": "cd4b45c7d09cf3e1e5edcc9c4f33b586ee6e160a9bdb1d4692afd4b6124a2fed"
         },
         {
           "test": "rejects the renamed urnPrefix option for untyped callers",

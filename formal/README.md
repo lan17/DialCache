@@ -257,7 +257,7 @@ flowchart LR
   SY["symbolic<br/>make model-check"]
   EX["exploration<br/>make explore"]
   GE --> TSP["typescript-parity<br/>make formal-ts"] & GOP["go-parity<br/>make formal-go"] & RSP["rust-parity<br/>make formal-rust"] & PYP["python-parity<br/>make formal-python"]
-  GE --> TSM["typescript-mutations, 6 shards<br/>make mutations-ts"] & GOM["go-mutations, 10 shards<br/>make mutations-go"] & RSM["rust-mutations, 3 shards<br/>make mutations-rust"]
+  GE --> TSM["typescript-mutations, 6 shards<br/>make mutations-ts"] & GOM["go-mutations, 15 shards<br/>make mutations-go"] & RSM["rust-mutations, 4 shards<br/>make mutations-rust"]
   TSM --> TSMM["typescript-mutations-merge<br/>make mutations-merge-ts"]
   GOM --> GOMM["go-mutations-merge<br/>make mutations-merge-go"]
   RSM --> RSMM["rust-mutations-merge<br/>make mutations-merge-rust"]
@@ -284,7 +284,7 @@ flowchart LR
   each mode adds to the one before it: `replay` runs `generate`, the four
   parity lanes and `symbolic`, about 15 minutes; `mutations` adds the three
   mutation lanes, about 50 minutes; `full`, the default and the weekly mode,
-  adds `check-models`, about two and a half hours, with its wall clock set by
+  adds `check-models`, about three hours, with its wall clock set by
   that job. The parity and mutation lanes wait only for `generate`, each
   mutation lane merges its shards, and the aggregate requires every selected
   lane to pass and every other lane to be skipped. It keeps a summary artifact

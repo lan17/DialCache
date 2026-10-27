@@ -8,6 +8,7 @@ import {
   type CacheConfigProvider,
   type DialCacheConfig,
   type Logger,
+  type ShadowConfig,
   type StaleRecoveryPredicate,
 } from "./config.js";
 import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
@@ -22,6 +23,7 @@ import {
   type DisabledReason,
   type MetricErrorKind,
   type MetricLayer,
+  type ShadowMismatchLoggingOutcome,
   type ShadowValidationOutcome,
 } from "./metrics.js";
 import {
@@ -43,12 +45,21 @@ import { deterministicShadowRampSample } from "./internal/ramp.js";
 import { RedisCache, type FutureFramePolicy } from "./internal/redis-cache.js";
 import {
   fetchKeyConfig,
+  isShadowMismatchDiffLevel,
+  resolveMismatchLogging,
   resolveRemoteLayerConfigResult,
   type LayerConfigResolution,
   type ResolvedLayerConfig,
   type ResolvedRemoteLayerConfig,
 } from "./internal/runtime-config.js";
-import { shadowMismatchLogDetails } from "./internal/shadow-log-json.js";
+import {
+  failedShadowMismatchLogFields,
+  previewShadowLogKey,
+  renderShadowMismatchLog,
+  type ShadowMismatchLogContent,
+  type ShadowMismatchLogPlan,
+} from "./internal/shadow-log-json.js";
+import { fulfills, isPromiseLike } from "./internal/thenable.js";
 
 type CacheKeyArgs = Record<string, string | number | boolean | bigint | null | undefined>;
 type Id = string | number | bigint;
@@ -67,6 +78,29 @@ export type CachedValue<Fn extends AnyFn> = Awaited<ReturnType<Fn>>;
  * side-effect-free, non-mutating, and bounded.
  */
 export type ShadowComparator<Value> = (cachedValue: Value, sourceValue: Value) => boolean;
+/**
+ * One differing field of a confirmed shadow mismatch: an RFC 6901 JSON Pointer
+ * into the compared value and, optionally, the value on each side there. Omit
+ * a side the field does not have, or both when only the location is known.
+ */
+export interface ShadowMismatchEntry {
+  readonly path: string;
+  readonly cached?: unknown;
+  readonly source?: unknown;
+}
+/**
+ * Replaces the built-in JSON difference computation for confirmed-mismatch
+ * warnings, which runs only when `shadow.mismatchLogging.diff` is above
+ * `"off"`. Inputs are borrowed snapshots. Like comparators, hooks must be
+ * synchronous, deterministic, side-effect-free, non-mutating, and bounded.
+ * A throw, a promise-like or a non-array logs `null` for the paths and the
+ * diff; DialCache never falls back to the built-in computation. Entries are
+ * logged as the hook returns them.
+ */
+export type ShadowMismatchDiff<Value> = (
+  cachedValue: Value,
+  sourceValue: Value,
+) => readonly ShadowMismatchEntry[];
 type CacheKeySelector<Fn extends AnyFn> = (...args: Parameters<Fn>) => CacheKeySpec;
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
@@ -133,6 +167,13 @@ interface CacheOperationOptionsBase<Value> {
    * This is stable use-case behavior, not runtime rollout configuration.
    */
   readonly shadowComparator?: ShadowComparator<Value>;
+  /**
+   * Replaces the built-in JSON difference computation behind
+   * `mismatchPaths` and `diffJson` in confirmed-mismatch warnings. Must be a
+   * synchronous function. This is stable use-case behavior, not runtime
+   * rollout configuration.
+   */
+  readonly shadowMismatchDiff?: ShadowMismatchDiff<Value>;
   /**
    * Overrides the DialCache-instance source-error classifier for this use
    * case, replacing both the instance and built-in policies. Must be
@@ -238,13 +279,16 @@ interface ShadowFlight {
 interface ShadowValidationPlan<Value> {
   readonly source: () => Promise<Value>;
   readonly comparator: ShadowComparator<Value>;
+  readonly mismatchDiff: ShadowMismatchDiff<Value> | undefined;
   readonly timeoutMs: number;
   readonly didCallerFallbackTimeout: () => boolean;
 }
 
 interface ShadowMismatchDetails {
+  readonly logPlan: ShadowMismatchLogPlan;
   readonly cachedValue: unknown;
   readonly sourceValue: unknown;
+  readonly mismatchDiff: ShadowMismatchDiff<never> | undefined;
 }
 
 type ShadowValidationStart<Value> =
@@ -274,6 +318,7 @@ const defaultConfigProvider: CacheConfigProvider = () => null;
 const defaultLogger: Logger = console;
 const defaultStaleRecoveryPredicate: StaleRecoveryPredicate =
   (error) => error instanceof FallbackTimeoutError;
+const SHADOW_MISMATCH_WARNING = "DialCache shadow validation mismatch";
 
 export class DialCache {
   private readonly context = new DialCacheContext();
@@ -281,7 +326,7 @@ export class DialCache {
   private readonly useCases = new Set<string>();
   private readonly configProvider: CacheConfigProvider;
   private readonly namespace: string;
-  private readonly logger: Logger;
+  private readonly logger: SafeLogger;
   private readonly redisCache: RedisCache | null;
   private readonly metrics: DialCacheMetricsAdapter | null;
   private readonly staleRecoveryPredicate: StaleRecoveryPredicate;
@@ -375,6 +420,7 @@ export class DialCache {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
+    const shadowMismatchDiff = resolveShadowMismatchDiff(options.shadowMismatchDiff);
     const staleRecoveryPredicate = resolveStaleRecoveryPredicate(
       options.shouldAttemptStaleRecovery,
       this.staleRecoveryPredicate,
@@ -391,6 +437,7 @@ export class DialCache {
         defaultConfig,
         fallbackTimeoutMs,
         shadowComparator,
+        shadowMismatchDiff,
         staleRecoveryPredicate,
       );
   }
@@ -405,6 +452,7 @@ export class DialCache {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
+    const shadowMismatchDiff = resolveShadowMismatchDiff(options.shadowMismatchDiff);
     const staleRecoveryPredicate = resolveStaleRecoveryPredicate(
       options.shouldAttemptStaleRecovery,
       this.staleRecoveryPredicate,
@@ -418,6 +466,7 @@ export class DialCache {
       defaultConfig,
       fallbackTimeoutMs,
       shadowComparator,
+      shadowMismatchDiff,
       staleRecoveryPredicate,
     );
   }
@@ -429,6 +478,7 @@ export class DialCache {
     defaultConfig: DialCacheKeyConfig | null,
     fallbackTimeoutMs: number | null,
     shadowComparator: ShadowComparator<Value>,
+    shadowMismatchDiff: ShadowMismatchDiff<Value> | undefined,
     staleRecoveryPredicate: StaleRecoveryPredicate,
   ): Promise<Value> {
     const rawFallback = async (): Promise<Value> => await load();
@@ -456,6 +506,7 @@ export class DialCache {
     const shadowValidation: ShadowValidationPlan<Value> = {
       source: rawFallback,
       comparator: shadowComparator,
+      mismatchDiff: shadowMismatchDiff,
       timeoutMs: fallbackTimeoutMs ?? DEFAULT_FALLBACK_TIMEOUT_MS,
       didCallerFallbackTimeout: () => callerFallbackTimedOut,
     };
@@ -902,7 +953,7 @@ export class DialCache {
       // The public contract is synchronous. Consume an accidental rejecting
       // thenable without awaiting it, and fail closed without delaying the
       // original source rejection.
-      void settleUnexpectedThenable(result);
+      void fulfills(result);
       this.logger.warn("DialCache stale recovery predicate returned a non-boolean; recovery was denied");
       return false;
     }
@@ -929,7 +980,7 @@ export class DialCache {
       return;
     }
 
-    const resolvedShadowConfig = shadowConfig as Record<string, unknown>;
+    const resolvedShadowConfig = shadowConfig as ShadowConfig;
     const shadowPercentage: unknown = resolvedShadowConfig.ramp;
     if (shadowPercentage === undefined || shadowPercentage === 0) {
       return;
@@ -954,7 +1005,7 @@ export class DialCache {
       this.recordShadowValidation(key, "dropped");
       return;
     }
-    const logMismatches = this.resolveShadowLogging(key, resolvedShadowConfig);
+    const logPlan = this.resolveShadowLogging(key, resolvedShadowConfig);
 
     const flight: ShadowFlight = {
       cachedFrame: start.kind === "retained" ? start.frame : null,
@@ -974,23 +1025,20 @@ export class DialCache {
       runStart,
       validation,
       readTimeoutMs,
-      logMismatches,
+      logPlan,
     );
   }
 
+  /** The leaves captured at admission; `null` when both are off. */
   private resolveShadowLogging(
     key: DialCacheKey,
-    shadowConfig: Record<string, unknown>,
-  ): boolean {
-    const configuredLogMismatches = shadowConfig.logMismatches;
-    if (configuredLogMismatches === undefined) {
-      return false;
-    }
-    if (typeof configuredLogMismatches !== "boolean") {
+    shadowConfig: ShadowConfig,
+  ): ShadowMismatchLogPlan | null {
+    const { value, diff, invalid } = resolveMismatchLogging(shadowConfig);
+    if (invalid) {
       this.recordError(key, CacheLayer.REMOTE, "config_resolution");
-      return false;
     }
-    return configuredLogMismatches;
+    return value || diff !== "off" ? { value, diff } : null;
   }
 
   private deferShadowValidation<T>(
@@ -1000,7 +1048,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     validation: ShadowValidationPlan<T>,
     readTimeoutMs: number,
-    logMismatches: boolean,
+    logPlan: ShadowMismatchLogPlan | null,
   ): void {
     setImmediate(() => {
       this.runShadowValidation(
@@ -1010,7 +1058,7 @@ export class DialCache {
         start,
         validation,
         readTimeoutMs,
-        logMismatches,
+        logPlan,
       );
     }).unref();
   }
@@ -1022,7 +1070,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     plan: ShadowValidationPlan<T>,
     readTimeoutMs: number,
-    logMismatches: boolean,
+    logPlan: ShadowMismatchLogPlan | null,
   ): void {
     const pendingRedisReads = new Set<Promise<void>>();
     let operationFinished = false;
@@ -1184,7 +1232,7 @@ export class DialCache {
           try {
             const result: unknown = plan.comparator(cachedValue, sourceValue);
             if (typeof result !== "boolean") {
-              await settleUnexpectedThenable(result);
+              await fulfills(result);
               if (abandonIfExpired()) {
                 return "timeout";
               }
@@ -1222,8 +1270,8 @@ export class DialCache {
           if (confirmationFrame === null || !redisPayloadsEqual(originalFrame.payload, confirmationFrame.payload)) {
             return "superseded";
           }
-          if (logMismatches) {
-            mismatchDetails = { cachedValue, sourceValue };
+          if (logPlan !== null) {
+            mismatchDetails = { logPlan, cachedValue, sourceValue, mismatchDiff: plan.mismatchDiff };
           }
           validatedValueAgeSeconds = shadowValueAgeSeconds(originalFrame.createdAtMs);
           return "mismatch";
@@ -1234,7 +1282,7 @@ export class DialCache {
     });
 
     void validation.then(
-      (outcome) => this.recordShadowValidation(key, outcome, logMismatches, mismatchDetails, validatedValueAgeSeconds),
+      (outcome) => this.recordShadowValidation(key, outcome, mismatchDetails, validatedValueAgeSeconds),
       () => this.recordShadowValidation(key, "timeout"),
     );
   }
@@ -1242,7 +1290,6 @@ export class DialCache {
   private recordShadowValidation(
     key: DialCacheKey,
     outcome: ShadowValidationOutcome,
-    logMismatches = false,
     mismatchDetails?: ShadowMismatchDetails,
     valueAgeSeconds?: number,
   ): void {
@@ -1256,35 +1303,66 @@ export class DialCache {
     if (valueAgeSeconds !== undefined) {
       this.metrics?.observeShadowValueAge?.(labels, valueAgeSeconds);
     }
-    if (outcome !== "mismatch" || !logMismatches) {
-      return;
+    // Only a confirmed mismatch with logging on carries details.
+    if (mismatchDetails !== undefined) {
+      this.warnShadowMismatch(key, mismatchDetails, valueAgeSeconds);
     }
+  }
 
-    const warning = {
+  /**
+   * Emits the confirmed-mismatch warning and its one `shadowMismatchLogging`
+   * event. Runs after the verdict was recorded and never changes it; any
+   * construction failure logs less, never more, and nothing reaches the caller.
+   */
+  private warnShadowMismatch(
+    key: DialCacheKey,
+    details: ShadowMismatchDetails,
+    valueAgeSeconds: number | undefined,
+  ): void {
+    const metadata = {
       cacheNamespace: key.namespace,
       useCase: key.useCase,
       keyType: key.keyType,
       outcome: "mismatch",
+      cachedValueAgeSeconds: valueAgeSeconds ?? null,
     } as const;
-    if (mismatchDetails !== undefined) {
-      try {
-        this.logger.warn(
-          "DialCache shadow validation mismatch",
-          {
-            ...warning,
-            ...shadowMismatchLogDetails(
-              key.urn,
-              mismatchDetails.cachedValue,
-              mismatchDetails.sourceValue,
-            ),
-          },
-        );
-        return;
-      } catch {
-        // JSON detail construction is best-effort; preserve the metadata warning.
-      }
+    let cacheKey: string | undefined;
+    let content: ShadowMismatchLogContent;
+    try {
+      cacheKey = previewShadowLogKey(key.urn);
+      content = renderShadowMismatchLog(
+        details.logPlan,
+        details.cachedValue,
+        details.sourceValue,
+        details.mismatchDiff,
+      );
+    } catch {
+      // Last resort: nothing may escape into the detached verdict handler.
+      content = { fields: failedShadowMismatchLogFields(details.logPlan), failure: "render_error" };
     }
-    this.logger.warn("DialCache shadow validation mismatch", warning);
+    const failure = content.failure;
+    const delivered = this.logger.warn(SHADOW_MISMATCH_WARNING, {
+      ...metadata,
+      ...(cacheKey === undefined ? {} : { cacheKey }),
+      ...content.fields,
+      ...(failure === null ? {} : { loggingOutcome: failure }),
+    });
+    const recordOutcome = (outcome: ShadowMismatchLoggingOutcome): void => {
+      this.metrics?.shadowMismatchLogging?.({
+        cacheNamespace: key.namespace,
+        useCase: key.useCase,
+        keyType: key.keyType,
+        outcome,
+      });
+    };
+    if (failure !== null) {
+      recordOutcome(failure);
+    } else if (typeof delivered === "boolean") {
+      recordOutcome(delivered ? "logged" : "logger_error");
+    } else {
+      // An asynchronous logger settles the outcome when its promise does.
+      void delivered.then((loggerSucceeded) => recordOutcome(loggerSucceeded ? "logged" : "logger_error"));
+    }
   }
 
   private async resolveLocalLayerConfig(
@@ -1609,11 +1687,21 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
     if (snapshot.shadow.logMismatches !== undefined && typeof snapshot.shadow.logMismatches !== "boolean") {
       throw new TypeError("DialCache defaultConfig shadow.logMismatches must be a boolean");
     }
+    const mismatchLogging = snapshot.shadow.mismatchLogging;
+    if (mismatchLogging?.value !== undefined && typeof mismatchLogging.value !== "boolean") {
+      throw new TypeError("DialCache defaultConfig shadow.mismatchLogging.value must be a boolean");
+    }
+    if (mismatchLogging?.diff !== undefined && !isShadowMismatchDiffLevel(mismatchLogging.diff)) {
+      throw new TypeError('DialCache defaultConfig shadow.mismatchLogging.diff must be "off", "paths" or "values"');
+    }
   }
 
   Object.freeze(snapshot.ttlSec);
   Object.freeze(snapshot.ramp);
   if (snapshot.shadow !== undefined) {
+    if (snapshot.shadow.mismatchLogging !== undefined) {
+      Object.freeze(snapshot.shadow.mismatchLogging);
+    }
     Object.freeze(snapshot.shadow);
   }
   return Object.freeze(snapshot);
@@ -1668,7 +1756,12 @@ function withFallbackTimeout<T>(
   });
 }
 
-function safeLogger(logger: Logger): Logger {
+/** The application logger; each method reports whether it returned without throwing. */
+type SafeLogger = {
+  readonly [Method in keyof Logger]: (...args: Parameters<Logger[Method]>) => boolean | Promise<boolean>;
+};
+
+function safeLogger(logger: Logger): SafeLogger {
   return {
     debug: (...args: Parameters<Logger["debug"]>) => callObserver(() => logger.debug(...args)),
     error: (...args: Parameters<Logger["error"]>) => callObserver(() => logger.error(...args)),
@@ -1700,6 +1793,7 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
       callObserver(() => metrics.observeStaleRecoveryValueAge?.(labels, seconds)),
     observeShadowValueAge: (labels, seconds) =>
       callObserver(() => metrics.observeShadowValueAge?.(labels, seconds)),
+    shadowMismatchLogging: (labels) => callObserver(() => metrics.shadowMismatchLogging?.(labels)),
     observeFutureTimestampOffset: (labels, seconds) =>
       callObserver(() => metrics.observeFutureTimestampOffset?.(labels, seconds)),
     observeGet: (labels, seconds) => callObserver(() => metrics.observeGet(labels, seconds)),
@@ -1712,16 +1806,18 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
   };
 }
 
-function callObserver(record: () => unknown): void {
+/**
+ * Runs an injected observer in isolation and reports whether it succeeded:
+ * `false` when it throws, and for a returned promise-like, a promise of whether
+ * it fulfilled. Observer failures never produce unhandled rejections.
+ */
+function callObserver(record: () => unknown): boolean | Promise<boolean> {
   try {
     const result = record();
-    if (result !== undefined) {
-      void Promise.resolve(result).catch(() => {
-        // Observer failures must not produce unhandled rejections.
-      });
-    }
+    return isPromiseLike(result) ? fulfills(result) : true;
   } catch {
     // Injected observers must not affect cache correctness or application fallbacks.
+    return false;
   }
 }
 
@@ -1729,6 +1825,15 @@ function resolveShadowComparator<Value>(
   comparator: ShadowComparator<Value> | undefined,
 ): ShadowComparator<Value> {
   return comparator ?? isDeepStrictEqual;
+}
+
+function resolveShadowMismatchDiff<Value>(
+  hook: ShadowMismatchDiff<Value> | undefined,
+): ShadowMismatchDiff<Value> | undefined {
+  if (hook !== undefined && typeof hook !== "function") {
+    throw new TypeError("DialCache shadowMismatchDiff must be a function");
+  }
+  return hook;
 }
 
 function resolveStaleRecoveryPredicate(
@@ -1769,16 +1874,4 @@ function redisPayloadsEqual(left: RedisCachePayload, right: RedisCachePayload): 
     return typeof right === "string" && left.equals(Buffer.from(right, "utf8"));
   }
   return Buffer.isBuffer(right) && right.equals(Buffer.from(left, "utf8"));
-}
-
-async function settleUnexpectedThenable(value: unknown): Promise<void> {
-  if (value === null || (typeof value !== "object" && typeof value !== "function")) {
-    return;
-  }
-  try {
-    await Promise.resolve(value);
-  } catch {
-    // Synchronous extension points may accidentally return a rejected thenable;
-    // consume it without letting that rejection affect cache control flow.
-  }
 }

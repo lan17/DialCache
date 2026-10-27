@@ -479,6 +479,15 @@ func TestProtocolRemainingVectors(t *testing.T) {
 			}
 		})
 	}
+	// W10: the built-in walk over two JSON values and the warning fields
+	// derived from it.
+	var mismatches []mismatchPathVector
+	if err := json.Unmarshal(groups["mismatchPathVectors"], &mismatches); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range mismatches {
+		t.Run(v.Name, func(t *testing.T) { checkMismatchPathVector(t, v) })
+	}
 	count := 0
 	for group, raw := range groups {
 		if group == "schemaVersion" {
@@ -493,7 +502,7 @@ func TestProtocolRemainingVectors(t *testing.T) {
 	selection := os.Getenv("DIALCACHE_PROTOCOL_CORPUS")
 	expected := 0
 	if selection != "generated" {
-		expected = 134
+		expected = 191
 	}
 	if selection != "fixed" {
 		for _, rows := range generatedProtocolGroups(t) {

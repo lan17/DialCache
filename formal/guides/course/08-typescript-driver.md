@@ -59,27 +59,27 @@ Choice `0` of `beginCall` becomes `{ op: "begin" }`; choice `3` of
 
 - **[behavior-driver.ts](../../../typescript/test/formal/behavior-driver.ts)**,
   the driver:
-  - [lines 54 to 69](../../../typescript/test/formal/behavior-driver.ts): the
+  - [lines 55 to 70](../../../typescript/test/formal/behavior-driver.ts): the
     `Input` union, every command a driver understands.
-  - [lines 73 to 90](../../../typescript/test/formal/behavior-driver.ts): the
+  - [lines 74 to 91](../../../typescript/test/formal/behavior-driver.ts): the
     `Observation` record.
-  - [lines 111 to 112](../../../typescript/test/formal/behavior-driver.ts): the
+  - [lines 117 to 118](../../../typescript/test/formal/behavior-driver.ts): the
     rule `no expected observation is passed to this class`.
-  - [lines 294 to 343](../../../typescript/test/formal/behavior-driver.ts):
+  - [lines 301 to 354](../../../typescript/test/formal/behavior-driver.ts):
     `apply` for `begin`;
-    [lines 345 to 360](../../../typescript/test/formal/behavior-driver.ts):
+    [lines 356 to 371](../../../typescript/test/formal/behavior-driver.ts):
     `resolve`, `reject` and `advance`;
-    [lines 405 to 412](../../../typescript/test/formal/behavior-driver.ts):
+    [lines 416 to 423](../../../typescript/test/formal/behavior-driver.ts):
     `release`.
-  - [lines 440 to 472](../../../typescript/test/formal/behavior-driver.ts): the
+  - [lines 451 to 483](../../../typescript/test/formal/behavior-driver.ts): the
     `settle` drain and the receipt;
-    [lines 481 to 483](../../../typescript/test/formal/behavior-driver.ts):
+    [lines 492 to 494](../../../typescript/test/formal/behavior-driver.ts):
     `snapshot()` and `receipt()`.
 - **[formal-features.test.ts](../../../typescript/test/formal-features.test.ts)**,
   lines 16 to 53: the `replay` loop. Lines 58 to 60: the
   `DIALCACHE_FEATURE_TRACE_FILE` and `DIALCACHE_FEATURE_PROFILE` selectors.
-- **[features.mjs](../../replay/features.mjs)**: `featureInput` (line 510) and
-  `assertFeatureObservation` (line 512), shared by every port through the
+- **[features.mjs](../../replay/features.mjs)**: `featureInput` (line 617) and
+  `assertFeatureObservation` (line 619), shared by every port through the
   coordinator.
 - **[profiles/source-budgets.mjs](../../replay/profiles/source-budgets.mjs)**:
   the fixture by init choice, the setup command, and the action decodings.

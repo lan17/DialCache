@@ -831,6 +831,77 @@ func TestReplayTransportValidatesObservationsLocally(t *testing.T) {
 	})
 }
 
+// The shadow profile's warning records and inputs cross the transport: the
+// full mismatch warning with its paths as one JSON string, the
+// shadowMismatchLogging event, a call that returned the unrenderable value,
+// the unrenderable resolve and the logger fault. Their malformed neighbours
+// are driver or coordinator defects the local schema check rejects.
+func TestReplayTransportCarriesShadowWarningRecords(t *testing.T) {
+	schema, err := readReplaySchema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	definitions := bm(schema["$defs"])
+	// The driver's encoding of a warning the library logs, failed fields and all.
+	warning := behaviorWarningObservation(obj{"cacheNamespace": "urn", "useCase": "Behavior", "keyType": "id", "outcome": "mismatch",
+		"cacheKey": "urn:id:1#Behavior", "cachedValueAgeSeconds": 0.5, "mismatchPaths": []string{"", "/a<b"}, "mismatchPathCount": 2,
+		"diffJson": `[{"path":"","cached":1}]`, "cachedValueJson": "1", "sourceValueJson": nil, "loggingOutcome": "render_error"})
+	warning["event"] = "mismatchWarning"
+	failed := behaviorWarningObservation(obj{"cacheNamespace": "urn", "useCase": "Behavior", "keyType": "id", "outcome": "mismatch",
+		"mismatchPaths": nil, "mismatchPathCount": nil, "diffJson": nil, "loggingOutcome": "hook_error"})
+	failed["event"] = "mismatchWarning"
+	if failed["mismatchPathsJson"] != nil || warning["mismatchPathsJson"] != `["","/a<b"]` || warning["mismatchPaths"] != nil {
+		t.Fatalf("warning paths are not one compact JSON string: %s %s", bjson(warning), bjson(failed))
+	}
+	logging := obj{"event": "shadowMismatchLogging", "cacheNamespace": "urn", "useCase": "Behavior", "keyType": "id", "outcome": "logger_error"}
+	unrenderable := obj{"status": "value", "value": obj{"unrenderable": true}}
+	observation := func(events, calls []any) obj {
+		observed := emptyBehaviorObservation(obj{"observe": []any{}})
+		observed["events"], observed["calls"] = events, calls
+		return observed
+	}
+	if err := replayRecordError(observation([]any{warning, failed, logging}, []any{unrenderable}), "behaviorObservation", "observation", definitions); err != nil {
+		t.Fatalf("well-formed shadow warning records rejected: %v", err)
+	}
+	with := func(base obj, field string, value any) obj {
+		changed := bm(bclone(base))
+		changed[field] = value
+		return changed
+	}
+	for name, events := range map[string][]any{
+		"paths as an array":         {with(warning, "mismatchPaths", []any{""})},
+		"paths JSON as an array":    {with(warning, "mismatchPathsJson", []any{""})},
+		"fractional path count":     {with(warning, "mismatchPathCount", 0.5)},
+		"negative warning age":      {with(warning, "cachedValueAgeSeconds", -1)},
+		"logger error on a warning": {with(warning, "loggingOutcome", "logger_error")},
+		"unknown logging outcome":   {with(logging, "outcome", "skipped")},
+		"null logging outcome":      {with(logging, "outcome", nil)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := replayRecordError(observation(events, []any{}), "behaviorObservation", "observation", definitions); err == nil {
+				t.Fatalf("malformed shadow warning record accepted: %s", bjson(events))
+			}
+		})
+	}
+	t.Run("unrenderable result that is not the marker", func(t *testing.T) {
+		calls := []any{obj{"status": "value", "value": obj{"unrenderable": false}}}
+		if err := replayRecordError(observation([]any{}, calls), "behaviorObservation", "observation", definitions); err == nil {
+			t.Fatal("unrenderable result without its marker accepted")
+		}
+	})
+	coordinator := &replayCoordinator{schema: schema}
+	for command, accepted := range map[string]bool{
+		`{"op":"resolve","loader":0,"unrenderable":true}`:           true,
+		`{"op":"faults","value":{"logger":true}}`:                   true,
+		`{"op":"resolve","loader":0,"unrenderable":true,"value":1}`: false,
+		`{"op":"resolve","loader":0,"unrenderable":false}`:          false,
+	} {
+		if coordinator.replayCommands([]any{parseJSONValue(t, command)}) != accepted {
+			t.Fatalf("command %s accepted=%v", command, !accepted)
+		}
+	}
+}
+
 func TestReplayCoordinatorBoundsFramesBeforeBuffering(t *testing.T) {
 	reader := bufio.NewReaderSize(strings.NewReader("12345678901234567890123456789012345\n"), 16)
 	if _, err := readReplayLine(reader, 32); err == nil || !strings.Contains(err.Error(), "oversized") {

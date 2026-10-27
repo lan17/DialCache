@@ -27,6 +27,7 @@ codes are omitted; the module header lists them.
 | `runtime_policy` | How a runtime policy reply (the runtime-boundaries drivers' codes 0 to 21) resolves against an instance's configured baseline: serving cohorts, omitted, null and invalid leaves, runtime TTLs, the kill switch. | `resolve` |
 | `policy_overlay` | How a runtime policy overlay (the policy drivers' codes 0 to 25) resolves over configured TTLs: each layer's TTL, the refill retention, coalescing and whether the reply failed (C13, C17, C20 to C22). | `resolve`, `ttls`, `failed`, `localTtl`, `remoteTtl`, `retention` |
 | `config_errors` | The policy-error channel: a reply that fails to resolve is reported once, against no layer, as a configuration error (C20); an opt-in record the traversal never reads. | `recordConfigError` |
+| `mismatch_logging` | How a shadow policy's mismatch-logging inputs, one config layer each, resolve to the leaves a shadow job captures (C60): each layer's shorthand expanded, the runtime overlay merged over the defaults leaf by leaf, each leaf resolved on its own and one configuration error for every invalid input. Only the shadow profile composes it; `shadow` never imports it. | `expandLogging`, `mergeLogging`, `resolveLogging` |
 | `request_memo` | Request-scoped memo rows and scope lifetime: a persistent context owns one row of slots; closing the scope forgets the row, and a late settlement can no longer memoize into it. | `openScope`, `closeScope`, `memoize`, `memoSlot`, `memoValue`, `scopeOpen` |
 | `local_storage` | Per-instance local storage with LRU eviction and strict insertion expiry; zero capacity stores nothing and never fails; an expired entry keeps its slot until replaced or evicted. | `localValue`, `promote`, `putLocal` |
 | `local_grid` | The local projection with the raw environment instants kept beside the ordinary expiry, so a precise-clock expiry error is executable instead of hidden by rounding (C09). | `call` |
@@ -45,7 +46,7 @@ codes are omitted; the module header lists them.
 | `remote_writes` | The atomic remote lifecycle with held writes: a refill serializes when its source settles accepted (the dump), then dispatches the write, then stores the frame; a fault at either step stops the rest. | `releaseJudged`, `settle`, `settleLoader`, `holdDump`, `dispatch`, `releaseDump`, `store`, `releaseWrite`, `abandonDump`, `abandonWrite`, `complete`, `finish`, `failed`, `latestDump`, `latestWrite` |
 | `adapter_replies` | The queued adapter reply (C55): what the adapter returns in place of the stored frame, interpreted once at the trust boundary; the drivers queue one reply by its class. | `queue`, `consume`, `queued`, `isFrame`, `carriesFence`, `fenceOf`, `reason`, `observed`, `settleRead` |
 | `diagnostics` | The diagnostics channel: which singleflight a caller coalesced into, the layer a failed source is attributed to, the recovery age, warnings and future offsets, over the request-only and the held lifecycles. | `admitRequest`, `releaseRequest`, `settleRequest`; `admit`, `releaseJudged`, `begin`, `beginRead`, `settleLoad`, `settleLoader`, `expireLoader`, `advance`; `recordAge`, `recordWarning`, `recordConfigError`, `recordFutureOffset` |
-| `shadow` | Shadow jobs (C47 to C54, C57, C60), admitted beside the caller in one bounded per-instance registry: a served hit's job checks the served payload against a detached source, a dark job's C0 read against the caller's own source. | `begin`, `release`, `settle`, `advance`; served jobs: `admitServed`, `settleJob`, `fill`, `confirmation`, `finishJob`, `expireJob`; held: `beginHeld`, `releaseHeld`, `settleHeld`, `settleRead`, `settleLoad`, `settleLoader`, `expireHeld`, `advanceHeld`; dark: `admitDark`, `dispatchC0`, `beginDark`, `recordVerdict`, `releaseRead`, `releaseLoad`, `releaseDump`, `releaseWrite` |
+| `shadow` | Shadow jobs (C47 to C54, C57, C60), admitted beside the caller in one bounded per-instance registry: a served hit's job checks the served payload against a detached source, a dark job's C0 read against the caller's own source; a job captures the mismatch-logging leaves `mismatch_logging` resolves, and a confirmed mismatch's warning content and logging outcome are judged at the verdict over scalar values (W10's root cases). | `begin`, `release`, `settle`, `advance`; served jobs: `admitServed`, `settleJob`, `fill`, `confirmation`, `finishJob`, `expireJob`; held: `beginHeld`, `releaseHeld`, `settleHeld`, `settleRead`, `settleLoad`, `settleLoader`, `expireHeld`, `advanceHeld`; dark: `admitDark`, `dispatchC0`, `beginDark`, `recordVerdict`, `releaseRead`, `releaseReadWithLogger`, `releaseLoad`, `releaseDump`, `releaseWrite`; logging: `warningOf`, `loggingOutcomeOf`, `recordMismatchWarning`, `recordVerdictInputs` |
 | `metrics` | The observer's metric events over the remote layer (C30, C57 to C59): the ordered trail the implementations report to their metrics callback, one event per read, write, miss reason and error. | `event`, `begin`, `settleRead`, `settleLoad`, `settleLoader`, `sourceDone`, `expireLoader`, `expireRead`, `advance`, `releaseDump`, `releaseWrite`, `invalidate`, `missReason`, `futureLead` |
 | `shadow_reads` | A shadow read's two completions (C54, C56): its bounded result ends at the read deadline while the raw adapter operation keeps the slot until it settles; the job deadline is independent. | `begin`, `releaseRead`, `releaseLoad`, `advance` |
 
@@ -57,7 +58,7 @@ at `serving` and read outward, which is how a rule is usually traced.
 
 | Layer | Modules | What they hold |
 | --- | --- | --- |
-| 0 | `encodings`, `calls`, `clock`, `layer_policy`, `config_errors`, `instances` | Vocabulary: sentinels, the call record, time, the immediate policy reply, the policy-error record and which instances exist. No rule reads another kernel module here. |
+| 0 | `encodings`, `calls`, `clock`, `layer_policy`, `config_errors`, `instances`, `mismatch_logging` | Vocabulary: sentinels, the call record, time, the immediate policy reply, the policy-error record, which instances exist and the mismatch-logging inputs. No rule reads another kernel module here. |
 | 1 | `request_memo`, `local_storage`, `payloads`, `policy_gate`, `flights`, `policy_overlay`, `runtime_policy` | The storage and registries each serving layer owns, the payload classes, the held-reply gate and the two runtime reply decoders. |
 | 2 | `remote_frames` | The remote layer's storage: frames with stamps, retention and watermarks. |
 | 3 | `serving`, `recovery` | The traversal and publication rules, and the stale-on-error judgments the held and atomic lifecycles consult. Start here to trace a rule. |
@@ -162,7 +163,10 @@ The composed profiles are, in order:
     the dark arm of the held shadow lifecycle. The dark job's C0 read, decode
     and confirmation read are held in `remote_io`'s lists and released by
     ordinal over the diagnosed budgeted held remote lifecycle, with the held
-    fill and the buffered invalidation.
+    fill and the buffered invalidation. It keeps its logging inputs as
+    written, resolves them at admission through `mismatch_logging`, and
+    composes the verdict receipts its warning properties read
+    (`recordVerdictInputs`).
 14. `formal/models/dialcache-effects-conformance.qnt` is the fourteenth, over
     the held remote lifecycle with its refills held, the queued adapter reply
     and the metric events, the first whose drivers' channel is an ordered event

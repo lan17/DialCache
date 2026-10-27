@@ -104,6 +104,13 @@ can differ from TypeScript; for example, NaN differs from itself. Supply a domai
 comparator when appropriate. [Shadow validation](../shadow-validation.md)
 describes this boundary.
 
+`ShadowPolicy::mismatch_logging` selects confirmed-mismatch warning content.
+Its built-in difference computation walks the `serde_json` renderings of an
+operation built with `Operation::new` or `register`; a `mismatch_diff` hook
+replaces it, and is the only source of differences for an operation whose
+`preview` is custom or `None`, or one built with `with_codec`. See
+[confirmed mismatch logging](../shadow-validation.md#confirmed-mismatch-logging).
+
 Large compression jobs and all zstd decompression use a bounded CPU executor.
 Application codecs choose their own scheduling. See [compression](../redis.md#compression)
 for thresholds and fail-open behavior on executor saturation.

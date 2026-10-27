@@ -47,7 +47,7 @@ func (JSONCodec[T]) Encode(value T) (Payload, error) {
 	if IsAbsent(value) {
 		return Payload{Bytes: []byte(JSONUndefinedSentinel)}, nil
 	}
-	raw, err := appendJSON(nil, reflect.ValueOf(value), make(map[visit]bool))
+	raw, err := appendJSON(nil, reflect.ValueOf(value), make(map[visit]bool), false)
 	return Payload{Bytes: raw}, err
 }
 func (JSONCodec[T]) Decode(payload Payload) (T, error) {
@@ -219,7 +219,13 @@ func quoteJSON(dst []byte, value string) []byte {
 	}
 	return append(dst, '"')
 }
-func appendJSON(dst []byte, value reflect.Value, seen map[visit]bool) ([]byte, error) {
+
+// appendJSON writes value in the portable JSON encoding. With marshalers set, a
+// value at any depth that implements json.Marshaler renders as its MarshalJSON
+// output parsed back, while Absent and big integers keep their own rules.
+// JSONCodec leaves it unset, so its stored encoding reaches MarshalJSON only
+// through a struct.
+func appendJSON(dst []byte, value reflect.Value, seen map[visit]bool, marshalers bool) ([]byte, error) {
 	if !value.IsValid() {
 		return append(dst, "null"...), nil
 	}
@@ -247,6 +253,11 @@ func appendJSON(dst []byte, value reflect.Value, seen map[visit]bool) ([]byte, e
 		if _, ok := value.Interface().(big.Int); ok {
 			return nil, errors.New("JSON cannot encode a bigint")
 		}
+		if marshalers {
+			if marshaler, ok := jsonMarshaler(value); ok {
+				return appendReparsed(dst, marshaler, seen)
+			}
+		}
 		if object, ok := value.Interface().(JSONObject); ok {
 			key := visit{value.Kind(), value.Pointer()}
 			if seen[key] {
@@ -254,14 +265,14 @@ func appendJSON(dst []byte, value reflect.Value, seen map[visit]bool) ([]byte, e
 			}
 			seen[key] = true
 			defer delete(seen, key)
-			return appendObject(dst, object, seen)
+			return appendObject(dst, object, seen, marshalers)
 		}
 		if binary, ok := value.Interface().([]byte); ok {
 			data := make([]any, len(binary))
 			for i, b := range binary {
 				data[i] = b
 			}
-			return appendObject(dst, JSONObject{{"type", "Buffer"}, {"data", data}}, seen)
+			return appendObject(dst, JSONObject{{"type", "Buffer"}, {"data", data}}, seen, marshalers)
 		}
 	}
 	if number, ok := scalarNumber(value); ok {
@@ -293,7 +304,7 @@ func appendJSON(dst []byte, value reflect.Value, seen map[visit]bool) ([]byte, e
 				dst = append(dst, ',')
 			}
 			var err error
-			dst, err = appendJSON(dst, value.Index(i), seen)
+			dst, err = appendJSON(dst, value.Index(i), seen, marshalers)
 			if err != nil {
 				return nil, err
 			}
@@ -318,28 +329,54 @@ func appendJSON(dst []byte, value reflect.Value, seen map[visit]bool) ([]byte, e
 		for _, name := range names {
 			object = append(object, JSONMember{name.String(), value.MapIndex(name).Interface()})
 		}
-		return appendObject(dst, object, seen)
+		return appendObject(dst, object, seen, marshalers)
 	case reflect.Struct:
 		// Native structs opt into Go's public JSON field/tag conventions, then the
 		// resulting JSON domain uses the same portable number/string encoding.
-		raw, err := json.Marshal(value.Interface())
-		if err != nil {
-			return nil, err
+		// A hook side marshals an addressable struct through its pointer, so a
+		// field's pointer-receiver MarshalJSON runs as encoding/json runs it.
+		if marshalers && value.CanAddr() {
+			return appendReparsed(dst, value.Addr().Interface(), seen)
 		}
-		var object any
-		if err = json.Unmarshal(raw, &object); err != nil {
-			return nil, err
-		}
-		return appendJSON(dst, reflect.ValueOf(object), seen)
+		return appendReparsed(dst, value.Interface(), seen)
 	default:
 		return nil, fmt.Errorf("unsupported JSON value %s", value.Kind())
 	}
+}
+
+// jsonMarshaler returns the json.Marshaler that encoding/json calls for value:
+// its own, or its pointer's when value is addressable.
+func jsonMarshaler(value reflect.Value) (json.Marshaler, bool) {
+	if marshaler, ok := value.Interface().(json.Marshaler); ok {
+		return marshaler, true
+	}
+	if !value.CanAddr() {
+		return nil, false
+	}
+	marshaler, ok := value.Addr().Interface().(json.Marshaler)
+	return marshaler, ok
+}
+
+// appendReparsed renders value with encoding/json and parses the output back,
+// never splicing it, so only its JSON domain reaches dst in the portable
+// encoding. MarshalJSON output that is not JSON, or that holds a number outside
+// double range, has no rendering.
+func appendReparsed(dst []byte, value any, seen map[visit]bool) ([]byte, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var parsed any
+	if err = json.Unmarshal(raw, &parsed); err != nil {
+		return nil, err
+	}
+	return appendJSON(dst, reflect.ValueOf(parsed), seen, false)
 }
 func arrayIndex(name string) (uint64, bool) {
 	n, e := strconv.ParseUint(name, 10, 32)
 	return n, e == nil && n < 4294967295 && strconv.FormatUint(n, 10) == name
 }
-func appendObject(dst []byte, object JSONObject, seen map[visit]bool) ([]byte, error) {
+func appendObject(dst []byte, object JSONObject, seen map[visit]bool, marshalers bool) ([]byte, error) {
 	// Repeated properties replace their value without moving their first position.
 	unique := make(JSONObject, 0, len(object))
 	indices := map[string]int{}
@@ -372,7 +409,7 @@ func appendObject(dst []byte, object JSONObject, seen map[visit]bool) ([]byte, e
 		dst = quoteJSON(dst, member.Name)
 		dst = append(dst, ':')
 		var err error
-		dst, err = appendJSON(dst, reflect.ValueOf(member.Value), seen)
+		dst, err = appendJSON(dst, reflect.ValueOf(member.Value), seen, marshalers)
 		if err != nil {
 			return nil, err
 		}

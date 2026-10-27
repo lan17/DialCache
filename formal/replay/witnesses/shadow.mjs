@@ -5,7 +5,8 @@ import { fidelityBinding } from "./fidelity.mjs";
 // The shadow profile's witnesses, decided from the recorded inputs and the
 // asserted public channels alone. What a rule needs beyond the observation
 // deltas is shadowed here: the fixture the init choice names (comparator,
-// comparison time, source work, hook, default logging), both clocks, the
+// comparison time, source work, outcome and diff hooks, default logging
+// inputs), the runtime logging inputs and the logger's failure, both clocks, the
 // frame a seed or a fill stored with its stamp, the watermark an invalidation
 // raised, the fault switches, and the one dark job the drivers run at a time
 // (its phase, its acquired C0 with the frame's stamp and the fence it observed,
@@ -16,8 +17,9 @@ import { fidelityBinding } from "./fidelity.mjs";
 // still carries the model's private predictions the fidelity check compares
 // the shadow after every step with the composed layout
 // (dialcache-shadow-conformance.qnt over the kernel library): the frame, its
-// stamp and the watermark, the two clocks, the fault switches, the one live
-// job as a shadow::Job record and the read or decode it holds by ordinal.
+// stamp and the watermark, the two clocks, the fault switches, the logging
+// inputs and the diff hook, the one live job as a shadow::Job record (its
+// captured leaves included) and the read or decode it holds by ordinal.
 
 const IDLE = 0, C0_READ = 1, SOURCE_WAIT = 2, SNAPSHOT_DECODE = 3, CONFIRMATION_READ = 4, FILL_SERIALIZE = 5, FILL_WRITE = 6, JOB_DONE = 7;
 const NOT_STARTED = 0, PENDING = 1, ACCEPTED = 2, FAILED = 3, TIMED_OUT = 4;
@@ -28,6 +30,38 @@ const BUDGET = 10, FRESH = 60000;
 const payloadBytes = payload => ({ 3: 1, 4: 2, 6: 5, 8: 7 })[payload] ?? payload;
 const decoded = payload => payload >= 7 ? 3 : [3, 5, 6].includes(payload) ? 1 : payload === 4 ? 2 : payload;
 const binary = payload => [3, 4, 5, 8].includes(payload);
+// The source result with no JSON rendering (D13), the resolveLoader choice 12.
+const UNRENDERABLE = 12;
+
+// Mismatch logging inputs as written, one config layer each: the
+// logMismatches shorthand, then the mismatchLogging value and diff leaves;
+// "" leaves one unwritten and "invalid" has the wrong type. The defaults by
+// init fixture and the runtime overlays by logPolicy choice (11 and 12 write
+// one leaf off).
+const written = (shorthand, value, diff) => ({ shorthand, value, diff });
+const NO_LOGGING = written("", "", "");
+const defaultLoggingOf = choice => (choice >= 4 && choice < 8) || choice === 13 ? written("true", "", "")
+  : choice === 14 ? written("", "", "paths") : choice === 15 ? written("", "false", "") : NO_LOGGING;
+const OVERLAYS = [written("false", "", ""), written("true", "", ""), written("invalid", "", ""), written("", "", "paths"),
+  written("", "", "values"), written("false", "true", ""), written("true", "false", ""), written("false", "", "paths"),
+  written("", "true", "invalid"), written("", "invalid", "paths"), written("invalid", "", "values"),
+  written("", "", "off"), written("", "false", "")];
+const DIFF_OFF_OVERLAY = 11, VALUE_FALSE_OVERLAY = 12;
+// The leaves a job captures (record D10), per leaf: the overlay's own leaf
+// when written, else what its shorthand stands for, else the same from the
+// defaults. `value` is on only for "true" and `diff` only for a level it
+// names; one configuration error covers a malformed shorthand and any leaf
+// of the wrong type.
+const standsFor = (shorthand, leaf) => shorthand === "" ? "" : shorthand === "true" ? (leaf === "value" ? "true" : "values")
+  : shorthand === "false" ? (leaf === "value" ? "false" : "off") : "invalid";
+const layerLeaf = (layer, leaf) => layer[leaf] !== "" ? layer[leaf] : standsFor(layer.shorthand, leaf);
+export function capturedLogging(defaults, overlay) {
+  const inForce = leaf => layerLeaf(overlay, leaf) !== "" ? layerLeaf(overlay, leaf) : layerLeaf(defaults, leaf);
+  const value = inForce("value"), diff = inForce("diff");
+  return { logging: { value: value === "true", diff: ["paths", "values"].includes(diff) ? diff : "off" },
+    invalid: !["", "true", "false"].includes(overlay.shorthand) || !["", "true", "false"].includes(value) || !["", "off", "paths", "values"].includes(diff) };
+}
+const logsMismatch = logging => logging.value || logging.diff !== "off";
 
 function fixtureOf(choice) {
   return {
@@ -35,15 +69,17 @@ function fixtureOf(choice) {
     comparisonMs: choice === 9 || choice === 10 ? BUDGET : 0,
     sourceWorkMs: choice === 12 ? BUDGET : choice === 11 ? BUDGET - 1 : 0,
     hook: choice !== 8,
-    defaultLog: choice >= 4 && choice < 8,
+    diffHook: choice === 13,
+    defaultLogging: defaultLoggingOf(choice),
   };
 }
 function initial(choice) {
   const fixture = fixtureOf(choice);
   return { ...fixture, now: 10000, wall: 100000, frame: 0, created: 0, watermark: 0, c0: 0, c0Created: 0, phase: IDLE, abandoned: false, deadline: 0,
     source: NOT_STARTED, sourcePending: false, sourceValue: 0, fence: 0, writeStamp: 0,
-    readFailed: false, loadFailed: false, dumpFailed: false, writeFailed: false,
-    shadowActive: fixture.hook, log: fixture.defaultLog, invalidLog: false, invalidShadow: false, acceptedLog: false, acceptedInvalidLog: false,
+    readFailed: false, loadFailed: false, dumpFailed: false, writeFailed: false, loggerFailed: false,
+    shadowActive: fixture.hook, overlayLogging: NO_LOGGING, overlayChoice: -1, invalidShadow: false,
+    accepted: { logging: { value: false, diff: "off" }, invalid: false }, acceptedOverlayChoice: -1,
     predicted: { outcome: undefined, reads: 0, loads: 0, dumps: 0, writes: 0 } };
 }
 // The profile's rules over the shadow; `predicted` collects what the step must
@@ -65,7 +101,8 @@ function apply(before, action, choice) {
       s.deadline = s.now + BUDGET; s.now += s.sourceWorkMs; s.wall += s.sourceWorkMs;
       s.phase = s.shadowActive && !jobExpired ? C0_READ : JOB_DONE;
       s.source = PENDING; s.sourcePending = true; s.sourceValue = 0; s.abandoned = jobExpired;
-      s.c0 = 0; s.c0Created = 0; s.fence = 0; s.acceptedLog = s.log; s.acceptedInvalidLog = s.invalidLog;
+      s.c0 = 0; s.c0Created = 0; s.fence = 0;
+      s.accepted = capturedLogging(s.defaultLogging, s.overlayLogging); s.acceptedOverlayChoice = s.overlayChoice;
       if (s.shadowActive && !jobExpired) s.predicted.reads++;
       if (jobExpired) s.predicted.outcome = "timeout";
       break;
@@ -127,8 +164,9 @@ function apply(before, action, choice) {
     case "invalidate": if (!s.writeFailed) s.watermark = Math.max(s.watermark, s.wall + choice); break;
     case "rollbackWall": s.wall -= 1000; break;
     case "advanceWall": s.wall += choice; break;
-    case "logPolicy": s.log = choice === 1; s.invalidLog = choice === 2; s.invalidShadow = false; s.shadowActive = s.hook; break;
-    case "shadowPolicy": s.shadowActive = s.hook && choice === 0; s.log = s.defaultLog; s.invalidShadow = choice === 2; s.invalidLog = false; break;
+    case "logPolicy": s.overlayLogging = OVERLAYS[choice]; s.overlayChoice = choice; s.invalidShadow = false; s.shadowActive = s.hook; break;
+    case "shadowPolicy": s.shadowActive = s.hook && choice === 0; s.overlayLogging = NO_LOGGING; s.overlayChoice = -1; s.invalidShadow = choice === 2; break;
+    case "loggerFault": s.loggerFailed = choice === 1; break;
     case "readFault": s.readFailed = choice === 1; break;
     case "loadFault": s.loadFailed = choice === 1; break;
     case "dumpFault": s.dumpFailed = choice === 1; break;
@@ -136,6 +174,50 @@ function apply(before, action, choice) {
     default: throw new Error(`unknown action ${action}`);
   }
   return s;
+}
+// The confirmed-mismatch warning a step logged, judged from its public content
+// (the d channel's warning and logging outcome) beside the inputs that
+// explain it: the leaves the job captured, the overlay admission read and
+// whether admission reported it invalid, the diff hook, the source's result
+// and the logger's failure (C60, D11 to D13).
+function warningLabels(recorder, step, previous, before, after, fixture, reported) {
+  const warnings = step.diagnostics.mismatchWarnings, outcomes = step.diagnostics.loggingOutcomes;
+  const accepted = after.accepted.logging, overlay = after.acceptedOverlayChoice;
+  if (warnings.length === previous.diagnostics.mismatchWarnings.length) {
+    if (fixture === 14 && overlay === 0 && !logsMismatch(accepted)) recorder.credit("shorthand-row:3");
+    return;
+  }
+  const warning = warnings.at(-1), outcome = outcomes.at(-1);
+  const valueLogged = warning.cachedValue !== -1;
+  recorder.credit(`warning-fields:${[valueLogged ? "value" : "", warning.diff === "off" ? "" : warning.diff].filter(Boolean).join("+")}`);
+  recorder.credit(`logging-outcome:${outcome}`);
+  const listed = warning.diff !== "off" && !warning.diffNull;
+  if (listed && warning.count === 0 && warning.paths.length === 0) recorder.credit("identical-renderings-log-no-paths");
+  if (listed && warning.count === 1 && warning.paths.length === 1 && warning.paths[0] === "") recorder.credit("differing-renderings-log-root-entry");
+  const hookRan = before.diffHook && accepted.diff !== "off", unrenderable = before.sourceValue === UNRENDERABLE;
+  if (unrenderable && valueLogged && warning.sourceValue === 0) recorder.credit("unrenderable-source-logs-null");
+  // Once the hook replaces the walk only the value fields need the source's
+  // rendering, so the precedence shows only where they were logged and the
+  // source's field is null.
+  if (hookRan && unrenderable && valueLogged && warning.sourceValue === 0 && outcome === "hook_error") recorder.credit("hook-error-over-render-error");
+  if (hookRan && before.loggerFailed && outcome === "hook_error") recorder.credit("hook-error-over-logger-error");
+  if (!hookRan && unrenderable && before.loggerFailed && outcome === "render_error") recorder.credit("render-error-over-logger-error");
+  if (before.diffHook && accepted.diff === "off" && outcome !== "hook_error") recorder.credit("hook-skipped-at-diff-off");
+  if (outcome === "logger_error" && warning.loggingOutcome === "" && !warning.diffNull) recorder.credit("logger-error-keeps-warning-content");
+  if (overlay === 6 && !valueLogged && warning.diff === "values") recorder.credit("shorthand-row:1");
+  if (overlay === 7 && !valueLogged && warning.diff === "paths") recorder.credit("shorthand-row:2");
+  if (fixture === 15 && overlay === 1 && valueLogged && warning.diff === "values") recorder.credit("shorthand-row:4");
+  // A leaf the overlay writes off replaces its own inherited leaf, which the
+  // defaults alone turn on, and leaves the other inherited leaf on.
+  const inherited = capturedLogging(defaultLoggingOf(fixture), NO_LOGGING).logging;
+  if (overlay === DIFF_OFF_OVERLAY && inherited.diff !== "off" && inherited.value && valueLogged && warning.diff === "off") {
+    recorder.credit("written-off-leaf:diff");
+  }
+  if (overlay === VALUE_FALSE_OVERLAY && inherited.value && inherited.diff !== "off" && !valueLogged && warning.diff === inherited.diff) {
+    recorder.credit("written-off-leaf:value");
+  }
+  if (reported && (overlay === 8 || overlay === 9) && valueLogged !== (warning.diff !== "off")) recorder.credit("invalid-leaf-keeps-valid-leaf");
+  if (reported && overlay === 10 && !valueLogged && warning.diff === "values") recorder.credit("invalid-shorthand-keeps-written-leaf");
 }
 // The shadow bound to the history: what the step predicts must be what the
 // drivers observed, or the history is refused rather than classified.
@@ -164,15 +246,18 @@ function modelView(shadow, o) {
   const source = o.calls.length - 1;
   const job = live ? {
     source, dark: true, cached: codeOf[shadow.c0], stamp: shadow.c0Created, fence: shadow.fence,
-    ttls: { localMs: 0, freshMs: FRESH, retentionMs: FRESH }, phase: phaseOf[shadow.phase], timedOut: shadow.abandoned, logging: shadow.acceptedLog,
+    ttls: { localMs: 0, freshMs: FRESH, retentionMs: FRESH }, phase: phaseOf[shadow.phase], timedOut: shadow.abandoned,
+    logging: shadow.accepted.logging, diffHook: shadow.diffHook,
   } : undefined;
   const reading = live && (shadow.phase === C0_READ || shadow.phase === CONFIRMATION_READ);
   const decoding = live && shadow.phase === SNAPSHOT_DECODE;
   return { remoteValues: [codeOf[shadow.frame]], created: [shadow.created], watermark: [shadow.watermark], now: shadow.now, skew: shadow.wall - shadow.now,
-    readFailed: shadow.readFailed, loadFailed: shadow.loadFailed, dumpFailed: shadow.dumpFailed, writeFailed: shadow.writeFailed, jobs: job ? [job] : [],
+    readFailed: shadow.readFailed, loadFailed: shadow.loadFailed, dumpFailed: shadow.dumpFailed, writeFailed: shadow.writeFailed,
+    loggerFailed: shadow.loggerFailed, diffHook: shadow.diffHook, defaultLogging: shadow.defaultLogging, overlayLogging: shadow.overlayLogging, jobs: job ? [job] : [],
     reads: reading ? [{ read: o.reads - 1, flight: source }] : [], loads: decoding ? [{ load: o.loads - 1, flight: source }] : [] };
 }
-const layoutFields = ["remoteValues", "created", "watermark", "now", "skew", "readFailed", "loadFailed", "dumpFailed", "writeFailed", "jobs", "reads", "loads"];
+const layoutFields = ["remoteValues", "created", "watermark", "now", "skew", "readFailed", "loadFailed", "dumpFailed", "writeFailed",
+  "loggerFailed", "diffHook", "defaultLogging", "overlayLogging", "jobs", "reads", "loads"];
 const binding = fidelityBinding({ publicChannels: ["o", "d"], layoutFields,
   view: (shadow, state) => [modelView(shadow, shadow.observed), { ...state,
     reads: state.reads.map(held => ({ read: held.read, flight: held.flight })), loads: state.loads.map(held => ({ load: held.load, flight: held.flight })) }] });
@@ -193,8 +278,7 @@ export function shadowWitnesses(histories, recorder = createWitnessRecorder()) {
     if (binding.carriesPrivateState(predictions)) binding.checkFidelity(shadows, predictions, path);
     // -- Comparison, captured policy and verdict flow ----------------------------------
     let c0Released = false, shadowTimedOut = false;
-    let logging = steps[0].choice >= 4 && steps[0].choice < 8;
-    const defaultLogging = logging;
+    const omittedDefaultLogging = Object.values(shadows[0].defaultLogging).every(input => input === "");
     let sawShadowPolicy = false, acceptedDefaultLogging = false;
     let shadowPolicy = 0, jobAdmitted = false, changedAdmittedJob = false;
     let acceptedLogging = false, acceptedInvalidLogging = false, invalidLoggingReportedAtAdmission = false, wallRolledAfterC0 = false;
@@ -206,10 +290,10 @@ export function shadowWitnesses(histories, recorder = createWitnessRecorder()) {
       const before = shadows[i - 1];
       if (step.action === "beginCall") {
         c0Released = false; shadowTimedOut = false;
-        acceptedLogging = logging; wallRolledAfterC0 = false;
-        acceptedInvalidLogging = before.invalidLog === true;
+        acceptedLogging = logsMismatch(shadows[i].accepted.logging); wallRolledAfterC0 = false;
+        acceptedInvalidLogging = shadows[i].accepted.invalid;
         invalidLoggingReportedAtAdmission = step.diagnostics.configErrors === steps[i - 1].diagnostics.configErrors + 1;
-        acceptedDefaultLogging = !defaultLogging && !sawShadowPolicy;
+        acceptedDefaultLogging = omittedDefaultLogging && !sawShadowPolicy;
         jobAdmitted = o.reads > previous.reads; changedAdmittedJob = false;
         if (steps[0].choice === 11 && jobAdmitted && o.calls.at(-1) === 0 && o.shadow.length === previous.shadow.length) {
           recorder.credit("source-work-before-deadline-dispatches-read");
@@ -225,11 +309,12 @@ export function shadowWitnesses(histories, recorder = createWitnessRecorder()) {
         }
       }
       if (step.action === "logPolicy" || step.action === "shadowPolicy") sawShadowPolicy = true;
-      if (step.action === "logPolicy") { logging = step.choice === 1; shadowPolicy = 0; }
+      if (step.action === "logPolicy") shadowPolicy = 0;
       if (step.action === "shadowPolicy") {
-        shadowPolicy = step.choice; logging = defaultLogging;
+        shadowPolicy = step.choice;
         if (jobAdmitted && step.choice > 0) changedAdmittedJob = true;
       }
+      const logging = logsMismatch(capturedLogging(shadows[i].defaultLogging, shadows[i].overlayLogging).logging);
       if (step.action === "rollbackWall" && c0Released) wallRolledAfterC0 = true;
       if (steps[0].choice === 12 && ["resolveLoader", "rejectLoader"].includes(step.action) &&
         previous.calls.at(-1) === 0 && o.calls.at(-1) === 4 && o.reads === previous.reads &&
@@ -259,6 +344,7 @@ export function shadowWitnesses(histories, recorder = createWitnessRecorder()) {
           if (outcome === "match") recorder.credit("enabled-logging-match-has-no-warning");
           if (outcome === "superseded") recorder.credit("enabled-logging-superseded-has-no-warning");
         }
+        if (outcome === "mismatch") warningLabels(recorder, step, steps[i - 1], before, shadows[i], steps[0].choice, invalidLoggingReportedAtAdmission);
         if (step.diagnostics.ages.length > steps[i - 1].diagnostics.ages.length) {
           if (wallRolledAfterC0 && step.diagnostics.ages.at(-1) === 0) recorder.credit("age-clamped-after-rollback");
           if (step.diagnostics.ages.at(-1) > 0) recorder.credit("age-at-verdict");

@@ -16,6 +16,7 @@ import {
   type RedisReadResult,
   type SerializationMetricLabels,
   type Serializer,
+  type ShadowMismatchLoggingMetricLabels,
   type ShadowValidationMetricLabels,
   type StaleRecoveryMetricLabels,
 } from "../src/index.js";
@@ -56,6 +57,14 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   coalesced(labels: CoalescedMetricLabels): void {
     this.record("coalesced", labels);
+  }
+
+  shadowValidation(labels: ShadowValidationMetricLabels): void {
+    this.record("shadowValidation", labels);
+  }
+
+  shadowMismatchLogging(labels: ShadowMismatchLoggingMetricLabels): void {
+    this.record("shadowMismatchLogging", labels);
   }
 
   staleRecovery(labels: StaleRecoveryMetricLabels): void {
@@ -125,6 +134,7 @@ describe("DialCache observability metrics", () => {
       invalidation: vi.fn(() => thenable),
       coalesced: vi.fn(() => thenable),
       shadowValidation: vi.fn(() => thenable),
+      shadowMismatchLogging: vi.fn(() => thenable),
       observeFutureTimestampOffset: vi.fn(() => thenable),
       staleRecovery: vi.fn(() => thenable),
       observeStaleRecoveryValueAge: vi.fn(() => thenable),
@@ -165,6 +175,12 @@ describe("DialCache observability metrics", () => {
       keyType: "user_id",
       outcome: "match",
     } satisfies ShadowValidationMetricLabels);
+    isolatedMetrics.shadowMismatchLogging?.({
+      cacheNamespace: "urn",
+      useCase: "RejectingMetricsThenable",
+      keyType: "user_id",
+      outcome: "logged",
+    } satisfies ShadowMismatchLoggingMetricLabels);
     isolatedMetrics.observeFutureTimestampOffset?.(labels, 0.001);
     isolatedMetrics.staleRecovery?.({
       cacheNamespace: "urn",
@@ -188,7 +204,7 @@ describe("DialCache observability metrics", () => {
 
     expect(then).not.toHaveBeenCalled();
     await tick();
-    expect(then).toHaveBeenCalledTimes(14);
+    expect(then).toHaveBeenCalledTimes(15);
   });
 
   it("includes the configured cache namespace on every metric path", async () => {
@@ -700,6 +716,55 @@ describe("DialCache observability metrics", () => {
       { userId: "123", calls: 1 },
       { userId: "123", calls: 1 },
     ]);
+  });
+
+  it("fails open when the shadow mismatch logging metrics hook throws", async () => {
+    const metrics = new RecordingMetrics();
+    const shadowMismatchLogging = vi.spyOn(metrics, "shadowMismatchLogging").mockImplementation(() => {
+      throw new Error("metrics unavailable");
+    });
+    const redis = new FakeRedis();
+    const useCase = "ThrowingShadowMismatchLoggingMetricFailOpen";
+    const cachedValue = { userId: "123", version: 1 };
+    const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase });
+    redis.setRaw(`${key.urn}:dialcache-frame-v1`, encodeFrame(cachedValue), 60_000);
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const dialcache = new DialCache({ metrics, redis: { client: redis, readTimeoutMs: 1_000 }, logger });
+    const getUser = dialcache.cached(async () => ({ userId: "123", version: 2 }), {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+        shadow: { ramp: 100, mismatchLogging: { diff: "paths" } },
+      }),
+    });
+
+    // A throwing hook after the first warning must leave the next served hit and validation intact.
+    for (const attempt of [1, 2]) {
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(cachedValue);
+      await vi.waitFor(() => {
+        expect(shadowMismatchLogging).toHaveBeenCalledTimes(attempt);
+      }, { timeout: 1_000, interval: 1 });
+    }
+
+    const shadowLabels = { cacheNamespace: "urn", useCase, keyType: "user_id" };
+    expect(events(metrics, "shadowValidation", { useCase })).toEqual([
+      { name: "shadowValidation", labels: { ...shadowLabels, outcome: "mismatch" } },
+      { name: "shadowValidation", labels: { ...shadowLabels, outcome: "mismatch" } },
+    ]);
+    expect(shadowMismatchLogging.mock.calls).toEqual([
+      [{ ...shadowLabels, outcome: "logged" }],
+      [{ ...shadowLabels, outcome: "logged" }],
+    ]);
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      expect.objectContaining({ useCase, mismatchPaths: ["/version"], mismatchPathCount: 1 }),
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(events(metrics, "error", { useCase })).toEqual([]);
   });
 
   it("classifies disabled cache skips by reason", async () => {

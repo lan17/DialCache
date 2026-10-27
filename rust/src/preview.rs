@@ -1,32 +1,42 @@
-//! Bounded previews for mismatch warnings.
+//! Bounded previews and caps for mismatch warnings.
 
 use std::io::{self, Write};
-
-use serde::Serialize;
 
 /// Maximum UTF-8 bytes of a logged cache key.
 pub const SHADOW_LOG_KEY_MAX_BYTES: usize = 2 * 1024;
 /// Maximum UTF-8 bytes of a logged value preview.
 pub const SHADOW_LOG_VALUE_MAX_BYTES: usize = 8 * 1024;
+/// Maximum UTF-8 bytes of a logged `diff_json`.
+pub const SHADOW_LOG_DIFF_MAX_BYTES: usize = 8 * 1024;
+/// Most difference entries a warning lists; `mismatch_path_count` keeps the
+/// uncut total.
+pub const SHADOW_MISMATCH_MAX_ENTRIES: usize = 64;
+/// Maximum UTF-8 bytes of one logged JSON Pointer.
+pub const SHADOW_MISMATCH_PATH_MAX_BYTES: usize = 512;
+/// Maximum UTF-8 bytes of one entry side's JSON in `diff_json`; a longer side
+/// is logged as its clamped JSON text.
+pub const SHADOW_MISMATCH_SIDE_MAX_BYTES: usize = 1024;
+/// Reference tokens in the deepest pointer the built-in walk reports.
+pub const SHADOW_MISMATCH_MAX_DEPTH: usize = 32;
 /// Marker appended to a clamped preview.
 pub const SHADOW_LOG_TRUNCATION_MARKER: &str = "...[truncated]";
 
 /// Retain only the logged prefix, but consume the complete serialization so
 /// errors beyond the cap still suppress the preview.
-struct JsonPrefix {
+pub(crate) struct JsonPrefix {
     bytes: Vec<u8>,
     truncated: bool,
 }
 
 impl JsonPrefix {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             bytes: Vec::with_capacity(SHADOW_LOG_VALUE_MAX_BYTES),
             truncated: false,
         }
     }
 
-    fn finish(mut self) -> String {
+    pub(crate) fn finish(mut self) -> String {
         if self.truncated {
             self.bytes
                 .truncate(SHADOW_LOG_VALUE_MAX_BYTES - SHADOW_LOG_TRUNCATION_MARKER.len());
@@ -59,7 +69,9 @@ impl Write for JsonPrefix {
     }
 }
 
-pub(crate) fn json_preview<T: Serialize>(value: &T) -> Option<String> {
+/// The streamed value-field prefix of `value`, as warnings render it: the
+/// default preview of an operation built with JSON.
+pub(crate) fn json_preview<T: serde::Serialize>(value: &T) -> Option<String> {
     let mut prefix = JsonPrefix::new();
     serde_json::to_writer(&mut prefix, value).ok()?;
     Some(prefix.finish())
@@ -95,6 +107,7 @@ pub fn preview_value(json: &str) -> String {
 mod tests {
     use super::*;
     use serde::ser::{Error, SerializeSeq};
+    use serde::Serialize;
 
     #[test]
     fn clamps_on_character_boundaries() {

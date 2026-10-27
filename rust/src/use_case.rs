@@ -13,8 +13,8 @@ use crate::engine::DialCache;
 use crate::error::{BoxError, ConfigError, Error};
 use crate::identity::{normalize_args, ArgValue, Identity, IntoKeyId};
 use crate::operation::{
-    downcast_value, erase_load, Comparator, ErasedOperation, Operation, OperationMetadata, Preview,
-    RecoveryPredicate, SourceBudget,
+    downcast_value, erase_load, Comparator, ErasedOperation, JsonDefault, MismatchDiffHook,
+    MismatchEntry, Operation, OperationMetadata, Preview, RecoveryPredicate, SourceBudget,
 };
 use crate::policy::Policy;
 use crate::scope::Scope;
@@ -149,6 +149,7 @@ pub struct UseCaseBuilder<Args, T> {
     comparator: Option<Comparator<T>>,
     should_recover: Option<RecoveryPredicate>,
     preview: Option<Preview<T>>,
+    mismatch_diff: Option<MismatchDiffHook<T>>,
     key: Option<KeyFn<Args>>,
     source: Option<SourceFn<Args, T>>,
 }
@@ -179,6 +180,7 @@ where
             comparator: None,
             should_recover: None,
             preview: None,
+            mismatch_diff: None,
             key: None,
             source: None,
         }
@@ -226,14 +228,26 @@ where
         self
     }
 
-    /// Bounded textual preview of a value for mismatch warnings.
-    /// Runs through [`Runtime::spawn_blocking`](crate::Runtime::spawn_blocking)
-    /// after confirmation; callbacks may run on a CPU worker thread.
+    /// The text mismatch warnings log for each value in place of its JSON;
+    /// required for value fields under
+    /// [`register_custom`](Self::register_custom). Difference fields then
+    /// come only from [`mismatch_diff`](Self::mismatch_diff). See [`Preview`].
     pub fn preview(
         mut self,
         preview: impl Fn(&T) -> Option<String> + Send + Sync + 'static,
     ) -> Self {
         self.preview = Some(Arc::new(preview));
+        self
+    }
+
+    /// Replace the built-in difference computation of mismatch warnings;
+    /// required for difference fields under
+    /// [`register_custom`](Self::register_custom). See [`MismatchDiffHook`].
+    pub fn mismatch_diff(
+        mut self,
+        hook: impl Fn(&T, &T) -> Vec<MismatchEntry> + Send + Sync + 'static,
+    ) -> Self {
+        self.mismatch_diff = Some(Arc::new(hook));
         self
     }
 
@@ -260,7 +274,7 @@ where
         self,
         codec: Arc<dyn Codec<T>>,
         comparator: Comparator<T>,
-        preview: Option<Preview<T>>,
+        json: Option<JsonDefault<T>>,
     ) -> Result<UseCase<Args, T>, ConfigError> {
         let key = self
             .key
@@ -286,7 +300,12 @@ where
             codec,
             comparator,
             should_recover: self.should_recover,
-            preview,
+            // Without a preview of its own, a JSON use case keeps the default.
+            preview: self
+                .preview
+                .or_else(|| json.as_ref().map(JsonDefault::preview)),
+            mismatch_diff: self.mismatch_diff,
+            json,
         }
         .erase();
         Ok(UseCase {
@@ -312,8 +331,7 @@ where
             .comparator
             .clone()
             .ok_or_else(|| ConfigError::invalid("DialCache use case needs a comparator"))?;
-        let preview = self.preview.clone();
-        self.finish(codec, comparator, preview)
+        self.finish(codec, comparator, None)
     }
 }
 
@@ -322,19 +340,16 @@ where
     Args: Clone + Send + Sync + 'static,
     T: Serialize + DeserializeOwned + PartialEq + Send + Sync + 'static,
 {
-    /// Register with the JSON codec, `PartialEq` comparison and JSON previews
-    /// unless overridden.
+    /// Register with the JSON codec and `PartialEq` comparison unless
+    /// overridden. Mismatch warnings use the values' JSON, as for
+    /// [`Operation::new`].
     pub fn register(self) -> Result<UseCase<Args, T>, ConfigError> {
         let codec = self.codec.clone().unwrap_or_else(|| Arc::new(JsonCodec));
         let comparator = self
             .comparator
             .clone()
             .unwrap_or_else(|| Arc::new(|a: &T, b: &T| a == b));
-        let preview = self
-            .preview
-            .clone()
-            .or_else(|| Some(Arc::new(crate::preview::json_preview::<T>)));
-        self.finish(codec, comparator, preview)
+        self.finish(codec, comparator, Some(JsonDefault::new()))
     }
 }
 

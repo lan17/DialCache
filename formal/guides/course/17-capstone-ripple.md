@@ -45,7 +45,7 @@ stronger, that replayed it in all four ports.
 
 - **[generated-fixtures.mjs](../../tools/generated-fixtures.mjs)**: the
   `--verify` mode the audit lane runs
-  ([validation.mjs](../../tools/validation.mjs) line 197, `--verify`) and the
+  ([validation.mjs](../../tools/validation.mjs) line 202, `--verify`) and the
   `--write` path behind `generate-artifacts.mjs`.
 - **[../../generated/README.md](../../generated/README.md)**: the two
   regeneration commands and the rule "never edit a file in this directory".

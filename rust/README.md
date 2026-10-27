@@ -198,7 +198,13 @@ payloads remain inline; synchronous protocol helpers remain synchronous.
 The default CPU executor is shared across cache instances: two worker threads
 and two queued jobs. Admission never waits for queue space. Saturation or worker
 creation failure fails open: a read falls through to the source, and a failed
-compression skips the write while preserving the source result. Custom runtimes
+compression skips the write while preserving the source result. Shadow mismatch
+warnings share this executor with caller reads: rendering a warning's content
+and running its `mismatch_diff` hook queue beside the zstd decompression of
+cache hits, so a burst of warnings can reject a compressed hit and send that
+read to the source. Each instance runs at most `shadow_max_in_flight` shadow
+jobs (default 1), so that setting and the number of instances in the process
+bound how many warnings contend. Custom runtimes
 may supply their own bounded CPU executor. `StepRuntime` queues these jobs on its
 controlled executor for deterministic tests. A shadow job retains its capacity
 until its admitted CPU work finishes or is discarded, including after a deadline
@@ -222,18 +228,30 @@ Default stale-recovery decode warnings omit error text that could contain cached
 values; JSON errors retain their category and line/column location. A custom
 `Logger` can inspect the original error when application-controlled details are
 needed.
-Mismatch logging is opt-in, confirmed, bounded, and previews values through
-the operation's `preview` (JSON for serde values). Default JSON previews retain
-only an 8 KiB prefix while checking the entire serialization for errors. Preview
-callbacks run through the bounded CPU executor after confirmation; they may run
-on a worker thread. Queue rejection omits value previews but still logs the
-confirmed mismatch. Diagnostic work holds shadow capacity until it finishes,
-including after runtime shutdown. Observer and logger failures never change a
-cache, source or maintenance result.
+Mismatch logging is opt-in, confirmed and bounded. `ShadowPolicy::mismatch_logging`
+chooses the warning's content: `value` logs the JSON of both values, and
+`diff` at `MismatchDiff::Paths` logs RFC 6901 pointers to the differing
+fields, which `MismatchDiff::Values` extends with what each side holds there;
+`log_mismatches: Some(true)` is shorthand for both. Values are compared with
+`PartialEq` or the operation's comparator; only the logged fields derive from
+the values' `serde` JSON, which `Operation::new` and `register` render. A
+`with_codec` or `register_custom` operation has none, so it logs value fields
+through its `preview` and differences through its `mismatch_diff` hook. A
+`preview` you set replaces the JSON for the whole warning, so the differences
+of an operation with one also come only from the hook; setting `preview` to
+`None` logs no values and leaves the differences to the hook as well. The
+differences are computed over each value's whole rendering, so their cost
+grows with the value's size. Rendering and hooks run through the bounded CPU executor after
+confirmation; they may run on a worker thread. A failure leaves the field
+unavailable and names its cause in the warning, and every warning attempt
+emits one `ShadowMismatchLogging` event with its outcome. Queue rejection
+still logs the metadata warning. Diagnostic work holds shadow capacity until
+it finishes, including after runtime shutdown. Observer and logger failures
+never change a cache, source or maintenance result.
 
 `MetricKind` maps every event to the metric names, labels and values shared
 with the TypeScript and Go exporters. `PrometheusObserver` (feature
-`prometheus`) registers the nineteen collectors on a `prometheus::Registry`
+`prometheus`) registers the twenty collectors on a `prometheus::Registry`
 under an optional prefix; clone one observer for every instance that exports
 to the same registry, because the `prometheus` crate cannot hand back an
 existing collector and a second registration of the same names is a

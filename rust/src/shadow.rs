@@ -17,10 +17,12 @@ use crate::flight::{start_pending, yield_deferred, Settled, ValueResult};
 use crate::limits::DEFAULT_FALLBACK_TIMEOUT_MS;
 use crate::local::StoredValue;
 use crate::observe::{
-    ErrorKind, Event, Layer, LogEvent, MissReason, ShadowMismatchDetails, ShadowOutcome,
+    ErrorKind, Event, Layer, LogEvent, MissReason, ShadowMismatchDetails,
+    ShadowMismatchLoggingOutcome, ShadowOutcome,
 };
-use crate::preview::{preview_key, preview_value};
+use crate::preview::preview_key;
 use crate::remote::Frame;
+use crate::shadow_log::{render_mismatch_log, LogPlan, MismatchContent, Renderers};
 
 /// One admitted shadow job holding an instance slot.
 /// One held entry of the instance-wide shadow table. Dropping it frees the
@@ -91,6 +93,11 @@ struct Verdict {
     outcome: ShadowOutcome,
     age_ms: Option<i64>,
     compared: Option<(StoredValue, StoredValue)>,
+}
+
+/// A verdict's value age in seconds, clamped at zero.
+fn age_seconds(age_ms: i64) -> f64 {
+    age_ms.max(0) as f64 / 1000.0
 }
 
 impl Verdict {
@@ -184,44 +191,70 @@ impl Execution {
             self.emit(Event::ShadowValueAge {
                 labels: self.labels.clone(),
                 outcome: verdict.outcome,
-                seconds: age.max(0) as f64 / 1000.0,
+                seconds: age_seconds(age),
             });
         }
     }
 
+    /// Emits the confirmed-mismatch warning and its one `ShadowMismatchLogging`
+    /// event. Runs after the verdict was recorded and never changes it; any
+    /// construction failure logs less, never more, and nothing reaches the
+    /// caller.
     async fn log_shadow_mismatch(&self, verdict: Verdict, slot: Arc<ShadowSlot>) {
-        if verdict.outcome != ShadowOutcome::Mismatch || !self.policy.shadow.log_mismatches {
+        let shadow = self.policy.shadow;
+        let (ShadowOutcome::Mismatch, Some((cached, source)), Some(age_ms)) =
+            (verdict.outcome, verdict.compared, verdict.age_ms)
+        else {
+            return;
+        };
+        if !shadow.logs_mismatches() {
             return;
         }
-        let (cached, source) = match (self.op.metadata.preview.clone(), verdict.compared) {
-            (Some(preview), Some((cached, source))) => {
-                let cpu_slot = slot.clone();
-                crate::blocking::run(self.core.runtime.as_ref(), move || {
-                    // Raw diagnostic work keeps capacity even if the awaiting
-                    // async task is dropped during runtime shutdown.
-                    let _slot = cpu_slot;
-                    let render = |value: &StoredValue| {
-                        catch_unwind(AssertUnwindSafe(|| preview(value)))
-                            .ok()
-                            .flatten()
-                            .map(|json| preview_value(&json))
-                    };
-                    Ok((render(&cached), render(&source)))
-                })
-                .await
-                .unwrap_or_default()
-            }
-            _ => (None, None),
+        let plan = LogPlan {
+            value: shadow.mismatch_value,
+            diff: shadow.mismatch_diff,
         };
-        self.core
+        let metadata = &self.op.metadata;
+        let renderers = Renderers {
+            value_renderer: metadata.value_renderer.clone(),
+            hook: metadata.mismatch_diff.clone(),
+        };
+        let content = if renderers.runs_code(plan) {
+            let cpu_slot = slot.clone();
+            crate::blocking::run(self.core.runtime.as_ref(), move || {
+                // Raw diagnostic work keeps capacity even if the awaiting
+                // async task is dropped during runtime shutdown.
+                let _slot = cpu_slot;
+                Ok(render_mismatch_log(plan, &cached, &source, &renderers))
+            })
+            .await
+            // Rejected, panicked or dropped CPU work keeps the metadata warning.
+            .unwrap_or_else(|_| MismatchContent::failed())
+        } else {
+            // Nothing to run: every requested field is unavailable.
+            render_mismatch_log(plan, &cached, &source, &renderers)
+        };
+        let delivered = self
+            .core
             .log(LogEvent::ShadowMismatch(ShadowMismatchDetails {
                 namespace: self.labels.namespace.clone(),
                 use_case: self.labels.use_case.clone(),
                 key_type: self.labels.key_type.clone(),
+                cached_value_age_seconds: age_seconds(age_ms),
                 cache_key: preview_key(&self.keys.logical),
-                cached_value_json: cached,
-                source_value_json: source,
+                diff: content.diff,
+                values: content.values,
+                logging_outcome: content.failure,
             }));
+        let outcome = content.failure.unwrap_or(if delivered {
+            ShadowMismatchLoggingOutcome::Logged
+        } else {
+            ShadowMismatchLoggingOutcome::LoggerError
+        });
+        self.emit(Event::ShadowMismatchLogging {
+            labels: self.labels.clone(),
+            outcome,
+        });
         drop(slot);
     }
 

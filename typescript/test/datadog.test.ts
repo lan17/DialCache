@@ -11,6 +11,7 @@ import {
   type DialCacheRedisClient,
   type MetricErrorKind,
   type MetricLayer,
+  type ShadowMismatchLoggingOutcome,
   type ShadowValidationOutcome,
   type StaleRecoveryOutcome,
 } from "../src/index.js";
@@ -130,6 +131,13 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   dropped: true,
 };
 const shadowValidationOutcomes = Object.keys(SHADOW_VALIDATION_OUTCOMES) as ShadowValidationOutcome[];
+const SHADOW_MISMATCH_LOGGING_OUTCOMES: Readonly<Record<ShadowMismatchLoggingOutcome, true>> = {
+  logged: true,
+  hook_error: true,
+  render_error: true,
+  logger_error: true,
+};
+const shadowMismatchLoggingOutcomes = Object.keys(SHADOW_MISMATCH_LOGGING_OUTCOMES) as ShadowMismatchLoggingOutcome[];
 const STALE_RECOVERY_OUTCOMES: Readonly<Record<StaleRecoveryOutcome, true>> = {
   served: true,
   miss: true,
@@ -200,6 +208,12 @@ describe("Datadog metrics adapter", () => {
       },
       42.5,
     );
+    metrics.shadowMismatchLogging({
+      cacheNamespace: cacheLabels.cacheNamespace,
+      useCase: "LoadUser",
+      keyType: "user_id",
+      outcome: "logged",
+    });
     metrics.observeFutureTimestampOffset(cacheLabels, 0.007);
     metrics.compression({ ...cacheLabels, outcome: "compressed" });
     metrics.observeGet(cacheLabels, 0.125);
@@ -266,6 +280,12 @@ describe("Datadog metrics adapter", () => {
         name: "dialcache.shadow.value_age",
         value: 42.5,
         tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "mismatch" },
+      },
+      {
+        method: "increment",
+        name: "dialcache.shadow_mismatch_logging.count",
+        value: 1,
+        tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "logged" },
       },
       {
         method: "distribution",
@@ -388,6 +408,14 @@ describe("Datadog metrics adapter", () => {
         outcome,
       });
     }
+    for (const outcome of shadowMismatchLoggingOutcomes) {
+      metrics.shadowMismatchLogging({
+        cacheNamespace: cacheLabels.cacheNamespace,
+        useCase: cacheLabels.useCase,
+        keyType: cacheLabels.keyType,
+        outcome,
+      });
+    }
     for (const outcome of staleRecoveryOutcomes) {
       metrics.staleRecovery({
         cacheNamespace: cacheLabels.cacheNamespace,
@@ -432,6 +460,18 @@ describe("Datadog metrics adapter", () => {
         .map(({ tags }) => tags),
     ).toEqual(
       shadowValidationOutcomes.map((outcome) => ({
+        cache_namespace: cacheLabels.cacheNamespace,
+        use_case: cacheLabels.useCase,
+        key_type: cacheLabels.keyType,
+        outcome,
+      })),
+    );
+    expect(
+      client.calls
+        .filter(({ name }) => name === "dialcache.shadow_mismatch_logging.count")
+        .map(({ tags }) => tags),
+    ).toEqual(
+      shadowMismatchLoggingOutcomes.map((outcome) => ({
         cache_namespace: cacheLabels.cacheNamespace,
         use_case: cacheLabels.useCase,
         key_type: cacheLabels.keyType,
@@ -537,8 +577,15 @@ describe("Datadog metrics adapter", () => {
       keyType: "user_id",
       outcome: "match",
     }) as unknown as Promise<void>;
+    const loggingReturned = metrics.shadowMismatchLogging({
+      cacheNamespace: "users",
+      useCase: "AsyncShadowMetric",
+      keyType: "user_id",
+      outcome: "logged",
+    }) as unknown as Promise<void>;
 
     await expect(returned).rejects.toBe(metricError);
+    await expect(loggingReturned).rejects.toBe(metricError);
   });
 
   it("never emits cache ids, arguments, Redis keys, or raw errors as Datadog tags", async () => {
@@ -670,24 +717,23 @@ describe("Datadog metrics adapter", () => {
 
   it("enforces Datadog's 200-character final metric-name limit", () => {
     const client = new RecordingDogStatsDClient();
-    const longestValidNamespace = "a".repeat(175);
-    const tooLongNamespace = "a".repeat(176);
+    // shadow_mismatch_logging.count is the longest suffix: 170 + "." + 29 = 200.
+    const longestValidNamespace = "a".repeat(170);
+    const tooLongNamespace = "a".repeat(171);
     const metrics = new DatadogDialCacheMetrics({
       client,
       namespace: longestValidNamespace,
       observationMetricType: "distribution",
     });
 
-    metrics.observeStaleRecoveryValueAge(
-      {
-        cacheNamespace: cacheLabels.cacheNamespace,
-        useCase: cacheLabels.useCase,
-        keyType: cacheLabels.keyType,
-        outcome: "served",
-      },
-      1,
-    );
+    metrics.shadowMismatchLogging({
+      cacheNamespace: cacheLabels.cacheNamespace,
+      useCase: cacheLabels.useCase,
+      keyType: cacheLabels.keyType,
+      outcome: "logged",
+    });
 
+    expect(client.calls[0]?.name).toBe(`${longestValidNamespace}.shadow_mismatch_logging.count`);
     expect(client.calls[0]?.name).toHaveLength(200);
     expect(
       () =>

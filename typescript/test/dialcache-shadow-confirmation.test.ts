@@ -8,6 +8,7 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   FallbackTimeoutError,
+  type CacheConfigProvider,
   type CacheMetricLabels,
   type CoalescedMetricLabels,
   type DialCacheConfig,
@@ -16,6 +17,7 @@ import {
   type DisabledMetricLabels,
   type ErrorMetricLabels,
   type InvalidationMetricLabels,
+  type Logger,
   type RedisCachePayload,
   type RedisInvalidationRequest,
   type RedisReadContext,
@@ -25,6 +27,11 @@ import {
   type RedisWriteRequest,
   type SerializationMetricLabels,
   type Serializer,
+  type ShadowMismatchDiff,
+  type ShadowMismatchEntry,
+  type ShadowMismatchLoggingConfig,
+  type ShadowMismatchLoggingMetricLabels,
+  type ShadowMismatchLoggingOutcome,
   type ShadowValidationMetricLabels,
 } from "../src/index.js";
 import {
@@ -32,9 +39,11 @@ import {
   deterministicShadowRampSample,
 } from "../src/internal/ramp.js";
 import {
+  SHADOW_LOG_DIFF_MAX_BYTES,
   SHADOW_LOG_KEY_MAX_BYTES,
   SHADOW_LOG_TRUNCATION_MARKER,
   SHADOW_LOG_VALUE_MAX_BYTES,
+  SHADOW_MISMATCH_SIDE_MAX_BYTES,
 } from "../src/internal/shadow-log-json.js";
 import { REMOTE_SHADOW_CACHE_LAYER } from "../src/metrics.js";
 
@@ -124,6 +133,7 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly ordinaryEvents: OrdinaryMetricEvent[] = [];
   readonly shadowEvents: ShadowValidationMetricLabels[] = [];
   readonly shadowAgeEvents: ShadowAgeEvent[] = [];
+  readonly shadowMismatchLoggingEvents: ShadowMismatchLoggingMetricLabels[] = [];
   readonly futureTimestampEvents: FutureTimestampEvent[] = [];
 
   request(labels: CacheMetricLabels): void {
@@ -158,6 +168,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
     this.shadowAgeEvents.push({ labels: { ...labels }, seconds });
   }
 
+  shadowMismatchLogging(labels: ShadowMismatchLoggingMetricLabels): void {
+    this.shadowMismatchLoggingEvents.push({ ...labels });
+  }
+
   observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {
     this.futureTimestampEvents.push({ labels: { ...labels }, seconds });
   }
@@ -188,6 +202,7 @@ function remoteConfig(
   shadowPercentage = 100,
   logging: {
     readonly logMismatches?: boolean;
+    readonly mismatchLogging?: ShadowMismatchLoggingConfig;
   } = {},
 ): DialCacheKeyConfig {
   return new DialCacheKeyConfig({
@@ -252,6 +267,124 @@ async function waitForShadowEvents(metrics: RecordingMetrics, count: number): Pr
   await vi.waitFor(() => {
     expect(metrics.shadowEvents).toHaveLength(count);
   }, { timeout: 2_000, interval: 1 });
+}
+
+async function waitForMismatchLoggingEvents(metrics: RecordingMetrics, count: number): Promise<void> {
+  await vi.waitFor(() => {
+    expect(metrics.shadowMismatchLoggingEvents).toHaveLength(count);
+  }, { timeout: 2_000, interval: 1 });
+}
+
+async function expectNoUnhandledRejection(run: () => Promise<void>): Promise<void> {
+  const unhandled = vi.fn();
+  process.on("unhandledRejection", unhandled);
+  try {
+    await run();
+    await nextImmediate();
+  } finally {
+    process.off("unhandledRejection", unhandled);
+  }
+  expect(unhandled).not.toHaveBeenCalled();
+}
+
+interface MismatchRecord {
+  readonly id: string;
+  readonly version: number;
+  readonly tags: readonly string[];
+  readonly extra?: boolean;
+}
+
+const mismatchCachedRecord: MismatchRecord = { id: "123", version: 1, tags: ["a"] };
+const mismatchSourceRecord: MismatchRecord = { id: "123", version: 2, tags: ["a", "b"], extra: true };
+const MISMATCH_PATH_FIELDS = {
+  mismatchPaths: ["/extra", "/tags", "/version"],
+  mismatchPathCount: 3,
+} as const;
+const MISMATCH_DIFF_JSON = '[{"path":"/extra","source":true},'
+  + '{"path":"/tags","cached":["a"],"source":["a","b"]},'
+  + '{"path":"/version","cached":1,"source":2}]';
+const MISMATCH_VALUE_FIELDS = {
+  cachedValueJson: '{"id":"123","version":1,"tags":["a"]}',
+  sourceValueJson: '{"id":"123","version":2,"tags":["a","b"],"extra":true}',
+} as const;
+
+interface ConfirmedMismatchOptions {
+  readonly warn: Logger["warn"];
+  readonly metrics?: RecordingMetrics;
+  readonly cacheConfigProvider?: CacheConfigProvider;
+  readonly shadowMismatchDiff?: ShadowMismatchDiff<MismatchRecord>;
+  readonly api?: "cached" | "getOrLoad";
+}
+
+/**
+ * Serves `mismatchCachedRecord` from Redis under key "123", loads
+ * `mismatchSourceRecord` from the source, confirms the unchanged C1, and
+ * waits for the verdict.
+ */
+async function runConfirmedMismatch(
+  useCase: string,
+  defaultConfig: DialCacheKeyConfig,
+  options: ConfirmedMismatchOptions,
+): Promise<{ readonly metrics: RecordingMetrics; readonly result: MismatchRecord }> {
+  const payload = JSON.stringify(mismatchCachedRecord);
+  const redis = new ScriptedRedis([() => payload, () => payload]);
+  const metrics = options.metrics ?? new RecordingMetrics();
+  const dialcache = createCache(redis, metrics, {
+    ...(options.cacheConfigProvider === undefined ? {} : { cacheConfigProvider: options.cacheConfigProvider }),
+    logger: {
+      debug: () => undefined,
+      error: () => undefined,
+      warn: options.warn,
+    },
+  });
+  const load = async (): Promise<MismatchRecord> => mismatchSourceRecord;
+  const hook = options.shadowMismatchDiff === undefined ? {} : { shadowMismatchDiff: options.shadowMismatchDiff };
+  const result = await dialcache.enable(async () => options.api === "getOrLoad"
+    ? await dialcache.getOrLoad(load, { ...trackedOptions(useCase, defaultConfig), key: "123", ...hook })
+    : await dialcache.cached(load, { ...trackedOptions(useCase, defaultConfig), cacheKey: () => "123", ...hook })());
+  await waitForShadowEvents(metrics, 1);
+  return { metrics, result };
+}
+
+/** The always-present warning fields for key "123", with the verdict's observed value age. */
+function mismatchWarning(
+  useCase: string,
+  metrics: RecordingMetrics,
+  fields: Readonly<Record<string, unknown>> = {},
+): Record<string, unknown> {
+  expect(metrics.shadowAgeEvents).toHaveLength(1);
+  return {
+    cacheNamespace: "urn",
+    useCase,
+    keyType: "user_id",
+    outcome: "mismatch",
+    cachedValueAgeSeconds: metrics.shadowAgeEvents[0]!.seconds,
+    cacheKey: `{urn:user_id:123}#${useCase}`,
+    ...fields,
+  };
+}
+
+interface BigintRecord {
+  readonly id: string;
+  readonly version: number | bigint;
+}
+
+const bigintRecordSerializer: Serializer<BigintRecord> = {
+  dump: (value) => JSON.stringify({ ...value, version: Number(value.version) }),
+  load: (value) => JSON.parse(Buffer.isBuffer(value) ? value.toString("utf8") : value) as BigintRecord,
+};
+
+function mismatchLoggingEvent(
+  useCase: string,
+  outcome: ShadowMismatchLoggingOutcome,
+): ShadowMismatchLoggingMetricLabels {
+  return { cacheNamespace: "urn", useCase, keyType: "user_id", outcome };
+}
+
+function configResolutionErrors(metrics: RecordingMetrics): Array<Record<string, unknown>> {
+  return metrics.ordinaryEvents
+    .filter(({ name, labels }) => name === "error" && labels.error === "config_resolution")
+    .map(({ labels }) => labels);
 }
 
 function expectTrackedReads(
@@ -375,8 +508,11 @@ describe("DialCache Redis shadow confirmation", () => {
     await dialcache.enable(async () => await getUser());
     await waitForShadowEvents(metrics, 1);
 
+    await nextImmediate();
+
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
     expect(warn).not.toHaveBeenCalled();
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([]);
   });
 
   it("logs one bounded JSON warning for a served-hit confirmed mismatch", async () => {
@@ -412,7 +548,9 @@ describe("DialCache Redis shadow confirmation", () => {
 
     await dialcache.enable(async () => await getUser());
     await waitForShadowEvents(metrics, 1);
+    await waitForMismatchLoggingEvents(metrics, 1);
 
+    expect(metrics.shadowAgeEvents).toHaveLength(1);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(
       "DialCache shadow validation mismatch",
@@ -421,11 +559,38 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase: "ShadowMismatchJson",
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: metrics.shadowAgeEvents[0]!.seconds,
         cacheKey: "{private-namespace:user_id:private-id}?tenant=private-tenant#ShadowMismatchJson",
+        mismatchPaths: ["/version"],
+        mismatchPathCount: 1,
+        diffJson: '[{"path":"/version","cached":1,"source":2}]',
         cachedValueJson: '{"id":"private-id","version":1}',
         sourceValueJson: '{"id":"private-id","version":2}',
       },
     );
+    expect(Object.keys((warn.mock.calls[0] as unknown as [string, object])[1])).toEqual([
+      "cacheNamespace",
+      "useCase",
+      "keyType",
+      "outcome",
+      "cachedValueAgeSeconds",
+      "cacheKey",
+      "mismatchPaths",
+      "mismatchPathCount",
+      "diffJson",
+      "cachedValueJson",
+      "sourceValueJson",
+    ]);
+    // Labels come from the key, not from the mutated verdict labels, and a
+    // rejected logger promise counts as logger_error.
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([
+      {
+        cacheNamespace: "private-namespace",
+        useCase: "ShadowMismatchJson",
+        keyType: "user_id",
+        outcome: "logger_error",
+      },
+    ]);
     await nextImmediate();
   });
 
@@ -465,7 +630,9 @@ describe("DialCache Redis shadow confirmation", () => {
 
     await expect(dialcache.enable(async () => await getUser())).resolves.toBe(sourceValue);
     await waitForShadowEvents(metrics, 1);
+    await waitForMismatchLoggingEvents(metrics, 1);
 
+    expect(metrics.shadowAgeEvents).toHaveLength(1);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(
       "DialCache shadow validation mismatch",
@@ -474,15 +641,22 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase: "ShadowMismatchRampedDownJson",
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: metrics.shadowAgeEvents[0]!.seconds,
         cacheKey: "{urn:user_id:123}?locale=en-US#ShadowMismatchRampedDownJson",
+        mismatchPaths: ["/version"],
+        mismatchPathCount: 1,
+        diffJson: '[{"path":"/version","cached":1,"source":2}]',
         cachedValueJson: '{"id":"123","version":1}',
         sourceValueJson: '{"id":"123","version":2}',
       },
     );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([
+      mismatchLoggingEvent("ShadowMismatchRampedDownJson", "logged"),
+    ]);
     expect(serializer.dump).not.toHaveBeenCalled();
   });
 
-  it("falls back to a metadata warning when JSON detail construction throws", async () => {
+  it("logs every requested field as null with render_error when warning construction throws", async () => {
     const cachedValue = { id: "123", version: 1 };
     const sourceValue = { id: "123", version: 2 };
     const payload = JSON.stringify(cachedValue);
@@ -519,8 +693,10 @@ describe("DialCache Redis shadow confirmation", () => {
     try {
       sourceGate.resolve(sourceValue);
       await waitForShadowEvents(metrics, 1);
+      await waitForMismatchLoggingEvents(metrics, 1);
 
       expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+      expect(metrics.shadowAgeEvents).toHaveLength(1);
       expect(warn).toHaveBeenCalledOnce();
       expect(warn).toHaveBeenCalledWith(
         "DialCache shadow validation mismatch",
@@ -529,8 +705,19 @@ describe("DialCache Redis shadow confirmation", () => {
           useCase: "ShadowMismatchJsonFailure",
           keyType: "user_id",
           outcome: "mismatch",
+          cachedValueAgeSeconds: metrics.shadowAgeEvents[0]!.seconds,
+          mismatchPaths: null,
+          mismatchPathCount: null,
+          diffJson: null,
+          cachedValueJson: null,
+          sourceValueJson: null,
+          loggingOutcome: "render_error",
         },
       );
+      expect(warn.mock.calls[0]?.[1]).not.toHaveProperty("cacheKey");
+      expect(metrics.shadowMismatchLoggingEvents).toEqual([
+        mismatchLoggingEvent("ShadowMismatchJsonFailure", "render_error"),
+      ]);
     } finally {
       sourceGate.resolve(sourceValue);
       encodeInto.mockRestore();
@@ -564,12 +751,15 @@ describe("DialCache Redis shadow confirmation", () => {
 
     await dialcache.enable(async () => await getUser());
     await waitForShadowEvents(metrics, 1);
+    await waitForMismatchLoggingEvents(metrics, 1);
 
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
     expect(warn).toHaveBeenCalledTimes(1);
     const warning = warn.mock.calls[0]?.[1] as Record<string, unknown>;
     expect(warning).not.toHaveProperty("cachedValue");
     expect(warning).not.toHaveProperty("sourceValue");
+    expect(warning).not.toHaveProperty("loggingOutcome");
+    expect(warning.cachedValueAgeSeconds).toBe(metrics.shadowAgeEvents[0]?.seconds);
     for (const [field, maxBytes] of [
       ["cacheKey", SHADOW_LOG_KEY_MAX_BYTES],
       ["cachedValueJson", SHADOW_LOG_VALUE_MAX_BYTES],
@@ -581,6 +771,701 @@ describe("DialCache Redis shadow confirmation", () => {
       expect((preview as string).endsWith(SHADOW_LOG_TRUNCATION_MARKER)).toBe(true);
       expect(preview).not.toContain("\uFFFD");
     }
+
+    // The ids are equal, so the one differing member carries both sides,
+    // each clamped to its JSON text.
+    expect(warning.mismatchPaths).toEqual(["/content"]);
+    expect(warning.mismatchPathCount).toBe(1);
+    expect(typeof warning.diffJson).toBe("string");
+    expect(Buffer.byteLength(warning.diffJson as string)).toBeLessThanOrEqual(SHADOW_LOG_DIFF_MAX_BYTES);
+    const entries = JSON.parse(warning.diffJson as string) as Array<Record<string, unknown>>;
+    expect(entries.map((entry) => Object.keys(entry))).toEqual([["path", "cached", "source"]]);
+    for (const side of [entries[0]!.cached, entries[0]!.source]) {
+      expect(typeof side).toBe("string");
+      expect(Buffer.byteLength(side as string)).toBeLessThanOrEqual(SHADOW_MISMATCH_SIDE_MAX_BYTES);
+      expect((side as string).startsWith('"')).toBe(true);
+      expect((side as string).endsWith(SHADOW_LOG_TRUNCATION_MARKER)).toBe(true);
+      expect(side).not.toContain("\uFFFD");
+    }
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([
+      mismatchLoggingEvent("ShadowMismatchClampedJson", "logged"),
+    ]);
+  });
+
+  it("logs only the paths and their count at diff paths", async () => {
+    const useCase = "ShadowMismatchPathsOnly";
+    const warn = vi.fn();
+    const { metrics } = await runConfirmedMismatch(
+      useCase,
+      remoteConfig(100, 100, { mismatchLogging: { diff: "paths" } }),
+      { warn },
+    );
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, MISMATCH_PATH_FIELDS),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
+  it("logs the paths and diffJson without whole-value JSON at diff values with value false", async () => {
+    const useCase = "ShadowMismatchValuesDiffOnly";
+    const warn = vi.fn();
+    const { metrics } = await runConfirmedMismatch(
+      useCase,
+      remoteConfig(100, 100, { mismatchLogging: { diff: "values", value: false } }),
+      { warn },
+    );
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, { ...MISMATCH_PATH_FIELDS, diffJson: MISMATCH_DIFF_JSON }),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
+  it("logs only the whole-value JSON and never runs the diff hook at value true alone", async () => {
+    const useCase = "ShadowMismatchValueOnly";
+    const warn = vi.fn();
+    const shadowMismatchDiff = vi.fn((): readonly ShadowMismatchEntry[] => [{ path: "/hook" }]);
+    const { metrics } = await runConfirmedMismatch(
+      useCase,
+      remoteConfig(100, 100, { mismatchLogging: { value: true } }),
+      { warn, shadowMismatchDiff },
+    );
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, MISMATCH_VALUE_FIELDS),
+    );
+    expect(shadowMismatchDiff).not.toHaveBeenCalled();
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
+  it("logs the exact value age the verdict observed as cachedValueAgeSeconds", async () => {
+    const nowMs = 1_700_000_090_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const useCase = "ShadowMismatchWarningAge";
+      const payload = JSON.stringify(mismatchCachedRecord);
+      const redis = new ScriptedRedis([() => payload, () => payload]);
+      redis.frameCreatedAtMs = nowMs - 30_500;
+      const metrics = new RecordingMetrics();
+      const warn = vi.fn();
+      const dialcache = createCache(redis, metrics, {
+        logger: {
+          debug: () => undefined,
+          error: () => undefined,
+          warn,
+        },
+      });
+      const getUser = dialcache.cached(async () => mismatchSourceRecord, {
+        ...trackedOptions(useCase, remoteConfig(100, 100, { mismatchLogging: { diff: "paths" } })),
+        cacheKey: () => "123",
+      });
+
+      await dialcache.enable(async () => await getUser());
+      await waitForMismatchLoggingEvents(metrics, 1);
+
+      expect(metrics.shadowAgeEvents.map(({ seconds }) => seconds)).toEqual([30.5]);
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[1]).toMatchObject({ cachedValueAgeSeconds: 30.5 });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    {
+      diff: "paths" as const,
+      fields: {
+        mismatchPaths: ["/plan", "/profile/locale", "/profile/timezone", "/roles"],
+        mismatchPathCount: 4,
+      },
+    },
+    {
+      diff: "values" as const,
+      fields: {
+        mismatchPaths: ["/plan", "/profile/locale", "/profile/timezone", "/roles"],
+        mismatchPathCount: 4,
+        diffJson: '[{"path":"/plan","cached":"free","source":"pro"},'
+          + '{"path":"/profile/locale","cached":"en-US","source":"en-GB"},'
+          + '{"path":"/profile/timezone","source":"Europe/London"},'
+          + '{"path":"/roles","cached":["viewer"],"source":["viewer","editor"]}]',
+      },
+    },
+  ])("logs the documented GetUser example at diff $diff", async ({ diff, fields }) => {
+    // docs/shadow-validation.md shows these exact warnings; keep them in step.
+    const cached = {
+      id: "u_123",
+      email: "ana@example.com",
+      plan: "free",
+      roles: ["viewer"],
+      profile: { name: "Ana", locale: "en-US" },
+    };
+    const source = {
+      id: "u_123",
+      email: "ana@example.com",
+      plan: "pro",
+      roles: ["viewer", "editor"],
+      profile: { name: "Ana", locale: "en-GB", timezone: "Europe/London" },
+    };
+    const payload = JSON.stringify(cached);
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      namespace: "users-api",
+      logger: { debug: () => undefined, error: () => undefined, warn },
+    });
+    const getUser = dialcache.cached(async (_userId: string) => source, {
+      keyType: "user_id",
+      useCase: "GetUser",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteConfig(100, 100, { mismatchLogging: { diff } }),
+    });
+
+    await expect(dialcache.enable(async () => await getUser("u_123"))).resolves.toEqual(cached);
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    const warning = {
+      cacheNamespace: "users-api",
+      useCase: "GetUser",
+      keyType: "user_id",
+      outcome: "mismatch",
+      cachedValueAgeSeconds: metrics.shadowAgeEvents[0]!.seconds,
+      cacheKey: "{users-api:user_id:u_123}#GetUser",
+      ...fields,
+    };
+    expect(warn).toHaveBeenCalledExactlyOnceWith("DialCache shadow validation mismatch", warning);
+    // The page shows the fields in this order.
+    expect(Object.keys(warn.mock.calls[0]![1] as object)).toEqual(Object.keys(warning));
+  });
+
+  it("emits one logged event per confirmed mismatch after its verdict and none for a match", async () => {
+    const useCase = "ShadowMismatchLoggingOrder";
+    const matching = JSON.stringify({ id: "a", version: 1 });
+    const redis = new ScriptedRedis([
+      () => matching,
+      () => JSON.stringify({ id: "b", version: 1 }),
+      () => JSON.stringify({ id: "b", version: 1 }),
+      () => JSON.stringify({ id: "c", version: 1 }),
+      () => JSON.stringify({ id: "c", version: 1 }),
+    ]);
+    const metrics = new RecordingMetrics();
+    const shadowValidation = vi.spyOn(metrics, "shadowValidation");
+    const observeShadowValueAge = vi.spyOn(metrics, "observeShadowValueAge");
+    const shadowMismatchLogging = vi.spyOn(metrics, "shadowMismatchLogging");
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
+    const getUser = dialcache.cached(async (id: string) => ({ id, version: id === "a" ? 1 : 2 }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { mismatchLogging: { diff: "paths" } })),
+      cacheKey: (id) => id,
+    });
+
+    await dialcache.enable(async () => await getUser("a"));
+    await waitForShadowEvents(metrics, 1);
+    await nextImmediate();
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["match"]);
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([]);
+
+    await dialcache.enable(async () => await getUser("b"));
+    await waitForMismatchLoggingEvents(metrics, 1);
+    await dialcache.enable(async () => await getUser("c"));
+    await waitForMismatchLoggingEvents(metrics, 2);
+    await nextImmediate();
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["match", "mismatch", "mismatch"]);
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([
+      mismatchLoggingEvent(useCase, "logged"),
+      mismatchLoggingEvent(useCase, "logged"),
+    ]);
+    expect(warn).toHaveBeenCalledTimes(2);
+    // The match verdict observes its value age too, so both verdict streams
+    // are offset by one against the warning streams.
+    expect(observeShadowValueAge).toHaveBeenCalledTimes(3);
+    for (const attempt of [0, 1]) {
+      const sequence = [
+        shadowValidation.mock.invocationCallOrder[attempt + 1]!,
+        observeShadowValueAge.mock.invocationCallOrder[attempt + 1]!,
+        warn.mock.invocationCallOrder[attempt]!,
+        shadowMismatchLogging.mock.invocationCallOrder[attempt]!,
+      ];
+      expect(sequence).toEqual([...sequence].sort((left, right) => left - right));
+    }
+  });
+
+  it.each([
+    ["null", null],
+    ["a string", "paths"],
+    ["an object", { path: "/version" }],
+  ])("rejects %s as shadowMismatchDiff where each API captures it", async (_label, hook) => {
+    const dialcache = new DialCache();
+    const invalidHook = hook as unknown as ShadowMismatchDiff<MismatchRecord>;
+    const source = async (): Promise<MismatchRecord> => mismatchSourceRecord;
+    const getOrLoadOptions = {
+      keyType: "user_id",
+      useCase: "InvalidGetOrLoadShadowMismatchDiff",
+      key: "123",
+      shadowMismatchDiff: invalidHook,
+    } as const;
+
+    expect(() =>
+      dialcache.cached(source, {
+        keyType: "user_id",
+        useCase: "InvalidCachedShadowMismatchDiff",
+        cacheKey: () => "123",
+        shadowMismatchDiff: invalidHook,
+      }),
+    ).toThrow(new TypeError("DialCache shadowMismatchDiff must be a function"));
+    // The rejected registration leaves the use case free for a valid one.
+    expect(() =>
+      dialcache.cached(source, {
+        keyType: "user_id",
+        useCase: "InvalidCachedShadowMismatchDiff",
+        cacheKey: () => "123",
+        shadowMismatchDiff: () => [],
+      }),
+    ).not.toThrow();
+    expect(() => dialcache.getOrLoad(source, getOrLoadOptions)).toThrow(TypeError);
+    await expect(dialcache.enable(async () => await dialcache.getOrLoad(source, getOrLoadOptions)))
+      .rejects.toThrow(TypeError);
+  });
+
+  it.each(["cached", "getOrLoad"] as const)(
+    "logs shadowMismatchDiff entries in place of the built-in walk through %s()",
+    async (api) => {
+      const useCase = `ShadowMismatchDiffHook${api}`;
+      const warn = vi.fn();
+      const shadowMismatchDiff = vi.fn((): readonly ShadowMismatchEntry[] => [
+        { path: "/custom", cached: "c", source: "s" },
+        { path: "/only-path" },
+        { path: "/one-side", source: { nested: true } },
+      ]);
+      const { metrics, result } = await runConfirmedMismatch(
+        useCase,
+        remoteConfig(100, 100, { logMismatches: true }),
+        { warn, shadowMismatchDiff, api },
+      );
+      await waitForMismatchLoggingEvents(metrics, 1);
+
+      expect(result).toEqual(mismatchCachedRecord);
+      expect(shadowMismatchDiff).toHaveBeenCalledOnce();
+      expect(shadowMismatchDiff).toHaveBeenCalledWith(mismatchCachedRecord, mismatchSourceRecord);
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        "DialCache shadow validation mismatch",
+        mismatchWarning(useCase, metrics, {
+          mismatchPaths: ["/custom", "/only-path", "/one-side"],
+          mismatchPathCount: 3,
+          diffJson: '[{"path":"/custom","cached":"c","source":"s"},'
+            + '{"path":"/only-path"},'
+            + '{"path":"/one-side","source":{"nested":true}}]',
+          ...MISMATCH_VALUE_FIELDS,
+        }),
+      );
+      expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+    },
+  );
+
+  it.each([
+    {
+      name: "throws",
+      useCase: "ShadowMismatchDiffHookThrows",
+      hook: (): readonly ShadowMismatchEntry[] => {
+        throw new Error("diff hook unavailable");
+      },
+    },
+    {
+      name: "returns a rejecting promise",
+      useCase: "ShadowMismatchDiffHookPromise",
+      hook: (): readonly ShadowMismatchEntry[] =>
+        Promise.reject(new Error("async diff hooks are unsupported")) as unknown as readonly ShadowMismatchEntry[],
+    },
+  ])("logs null diff fields and hook_error without touching the verdict when the hook $name", async ({
+    useCase,
+    hook,
+  }) => {
+    const warn = vi.fn();
+    await expectNoUnhandledRejection(async () => {
+      const { metrics, result } = await runConfirmedMismatch(
+        useCase,
+        remoteConfig(100, 100, { logMismatches: true }),
+        { warn, shadowMismatchDiff: hook },
+      );
+      await waitForMismatchLoggingEvents(metrics, 1);
+
+      expect(result).toEqual(mismatchCachedRecord);
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        "DialCache shadow validation mismatch",
+        mismatchWarning(useCase, metrics, {
+          mismatchPaths: null,
+          mismatchPathCount: null,
+          diffJson: null,
+          ...MISMATCH_VALUE_FIELDS,
+          loggingOutcome: "hook_error",
+        }),
+      );
+      expect(Object.keys(warn.mock.calls[0]![1] as object).at(-1)).toBe("loggingOutcome");
+      expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "hook_error")]);
+    });
+  });
+
+  it.each([
+    { name: "the default deep equality", useCase: "ShadowMismatchBigintDefaultEquality", comparator: undefined },
+    {
+      name: "a comparator",
+      useCase: "ShadowMismatchBigintComparator",
+      comparator: (cached: BigintRecord, source: BigintRecord) => cached.version === source.version,
+    },
+  ])("logs render_error with null source and diff fields for a bigint source value under $name", async ({
+    useCase,
+    comparator,
+  }) => {
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
+    const getUser = dialcache.cached(async (): Promise<BigintRecord> => ({ id: "123", version: 1n }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { logMismatches: true })),
+      cacheKey: () => "123",
+      serializer: bigintRecordSerializer,
+      ...(comparator === undefined ? {} : { shadowComparator: comparator }),
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123", version: 1 });
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, {
+        mismatchPaths: null,
+        mismatchPathCount: null,
+        diffJson: null,
+        cachedValueJson: '{"id":"123","version":1}',
+        sourceValueJson: null,
+        loggingOutcome: "render_error",
+      }),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "render_error")]);
+  });
+
+  it("logs a cached undefined negative-cache entry as an absent side, not a render failure", async () => {
+    const useCase = "ShadowMismatchAbsentCachedValue";
+    // The default JSON serializer's stored form of a top-level undefined.
+    const payload = "__dialcache_json_undefined_v1__";
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
+    const getUser = dialcache.cached(async (): Promise<{ id: string } | undefined> => ({ id: "123" }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { logMismatches: true })),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toBeUndefined();
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, {
+        mismatchPaths: [""],
+        mismatchPathCount: 1,
+        diffJson: '[{"path":"","source":{"id":"123"}}]',
+        cachedValueJson: null,
+        sourceValueJson: '{"id":"123"}',
+      }),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
+  it("passes an absent cached side to shadowMismatchDiff as the raw undefined", async () => {
+    const useCase = "ShadowMismatchAbsentCachedHookInput";
+    // The default JSON serializer's stored form of a top-level undefined.
+    const payload = "__dialcache_json_undefined_v1__";
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
+    const hookInputs: unknown[][] = [];
+    const getUser = dialcache.cached(async (): Promise<{ id: string } | undefined> => ({ id: "123" }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { mismatchLogging: { diff: "values" } })),
+      cacheKey: () => "123",
+      shadowMismatchDiff: (cached, source) => {
+        hookInputs.push([cached, source]);
+        return [{ path: "", source }];
+      },
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toBeUndefined();
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    // D13: the hook receives the raw values, so an absent side stays
+    // undefined rather than becoming JSON null.
+    expect(hookInputs).toStrictEqual([[undefined, { id: "123" }]]);
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, {
+        mismatchPaths: [""],
+        mismatchPathCount: 1,
+        diffJson: '[{"path":"","source":{"id":"123"}}]',
+      }),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
+  it("logs hook paths without rendering values at diff paths, even for a bigint source value", async () => {
+    const useCase = "ShadowMismatchBigintHookPaths";
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
+    const getUser = dialcache.cached(async (): Promise<BigintRecord> => ({ id: "123", version: 1n }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { mismatchLogging: { diff: "paths" } })),
+      cacheKey: () => "123",
+      serializer: bigintRecordSerializer,
+      shadowMismatchDiff: () => [{ path: "/version" }],
+    });
+
+    await dialcache.enable(async () => await getUser());
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, { mismatchPaths: ["/version"], mismatchPathCount: 1 }),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
+  it.each<{
+    readonly name: string;
+    readonly useCase: string;
+    readonly warn: () => unknown;
+    readonly outcome: ShadowMismatchLoggingOutcome;
+  }>([
+    {
+      name: "throws synchronously",
+      useCase: "ShadowMismatchLoggerThrows",
+      warn: () => {
+        throw new Error("logger unavailable");
+      },
+      outcome: "logger_error",
+    },
+    {
+      name: "returns a rejected promise",
+      useCase: "ShadowMismatchLoggerRejects",
+      warn: () => Promise.reject(new Error("logger transport unavailable")),
+      outcome: "logger_error",
+    },
+    {
+      name: "returns a resolved promise",
+      useCase: "ShadowMismatchLoggerResolves",
+      warn: () => Promise.resolve(),
+      outcome: "logged",
+    },
+    {
+      name: "returns a thenable that rejects",
+      useCase: "ShadowMismatchLoggerThenableRejects",
+      warn: () => ({
+        then(_resolve: unknown, reject: (reason: unknown) => void): void {
+          reject(new Error("logger transport unavailable"));
+        },
+      }),
+      outcome: "logger_error",
+    },
+  ])("records $outcome and leaves the caller unaffected when the logger $name", async ({
+    useCase,
+    warn: warnImplementation,
+    outcome,
+  }) => {
+    // A plain function rather than vi.fn: a spy attaches its own handlers to a
+    // returned promise, which would hide a rejection DialCache left unconsumed.
+    const calls: unknown[][] = [];
+    const warn = (...args: unknown[]): unknown => {
+      calls.push(args);
+      return warnImplementation();
+    };
+    await expectNoUnhandledRejection(async () => {
+      const { metrics, result } = await runConfirmedMismatch(
+        useCase,
+        remoteConfig(100, 100, { logMismatches: true }),
+        { warn },
+      );
+      await waitForMismatchLoggingEvents(metrics, 1);
+
+      expect(result).toEqual(mismatchCachedRecord);
+      expect(metrics.shadowEvents.map(({ outcome: verdict }) => verdict)).toEqual(["mismatch"]);
+      expect(calls).toEqual([[
+        "DialCache shadow validation mismatch",
+        mismatchWarning(useCase, metrics, {
+          ...MISMATCH_PATH_FIELDS,
+          diffJson: MISMATCH_DIFF_JSON,
+          ...MISMATCH_VALUE_FIELDS,
+        }),
+      ]]);
+      expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, outcome)]);
+    });
+  });
+
+  it.each(([
+    {
+      name: "the hook throws",
+      useCase: "ShadowMismatchHookAndLoggerThrow",
+      shadowMismatchDiff: () => {
+        throw new Error("hook failed");
+      },
+      fields: { mismatchPaths: null, mismatchPathCount: null, diffJson: null },
+      outcome: "hook_error",
+    },
+    {
+      name: "a hook side has no JSON rendering",
+      useCase: "ShadowMismatchRenderAndLoggerThrow",
+      shadowMismatchDiff: () => [{ path: "/version", cached: 1n }],
+      fields: { mismatchPaths: ["/version"], mismatchPathCount: 1, diffJson: null },
+      outcome: "render_error",
+    },
+  ] as const satisfies readonly {
+    readonly name: string;
+    readonly useCase: string;
+    readonly shadowMismatchDiff: ShadowMismatchDiff<MismatchRecord>;
+    readonly fields: Record<string, unknown>;
+    readonly outcome: ShadowMismatchLoggingOutcome;
+  }[]).flatMap((failure) => (["throws", "rejects"] as const).map((loggerFailure) => ({
+    ...failure,
+    useCase: `${failure.useCase}${loggerFailure}`,
+    loggerFailure,
+  }))))("records $outcome rather than logger_error when $name and the logger $loggerFailure", async ({
+    useCase,
+    shadowMismatchDiff,
+    fields,
+    outcome,
+    loggerFailure,
+  }) => {
+    const calls: unknown[][] = [];
+    const warn = (...args: unknown[]): unknown => {
+      calls.push(args);
+      if (loggerFailure === "rejects") {
+        return Promise.reject(new Error("logger transport unavailable"));
+      }
+      throw new Error("logger unavailable");
+    };
+    await expectNoUnhandledRejection(async () => {
+      const { metrics, result } = await runConfirmedMismatch(
+        useCase,
+        remoteConfig(100, 100, { mismatchLogging: { diff: "values" } }),
+        { warn, shadowMismatchDiff },
+      );
+      await waitForMismatchLoggingEvents(metrics, 1);
+
+      expect(result).toEqual(mismatchCachedRecord);
+      expect(calls).toEqual([[
+        "DialCache shadow validation mismatch",
+        mismatchWarning(useCase, metrics, { ...fields, loggingOutcome: outcome }),
+      ]]);
+      expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, outcome)]);
+    });
+  });
+
+  it.each([
+    {
+      name: "the hook throws",
+      useCase: "ShadowMismatchHookFailsLoggerPending",
+      shadowMismatchDiff: (): never => {
+        throw new Error("hook failed");
+      },
+      outcome: "hook_error",
+    },
+    {
+      name: "a hook side has no JSON rendering",
+      useCase: "ShadowMismatchRenderFailsLoggerPending",
+      shadowMismatchDiff: () => [{ path: "/version", cached: 1n }],
+      outcome: "render_error",
+    },
+  ] as const)("records $outcome at once when $name while the logger's promise is still pending", async ({
+    useCase,
+    shadowMismatchDiff,
+    outcome,
+  }) => {
+    let warnings = 0;
+    const warn = (): Promise<never> => {
+      warnings += 1;
+      return new Promise<never>(() => undefined);
+    };
+    const { metrics } = await runConfirmedMismatch(
+      useCase,
+      remoteConfig(100, 100, { mismatchLogging: { diff: "values" } }),
+      { warn, shadowMismatchDiff: shadowMismatchDiff as ShadowMismatchDiff<MismatchRecord> },
+    );
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(warnings).toBe(1);
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, outcome)]);
+  });
+
+  it("records no logging outcome while a logger's promise never settles", async () => {
+    let warnings = 0;
+    const warn = (): Promise<never> => {
+      warnings += 1;
+      return new Promise<never>(() => undefined);
+    };
+    const { metrics } = await runConfirmedMismatch(
+      "ShadowMismatchLoggerPending",
+      remoteConfig(100, 100, { logMismatches: true }),
+      { warn },
+    );
+    for (let turn = 0; turn < 5; turn += 1) {
+      await nextImmediate();
+    }
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(warnings).toBe(1);
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([]);
   });
 
   it.each([
@@ -855,8 +1740,11 @@ describe("DialCache Redis shadow confirmation", () => {
     await dialcache.enable(async () => await getUser());
     await waitForShadowEvents(metrics, 1);
 
+    await nextImmediate();
+
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["superseded"]);
     expect(warn).not.toHaveBeenCalled();
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([]);
   });
 
   it.each([
@@ -2002,6 +2890,7 @@ describe("DialCache Redis shadow confirmation", () => {
       && labels.error === "config_resolution"
     )).toHaveLength(1);
     expect(warn).not.toHaveBeenCalled();
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([]);
   });
 
   it("treats DialCacheKeyConfig.disabled() as a complete shadow kill switch", async () => {
@@ -2022,6 +2911,180 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(source).toHaveBeenCalledOnce();
     expect(redis.requests).toHaveLength(0);
     expect(metrics.shadowEvents).toHaveLength(0);
+  });
+
+  it("keeps the valid default leaf and records one config_resolution for an invalid runtime leaf", async () => {
+    const useCase = "ShadowMismatchInvalidRuntimeLeaf";
+    const warn = vi.fn();
+    const { metrics } = await runConfirmedMismatch(
+      useCase,
+      remoteConfig(100, 100, { mismatchLogging: { value: true } }),
+      {
+        warn,
+        cacheConfigProvider: async () => new DialCacheKeyConfig({
+          shadow: { mismatchLogging: { diff: "everything" as never } },
+        }),
+      },
+    );
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(configResolutionErrors(metrics)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+        error: "config_resolution",
+        inFallback: false,
+      },
+    ]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, MISMATCH_VALUE_FIELDS),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
+  it("records one config_resolution for a malformed runtime shorthand and logs the leaves beside it", async () => {
+    const useCase = "ShadowMismatchMalformedShorthandLeaves";
+    const warn = vi.fn();
+    const { metrics } = await runConfirmedMismatch(
+      useCase,
+      remoteConfig(100, 100, { logMismatches: true }),
+      {
+        warn,
+        cacheConfigProvider: async () => new DialCacheKeyConfig({
+          shadow: {
+            logMismatches: "yes" as never,
+            mismatchLogging: { value: false, diff: "paths" },
+          },
+        }),
+      },
+    );
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(configResolutionErrors(metrics)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+        error: "config_resolution",
+        inFallback: false,
+      },
+    ]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, MISMATCH_PATH_FIELDS),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
+  it.each([
+    {
+      name: "every field but whole-value JSON for logMismatches true beside value false",
+      useCase: "ShadowMismatchRowShorthandTrueValueFalse",
+      defaults: { logMismatches: true, mismatchLogging: { value: false } },
+      runtime: undefined,
+      fields: { ...MISMATCH_PATH_FIELDS, diffJson: MISMATCH_DIFF_JSON },
+    },
+    {
+      name: "only the paths for logMismatches false beside diff paths",
+      useCase: "ShadowMismatchRowShorthandFalseDiffPaths",
+      defaults: { logMismatches: false, mismatchLogging: { diff: "paths" } },
+      runtime: undefined,
+      fields: MISMATCH_PATH_FIELDS,
+    },
+    {
+      name: "nothing for a runtime logMismatches false over a default diff paths",
+      useCase: "ShadowMismatchRowRuntimeFalseOverPaths",
+      defaults: { mismatchLogging: { diff: "paths" } },
+      runtime: { logMismatches: false },
+      fields: null,
+    },
+    {
+      name: "every field for a runtime logMismatches true over a default value false",
+      useCase: "ShadowMismatchRowRuntimeTrueOverValueFalse",
+      defaults: { mismatchLogging: { value: false } },
+      runtime: { logMismatches: true },
+      fields: { ...MISMATCH_PATH_FIELDS, diffJson: MISMATCH_DIFF_JSON, ...MISMATCH_VALUE_FIELDS },
+    },
+  ] as const)("logs $name", async ({ useCase, defaults, runtime, fields }) => {
+    const warn = vi.fn();
+    const { metrics } = await runConfirmedMismatch(
+      useCase,
+      remoteConfig(100, 100, defaults),
+      {
+        warn,
+        ...(runtime === undefined
+          ? {}
+          : { cacheConfigProvider: async () => new DialCacheKeyConfig({ shadow: runtime }) }),
+      },
+    );
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(configResolutionErrors(metrics)).toEqual([]);
+    if (fields === null) {
+      await nextImmediate();
+      expect(warn).not.toHaveBeenCalled();
+      expect(metrics.shadowMismatchLoggingEvents).toEqual([]);
+      return;
+    }
+    await waitForMismatchLoggingEvents(metrics, 1);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      mismatchWarning(useCase, metrics, fields),
+    );
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([mismatchLoggingEvent(useCase, "logged")]);
+  });
+
+  it("lets DialCacheKeyConfig.disabled() override every inherited mismatch-logging leaf", async () => {
+    const defaults = remoteConfig(100, 100, {
+      logMismatches: true,
+      mismatchLogging: { value: true, diff: "values" },
+    });
+    const disabledShadow = DialCacheKeyConfig.disabled().shadow;
+    expect(disabledShadow).toEqual({ ramp: 0, mismatchLogging: { value: false, diff: "off" } });
+
+    const killedRedis = new ScriptedRedis([]);
+    const killedMetrics = new RecordingMetrics();
+    const killedWarn = vi.fn();
+    const killedCache = createCache(killedRedis, killedMetrics, {
+      cacheConfigProvider: async () => DialCacheKeyConfig.disabled(),
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn: killedWarn,
+      },
+    });
+    const getUser = killedCache.cached(async () => mismatchSourceRecord, {
+      ...trackedOptions("ShadowMismatchDisabledOverlay", defaults),
+      cacheKey: () => "123",
+    });
+    await expect(killedCache.enable(async () => await getUser())).resolves.toEqual(mismatchSourceRecord);
+    await nextImmediate();
+
+    expect(killedRedis.requests).toHaveLength(0);
+    expect(killedMetrics.shadowEvents).toHaveLength(0);
+    expect(killedWarn).not.toHaveBeenCalled();
+    expect(killedMetrics.shadowMismatchLoggingEvents).toEqual([]);
+
+    // With only the shadow ramp restored, the verdict still runs, but the
+    // overlay's leaves replace both inherited ones.
+    const warn = vi.fn();
+    const { metrics } = await runConfirmedMismatch("ShadowMismatchDisabledLeaves", defaults, {
+      warn,
+      cacheConfigProvider: async () => new DialCacheKeyConfig({ shadow: { ...disabledShadow, ramp: 100 } }),
+    });
+    await nextImmediate();
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(warn).not.toHaveBeenCalled();
+    expect(metrics.shadowMismatchLoggingEvents).toEqual([]);
+    expect(configResolutionErrors(metrics)).toEqual([]);
   });
 
   it("keeps partial Redis-serving and shadow-observation cohorts independent", async () => {

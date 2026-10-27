@@ -18,8 +18,8 @@ per port, detections, the challenges mapped to it);
 | `M05` | C03.detached-bypass | Treat a detached context whose outer scope closed as still enabled | ordinary, generated, portable | generated, portable | generated, fixed, portable | none |
 | `M06` | W04.strict-fence | Accept a tracked frame timestamp equal to its watermark | ordinary, generated, portable | generated, portable | generated, fixed, portable | `fence-inclusive-timestamp`, `tracked-read-inclusive-fence`, `redis-protocol-inclusive-fence`, `frame-vectors-inclusive-fence` |
 | `M07` | C51.changed-confirmation | Confirm an unequal shadow result even when C1 contains different payload bytes | ordinary, generated, portable | generated, portable | generated, fixed, portable | none |
-| `M08` | C60.invalid-logging-policy | Enable mismatch logging after a malformed runtime logging flag | ordinary, generated, portable | generated, portable | generated, fixed, portable | none |
-| `M09` | C60.logging-default-off | Enable mismatch logging when its flag is omitted | ordinary, generated, portable | generated, portable | generated, portable | none |
+| `M08` | C60.invalid-logging-policy | Enable mismatch logging after a malformed runtime logging flag | ordinary, generated, portable | generated, portable | generated, fixed, portable | `shadow-logging-malformed-shorthand-expands-on` |
+| `M09` | C60.logging-default-off | Enable mismatch logging when its flag is omitted | ordinary, generated, portable | generated, portable | generated, portable | `shadow-logging-omitted-value-resolves-on` |
 | `M10` | C31.tracked-no-local-fill | Publish an unvalidated tracked source value directly into local storage | ordinary, generated, portable | generated, portable | generated, fixed, portable | `core-tracked-fallback-warms-local` |
 | `M11` | C09.fixed-local-ttl | Renew the local insertion TTL on every cache hit | ordinary, generated, portable | generated, portable | generated, fixed, portable | `local-clock-hit-renews-insertion` |
 | `M12` | W02.sorted-arguments | Reverse the prescribed argument-name ordering | generated, portable | generated, portable | generated, fixed, portable | none |
@@ -74,3 +74,15 @@ per port, detections, the challenges mapped to it);
 | `M62` | C54.read-ownership | Release shadow capacity at bounded read failure before the raw adapter operation settles | generated, portable | generated, portable | - | `shadow-read-deadline-releases-raw-capacity` |
 | `M63` | C38.marker-transition | Move an invalidation cutoff backwards when an older request arrives | generated, portable | generated, portable | - | `invalidation-transition-cutoff-moves-backwards` |
 | `M64` | C39.numeric-limits | Reject the maximum supported invalidation buffer | generated, portable | generated, portable | - | `invalidation-transition-inclusive-buffer-limit` |
+| `M65` | C60.logging-enabled | Leave mismatch logging off when its flag is true | ordinary, generated, portable | generated, portable | generated, fixed, portable | `shadow-logging-true-shorthand-expands-off` |
+| `M66` | W10.mismatch-paths | Walk arrays of different length over their common prefix instead of reporting them once at the array pointer | ordinary, portable | fixed, portable | fixed, portable | none |
+| `M67` | W10.mismatch-paths | Report nothing for a pair of values of different JSON kinds, roots included | ordinary, portable | fixed, portable | fixed, portable | none |
+| `M68` | W10.mismatch-paths | Treat an absent compared value as a value with no JSON rendering | ordinary, portable | fixed, portable | fixed, portable | none |
+| `M69` | C60.logging-outcomes | Fall back to the built-in walk when the mismatch diff hook fails | ordinary, generated, portable | generated, portable | generated, portable | `shadow-diff-hook-failure-falls-back-to-walk` |
+| `M70` | C60.outcome-precedence | Run the mismatch diff hook when diff is off | ordinary, generated, portable | generated, portable | generated, portable | `shadow-diff-hook-runs-at-diff-off` |
+| `M71` | C60.shorthand-table | Treat a mismatch-logging leaf written off as unwritten | ordinary, generated, portable | generated, portable | generated, portable | `shadow-logging-written-off-leaf-ignored` |
+| `M72` | C60.outcome-precedence | Report render_error over hook_error when both fail | ordinary, generated, portable | generated, portable | generated, portable | `shadow-logging-render-error-outranks-hook-error` |
+| `M73` | C60.outcome-precedence | Report logger_error over a warning construction failure when the logger also fails | ordinary, generated, portable | generated, portable | generated, portable | `shadow-logging-logger-error-outranks-construction` |
+| `M74` | C60.logging-outcomes | Emit a mismatch warning when both mismatch-logging leaves are off | ordinary, generated, portable | generated, portable | generated, fixed, portable | `shadow-warning-with-logging-off` |
+| `M75` | C60.warning-field-groups | Log the difference entries with their values at diff paths | ordinary, generated, portable | generated, portable | generated, fixed, portable | `shadow-warning-paths-carry-entries` |
+| `M76` | C60.invalid-input-isolation | Resolve an invalid diff leaf to values instead of off | ordinary, generated, portable | generated, portable | generated, portable | `shadow-logging-invalid-diff-leaf-acts-values` |

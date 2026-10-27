@@ -240,7 +240,8 @@ Every event has `event`; additional label fields must be JSON primitives. The
 | `size`, `storedSize` | cache labels + `bytes` |
 | `compression` | cache labels + `outcome` |
 | `serialization` | cache labels + `operation`, `seconds` |
-| `mismatchWarning` | `cacheNamespace`, `useCase`, `keyType`, `outcome`; optional `cacheKey`, `cachedValueJson`, `sourceValueJson` (string or null) |
+| `mismatchWarning` | `cacheNamespace`, `useCase`, `keyType`, `outcome`; optional, each recorded exactly when the warning carries it: `cacheKey`, `cachedValueJson`, `sourceValueJson` and `diffJson` (string or null), `cachedValueAgeSeconds` (number or null; every shadow-profile warning follows a verdict that sampled an age, so that profile's projection requires a number), `mismatchPathsJson` (the `mismatchPaths` array as one JSON string, or null), `mismatchPathCount` (integer or null), `loggingOutcome` (`hook_error` or `render_error`) |
+| `shadowMismatchLogging` | `cacheNamespace`, `useCase`, `keyType` (no layer), `outcome` (`logged`, `hook_error`, `render_error` or `logger_error`) |
 | `readContext` | `index`, `timeoutMs`, `aborted` |
 | `readAbort`, `writeDispatch` | `index` |
 | `marker` | `cutoffMs`, `ttlMs` (signed; a `-1` cutoff means no watermark) |
@@ -250,11 +251,19 @@ Fixture sentinels are defined by `$defs/behaviorFixture`; `core` and
 number, `null` (no deadline) or `"default"` (the library default); omitted means
 10 ms. `readTimeoutMs` is a number or `"default"`; omitted means 50 ms.
 `recovery` is `allow`, `deny`, `error` or `default`; `comparator` is `equal`,
-`unequal` or `error`. `observe` lists event kinds from the table above, and its
-presence, even empty, makes `events` required. `localMaxSize` and
+`unequal` or `error`; `mismatchDiff` is `error`, a `shadowMismatchDiff` hook that
+fails (a throw, a returned error or a panic, as the port's hook fails). `observe`
+lists event kinds from the table above, and its presence, even empty, makes `events`
+required. `localMaxSize` and
 `shadowMaxInFlight` are nonnegative integers; `comparisonMs` and `sourceWorkMs`
 are nonnegative numbers; `tracked`, `remote`, `shadowHook`, `observerFailure`,
-`probeSourceScope` and `localFaultInjection` are booleans. The coordinator
+`probeSourceScope` and `localFaultInjection` are booleans. The `faults` command's
+`logger` makes the logger fail after the driver records what it received, while
+metric observers keep working. `resolve` with `unrenderable: true` and no `value`
+settles the loader with the driver's value that has no JSON rendering (a throwing
+`toJSON`, a failing `MarshalJSON` or `Serialize`, a non-serializable object); the
+driver knows it by identity and reports a call that returns it as
+`{"unrenderable": true}`. The coordinator
 validates its own prepare response, fixture included, against this definition,
 so it cannot hand a port an unknown sentinel.
 

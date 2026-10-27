@@ -8,18 +8,26 @@ to publish a value or cancels another caller's shared source.
 from __future__ import annotations
 
 import asyncio
-import contextvars
 import functools
 import inspect
-import json
 import logging
 import math
 from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from dataclasses import dataclass, field
 from typing import Any, ParamSpec, Protocol, TypeVar, overload
 
+from ._callbacks import discard_awaitable
+from ._shadow_log import KEY_MAX_BYTES, MismatchLogPlan, clamp_utf8, render_shadow_mismatch_log
 from .clock import SystemClock
-from .config import UNSET, Policy, _valid_ramp, merge_policy, resolve_layer, validate_static_policy
+from .config import (
+    UNSET,
+    Policy,
+    _valid_ramp,
+    merge_policy,
+    resolve_layer,
+    resolve_mismatch_logging,
+    validate_static_policy,
+)
 from .context import DialCacheContext
 from .errors import (
     ConfigError,
@@ -39,6 +47,7 @@ from .serializer import JsonSerializer
 T = TypeVar("T")
 P = ParamSpec("P")
 MAX_SAFE = 9_007_199_254_740_991
+SHADOW_MISMATCH_WARNING = "DialCache shadow validation mismatch: %s"
 
 
 class _CachedDecorator(Protocol):
@@ -62,6 +71,15 @@ async def _call_dependency(callback: Callable[..., Any], *args: Any) -> Any:
         if task is not None and task.cancelling():
             raise
         raise RuntimeError("DialCache dependency was cancelled") from error
+
+
+async def _completes(delivered: Awaitable[Any]) -> bool:
+    """Await a logger's awaitable; whether it completed without raising."""
+    try:
+        await _call_dependency(lambda: delivered)
+    except Exception:
+        return False
+    return True
 
 
 def _valid_integer(value: Any, minimum: int = 0, maximum: int = MAX_SAFE) -> bool:
@@ -146,6 +164,7 @@ class _Operation:
     tracked: bool
     comparator: Callable[[Any, Any], bool]
     recovery: Callable[[BaseException], bool]
+    mismatch_diff: Callable[[Any, Any], Any] | None = None
     did_timeout: bool = False
     deliveries: set[asyncio.Future[Any]] = field(default_factory=set)
 
@@ -165,6 +184,14 @@ class DialCache:
     The application owns Redis connections. Instances have independent scopes,
     LRU storage and in-flight tables. Values held in memory are shared by
     reference and should be treated as immutable.
+
+    ``logger`` receives ``warning(message, details)`` calls and defaults to
+    the ``dialcache`` standard-library logger. Nothing it raises reaches the
+    caller, and an awaitable it returns for any warning is driven in a task
+    of its own. A confirmed shadow-mismatch warning without an earlier
+    ``hook_error`` or ``render_error`` records its ``shadowMismatchLogging``
+    outcome after the call returns, or after that awaitable settles:
+    ``logger_error`` when either raises.
     """
 
     def __init__(
@@ -265,6 +292,22 @@ class DialCache:
         An explicit selector receives the original positional and keyword
         arguments, including self for methods. Loader defaults are not injected:
         declare matching defaults on the selector when callers can omit them.
+
+        Options, shared with :meth:`get_or_load`: ``default_config``,
+        ``fallback_timeout_ms``, ``serializer``, ``track_for_invalidation``,
+        ``shadow_comparator``, ``shadow_mismatch_diff`` and
+        ``should_attempt_stale_recovery``. ``shadow_mismatch_diff(cached,
+        source)`` replaces the built-in JSON difference computation of
+        confirmed-mismatch warnings, which runs only while
+        ``shadow.mismatch_logging.diff`` is above ``"off"``. It returns a list
+        of mappings, each with a str ``"path"`` (an RFC 6901 JSON Pointer) and
+        optional ``"cached"`` and ``"source"`` sides; a missing key or
+        ``UNDEFINED`` omits a side, and ``None`` is JSON null. Like the
+        comparator it must be synchronous, deterministic, side-effect-free,
+        non-mutating and bounded. A raise, an awaitable, or a result that is
+        not such a list logs None for the paths and the diff; DialCache never
+        falls back to the built-in computation. Non-callable callbacks raise
+        ConfigError.
         """
         if (cache_key is None) == (id_arg is None):
             raise ConfigError("Supply exactly one of cache_key or id_arg")
@@ -322,6 +365,7 @@ class DialCache:
                     prototype.tracked,
                     prototype.comparator,
                     prototype.recovery,
+                    prototype.mismatch_diff,
                 )
                 return await self._execute(op)
 
@@ -339,7 +383,10 @@ class DialCache:
         key_selector: Callable[[], Any] | None = None,
         **options: Any,
     ) -> T:
-        """Read a key or run its loader. Repeated inline use-case names are valid."""
+        """Read a key or run its loader. Repeated inline use-case names are valid.
+
+        Options are those of :meth:`cached`, validated on every call.
+        """
         op = self._operation(load, key_selector or (lambda: key), key_type, use_case, **options)
         return await self._execute(op)
 
@@ -362,6 +409,7 @@ class DialCache:
         track_for_invalidation: bool = False,
         shadow_comparator: Any = None,
         should_attempt_stale_recovery: Any = None,
+        shadow_mismatch_diff: Any = None,
     ) -> _Operation:
         self._check_use_case(use_case)
         policy = validate_static_policy(default_config) or Policy()
@@ -371,6 +419,8 @@ class DialCache:
         )
         if not callable(comparator) or not callable(recovery):
             raise ConfigError("Comparator and recovery predicate must be callable")
+        if shadow_mismatch_diff is not None and not callable(shadow_mismatch_diff):
+            raise ConfigError("shadow_mismatch_diff must be callable")
         return _Operation(
             load,
             select,
@@ -382,6 +432,7 @@ class DialCache:
             track_for_invalidation,
             comparator,
             recovery,
+            shadow_mismatch_diff,
         )
 
     @staticmethod
@@ -404,26 +455,22 @@ class DialCache:
     def _emit(self, event: str, labels: Mapping[str, Any], **fields: Any) -> None:
         emit_metric(self.metrics, {"event": event, **labels, **fields})
 
-    def _log(self, message: str, error: Any = None) -> None:
+    def _log(self, message: str, *args: Any) -> bool | asyncio.Task[bool]:
+        """Call ``logger.warning`` so that nothing it does reaches the caller.
+
+        Returns whether the call returned without raising. An awaitable it
+        returns is driven in a task of its own, returned instead, which
+        settles to whether the awaitable completed without raising. The
+        awaitable check reads the result's class, which application code can
+        make raise, so a raise there is a failed call too.
+        """
         try:
-            self.logger.warning(message, error) if error is not None else self.logger.warning(message)
+            delivered = self.logger.warning(message, *args)
+            if not inspect.isawaitable(delivered):
+                return True
         except (Exception, asyncio.CancelledError):
-            pass
-
-    @staticmethod
-    def _discard_awaitable(value: Any) -> None:
-        # Recovery predicates are synchronous. A rejected result must not
-        # start work or take ownership of an application's existing task.
-        if inspect.iscoroutine(value):
-            if inspect.getcoroutinestate(value) == inspect.CORO_CREATED:
-                value.close()
-        elif asyncio.isfuture(value):
-
-            def consume(done: asyncio.Future[Any]) -> None:
-                if not done.cancelled():
-                    done.exception()
-
-            value.add_done_callback(consume, context=contextvars.Context())
+            return False
+        return self._spawn(_completes(delivered))
 
     def _labels(self, key: Key | _Operation, layer: str | None = None) -> dict[str, Any]:
         labels = {"cacheNamespace": self.namespace, "useCase": key.use_case, "keyType": key.key_type}
@@ -851,7 +898,8 @@ class DialCache:
                         if present:
                             return value
                     else:
-                        self._discard_awaitable(allow)
+                        # Recovery predicates are synchronous.
+                        discard_awaitable(allow)
                 except Exception:
                     pass
             raise
@@ -998,13 +1046,21 @@ class DialCache:
         if key.logical in self._shadows or len(self._shadows) >= self._shadow_max:
             self._emit("shadowValidation", self._labels(key), outcome="dropped")
             return
-        log = shadow.get("log_mismatches", shadow.get("logMismatches", False))
-        if type(log) is not bool:
-            self._error(key, "remote", "config_resolution")
-            log = False
+        plan = self._resolve_shadow_logging(key, shadow)
         job = _Shadow(self.clock.monotonic_ms() if started is None else started, op.timeout or 60_000)
         self._shadows[key.logical] = job
-        self._spawn(self._run_shadow(op, key, policy, remote, job, frame, source, log))
+        self._spawn(self._run_shadow(op, key, policy, remote, job, frame, source, plan))
+
+    def _resolve_shadow_logging(self, key: Key, shadow: Mapping[str, Any]) -> MismatchLogPlan | None:
+        """Capture the content leaves at admission; None when both are off."""
+        resolved = resolve_mismatch_logging(shadow)
+        if resolved.invalid:
+            self._error(key, "remote", "config_resolution")
+        return (
+            MismatchLogPlan(resolved.value, resolved.diff)
+            if resolved.value or resolved.diff != "off"
+            else None
+        )
 
     def _release_shadow(self, key: Key, job: _Shadow) -> None:
         if job.finished and not job.pending_reads and self._shadows.get(key.logical) is job:
@@ -1044,7 +1100,7 @@ class DialCache:
         job: _Shadow,
         frame: Frame | None,
         source: asyncio.Task[Any] | None,
-        log: bool,
+        plan: MismatchLogPlan | None,
     ) -> None:
         if source is None:
             try:
@@ -1149,12 +1205,10 @@ class DialCache:
                         confirmation.payload
                     ) != self._payload_bytes(frame.payload):
                         return "superseded"
-                    if log:
-                        details.update(
-                            cacheKey=self._clamp(key.logical, 2048),
-                            cachedValueJson=self._preview(cached),
-                            sourceValueJson=self._preview(value),
-                        )
+                    if plan is not None:
+                        # Rendered after the verdict, so warning work can
+                        # neither change it nor hold the capacity slot.
+                        details["compared"] = (cached, value)
                 details["age"] = max(0, self.clock.wall_ms() - frame.created_at_ms) / 1000
                 return "match" if matched else "mismatch"
             finally:
@@ -1173,30 +1227,58 @@ class DialCache:
         except Exception:
             outcome = "timeout"
         self._emit("shadowValidation", self._labels(key), outcome=outcome)
+        age = None
         if "age" in details and outcome in ("match", "mismatch"):
-            self._emit("shadowAge", self._labels(key), outcome=outcome, seconds=details.pop("age"))
-        if outcome == "mismatch" and log:
-            self._log(
-                "DialCache shadow validation mismatch: %s",
-                {**self._labels(key), "outcome": outcome, **details},
-            )
+            age = details.pop("age")
+            self._emit("shadowAge", self._labels(key), outcome=outcome, seconds=age)
+        if outcome == "mismatch" and plan is not None:
+            cached, value = details.pop("compared")
+            self._warn_shadow_mismatch(key, op, plan, cached, value, age)
+
+    def _warn_shadow_mismatch(
+        self, key: Key, op: _Operation, plan: MismatchLogPlan, cached: Any, source: Any, age: float | None
+    ) -> None:
+        """Emit the confirmed-mismatch warning and its one shadowMismatchLogging event.
+
+        Runs after the verdict was recorded and never changes it; any
+        construction failure logs less, never more, and nothing reaches the
+        caller. A logger that returns an awaitable settles the event when the
+        awaitable does, and one that never settles emits none.
+        """
+        warning: dict[str, Any] = {
+            **self._labels(key),
+            "outcome": "mismatch",
+            "cachedValueAgeSeconds": age,
+            "cacheKey": clamp_utf8(key.logical, KEY_MAX_BYTES),
+        }
+        try:
+            fields, failure = render_shadow_mismatch_log(plan, cached, source, op.mismatch_diff)
+        except (Exception, asyncio.CancelledError):
+            # Last resort: an application value whose rendering raises
+            # CancelledError, or anything unforeseen, still logs the metadata.
+            fields, failure = {}, "render_error"
+        warning.update(fields)
+        if failure is not None:
+            warning["loggingOutcome"] = failure
+        delivered = self._log(SHADOW_MISMATCH_WARNING, warning)
+        labels = self._labels(key)
+        if failure is not None:
+            # An earlier failure is recorded at once, whatever the logger does.
+            self._emit("shadowMismatchLogging", labels, outcome=failure)
+        elif isinstance(delivered, bool):
+            self._emit("shadowMismatchLogging", labels, outcome="logged" if delivered else "logger_error")
+        else:
+            # The logger's task holds only its awaitable and this callback
+            # only the labels, so a logger that never settles retains
+            # neither compared value.
+            def settled(done: asyncio.Task[bool]) -> None:
+                if not done.cancelled() and done.exception() is None:
+                    self._emit(
+                        "shadowMismatchLogging", labels, outcome="logged" if done.result() else "logger_error"
+                    )
+
+            delivered.add_done_callback(settled)
 
     @staticmethod
     def _payload_bytes(value: str | bytes) -> bytes:
         return utf8_bytes(value) if isinstance(value, str) else value
-
-    @staticmethod
-    def _clamp(text: str, limit: int) -> str:
-        encoded = utf8_bytes(text)
-        marker = b"...[truncated]"
-        if len(encoded) <= limit:
-            return text
-        return encoded[: limit - len(marker)].decode("utf-8", "ignore") + marker.decode()
-
-    @staticmethod
-    def _preview(value: Any) -> str | None:
-        try:
-            text = json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-            return DialCache._clamp(text, 8192)
-        except Exception:
-            return None

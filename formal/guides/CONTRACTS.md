@@ -113,7 +113,7 @@ Exporter compatibility and resource-exhaustion limits have explicit native integ
 | C57 | Recovery age is measured after successful decode only; shadow age uses original C0 at match/confirmed-mismatch verdict, clamped at zero; future offsets are positive and attributed to the observing layer | S: recovery age/negative-outcome scenarios, shadow verdict age scenarios, serving/dark/confirmation future-offset scenarios; G: recovery/shadow (age at decode/verdict and rollback clamping), effects (serving future-offset attribution) |
 | C58 | Diagnostic categories describe the failed operation and reached layer; coalesced followers do not duplicate a leader's trail; recovered failures still count as source failures; sizes count bytes and precede dispatch | S: stable diagnostic category scenarios, `coalesced remote failure records one leader trail and one follower event`, `request followers report request scope without repeating lower traversal`, `recovered source failure remains a fallback diagnostic`, `source timeout records one failure even after a late rejection`, `accepted publication time is separate from reported source duration`; G: effects (ordered categories, shared trail, phase ownership and pre-dispatch sizes), scope/recovery/shadow (coalescing and source-failure attribution); native local-fault injection is replayed under C27, exporter schemas remain X01 |
 | C59 | Ordinary remote-get duration includes fresh decode; source duration ends at accepted settlement/deadline and excludes later preparation/write; serialization duration measures its own phase | S: `remote get duration includes fresh decoding without spending a source budget`, `accepted publication time is separate from reported source duration`; G: effects; these assert controlled elapsed time, not real-world timer precision or scheduler turns |
-| C60 | Mismatch logging defaults off; opting in emits one diagnostic warning only after confirmed mismatch, independently of caller return and outcome metrics | S: four `mismatch warning … verdict` scenarios; G: shadow (logging default, both policies and admission snapshot); native JSON conversion, exact text truncation, and logger backend remain B03/X01 |
+| C60 | Mismatch logging defaults off; opting in, with `value` true or `diff` above `off` once each layer's `logMismatches` expands, emits one diagnostic warning only after confirmed mismatch, independently of caller return and outcome metrics, carrying the field groups the leaves captured at admission name; each warning attempt reports one `shadowMismatchLogging` outcome and logging off reports none, `hook_error` over `render_error` over `logger_error`, a failure nulling only the fields it feeds | S: four `mismatch warning … verdict` scenarios; G: shadow (logging default, each leaf, the shorthand table, invalid inputs, the admission snapshot, warning content, and each logging outcome alone and combined); native JSON conversion, exact value-field and `diffJson` truncation text at their 8 KiB caps, and logger backend remain B03/X01 |
 
 ### Deterministic protocol obligations
 
@@ -128,6 +128,7 @@ Exporter compatibility and resource-exhaustion limits have explicit native integ
 | W07 | Compression threshold counts serialized bytes; write compression must shrink stored data and preserve decoded type/value | V: `compressionWriteVectors`; compressor output bytes are not prescribed |
 | W08 | Disabling new compression still requires envelope escaping and decompression of old entries | V: `envelopeVectors`, `compressedDecodeVectors`; behavioral fixtures decode through real DialCache with new compression disabled |
 | W09 | Invalidation marker domain, monotonic cutoff, repair, persistence, retention floor/slack, and pre-mutation validation | I: all vectors; actual exported protocol runs on Redis 6.2 and Valkey 8 |
+| W10 | The built-in mismatch walk over two JSON values: RFC 6901 pointers, object members in UTF-16 code-unit order with a one-sided member at its pointer, equal-length arrays by index and others once at the array, roots of different kinds or an absent side (D13) at the root, identical values with no entry (numbers compare as IEEE doubles; a bool never equals a number), depth capped at 32 tokens, entries cut at 64 with the uncut count, pointers clamped at 512 bytes and sides over 1 KiB as clamped text | V: `mismatchPathVectors`; shadow model scalar cases (no entry, or one root entry) |
 
 ## Assumptions and deliberate exclusions
 
@@ -157,10 +158,10 @@ Each row identifies where the source's semantic rules land. Repeated tests in di
 | `docs/coalescing.md` | C11–C15, C18, C23–C28, C36; B02, E03/E04, X01 |
 | `docs/invalidation.md` | C31–C39, W01/W04/W05/W09; E01–E05 |
 | `docs/stale-on-error.md` | C37, C40–C46; B01/B02, E04, X01 |
-| `docs/shadow-validation.md` | C47–C54; B02/B03, E03/E04, X01 |
+| `docs/shadow-validation.md` | C47–C54/C60, W10; B02/B03, E03/E04, X01 |
 | `docs/redis.md` | C22/C23/C27–C29, W01–W09; B01–B03, E01–E05, X02 |
 | `docs/api.md` | C01–C54/W01–W09 where those contracts are repeated; B01/B03, X01 for exact API/export/reference contracts |
-| `docs/observability.md` | C30/C47/C50–C54, W04; X01 for detailed telemetry contracts |
+| `docs/observability.md` | C30/C47/C50–C54/C60, W04; X01 for detailed telemetry contracts |
 | `docs/upgrading.md`, `docs/maintainers.md` | E05, B01, X01/X02 for deployment, package/release/test workflow, and benchmarks |
 
 | Implementation tests (`typescript/test/` basenames) | Inventory |
@@ -169,15 +170,15 @@ Each row identifies where the source's semantic rules land. Repeated tests in di
 | `dialcache-get-or-load` | C01–C05, C11/C15/C18/C27/C31; B01/B03 for inline/wrapper API differences |
 | `dialcache-coalescing` | C11–C15/C18/C20/C24/C36/C43; B02/B03 |
 | `dialcache-liveness`, `dialcache-redis-read-deadline` | C23–C28/C46/C56/C59; B01/B02, E03, X01 |
-| `dialcache-config-ramp`, `dialcache-observability-internals` | C16–C22/C47, W03; B01, X01 |
+| `dialcache-config-ramp`, `dialcache-observability-internals` | C16–C22/C47/C60, W03; B01, X01 |
 | `dialcache-invalidation` | C29–C39, W01/W09; B01, E01/E02/E05, X01 |
 | `dialcache-redis` | C05/C22/C27–C29/C31/C33/C34/C55, W04; B01–B03, E01/E04, X01 |
 | `dialcache-stale-on-error`, `dialcache-stale-recovery-policy` | C37/C40–C46; B01–B03, X01 |
-| `dialcache-shadow-validation`, `dialcache-shadow-confirmation` | C30/C47–C54; B01–B03, X01 |
+| `dialcache-shadow-validation`, `dialcache-shadow-confirmation` | C30/C47–C54/C60; B01–B03, X01 |
 | `redis-payload`, `duration` | W04/W05/W09; B01/B02 for native reply shapes, rounding representation, exception identity, and zero-copy views |
 | `compression`, `compression-error`, `compression-guard`, `dialcache-compression` | C06/C27/C34, W06–W08; B01/B03, X01/X02 |
 | `dialcache-logger`, `dialcache-metrics` | C20/C21/C27–C30/C33/C40–C60; B02, X01 |
-| `datadog`, `prometheus`, `shadow-log-json` | C30; B01–B03, X01 |
+| `datadog`, `prometheus`, `shadow-log-json` | C30/C60, W10; B01–B03, X01 |
 | `node-redis`, `valkey-glide` | W04/W05/W09, E01–E03; B01/B02 and X02 for client-specific routing, retry, module identity, error decoration, and lifecycle |
 | `redis-real.integration`, `redis-cluster.integration` | E01/E02, W01/W04–W09, C22/C27–C39; X02; portable invalidation vectors execute here |
 | `formal-behavior`, `formal-conformance`, `formal-effects`, `formal-features`, `formal-protocol-vectors` | Execution of the portable artifacts and independent-observation/parser regression checks |

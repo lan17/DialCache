@@ -457,6 +457,29 @@
         },
         {
           "type": "object",
+          "description": "Resolve the loader with the driver's native value that has no JSON rendering (D13): a throwing toJSON, a failing MarshalJSON or Serialize, a non-serializable object. The caller observes it as { unrenderable: true }.",
+          "properties": {
+            "op": {
+              "const": "resolve"
+            },
+            "loader": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "unrenderable": {
+              "const": true
+            }
+          },
+          "required": [
+            "op",
+            "loader",
+            "unrenderable"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "properties": {
             "op": {
               "const": "reject"
@@ -661,6 +684,10 @@
                 },
                 "observer": {
                   "type": "boolean"
+                },
+                "logger": {
+                  "type": "boolean",
+                  "description": "The logger callback throws after the driver records what it was given; metric observers keep working."
                 },
                 "holdReads": {
                   "type": "boolean"
@@ -1005,6 +1032,19 @@
       ],
       "additionalProperties": false
     },
+    "unrenderable": {
+      "type": "object",
+      "description": "A call that completed with the driver's value that has no JSON rendering (the resolve command's unrenderable result), recognized by identity, never through JSON.",
+      "properties": {
+        "unrenderable": {
+          "const": true
+        }
+      },
+      "required": [
+        "unrenderable"
+      ],
+      "additionalProperties": false
+    },
     "callResult": {
       "description": "Outcome of one begun getOrLoad call, in begin order. Error identities are driver-local indices, never messages: source:N is the N-th controlled source failure, timeout:N the N-th fallback deadline error, unexpected:<text> anything else.",
       "oneOf": [
@@ -1038,6 +1078,9 @@
                 },
                 {
                   "$ref": "#/$defs/absent"
+                },
+                {
+                  "$ref": "#/$defs/unrenderable"
                 }
               ]
             }
@@ -1643,7 +1686,7 @@
         },
         {
           "type": "object",
-          "description": "Details object of the shadow validation mismatch warning log. Value previews are present only when the policy enables mismatch logging with details.",
+          "description": "Details object of the shadow validation mismatch warning log, each member recorded exactly when the warning carries it: the value fields with mismatchLogging.value, mismatchPathsJson and mismatchPathCount at diff paths or values, diffJson at values, loggingOutcome when construction failed.",
           "properties": {
             "event": {
               "const": "mismatchWarning"
@@ -1673,6 +1716,77 @@
               "type": [
                 "string",
                 "null"
+              ]
+            },
+            "cachedValueAgeSeconds": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "description": "The age the shadowAge metric records for the same verdict, in seconds."
+            },
+            "mismatchPathsJson": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The warning's mismatchPaths array as one JSON string, null when the field is null."
+            },
+            "mismatchPathCount": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "diffJson": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "loggingOutcome": {
+              "enum": [
+                "hook_error",
+                "render_error"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "cacheNamespace",
+            "useCase",
+            "keyType",
+            "outcome"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/primitive"
+          }
+        },
+        {
+          "type": "object",
+          "description": "One shadowMismatchLogging metric event per confirmed-mismatch warning attempt (D11).",
+          "properties": {
+            "event": {
+              "const": "shadowMismatchLogging"
+            },
+            "cacheNamespace": {
+              "type": "string"
+            },
+            "useCase": {
+              "type": "string"
+            },
+            "keyType": {
+              "type": "string"
+            },
+            "outcome": {
+              "enum": [
+                "logged",
+                "hook_error",
+                "render_error",
+                "logger_error"
               ]
             }
           },
@@ -2246,6 +2360,12 @@
           "type": "boolean",
           "description": "false removes the shadowValidation metrics hook. Default true."
         },
+        "mismatchDiff": {
+          "enum": [
+            "error"
+          ],
+          "description": "Per-call shadowMismatchDiff hook: error throws (or returns an error, per the port). Omitted: no hook, the built-in walk runs."
+        },
         "observerFailure": {
           "type": "boolean",
           "description": "Every observer and logger callback throws. Default false."
@@ -2280,6 +2400,7 @@
               "fallback",
               "serialization",
               "mismatchWarning",
+              "shadowMismatchLogging",
               "writeDispatch",
               "marker",
               "coalescingState"

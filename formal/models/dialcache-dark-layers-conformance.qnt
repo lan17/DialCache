@@ -65,7 +65,11 @@ module dialcache_dark_layers_conformance {
     keysPerInstance: KEYS, keysPerScope: KEYS, persistentContexts: SCOPES, operationsPerEntity: 1, probeSourceScope: true, policyProvider: true
   }
 
-  type Channel = { inspections: List[Flights::Inspection], configErrors: int, warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str], futureOffsets: List[Diagnostics::FutureOffset] }
+  type Channel = {
+    inspections: List[Flights::Inspection], configErrors: int, warnings: int, ages: List[int],
+    coalesced: List[str], fallbackErrors: List[str], futureOffsets: List[Diagnostics::FutureOffset],
+    mismatchWarnings: List[Shadow::MismatchWarning], loggingOutcomes: List[str]
+  }
   type State = {
     o: Observation, d: Channel, io: RemoteIO::IO,
     now: int, skew: int, remoteAvailable: bool, tracked: bool, capacity: int,
@@ -107,7 +111,10 @@ module dialcache_dark_layers_conformance {
   }
   pure def selectedFor(choice: int): bool = choice != DARK_ALL_NO_SHADOW
   pure def shadowing(selected: bool): Shadow::Shadowing =
-    { hook: true, selected: selected, capacity: JOB_CAPACITY, budgetMs: SOURCE_BUDGET_MS, logging: false }
+    {
+      hook: true, selected: selected, capacity: JOB_CAPACITY, budgetMs: SOURCE_BUDGET_MS,
+      logging: Shadow::LOGGING_OFF, diffHook: false
+    }
   pure def instance(context: int): int = if (context == 2 or context == 4) 1 else 0
   pure def call(choice: int): Call =
     { instance: instance(choice / KEYS), key: choice % KEYS, context: choice / KEYS, enabled: true, keyFailed: false }
@@ -127,7 +134,10 @@ module dialcache_dark_layers_conformance {
   pure def invalidationBuffer(choice: int): int = (choice % 2) * FUTURE_BUFFER_MS
 
   pure val INITIAL: State = {
-    o: empty, d: { inspections: List(), configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List() },
+    o: empty, d: {
+      inspections: List(), configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(),
+      futureOffsets: List(), mismatchWarnings: List(), loggingOutcomes: List()
+    },
     io: RemoteIO::NO_IO,
     now: 0, skew: WALL_ORIGIN_MS, remoteAvailable: true, tracked: true, capacity: KEYS,
     readFailed: false, dumpFailed: false, writeFailed: false, loadFailed: false,
@@ -364,8 +374,10 @@ module dialcache_dark_layers_conformance {
   // Joint (clock x shadow read): a future offset is reported only after a wall rollback.
   val futureOffsetsFollowRollbacks = s.d.futureOffsets.length() == 0 or s.skew < WALL_ORIGIN_MS
   // The profile's own restrictions, executable: no mismatch logging and no
-  // malformed policy, so the channel's warnings and configuration errors stay zero.
+  // malformed policy, so the channel's warnings, their content and logging
+  // outcomes, and its configuration errors stay empty.
   val channelRestrictionsHold = s.d.warnings == 0 and s.d.configErrors == 0
+    and s.d.mismatchWarnings.length() == 0 and s.d.loggingOutcomes.length() == 0
   val agesRequireVerdicts = s.d.ages.length() == s.o.shadow.select(label => label == "match" or label == "mismatch").length()
   // Every reply the decoder produces is one the library can be configured with (C10).
   // One knob (C6): the job budget is the source budget, as the library derives it from the call's fallback timeout.

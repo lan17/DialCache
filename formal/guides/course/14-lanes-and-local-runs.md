@@ -26,7 +26,7 @@ four shards. These are gates on a change, not a completion claim.
 for any branch. Its jobs are the six stages of lesson 1 as separate lanes:
 
 - `check-models` (`make formal-check`): typecheck and run every model, every
-  regression and every challenge; budget 150 minutes.
+  regression and every challenge; budget 210 minutes.
 - `generate` (`make formal-generate`): the corpus and the witness evidence.
 - One parity lane per port: `make formal-ts`, `formal-go`, `formal-rust` and
   `formal-python`.
@@ -70,9 +70,9 @@ command, so the step name tells you which lesson's check fired.
   the `mode` input that selects the lanes, and the `timeout-minutes` budget on
   each.
 - **[validation.mjs](../../tools/validation.mjs)**, lines 11 to 12: `check` and
-  `formal` as lists of other targets. Line 195: the five checks of `audit`.
-  Lines 197 to 201: its fixture, style (`check-style.mjs`), course, read-view
-  and scope steps. Line 202: `smoke`. Line 212: `formal-check`.
+  `formal` as lists of other targets. Line 200: the five checks of `audit`.
+  Lines 202 to 206: its fixture, style (`check-style.mjs`), course, read-view
+  and scope steps. Line 207: `smoke`. Line 217: `formal-check`.
 - **[../VALIDATION.md](../VALIDATION.md#choosing-a-run)**, "Choosing a run":
   the task-to-command table, and the rest of the page for reading a completion
   report and a mutation report.

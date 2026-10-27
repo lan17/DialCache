@@ -41,6 +41,11 @@ sparse `PolicyOverlay`, shared-shape `JSONPolicy`, or `RawPolicy` on each enable
 invocation. Nil leaves inherit; pointers such as `Ptr(false)` distinguish an
 explicit disabling value from omission.
 
+`ShadowPolicy.MismatchLogging` selects confirmed-mismatch warning content with
+`Value` and a `MismatchDiffLevel` (`MismatchDiffOff`, `MismatchDiffPaths` or
+`MismatchDiffValues`); `LogMismatches` is shorthand for both leaves. See
+[confirmed mismatch logging](../shadow-validation.md#confirmed-mismatch-logging).
+
 Durations use `time.Duration`: cache TTLs and recovery ages must be whole seconds,
 read/source deadlines whole milliseconds. `Operation.SourceTimeout` defaults to
 60 seconds when zero; `NoTimeout` explicitly removes that guard. Runtime policy
@@ -84,7 +89,9 @@ use this hook only to enable admission rather than forwarding the same outcome
 twice. See [observability](../observability.md).
 
 The default shadow comparator is `SemanticEqual`. An operation's `Comparator`
-can implement application equality and return an error. See
+can implement application equality and return an error. Its `MismatchDiff`
+replaces the built-in difference computation of confirmed-mismatch warnings; a
+`MismatchEntry` side set to `Absent` is omitted. See
 [comparison semantics](../shadow-validation.md#comparison-semantics).
 
 ## Conformance

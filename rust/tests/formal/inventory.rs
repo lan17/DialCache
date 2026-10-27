@@ -368,7 +368,7 @@ pub const BEHAVIOR_PROFILE_VERSIONS: [(&str, i64); 16] = [
     ("layers", 2),
     ("recovery", 1),
     ("independent", 2),
-    ("shadow", 3),
+    ("shadow", 4),
     ("admission", 1),
     ("dark-layers", 2),
     ("shadow-read-deadlines", 1),

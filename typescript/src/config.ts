@@ -13,15 +13,50 @@ export type LayerConfig = Partial<Record<CacheLayer, number>>;
 /** Synchronously classifies whether one source rejection may use a retained Redis candidate. */
 export type StaleRecoveryPredicate = (error: unknown) => boolean;
 
+/**
+ * How much of the structural difference a confirmed-mismatch warning logs:
+ * `"off"` nothing, `"paths"` the JSON Pointers of the differing fields, and
+ * `"values"` those pointers with the cached and source values at each one.
+ */
+export type ShadowMismatchDiffLevel = "off" | "paths" | "values";
+
+/**
+ * Content of the one warning emitted per confirmed shadow mismatch. Both
+ * leaves default off, and the warning is emitted only when `value` is true or
+ * `diff` is above `"off"`. Leaves merge independently at runtime, like
+ * cache-layer leaves.
+ */
+export interface ShadowMismatchLoggingConfig {
+  /** Include bounded native-JSON strings for both compared values. */
+  readonly value?: boolean;
+  /** Include the differing fields at this level. */
+  readonly diff?: ShadowMismatchDiffLevel;
+}
+
 /** Per-use-case runtime policy for detached Redis shadow work. */
 export interface ShadowConfig {
   /** Independent stable cohort percentage. Omitted and zero disable shadow work. */
   readonly ramp?: number;
   /**
-   * Emit one warning with the logical key and bounded native-JSON strings for
-   * the compared values for each confirmed mismatch. Defaults to false.
+   * Shorthand for the whole `mismatchLogging` group: `true` stands for
+   * `{ value: true, diff: "values" }` and `false` for
+   * `{ value: false, diff: "off" }`. Leaves written in this same object's
+   * `mismatchLogging` override the expanded values before runtime overlays
+   * merge.
    */
   readonly logMismatches?: boolean;
+  /** Confirmed-mismatch warning content. Omitted leaves default off. */
+  readonly mismatchLogging?: ShadowMismatchLoggingConfig;
+}
+
+interface DialCacheKeyConfigInput {
+  readonly ttlSec?: LayerConfig;
+  readonly ramp?: LayerConfig;
+  readonly shadow?: ShadowConfig;
+  readonly requestLocal?: boolean;
+  readonly coalesce?: boolean;
+  readonly staleOnErrorMaxAgeSec?: number;
+  readonly remoteReadTimeoutMs?: number;
 }
 
 export class DialCacheKeyConfig {
@@ -59,15 +94,7 @@ export class DialCacheKeyConfig {
    */
   readonly remoteReadTimeoutMs?: number;
 
-  constructor(config: {
-    ttlSec?: LayerConfig;
-    ramp?: LayerConfig;
-    shadow?: ShadowConfig;
-    requestLocal?: boolean;
-    coalesce?: boolean;
-    staleOnErrorMaxAgeSec?: number;
-    remoteReadTimeoutMs?: number;
-  }) {
+  constructor(config: DialCacheKeyConfigInput) {
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
       throw new TypeError("DialCache key config must be an object");
     }
@@ -129,7 +156,13 @@ export class DialCacheKeyConfig {
       staleOnErrorMaxAgeSec: 0,
       shadow: {
         ramp: 0,
-        logMismatches: false,
+        // `Required` keeps this overlay exhaustive: leaves merge
+        // independently, so an omitted leaf would let an inherited one
+        // survive disabled().
+        mismatchLogging: {
+          value: false,
+          diff: "off",
+        } satisfies Required<ShadowMismatchLoggingConfig>,
       },
       ramp: {
         [CacheLayer.LOCAL]: 0,
@@ -156,6 +189,19 @@ function cloneShadowConfig(config: ShadowConfig | undefined): ShadowConfig | und
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError("DialCache shadow config must be an object");
   }
+  const clone: { -readonly [Field in keyof ShadowConfig]: ShadowConfig[Field] } = { ...config };
+  if (clone.mismatchLogging !== undefined) {
+    clone.mismatchLogging = cloneMismatchLoggingConfig(clone.mismatchLogging);
+  }
+  return clone;
+}
+
+function cloneMismatchLoggingConfig(config: ShadowMismatchLoggingConfig): ShadowMismatchLoggingConfig {
+  if (config === null || typeof config !== "object" || Array.isArray(config)) {
+    throw new TypeError("DialCache shadow mismatchLogging config must be an object");
+  }
+  // Leaf values stay unvalidated, like layer-map leaves, so a malformed
+  // runtime leaf fails open narrowly at resolution.
   return { ...config };
 }
 

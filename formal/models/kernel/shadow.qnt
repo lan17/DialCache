@@ -9,18 +9,21 @@ module shadow {
   //   job with no C0 fills, under that authority, the fence judged again at dispatch (C52, C53).
   // - A C0 is decoded on its own and compared; an unequal comparison needs one confirmation read
   //   of the frame's bytes (C50, C51); verdict ages and mismatch warnings follow C57 and C60.
+  // - A job captures the mismatch-logging leaves; a confirmed mismatch with either on warns once,
+  //   its content and logging outcome judged at the verdict (C60; W10's scalar cases).
   // Shapes
   // - Comparison: the comparator the drivers install and the elapsed time it consumes.
   // - Shadowing: the shadow policy in force for a call, passed at admission.
-  // - Malformed: whether the ramp or the logging value failed to resolve, passed to `beginDark`.
+  // - Malformed: whether the ramp or a logging input failed to resolve, passed to `beginDark`.
+  // - Logging: the leaves a job captures, resolved from the written inputs by `mismatch_logging`.
   // - Job: one job's record, kept while it is pending.
   // - Jobs[r]: the per-instance registry of bounded capacity both kinds share, over the clock.
   // - Shadowed[r]: the atomic lifecycle over `remote_writes::Writing`, shadow-layers' shape.
   // - HeldJobs[r]: the held lifecycle over `remote_io::Held`, with the held fills.
   // - HeldShadowed[r]: the served arm (admission profile), the selection captured per flight.
   // - DiagnosedShadowed[r, q]: the dark arm (shadow profile) over `diagnostics::DiagnosedHeld`.
-  // Consumers: admission, dark-layers, shadow, shadow-layers, shadow-read-deadlines; also
-  //   composed through `shadow_reads`.
+  // - Entry, MismatchWarning, Verdict: a warning's content, and a verdict's opt-in receipt.
+  // Consumers: admission, dark-layers, shadow, shadow-layers, shadow-read-deadlines, `shadow_reads`.
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import calls.* from "./calls"
@@ -54,16 +57,28 @@ module shadow {
   type Comparison = { comparator: int, elapsedMs: int }
   pure val VALUE_COMPARISON: Comparison = { comparator: COMPARE_VALUES, elapsedMs: 0 }
 
+  // -- Mismatch logging (C60) ----------------------------------------------------------
+  // The leaves a confirmed-mismatch warning is logged under: `value` logs both
+  // renderings, and the ordered `diff` level logs the difference's paths
+  // (`paths`) or its entries too (`values`). Either on opts into a warning.
+  pure val DIFF_OFF = "off"
+  pure val DIFF_PATHS = "paths"
+  pure val DIFF_VALUES = "values"
+  type Logging = { value: bool, diff: str }
+  pure val LOGGING_OFF: Logging = { value: false, diff: DIFF_OFF }
+  pure def logs(logging: Logging): bool = logging.value or logging.diff != DIFF_OFF
+
   // The shadow policy in force for a call: whether the outcome hook is
   // installed (C47), whether the key's cohort is selected, the per-instance
-  // capacity, the job budget and whether a confirmed mismatch is logged (C60,
-  // captured by the job at admission). Cohort selection is the drivers' ramp
-  // decoded by the profile through `cohort_boundaries` (strict against the
-  // key's numerator); the module reads the decoded selection.
-  type Shadowing = { hook: bool, selected: bool, capacity: int, budgetMs: int, logging: bool }
-  // Whether the policy failed to resolve: the ramp, or the logging value. A
+  // capacity, the job budget, the mismatch-logging leaves (C60) and whether a
+  // `shadowMismatchDiff` hook replaces the built-in walk (D6; the model's hook
+  // throws), both captured by the job at admission. Cohort selection is the
+  // drivers' ramp decoded by the profile through `cohort_boundaries` (strict
+  // against the key's numerator); the module reads the decoded selection.
+  type Shadowing = { hook: bool, selected: bool, capacity: int, budgetMs: int, logging: Logging, diffHook: bool }
+  // Whether the policy failed to resolve: the ramp, or a logging input. A
   // shadow policy that fails to resolve is one configuration error per call:
-  // an invalid ramp always; an invalid logging value only where the hook and
+  // an invalid ramp always; any invalid logging input only where the hook and
   // the ramp would otherwise admit the job (`beginDark`).
   type Malformed = { ramp: bool, logging: bool }
   pure val WELL_FORMED: Malformed = { ramp: false, logging: false }
@@ -73,10 +88,14 @@ module shadow {
   // dark, the payload its C0 found fresh (NO_VALUE when none) and that
   // frame's stamp (the age a verdict samples), the fence its C0 read observed
   // when it found no visible frame (C53), the TTLs its reply resolved to
-  // (C18), its phase, whether its budget expired and the mismatch logging it
-  // captured. The captured TTLs are the freshness its C0 read judges by and
-  // the retention its fill is written with, whatever the policy says later.
-  type Job = { source: int, dark: bool, cached: int, stamp: int, fence: int, ttls: Ttls, phase: int, timedOut: bool, logging: bool }
+  // (C18), its phase, whether its budget expired, and the mismatch logging
+  // and diff hook it captured. The captured TTLs are the freshness its C0
+  // read judges by and the retention its fill is written with, whatever the
+  // policy says later.
+  type Job = {
+    source: int, dark: bool, cached: int, stamp: int, fence: int, ttls: Ttls, phase: int, timedOut: bool,
+    logging: Logging, diffHook: bool
+  }
   // The registry beside the clock and its pending budgets, over the sources
   // the jobs run for: what every lifecycle composes. The registry is
   // pending-only, keyed by the job's source: a finished job leaves no record,
@@ -113,10 +132,16 @@ module shadow {
   // (`deadlines`, `diagnostics`: the caller's source deadline, the coalesced
   // scope, the layer a failure is attributed to) with the held fills and the
   // jobs. Beside the four channel fields every descriptor parses, it carries
-  // the two the shadow drivers compare.
+  // the four the shadow drivers compare: the configuration errors, the future
+  // offsets, the mismatch warnings with their content and one logging outcome
+  // per warning (`recordMismatchWarning`); a profile whose drivers never log a
+  // mismatch carries the last two empty.
   type DiagnosedShadowed[r, q] = Diagnostics::DiagnosedHeld[
     { dumps: List[Writes::HeldDump], writes: List[Writes::HeldWrite], jobs: List[Job] | r },
-    { configErrors: int, futureOffsets: List[Diagnostics::FutureOffset] | q }
+    {
+      configErrors: int, futureOffsets: List[Diagnostics::FutureOffset],
+      mismatchWarnings: List[MismatchWarning], loggingOutcomes: List[str] | q
+    }
   ]
 
   pure def holdsJob(state: Jobs[r], source: int): bool = state.jobs.select(job => job.source == source).length() > 0
@@ -158,8 +183,12 @@ module shadow {
   pure def admits(shadowing: Shadowing): bool = shadowing.hook and shadowing.selected
   pure def dropped(state: Jobs[r]): Jobs[r] =
     { o: { shadow: state.o.shadow.append("dropped"), ...state.o }, ...state }
-  pure def newJob(source: int, dark: bool, cached: int, stamp: int, fence: int, ttls: Ttls, phase: int, logging: bool): Job =
-    { source: source, dark: dark, cached: cached, stamp: stamp, fence: fence, ttls: ttls, phase: phase, timedOut: false, logging: logging }
+  // A pending job, the shadow policy's mismatch logging and diff hook captured.
+  pure def newJob(source: int, dark: bool, cached: int, stamp: int, fence: int, ttls: Ttls, phase: int,
+      shadowing: Shadowing): Job = {
+    source: source, dark: dark, cached: cached, stamp: stamp, fence: fence, ttls: ttls, phase: phase, timedOut: false,
+    logging: shadowing.logging, diffHook: shadowing.diffHook
+  }
   // A job registered over its source, its budget due from now: every job has
   // the budget its admission resolved, kept by `deadlines` (kind `JOB`, keyed
   // by the job's source).
@@ -182,7 +211,9 @@ module shadow {
     if (not(admits(shadowing))) state
     else if (busy(state, who.instance, who.key, shadowing.capacity)) dropped(state)
     else admit(Serving::startDetachedSource(state, layout, who),
-      newJob(state.sources.length(), false, cached, state.created.nth(who.key), NO_FENCE, ttls, WAITING_SOURCE, shadowing.logging), shadowing.budgetMs)
+      newJob(state.sources.length(), false, cached, state.created.nth(who.key), NO_FENCE, ttls, WAITING_SOURCE,
+        shadowing),
+      shadowing.budgetMs)
   // Admission beside the release judged once (`serving::layeredRelease`), on
   // the released state: the atomic lifecycle, where a dark job's C0 read is
   // made here. A served hit admits a served job (`admitServed`); a miss whose
@@ -213,7 +244,8 @@ module shadow {
           if (c0.failed) { o: { shadow: read.o.shadow.append("redis_error"), ...read.o }, ...read }
           else admit(read,
             newJob(state.sources.length() - 1, true, acquired(c0), state.created.nth(call.key),
-              Remote::fenceFor(state, call.key, layout.operationsPerEntity, c0.visible), ttls, WAITING_SOURCE, shadowing.logging),
+              Remote::fenceFor(state, call.key, layout.operationsPerEntity, c0.visible), ttls, WAITING_SOURCE,
+              shadowing),
             shadowing.budgetMs)
         }
       | _ => state
@@ -486,7 +518,8 @@ module shadow {
     else match judged.decision.outcome {
       | Starts => if (not(judged.open) or judged.effective.layers.remote) state
         else if (busy(state, call.instance, call.key, shadowing.capacity)) dropped(state)
-        else admit(state, newJob(state.sources.length() - 1, true, NO_VALUE, 0, NO_FENCE, ttls, READING_C0, shadowing.logging), shadowing.budgetMs)
+        else admit(state, newJob(state.sources.length() - 1, true, NO_VALUE, 0, NO_FENCE, ttls, READING_C0, shadowing),
+          shadowing.budgetMs)
       // The remote layer is unobserved at a held release: nothing serves from
       // it here, so no served job is admitted at this step.
       | _ => state
@@ -531,37 +564,127 @@ module shadow {
       settleJobHeld(settled, layout, flight)
     else settled
   }
+  // -- Mismatch warnings (C60, D11 to D13) ----------------------------------------------
+
+  // A side of a warning's value fields or of an entry: OMITTED when the
+  // warning or the entry leaves it out, NO_RENDERING when it is logged as
+  // `null` (a value with no JSON rendering, D13), else the value's code (a
+  // source's result; a C0's decoded value, `payloads::valueOf`).
+  pure val OMITTED = -1
+  pure val NO_RENDERING = 0
+  // One difference the walk reports: its RFC 6901 pointer and both sides.
+  type Entry = { path: str, cached: int, source: int }
+  // One warning's content as the drivers parse it (D12): the age of its C0 at
+  // the verdict, the two value fields, which `diff` fields it carries and
+  // whether they are `null`, the uncut count, the paths, the entries (logged
+  // at `values` only) and the construction failure it names ("" for none).
+  type MismatchWarning = {
+    ageMs: int, cachedValue: int, sourceValue: int, diff: str, diffNull: bool,
+    count: int, paths: List[str], entries: List[Entry], loggingOutcome: str
+  }
+  pure def unrendered(code: int): bool = code == VALUE_UNRENDERABLE
+  // A value field: left out with `value` off, `null` for a side with no rendering.
+  pure def valueField(logging: Logging, code: int): int =
+    if (not(logging.value)) OMITTED else if (unrendered(code)) NO_RENDERING else code
+  // The warning a confirmed mismatch logs under the job's captured leaves,
+  // over two scalar values (W10's root cases; the walk over nested values is
+  // the protocol vectors'). Each side is rendered once when `value` is on, or
+  // when `diff` is and no hook replaces the walk; a rendered side with no
+  // rendering is a `render_error`, its value field null and the walk not run.
+  // The hook runs only when `diff` is on; the model's hook throws, a
+  // `hook_error` that nulls every diff field it carries and never falls back
+  // to the walk (D6), ranking above `render_error`. The walk reports nothing
+  // for identical renderings, else one entry at the root with both sides.
+  pure def warningOf(job: Job, cached: int, result: int, ageMs: int): MismatchWarning = {
+    val diffOn = job.logging.diff != DIFF_OFF
+    val rendered = job.logging.value or (diffOn and not(job.diffHook))
+    val renderFails = rendered and (unrendered(cached) or unrendered(result))
+    val hookFails = diffOn and job.diffHook
+    val listed = diffOn and not(hookFails) and not(renderFails)
+    val found = if (cached == result) List() else List({ path: "", cached: cached, source: result })
+    {
+      ageMs: ageMs, cachedValue: valueField(job.logging, cached), sourceValue: valueField(job.logging, result),
+      diff: job.logging.diff, diffNull: diffOn and not(listed),
+      count: if (listed) found.length() else 0,
+      paths: if (listed) found.foldl(List(), (paths, entry) => paths.append(entry.path)) else List(),
+      entries: if (listed and job.logging.diff == DIFF_VALUES) found else List(),
+      loggingOutcome: if (hookFails) "hook_error" else if (renderFails) "render_error" else ""
+    }
+  }
+  // The one `shadowMismatchLogging` outcome of a warning attempt (D11, D15):
+  // the construction failure the warning names, else `logger_error` when the
+  // logger failed after receiving it, else `logged`.
+  pure def loggingOutcomeOf(warning: MismatchWarning, loggerFailed: bool): str =
+    if (warning.loggingOutcome != "") warning.loggingOutcome else if (loggerFailed) "logger_error" else "logged"
+  pure def recordMismatchWarning(state: DiagnosedShadowed[r, q], warning: MismatchWarning,
+      outcome: str): DiagnosedShadowed[r, q] = {
+    val counted = Diagnostics::recordWarning(state)
+    {
+      d: {
+        mismatchWarnings: counted.d.mismatchWarnings.append(warning),
+        loggingOutcomes: counted.d.loggingOutcomes.append(outcome), ...counted.d
+      },
+      ...counted
+    }
+  }
   // The verdict the drivers observe, recorded beside the label the settlement
   // reported for the job: a `match` or a confirmed `mismatch` samples the C0
   // frame's age at the verdict, clamped to zero after a wall rollback (C57),
-  // and a confirmed mismatch warns under the logging policy the job captured
-  // (C60). It warns exactly when the admission's mismatch-logging policy was
-  // on (`Shadowing.logging`). A timed-out job reports no label and so no verdict.
-  pure def recordVerdict(before: DiagnosedShadowed[r, q], after: DiagnosedShadowed[r, q], job: Job): DiagnosedShadowed[r, q] = {
+  // and a confirmed mismatch warns once when the leaves the job captured at
+  // admission opt in (`logs`), its content judged by `warningOf` and its one
+  // logging outcome by `loggingOutcomeOf` under the logger's failure input.
+  // A timed-out job reports no label and so no verdict.
+  pure def recordVerdict(before: DiagnosedShadowed[r, q], after: DiagnosedShadowed[r, q], job: Job,
+      loggerFailed: bool): DiagnosedShadowed[r, q] = {
     val labels = after.o.shadow
     val outcome = if (labels.length() > before.o.shadow.length()) labels.nth(labels.length() - 1) else ""
     if (outcome != "match" and outcome != "mismatch") after
     else {
-      val age = Clock::wallOf(after) - job.stamp
-      val warned = if (outcome == "mismatch" and job.logging) Diagnostics::recordWarning(after) else after
-      Diagnostics::recordAge(warned, if (age < 0) 0 else age)
+      val elapsed = Clock::wallOf(after) - job.stamp
+      val age = if (elapsed < 0) 0 else elapsed
+      val warning = warningOf(job, Payloads::valueOf(job.cached), sourceOf(after, job).result, age)
+      val warned = if (outcome == "mismatch" and logs(job.logging))
+        recordMismatchWarning(after, warning, loggingOutcomeOf(warning, loggerFailed)) else after
+      Diagnostics::recordAge(warned, age)
     }
   }
-  // The drivers release a job's held decode: the settlement, its verdict recorded.
+  // The drivers release a job's held decode: the settlement, its verdict
+  // recorded. A decode never confirms a mismatch, so no logger runs here.
   pure def releaseLoad(state: DiagnosedShadowed[r, q], layout: Serving::Layout, load: int, failed: bool, comparison: Comparison, budget: int): DiagnosedShadowed[r, q] =
-    recordVerdict(state, settleJobLoad(state, layout, load, failed, comparison, budget), decoderOf(state, load))
-  // The drivers release a job's held read: a visible frame stamped after the
-  // wall clock reports its offset on the shadow layer whatever follows, then
-  // the settlement, its verdict recorded.
-  pure def releaseRead(state: DiagnosedShadowed[r, q], layout: Serving::Layout, read: int, failed: bool): DiagnosedShadowed[r, q] = {
+    recordVerdict(state, settleJobLoad(state, layout, load, failed, comparison, budget), decoderOf(state, load), false)
+  // The drivers release a job's held read, the logger failing or not: a
+  // visible frame stamped after the wall clock reports its offset on the
+  // shadow layer whatever follows, then the settlement, its verdict recorded.
+  pure def releaseReadWithLogger(state: DiagnosedShadowed[r, q], layout: Serving::Layout, read: int, failed: bool,
+      loggerFailed: bool): DiagnosedShadowed[r, q] = {
     val job = readerOf(state, read)
     val key = sourceOf(state, job).key
     val stamp = state.created.nth(key)
     val offset = stamp - Clock::wallOf(state)
     val measured = if (offset > 0 and Remote::observe(state, key, layout.operationsPerEntity, 0, failed).visible)
       Diagnostics::recordFutureOffset(state, Diagnostics::REMOTE_SHADOW_LAYER, offset) else state
-    recordVerdict(measured, settleJobRead(measured, layout, read, failed), job)
+    recordVerdict(measured, settleJobRead(measured, layout, read, failed), job, loggerFailed)
   }
+  // A profile whose logger never fails.
+  pure def releaseRead(state: DiagnosedShadowed[r, q], layout: Serving::Layout, read: int,
+      failed: bool): DiagnosedShadowed[r, q] =
+    releaseReadWithLogger(state, layout, read, failed, false)
+  // Opt-in record for a profile's own properties, never read by the
+  // traversal: what each verdict saw, in verdict order (parallel to `d.ages`):
+  // its label, the leaves and diff hook its job captured, the C0's decoded
+  // value, the source's result and whether the logger failed.
+  type Verdict = { outcome: str, logging: Logging, diffHook: bool, cached: int, result: int, loggerFailed: bool }
+  pure def recordVerdictInputs(before: DiagnosedShadowed[{ verdicts: List[Verdict] | r }, q],
+      after: DiagnosedShadowed[{ verdicts: List[Verdict] | r }, q], job: Job,
+      loggerFailed: bool): DiagnosedShadowed[{ verdicts: List[Verdict] | r }, q] =
+    if (after.d.ages.length() == before.d.ages.length()) after
+    else {
+      verdicts: after.verdicts.append({
+        outcome: after.o.shadow.nth(after.o.shadow.length() - 1), logging: job.logging, diffHook: job.diffHook,
+        cached: Payloads::valueOf(job.cached), result: sourceOf(before, job).result, loggerFailed: loggerFailed
+      }),
+      ...after
+    }
   // Delivery from inside the kernel, by kind: a job budget (nothing for a job
   // a source deadline of the same round already ended), a read deadline, or a
   // source deadline through the diagnosed expiry, then the job waiting on the

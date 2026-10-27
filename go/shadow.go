@@ -15,10 +15,10 @@ type shadowFlight struct {
 
 func (f *shadowFlight) abandon() { f.abandoned.Store(true); f.once.Do(func() { close(f.stop) }) }
 
-type shadowVerdict struct {
+type shadowVerdict[T any] struct {
 	outcome        string
 	age            *int64
-	cached, source any
+	cached, source T
 }
 
 func (x *execution[T]) darkSource(layer string, localMiss bool) (T, error) {
@@ -46,7 +46,7 @@ func (x *execution[T]) scheduleShadow(frame *Frame, source *pending[T], started 
 	c.mu.Lock()
 	if c.shadows[x.key] != nil || len(c.shadows) >= c.settings.shadowCapacity {
 		c.mu.Unlock()
-		x.shadowEvent(shadowVerdict{outcome: "dropped"})
+		x.shadowEvent(shadowVerdict[T]{outcome: "dropped"})
 		return
 	}
 	f := &shadowFlight{stop: make(chan struct{})}
@@ -58,7 +58,7 @@ func (x *execution[T]) scheduleShadow(frame *Frame, source *pending[T], started 
 	deferWork(c.settings.clock, func() { x.runShadow(f, frame, source, started) })
 }
 
-func (x *execution[T]) shadowEvent(v shadowVerdict) {
+func (x *execution[T]) shadowEvent(v shadowVerdict[T]) {
 	d := x.labels("")
 	d["outcome"] = v.outcome
 	e := Event{Kind: "shadowValidation", Key: x.key, Data: d, Outcome: v.outcome}
@@ -73,31 +73,61 @@ func (x *execution[T]) shadowEvent(v shadowVerdict) {
 		}
 		x.event("shadowAge", "", map[string]any{"outcome": v.outcome, "seconds": float64(age) / 1000})
 	}
-	if v.outcome == "mismatch" && x.policy.Shadow.LogMismatches && x.cache.settings.logger != nil {
-		func() {
-			defer func() { recover() }()
-			details := x.labels("")
-			details["outcome"] = "mismatch"
-
-			preview := ShadowMismatchLogDetails(x.key, v.cached, v.source)
-			details["cacheKey"] = preview.CacheKey
-			if preview.CachedValueJSON != nil {
-				details["cachedValueJson"] = *preview.CachedValueJSON
-			} else {
-				details["cachedValueJson"] = nil
-			}
-			if preview.SourceValueJSON != nil {
-				details["sourceValueJson"] = *preview.SourceValueJSON
-			} else {
-				details["sourceValueJson"] = nil
-			}
-			x.cache.settings.logger.Warn("DialCache shadow validation mismatch", details)
-		}()
+	if v.outcome == "mismatch" && x.policy.Shadow.logsMismatches() {
+		x.warnShadowMismatch(v)
 	}
+}
+
+// warnShadowMismatch emits the confirmed-mismatch warning and its one
+// shadowMismatchLogging event. It runs after the verdict was recorded and
+// never changes it; a construction failure logs less, never more, and nothing
+// reaches the caller.
+func (x *execution[T]) warnShadowMismatch(v shadowVerdict[T]) {
+	shadow := x.policy.Shadow
+	age := *v.age
+	if age < 0 {
+		age = 0
+	}
+	details := x.labels("")
+	details["outcome"] = "mismatch"
+	details["cachedValueAgeSeconds"] = float64(age) / 1000
+	var fields map[string]any
+	failure := shadowLogRenderError
+	func() {
+		// Construction is fail-closed by design; keep the metadata warning if
+		// anything unforeseen still panics while rendering it.
+		defer func() { _ = recover() }()
+		details["cacheKey"] = PreviewShadowLogKey(x.key)
+		var hook func() ([]MismatchEntry, error)
+		if x.op.MismatchDiff != nil {
+			hook = func() ([]MismatchEntry, error) { return x.op.MismatchDiff(v.cached, v.source) }
+		}
+		fields, failure = renderShadowMismatchLog(shadow.LogValue, shadow.LogDiff, v.cached, v.source, hook)
+	}()
+	for name, field := range fields {
+		details[name] = field
+	}
+	if failure != "" {
+		details["loggingOutcome"] = failure
+	}
+	delivered := warnDelivered(x.cache.settings.logger, "DialCache shadow validation mismatch", details)
+	// hook_error ranks above render_error, which ranks above logger_error.
+	outcome := failure
+	if outcome == "" {
+		outcome = "logged"
+		if !delivered {
+			outcome = "logger_error"
+		}
+	}
+	x.event("shadowMismatchLogging", "", map[string]any{"outcome": outcome})
 }
 
 func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[T], started time.Duration) {
 	clock := x.cache.settings.clock
+	// The verdict and its mismatch warning keep the slot too, so capacity
+	// bounds the hook and the built-in walk as it bounds the comparator.
+	reported := make(chan struct{})
+	defer close(reported)
 	if source == nil {
 		started = elapsedNow(clock)
 	}
@@ -141,7 +171,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 		x.duration("get", "remote_shadow", begin, nil)
 		return r, err
 	}
-	validation := startPending(func() (shadowVerdict, error) {
+	validation := startPending(func() (shadowVerdict[T], error) {
 		defer func() {
 			// Reads keep the slot after a read timeout; owned source/codec/write
 			// work already keeps this operation blocked until its raw completion.
@@ -149,6 +179,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 				for _, r := range reads {
 					<-r.done
 				}
+				<-reported
 				x.cache.mu.Lock()
 				if x.cache.shadows[x.key] == f {
 					delete(x.cache.shadows, x.key)
@@ -156,7 +187,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 				x.cache.mu.Unlock()
 			}()
 		}()
-		out := func(name string) (shadowVerdict, error) { return shadowVerdict{outcome: name}, nil }
+		out := func(name string) (shadowVerdict[T], error) { return shadowVerdict[T]{outcome: name}, nil }
 		if expired() {
 			return out("timeout")
 		}
@@ -243,7 +274,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 		}
 		age := clock.WallMS() - int64(frame.CreatedAtMS)
 		if matches {
-			return shadowVerdict{outcome: "match", age: &age}, nil
+			return shadowVerdict[T]{outcome: "match", age: &age}, nil
 		}
 		confirmation, err := read(false, true)
 		if err != nil {
@@ -256,13 +287,13 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 			return out("superseded")
 		}
 		age = clock.WallMS() - int64(frame.CreatedAtMS)
-		return shadowVerdict{outcome: "mismatch", age: &age, cached: cached, source: value}, nil
+		return shadowVerdict[T]{outcome: "mismatch", age: &age, cached: cached, source: value}, nil
 	})
 	verdict, err := awaitDeadline(clock, validation, started, budget, func() error {
 		return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(budget) * time.Millisecond}
 	}, f.abandon)
 	if err != nil {
-		verdict = shadowVerdict{outcome: "timeout"}
+		verdict = shadowVerdict[T]{outcome: "timeout"}
 	}
 	x.shadowEvent(verdict)
 }

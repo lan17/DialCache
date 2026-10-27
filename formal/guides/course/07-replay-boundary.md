@@ -64,8 +64,8 @@ action in front.
   receipt, comparison, next commands); line 141 says it again (`Predictions
   never choose commands`).
 - **[protocol.schema.json](../../replay/protocol.schema.json)**: the `$defs` for
-  `request`, `command`, `behaviorObservation` (line 1780), `settlementReceipt`
-  (line 2090) and `behaviorFixture` (line 2165). The schema file, not the
+  `request`, `command`, `behaviorObservation` (line 1894), `settlementReceipt`
+  (line 2204) and `behaviorFixture` (line 2279). The schema file, not the
   version number, is the compatibility unit.
 - **[../PORTING.md](../PORTING.md#shared-coordinator-protocol)**, "Shared
   coordinator protocol" and "[Observation

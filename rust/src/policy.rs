@@ -10,8 +10,64 @@ use crate::observe::DisabledReason;
 pub struct ShadowPolicy {
     /// Independent stable cohort percentage in `[0, 100]`. Omitted and zero disable shadow work.
     pub ramp: Option<f64>,
-    /// Emit one warning per confirmed mismatch. Defaults to false.
+    /// Shorthand for the whole [`mismatch_logging`](Self::mismatch_logging)
+    /// group: `true` stands for `value` on with [`MismatchDiff::Values`],
+    /// `false` for both leaves off. Leaves set in `mismatch_logging` override
+    /// what it expands to, before runtime overlays merge leaf by leaf.
     pub log_mismatches: Option<bool>,
+    /// Content of the warning emitted per confirmed mismatch. Omitted leaves
+    /// default off.
+    pub mismatch_logging: Option<MismatchLogging>,
+}
+
+/// Content of the one warning emitted per confirmed shadow mismatch. Both
+/// leaves default off, and the warning is emitted when either is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MismatchLogging {
+    /// Log the JSON of both compared values. Defaults to false.
+    pub value: Option<bool>,
+    /// How much of the structural difference to log. Defaults to
+    /// [`MismatchDiff::Off`].
+    pub diff: Option<MismatchDiff>,
+}
+
+/// How much of the structural difference a confirmed-mismatch warning logs.
+/// The levels are ordered: each logs everything the previous one does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub enum MismatchDiff {
+    /// No difference fields.
+    #[default]
+    Off,
+    /// Where the values differ: `mismatchPaths` and `mismatchPathCount`.
+    Paths,
+    /// The paths plus what each side holds there: `diffJson`.
+    Values,
+}
+
+impl MismatchDiff {
+    /// The level as the JSON configuration spells it: `off`, `paths` or `values`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MismatchDiff::Off => "off",
+            MismatchDiff::Paths => "paths",
+            MismatchDiff::Values => "values",
+        }
+    }
+
+    fn from_json(value: &Value) -> Option<MismatchDiff> {
+        match value.as_str()? {
+            "off" => Some(MismatchDiff::Off),
+            "paths" => Some(MismatchDiff::Paths),
+            "values" => Some(MismatchDiff::Values),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for MismatchDiff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// Static caching policy of one operation. Omitted leaves use library
@@ -61,7 +117,11 @@ impl Policy {
             remote_ramp: Some(0.0),
             shadow: Some(ShadowPolicy {
                 ramp: Some(0.0),
-                log_mismatches: Some(false),
+                log_mismatches: None,
+                mismatch_logging: Some(MismatchLogging {
+                    value: Some(false),
+                    diff: Some(MismatchDiff::Off),
+                }),
             }),
             ..Policy::default()
         }
@@ -199,6 +259,23 @@ impl Policy {
                 })?;
                 parsed.log_mismatches = Some(flag);
             }
+            if let Some(group) = shadow.get("mismatchLogging") {
+                let group = policy_object(group, "shadow mismatchLogging config")?;
+                let mut leaves = MismatchLogging::default();
+                if let Some(leaf) = group.get("value") {
+                    let flag = leaf.as_bool().ok_or_else(|| {
+                        PolicyError("shadow.mismatchLogging.value must be boolean".to_string())
+                    })?;
+                    leaves.value = Some(flag);
+                }
+                if let Some(leaf) = group.get("diff") {
+                    let level = MismatchDiff::from_json(leaf).ok_or_else(|| {
+                        PolicyError("invalid static shadow.mismatchLogging.diff".to_string())
+                    })?;
+                    leaves.diff = Some(level);
+                }
+                parsed.mismatch_logging = Some(leaves);
+            }
             policy.shadow = Some(parsed);
         }
         policy.validate()?;
@@ -247,6 +324,16 @@ impl Policy {
             }
             if let Some(flag) = shadow.log_mismatches {
                 leaves.insert("logMismatches".to_string(), Value::Bool(flag));
+            }
+            if let Some(group) = shadow.mismatch_logging {
+                let mut written = Map::new();
+                if let Some(flag) = group.value {
+                    written.insert("value".to_string(), Value::Bool(flag));
+                }
+                if let Some(level) = group.diff {
+                    written.insert("diff".to_string(), Value::from(level.as_str()));
+                }
+                leaves.insert("mismatchLogging".to_string(), Value::Object(written));
             }
             object.insert("shadow".to_string(), Value::Object(leaves));
         }
@@ -384,16 +471,31 @@ pub struct ResolvedShadow {
     pub enabled: bool,
     /// The shadow cohort percentage; zero when omitted or invalid.
     pub ramp: f64,
-    /// Whether a confirmed mismatch logs a warning; `false` when the flag
-    /// was omitted or malformed.
-    pub log_mismatches: bool,
+    /// Whether a confirmed-mismatch warning carries the JSON of both values:
+    /// the effective `mismatchLogging.value` leaf after the shorthand
+    /// expanded, `false` when omitted or invalid.
+    pub mismatch_value: bool,
+    /// How much of the difference a confirmed-mismatch warning carries: the
+    /// effective `mismatchLogging.diff` leaf, [`MismatchDiff::Off`] when
+    /// omitted or invalid.
+    pub mismatch_diff: MismatchDiff,
     /// The shadow ramp leaf was present but invalid: shadow work is off and a
     /// `config_resolution` error is emitted on the remote layer whenever a
     /// shadow job would otherwise have been scheduled (a remote hit or a
     /// ramped-down remote).
     pub config_error: bool,
-    /// Recorded only if a job is admitted.
+    /// A mismatch-logging leaf or the `logMismatches` shorthand was invalid
+    /// and acts off. One `config_resolution` covers all of them, recorded only
+    /// if a job is admitted.
     pub logging_config_error: bool,
+}
+
+impl ResolvedShadow {
+    /// Whether a confirmed mismatch emits a warning: `value` is on or `diff`
+    /// is above [`MismatchDiff::Off`].
+    pub fn logs_mismatches(&self) -> bool {
+        self.mismatch_value || self.mismatch_diff != MismatchDiff::Off
+    }
 }
 
 /// The captured policy of one enabled invocation.
@@ -505,15 +607,10 @@ pub fn resolve_policy(
                 None => shadow.config_error = true,
             }
         }
-        if let Some(leaf) = leaves.get("logMismatches") {
-            match leaf.as_bool() {
-                Some(flag) => shadow.log_mismatches = flag,
-                None => {
-                    shadow.log_mismatches = false;
-                    shadow.logging_config_error = true;
-                }
-            }
-        }
+        let logging = resolve_mismatch_logging(leaves);
+        shadow.mismatch_value = logging.value;
+        shadow.mismatch_diff = logging.diff;
+        shadow.logging_config_error = logging.invalid;
     }
 
     Ok(ResolvedPolicy {
@@ -537,7 +634,6 @@ fn merge_overlay(merged: &mut Map<String, Value>, overlay: &Value) -> Result<(),
     for (name, leaves) in [
         ("ttlSec", &["local", "remote"][..]),
         ("ramp", &["local", "remote"][..]),
-        ("shadow", &["ramp", "logMismatches"][..]),
     ] {
         let Some(incoming) = overlay.get(name) else {
             continue;
@@ -554,6 +650,17 @@ fn merge_overlay(merged: &mut Map<String, Value>, overlay: &Value) -> Result<(),
         }
         merged.insert(name.to_string(), Value::Object(output));
     }
+    if let Some(incoming) = overlay.get("shadow") {
+        let incoming = policy_object(incoming, "shadow")?;
+        let inherited = match merged.get("shadow") {
+            Some(Value::Object(existing)) => existing.clone(),
+            _ => Map::new(),
+        };
+        merged.insert(
+            "shadow".to_string(),
+            Value::Object(merge_shadow(&inherited, incoming)?),
+        );
+    }
     for name in [
         "requestLocal",
         "coalesce",
@@ -565,6 +672,109 @@ fn merge_overlay(merged: &mut Map<String, Value>, overlay: &Value) -> Result<(),
         }
     }
     Ok(())
+}
+
+/// Merge one runtime `shadow` group over the inherited one. `ramp` merges as
+/// a leaf. Each layer's `logMismatches` shorthand expands to the leaves it
+/// stands for before the leaf-wise merge, so a runtime shorthand replaces both
+/// inherited leaves while a leaf written beside it still wins within its own
+/// layer. A non-object runtime `mismatchLogging` fails the merge.
+fn merge_shadow(
+    inherited: &Map<String, Value>,
+    incoming: &Map<String, Value>,
+) -> Result<Map<String, Value>, PolicyError> {
+    let mut output = Map::new();
+    if let Some(ramp) = incoming.get("ramp").or_else(|| inherited.get("ramp")) {
+        output.insert("ramp".to_string(), ramp.clone());
+    }
+    if let Some(group) = incoming.get("mismatchLogging") {
+        policy_object(group, "shadow mismatchLogging config")?;
+    }
+    let base = expand_mismatch_logging(inherited);
+    let written = expand_mismatch_logging(incoming);
+    // Only the runtime layer can carry a malformed shorthand: a static one is
+    // a typed boolean. It stays raw, so resolution records the one
+    // `config_resolution` it owes; its expanded leaves already won the merge.
+    if written.invalid {
+        if let Some(shorthand) = incoming.get("logMismatches") {
+            output.insert("logMismatches".to_string(), shorthand.clone());
+        }
+    }
+    let mut group = Map::new();
+    if let Some(value) = written.value.or(base.value) {
+        group.insert("value".to_string(), value);
+    }
+    if let Some(diff) = written.diff.or(base.diff) {
+        group.insert("diff".to_string(), diff);
+    }
+    if !group.is_empty() {
+        output.insert("mismatchLogging".to_string(), Value::Object(group));
+    }
+    Ok(output)
+}
+
+/// The mismatch-logging leaves one shadow group writes, before validation;
+/// `None` is unwritten. `invalid` marks a malformed shorthand.
+#[derive(Default)]
+struct MismatchLeaves {
+    value: Option<Value>,
+    diff: Option<Value>,
+    invalid: bool,
+}
+
+/// Expand one shadow group's `logMismatches` shorthand into the leaves it
+/// stands for, `true` as value on with diff `values` and `false` as both off,
+/// then let the leaves written in the same group's `mismatchLogging` override
+/// them. A malformed shorthand expands to both leaves off and is marked
+/// invalid.
+fn expand_mismatch_logging(shadow: &Map<String, Value>) -> MismatchLeaves {
+    let expanded = |value: bool, diff: MismatchDiff, invalid: bool| MismatchLeaves {
+        value: Some(Value::Bool(value)),
+        diff: Some(Value::from(diff.as_str())),
+        invalid,
+    };
+    let mut leaves = match shadow.get("logMismatches") {
+        None => MismatchLeaves::default(),
+        Some(Value::Bool(true)) => expanded(true, MismatchDiff::Values, false),
+        Some(Value::Bool(false)) => expanded(false, MismatchDiff::Off, false),
+        Some(_) => expanded(false, MismatchDiff::Off, true),
+    };
+    if let Some(group) = shadow.get("mismatchLogging").and_then(Value::as_object) {
+        if let Some(value) = group.get("value") {
+            leaves.value = Some(value.clone());
+        }
+        if let Some(diff) = group.get("diff") {
+            leaves.diff = Some(diff.clone());
+        }
+    }
+    leaves
+}
+
+/// The effective mismatch-logging leaves of one merged shadow group.
+struct MismatchLoggingResolution {
+    value: bool,
+    diff: MismatchDiff,
+    invalid: bool,
+}
+
+/// Resolve each leaf independently: an omitted leaf is off, an invalid leaf
+/// acts off, and `invalid` reports that the group owes one
+/// `config_resolution`, however many of its inputs were invalid.
+fn resolve_mismatch_logging(shadow: &Map<String, Value>) -> MismatchLoggingResolution {
+    let leaves = expand_mismatch_logging(shadow);
+    let value = match &leaves.value {
+        None => Some(false),
+        Some(leaf) => leaf.as_bool(),
+    };
+    let diff = match &leaves.diff {
+        None => Some(MismatchDiff::Off),
+        Some(leaf) => MismatchDiff::from_json(leaf),
+    };
+    MismatchLoggingResolution {
+        value: value.unwrap_or(false),
+        diff: diff.unwrap_or(MismatchDiff::Off),
+        invalid: leaves.invalid || value.is_none() || diff.is_none(),
+    }
 }
 
 fn resolve_layer(
@@ -708,7 +918,7 @@ mod tests {
         assert_eq!(r.remote_read_timeout_ms, 30);
         assert!(r.shadow.enabled);
         assert_eq!(r.shadow.ramp, 100.0);
-        assert!(!r.shadow.log_mismatches);
+        assert!(!r.shadow.logs_mismatches());
         assert!(!r.shadow.config_error);
         assert!(!r.shadow.logging_config_error);
 
@@ -733,7 +943,8 @@ mod tests {
             assert!(inherit.remote.enabled);
             assert_eq!(inherit.remote_read_timeout_ms, 30);
             assert!(inherit.shadow.enabled);
-            assert!(inherit.shadow.log_mismatches);
+            assert!(inherit.shadow.mismatch_value);
+            assert_eq!(inherit.shadow.mismatch_diff, MismatchDiff::Values);
         }
     }
 
@@ -784,6 +995,15 @@ mod tests {
             json!({"shadow": {"ramp": "50"}}),
             json!({"shadow": {"logMismatches": null}}),
             json!({"shadow": {"logMismatches": 1}}),
+            json!({"shadow": {"mismatchLogging": null}}),
+            json!({"shadow": {"mismatchLogging": []}}),
+            json!({"shadow": {"mismatchLogging": true}}),
+            json!({"shadow": {"mismatchLogging": {"value": null}}}),
+            json!({"shadow": {"mismatchLogging": {"value": "true"}}}),
+            json!({"shadow": {"mismatchLogging": {"diff": null}}}),
+            json!({"shadow": {"mismatchLogging": {"diff": "full"}}}),
+            json!({"shadow": {"mismatchLogging": {"diff": true}}}),
+            json!({"shadow": {"mismatchLogging": {"diff": "Paths"}}}),
         ];
         for config in invalid {
             assert!(
@@ -869,17 +1089,21 @@ mod tests {
             .is_err());
         let nan_shadow = ShadowPolicy {
             ramp: Some(f64::NAN),
-            log_mismatches: None,
+            ..ShadowPolicy::default()
         };
         assert!(Policy::default().shadow(nan_shadow).validate().is_err());
         let high_shadow = ShadowPolicy {
             ramp: Some(100.5),
-            log_mismatches: None,
+            ..ShadowPolicy::default()
         };
         assert!(Policy::default().shadow(high_shadow).validate().is_err());
         let flag_only = ShadowPolicy {
-            ramp: None,
             log_mismatches: Some(true),
+            mismatch_logging: Some(MismatchLogging {
+                value: Some(false),
+                diff: Some(MismatchDiff::Paths),
+            }),
+            ..ShadowPolicy::default()
         };
         assert!(Policy::default().shadow(flag_only).validate().is_ok());
         assert!(Policy::enabled(60).validate().is_ok());
@@ -910,7 +1134,11 @@ mod tests {
             "coalesce": false,
             "staleOnErrorMaxAgeSec": 120,
             "remoteReadTimeoutMs": 25,
-            "shadow": {"ramp": 3.5, "logMismatches": true},
+            "shadow": {
+                "ramp": 3.5,
+                "logMismatches": true,
+                "mismatchLogging": {"value": false, "diff": "paths"},
+            },
         });
         let policy = Policy::from_json(&source).unwrap();
         assert_eq!(
@@ -926,7 +1154,11 @@ mod tests {
                 remote_read_timeout_ms: Some(25),
                 shadow: Some(ShadowPolicy {
                     ramp: Some(3.5),
-                    log_mismatches: Some(true)
+                    log_mismatches: Some(true),
+                    mismatch_logging: Some(MismatchLogging {
+                        value: Some(false),
+                        diff: Some(MismatchDiff::Paths),
+                    }),
                 }),
             }
         );
@@ -969,13 +1201,29 @@ mod tests {
         assert_eq!(
             Policy::default()
                 .shadow(ShadowPolicy {
-                    ramp: None,
-                    log_mismatches: Some(false)
+                    log_mismatches: Some(false),
+                    ..ShadowPolicy::default()
                 })
                 .to_json(),
             json!({
                 "ttlSec": {}, "ramp": {},
                 "shadow": {"logMismatches": false},
+            })
+        );
+        // Only the set mismatch-logging leaves appear in their group.
+        assert_eq!(
+            Policy::default()
+                .shadow(ShadowPolicy {
+                    mismatch_logging: Some(MismatchLogging {
+                        value: None,
+                        diff: Some(MismatchDiff::Values),
+                    }),
+                    ..ShadowPolicy::default()
+                })
+                .to_json(),
+            json!({
+                "ttlSec": {}, "ramp": {},
+                "shadow": {"mismatchLogging": {"diff": "values"}},
             })
         );
         // Zero recovery age is a present leaf, not an omission.
@@ -1003,7 +1251,7 @@ mod tests {
                 "ramp": {"local": 0, "remote": 0},
                 "requestLocal": false,
                 "staleOnErrorMaxAgeSec": 0,
-                "shadow": {"ramp": 0, "logMismatches": false},
+                "shadow": {"ramp": 0, "mismatchLogging": {"value": false, "diff": "off"}},
             })
         );
     }
@@ -1034,7 +1282,7 @@ mod tests {
         assert_eq!(alone.remote.reason, Some(DisabledReason::PolicyDisabled));
         assert!(!alone.stale_on_error_config_error);
         assert!(!alone.shadow.enabled && !alone.shadow.config_error);
-        assert!(!alone.shadow.log_mismatches && !alone.shadow.logging_config_error);
+        assert!(!alone.shadow.logs_mismatches() && !alone.shadow.logging_config_error);
 
         // As an overlay it ramps every inherited path to zero instead of relying on omission.
         let base = Policy::enabled(60)
@@ -1043,6 +1291,10 @@ mod tests {
             .shadow(ShadowPolicy {
                 ramp: Some(100.0),
                 log_mismatches: Some(true),
+                mismatch_logging: Some(MismatchLogging {
+                    value: Some(true),
+                    diff: Some(MismatchDiff::Values),
+                }),
             });
         let killed = resolved(&base, Some(RuntimePolicy::from(Policy::disabled()).0));
         assert!(!killed.request_local);
@@ -1292,7 +1544,7 @@ mod tests {
         assert_eq!(r.shadow.ramp, 100.0);
         assert!(!r.shadow.config_error);
         assert!(r.shadow.logging_config_error);
-        assert!(!r.shadow.log_mismatches);
+        assert!(!r.shadow.logs_mismatches());
 
         let r = resolved(&base, Some(json!({"shadow": {"ramp": null}})));
         assert!(r.shadow.config_error);
@@ -1317,7 +1569,7 @@ mod tests {
         assert!(
             logging.shadow.enabled
                 && logging.shadow.logging_config_error
-                && !logging.shadow.log_mismatches
+                && !logging.shadow.logs_mismatches()
         );
     }
 
@@ -1331,6 +1583,7 @@ mod tests {
             .shadow(ShadowPolicy {
                 ramp: Some(100.0),
                 log_mismatches: Some(true),
+                mismatch_logging: None,
             });
 
         // Omitted leaves inherit the operation leaf; an empty overlay changes nothing.
@@ -1344,7 +1597,8 @@ mod tests {
         assert!(inherited.request_local && !inherited.coalesce);
         assert_eq!(inherited.remote_read_timeout_ms, 40);
         assert_eq!(inherited.stale_on_error_max_age_ms, 30_000);
-        assert!(inherited.shadow.enabled && inherited.shadow.log_mismatches);
+        assert!(inherited.shadow.enabled && inherited.shadow.mismatch_value);
+        assert_eq!(inherited.shadow.mismatch_diff, MismatchDiff::Values);
 
         // A present leaf replaces the operation leaf, sparsely.
         let patched = resolved(
@@ -1401,10 +1655,12 @@ mod tests {
 
         // Shadow leaves merge independently of serving leaves.
         let shadow = resolved(&base, Some(json!({"shadow": {"logMismatches": false}})));
-        assert!(shadow.shadow.enabled && !shadow.shadow.log_mismatches);
+        assert!(shadow.shadow.enabled && !shadow.shadow.logs_mismatches());
         let shadow = resolved(&base, Some(json!({"shadow": {"ramp": 0}})));
         assert!(
-            !shadow.shadow.enabled && shadow.shadow.log_mismatches && !shadow.shadow.config_error
+            !shadow.shadow.enabled
+                && shadow.shadow.logs_mismatches()
+                && !shadow.shadow.config_error
         );
         assert!(shadow.local.enabled && shadow.remote.enabled);
     }
@@ -1431,7 +1687,7 @@ mod tests {
             ),
         );
         assert_eq!(r.stale_on_error_max_age_ms, 7_000);
-        assert!(r.shadow.enabled && !r.shadow.log_mismatches);
+        assert!(r.shadow.enabled && !r.shadow.logs_mismatches());
         // A runtime static-policy overlay (via From<Policy>) behaves like its JSON form.
         let overlay = RuntimePolicy::from(Policy::default().local_ttl_sec(9));
         let r = resolve_policy(
@@ -1603,5 +1859,340 @@ mod tests {
             resolve(&Policy::default(), Some(json!({"remoteReadTimeoutMs": 0}))).unwrap_err(),
             PolicyError("invalid runtime remoteReadTimeoutMs".to_string())
         );
+    }
+
+    fn shadow_logging(base: &Policy, overlay: Option<Value>) -> (bool, MismatchDiff, bool) {
+        let shadow = resolved(base, overlay).shadow;
+        (
+            shadow.mismatch_value,
+            shadow.mismatch_diff,
+            shadow.logging_config_error,
+        )
+    }
+
+    fn shadow_base(log_mismatches: Option<bool>, group: Option<MismatchLogging>) -> Policy {
+        Policy::default().shadow(ShadowPolicy {
+            ramp: Some(100.0),
+            log_mismatches,
+            mismatch_logging: group,
+        })
+    }
+
+    #[test]
+    fn mismatch_logging_resolves_the_recorded_four_row_table() {
+        use MismatchDiff::{Off, Paths, Values};
+        let leaves = |value, diff| Some(MismatchLogging { value, diff });
+        // { logMismatches: true, mismatchLogging: { value: false } }, in either layer.
+        let row = shadow_base(Some(true), leaves(Some(false), None));
+        assert_eq!(shadow_logging(&row, None), (false, Values, false));
+        assert_eq!(
+            shadow_logging(
+                &shadow_base(None, None),
+                Some(
+                    json!({"shadow": {"logMismatches": true, "mismatchLogging": {"value": false}}})
+                )
+            ),
+            (false, Values, false)
+        );
+        // { logMismatches: false, mismatchLogging: { diff: "paths" } }, in either layer.
+        let row = shadow_base(Some(false), leaves(None, Some(Paths)));
+        assert_eq!(shadow_logging(&row, None), (false, Paths, false));
+        assert_eq!(
+            shadow_logging(
+                &shadow_base(None, None),
+                Some(
+                    json!({"shadow": {"logMismatches": false, "mismatchLogging": {"diff": "paths"}}})
+                )
+            ),
+            (false, Paths, false)
+        );
+        // A runtime shorthand replaces both inherited leaves.
+        let paths = shadow_base(None, leaves(None, Some(Paths)));
+        assert_eq!(
+            shadow_logging(&paths, Some(json!({"shadow": {"logMismatches": false}}))),
+            (false, Off, false)
+        );
+        let value_off = shadow_base(None, leaves(Some(false), None));
+        assert_eq!(
+            shadow_logging(&value_off, Some(json!({"shadow": {"logMismatches": true}}))),
+            (true, Values, false)
+        );
+    }
+
+    #[test]
+    fn mismatch_logging_leaves_merge_after_each_layer_expands() {
+        use MismatchDiff::{Off, Paths, Values};
+        let leaves = |value, diff| Some(MismatchLogging { value, diff });
+        // An omitted runtime leaf inherits; a written one wins leaf by leaf.
+        let base = shadow_base(None, leaves(Some(true), Some(Paths)));
+        assert_eq!(
+            shadow_logging(
+                &base,
+                Some(json!({"shadow": {"mismatchLogging": {"diff": "values"}}}))
+            ),
+            (true, Values, false)
+        );
+        assert_eq!(
+            shadow_logging(
+                &base,
+                Some(json!({"shadow": {"mismatchLogging": {"value": false}}}))
+            ),
+            (false, Paths, false)
+        );
+        // A static shorthand is a baseline like any other pair of static leaves.
+        let shorthand = shadow_base(Some(true), None);
+        assert_eq!(
+            shadow_logging(
+                &shorthand,
+                Some(json!({"shadow": {"mismatchLogging": {"diff": "paths"}}}))
+            ),
+            (true, Paths, false)
+        );
+        // An overlay without a shadow group, or with an empty one, keeps the static leaves.
+        for overlay in [
+            json!({}),
+            json!({"shadow": {}}),
+            json!({"shadow": {"ramp": 50}}),
+        ] {
+            assert_eq!(
+                shadow_logging(&shorthand, Some(overlay)),
+                (true, Values, false)
+            );
+        }
+        // The disabled() overlay turns every inherited leaf off without a diagnostic.
+        let all_on = shadow_base(Some(true), leaves(Some(true), Some(Values)));
+        assert_eq!(
+            shadow_logging(&all_on, Some(RuntimePolicy::from(Policy::disabled()).0)),
+            (false, Off, false)
+        );
+    }
+
+    #[test]
+    fn a_malformed_runtime_shorthand_stays_raw_for_one_config_resolution() {
+        let inherited = shadow_base(
+            None,
+            Some(MismatchLogging {
+                value: Some(false),
+                diff: Some(MismatchDiff::Values),
+            }),
+        );
+        let written = json!({"logMismatches": "yes", "mismatchLogging": {"value": true}});
+        let base = match inherited.to_json() {
+            Value::Object(object) => object["shadow"].as_object().unwrap().clone(),
+            _ => unreachable!(),
+        };
+        // The malformed shorthand expands to both leaves off over the static
+        // leaves, the leaf written beside it still wins, and the raw value stays.
+        let merged = merge_shadow(&base, written.as_object().unwrap()).unwrap();
+        assert_eq!(
+            Value::Object(merged),
+            json!({
+                "ramp": 100,
+                "logMismatches": "yes",
+                "mismatchLogging": {"value": true, "diff": "off"},
+            })
+        );
+        assert_eq!(
+            shadow_logging(&inherited, Some(json!({"shadow": written}))),
+            (true, MismatchDiff::Off, true)
+        );
+        // Any number of invalid inputs owes the same single flag.
+        assert_eq!(
+            shadow_logging(
+                &inherited,
+                Some(json!({"shadow": {
+                    "logMismatches": null,
+                    "mismatchLogging": {"value": "yes", "diff": "full"},
+                }}))
+            ),
+            (false, MismatchDiff::Off, true)
+        );
+    }
+
+    #[test]
+    fn mismatch_logging_resolves_each_leaf_independently() {
+        use MismatchDiff::{Off, Paths, Values};
+        let cases = [
+            (json!({}), (false, Off, false)),
+            (json!({"mismatchLogging": {}}), (false, Off, false)),
+            (
+                json!({"mismatchLogging": {"value": true, "diff": "paths"}}),
+                (true, Paths, false),
+            ),
+            (
+                json!({"mismatchLogging": {"value": "true", "diff": "paths"}}),
+                (false, Paths, true),
+            ),
+            (
+                json!({"mismatchLogging": {"value": null}}),
+                (false, Off, true),
+            ),
+            (
+                json!({"mismatchLogging": {"value": true, "diff": "full"}}),
+                (true, Off, true),
+            ),
+            (json!({"mismatchLogging": {"diff": 1}}), (false, Off, true)),
+            (
+                json!({"mismatchLogging": {"diff": null}}),
+                (false, Off, true),
+            ),
+            (
+                json!({"mismatchLogging": {"diff": "toString"}}),
+                (false, Off, true),
+            ),
+            (
+                json!({"mismatchLogging": {"value": true, "diff": "constructor"}}),
+                (true, Off, true),
+            ),
+            (
+                json!({"mismatchLogging": {"diff": "Values"}}),
+                (false, Off, true),
+            ),
+            (json!({"logMismatches": "yes"}), (false, Off, true)),
+            (json!({"logMismatches": null}), (false, Off, true)),
+            (json!({"logMismatches": 0}), (false, Off, true)),
+            (
+                json!({"logMismatches": "yes", "mismatchLogging": {"value": true, "diff": "values"}}),
+                (true, Values, true),
+            ),
+            // Unknown members stay ignored, as on main.
+            (
+                json!({"mismatchLogging": {"diff": "paths", "unknown": 1}, "unknown": true}),
+                (false, Paths, false),
+            ),
+        ];
+        for (shadow, expected) in cases {
+            assert_eq!(
+                shadow_logging(&Policy::default(), Some(json!({"shadow": shadow.clone()}))),
+                expected,
+                "{shadow}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_non_object_runtime_mismatch_logging_group_fails_resolution() {
+        for group in [
+            json!(null),
+            json!([]),
+            json!(1),
+            json!("paths"),
+            json!(true),
+        ] {
+            for base in [Policy::default(), shadow_base(Some(true), None)] {
+                assert_eq!(
+                    resolve(
+                        &base,
+                        Some(json!({"shadow": {"logMismatches": true, "mismatchLogging": group.clone()}}))
+                    )
+                    .unwrap_err(),
+                    PolicyError("DialCache shadow mismatchLogging config must be an object".to_string()),
+                    "{group}"
+                );
+            }
+        }
+    }
+
+    // Port of the TypeScript merge grid: the recorded rule is written out
+    // without the code under test and checked over every combination.
+    #[test]
+    fn every_combination_of_shorthand_and_leaves_resolves_as_each_layer_expanded_first() {
+        fn layer_leaves(
+            shorthand: Option<&Value>,
+            group: Option<&Value>,
+        ) -> (Option<Value>, Option<Value>) {
+            let (mut value, mut diff) = (None, None);
+            if let Some(shorthand) = shorthand {
+                let on = shorthand == &Value::Bool(true);
+                value = Some(Value::Bool(on));
+                diff = Some(Value::from(if on { "values" } else { "off" }));
+            }
+            if let Some(group) = group.and_then(Value::as_object) {
+                if let Some(leaf) = group.get("value") {
+                    value = Some(leaf.clone());
+                }
+                if let Some(leaf) = group.get("diff") {
+                    diff = Some(leaf.clone());
+                }
+            }
+            (value, diff)
+        }
+        let static_shorthands = [None, Some(true), Some(false)];
+        let static_groups = [
+            None,
+            Some((None, None)),
+            Some((Some(true), None)),
+            Some((Some(false), None)),
+            Some((None, Some(MismatchDiff::Paths))),
+            Some((None, Some(MismatchDiff::Off))),
+            Some((Some(true), Some(MismatchDiff::Values))),
+        ];
+        let runtime_shorthands = [
+            None,
+            Some(json!(true)),
+            Some(json!(false)),
+            Some(json!("yes")),
+            Some(json!(null)),
+            Some(json!(0)),
+        ];
+        let runtime_groups = [
+            None,
+            Some(json!({})),
+            Some(json!({"value": true})),
+            Some(json!({"value": false})),
+            Some(json!({"diff": "paths"})),
+            Some(json!({"diff": "values"})),
+            Some(json!({"value": true, "diff": "off"})),
+            Some(json!({"value": "yes"})),
+            Some(json!({"value": null})),
+            Some(json!({"diff": "full"})),
+            Some(json!({"diff": "toString"})),
+        ];
+        let mut combinations = 0;
+        for static_shorthand in static_shorthands {
+            for static_group in static_groups {
+                let base = shadow_base(
+                    static_shorthand,
+                    static_group.map(|(value, diff)| MismatchLogging { value, diff }),
+                );
+                let static_shadow = base.to_json()["shadow"].clone();
+                let inherited = layer_leaves(
+                    static_shadow.get("logMismatches"),
+                    static_shadow.get("mismatchLogging"),
+                );
+                for runtime_shorthand in &runtime_shorthands {
+                    for runtime_group in &runtime_groups {
+                        let mut shadow = Map::new();
+                        if let Some(shorthand) = runtime_shorthand {
+                            shadow.insert("logMismatches".to_string(), shorthand.clone());
+                        }
+                        if let Some(group) = runtime_group {
+                            shadow.insert("mismatchLogging".to_string(), group.clone());
+                        }
+                        let written =
+                            layer_leaves(runtime_shorthand.as_ref(), runtime_group.as_ref());
+                        let value = written.0.or(inherited.0.clone());
+                        let diff = written.1.or(inherited.1.clone());
+                        let valid_value = value.as_ref().is_none_or(Value::is_boolean);
+                        let level = diff.as_ref().and_then(MismatchDiff::from_json);
+                        let valid_diff = diff.is_none() || level.is_some();
+                        let malformed = runtime_shorthand.as_ref().is_some_and(|s| !s.is_boolean());
+                        let expected = (
+                            valid_value && value == Some(Value::Bool(true)),
+                            level.unwrap_or(MismatchDiff::Off),
+                            malformed || !valid_value || !valid_diff,
+                        );
+                        let overlay = json!({"shadow": Value::Object(shadow)});
+                        assert_eq!(
+                            shadow_logging(&base, Some(overlay.clone())),
+                            expected,
+                            "static {static_shadow} runtime {overlay}"
+                        );
+                        combinations += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(combinations, 3 * 7 * 6 * 11);
     }
 }

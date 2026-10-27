@@ -2631,7 +2631,7 @@
       "steps": [
         {"input": {"op": "seed","value": 1},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
-        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"loads": 2,"shadow": ["mismatch"],"reads": 2,"events": [{"event": "mismatchWarning","cacheNamespace": "urn","useCase": "Behavior","keyType": "id","outcome": "mismatch","cacheKey": "urn:id:1#Behavior","cachedValueJson": "1","sourceValueJson": "2"}]}}
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"loads": 2,"shadow": ["mismatch"],"reads": 2,"events": [{"event": "mismatchWarning","cacheNamespace": "urn","useCase": "Behavior","keyType": "id","outcome": "mismatch","cacheKey": "urn:id:1#Behavior","cachedValueAgeSeconds": 0,"mismatchPathsJson": "[\"\"]","mismatchPathCount": 1,"diffJson": "[{\"path\":\"\",\"cached\":1,\"source\":2}]","cachedValueJson": "1","sourceValueJson": "2"}]}}
       ]
     },
     {

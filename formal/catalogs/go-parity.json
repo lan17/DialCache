@@ -8,32 +8,32 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "f5f7ee357201b343eb00f8f9c783c92af0d722709137edc0f55e0a52b3cdec0a",
-    "executionSha256": "29a412f87329347840f000ea44a6e95332464c0b01b92b4e41c615af3c9157cd",
-    "sourceAuditDispositionsSha256": "e05fcb0da204544920a87eeb98611cc697c7f2652fead527e409595010d09377",
-    "featureCoverageSha256": "2d4e47ec18688c911ce4d6bda780edc8ee654069aa5704e15a39cbae35655ba7",
-    "coverageWitnessesSha256": "2b2d5d57daacba3ecd3637f5a917d58b0b63fcc88893e651cd602cdba1ef4244",
-    "profilesSha256": "9df8285820e4fff65f6a7753885bbb192c09f3f476eac8f9c98d130454ae1a28"
+    "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
+    "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
+    "sourceAuditDispositionsSha256": "c95ce03c30df574246e5943e2d69e084ed809b5d3e2a3d0f0abf5a2123bc8aaa",
+    "featureCoverageSha256": "3f33092274a0046c2d793790b1b4999021021e018f47ae65c15d3a0313776fd2",
+    "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
+    "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
   "inventory": {
-    "behavioralCases": 244,
-    "withRequiredGeneratedWitnesses": 244,
+    "behavioralCases": 249,
+    "withRequiredGeneratedWitnesses": 249,
     "withoutRequiredGeneratedWitnesses": [],
-    "wireCases": 22,
-    "sourceFiles": 27,
-    "sourceDeclarations": 772,
-    "casesWithScheduledChecks": 266,
-    "requiredWitnesses": 497,
-    "casesWithQuintRegressionReplay": 192,
+    "wireCases": 23,
+    "sourceFiles": 28,
+    "sourceDeclarations": 878,
+    "casesWithScheduledChecks": 272,
+    "requiredWitnesses": 535,
+    "casesWithQuintRegressionReplay": 198,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
-    "scheduledInvariants": 253,
-    "scheduledRegressions": 468,
+    "scheduledInvariants": 258,
+    "scheduledRegressions": 489,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 343,
-    "exportedRegressionHistories": 358
+    "caseReferencedWitnesses": 378,
+    "exportedRegressionHistories": 379
   },
   "cases": [
     {
@@ -2959,6 +2959,78 @@
       "gaps": []
     },
     {
+      "id": "C60.warning-field-groups",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "C60.shorthand-table",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "C60.invalid-input-isolation",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "C60.logging-outcomes",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "C60.outcome-precedence",
+      "kind": "portable-behavior",
+      "group": "shadow",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
+      "id": "W10.mismatch-paths",
+      "kind": "wire-protocol",
+      "group": "wire-protocol",
+      "gaps": [],
+      "evidence": {
+        "typescript": ".formal-traces/ts-replay.json",
+        "go": ".formal-traces/go-replay.jsonl",
+        "nativeGo": [],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+      }
+    },
+    {
       "id": "C40.fenced-candidate",
       "group": "recovery",
       "evidence": {
@@ -3317,14 +3389,14 @@
   "sourceInventory": [
     {
       "path": "typescript/src/config.ts",
-      "sha256": "3ece031f00acee5067f18db6a8eab35a725fd87e1525c60dfd9c578741953cbf",
+      "sha256": "e8fafc6f9452a40c212150e492ccc8223bb1e13efe94cb5708be9b0fca6cc392",
       "candidateGoFiles": [
         "go/policy.go",
         "go/api.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Static configuration and callback contracts map to typed time.Duration Policy, functional Option constructors and Operation[T]. ParsePolicy exposes the seconds-based JSON input; pointer leaves and functional options preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults.",
+        "rationale": "Static configuration and callback contracts map to typed time.Duration Policy, functional Option constructors and Operation[T]. ParsePolicy exposes the seconds-based JSON input; pointer leaves and functional options preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults. The shadow.mismatchLogging leaves map to ShadowPolicy.MismatchLogging with a typed MismatchDiffLevel, and the logMismatches shorthand stays a *bool that expands to them.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -3338,9 +3410,11 @@
               "ParsePolicy",
               "ValidatePolicy",
               "SnapshotPolicy",
-              "ResolvePolicy"
+              "ResolvePolicy",
+              "MismatchLoggingPolicy",
+              "MismatchDiffLevel"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           },
           {
             "path": "go/api.go",
@@ -3348,9 +3422,10 @@
               "Option",
               "Operation",
               "Logger",
-              "RecoveryPredicate"
+              "RecoveryPredicate",
+              "MismatchEntry"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           }
         ]
       }
@@ -3387,14 +3462,14 @@
     },
     {
       "path": "typescript/src/datadog.ts",
-      "sha256": "078ee508e948dcf997b556e6ab34d6c5e779c057dd588f2b7b16dee40fcf2c41",
+      "sha256": "6582c119ce95f473ceede6c5807575e82b01df9a9e6255698379273878c26ea0",
       "candidateGoFiles": [
         "go/metrics_datadog.go",
         "go/metrics.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "DogStatsD integration maps event kinds, labels, units and suffixes through an application-owned DogStatsDClient. Go uses an interface returning errors and an explicit constructor; FailureIsolatedObserver prevents exporter failures from changing cache outcomes.",
+        "rationale": "DogStatsD integration maps event kinds, labels, units and suffixes through an application-owned DogStatsDClient. Go uses an interface returning errors and an explicit constructor; FailureIsolatedObserver prevents exporter failures from changing cache outcomes. shadowMismatchLogging maps to shadow_mismatch_logging.count, which lowers the longest namespace to 170 characters.",
         "nativeAdaptations": [
           "B01",
           "X01"
@@ -3408,7 +3483,7 @@
               "NewDatadogMetrics",
               "ObserveEvent"
             ],
-            "sha256": "84f56821e1234a7ae77569c1429d2385a13bedb1ce7d1a5186a1d808ebe6809b"
+            "sha256": "d398ab0e2690ae6d6614d4f50d8de7d324ce85717bd2fba1158afa30aac440bb"
           },
           {
             "path": "go/metrics.go",
@@ -3417,14 +3492,14 @@
               "metricLabels",
               "metricValue"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "9066cceb94a24bdc514eca2a9a7090a7d437cc2b18bc389bd0d83e97ff7b5448"
           }
         ]
       }
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "90e83928537806591b4de1553c81dc542bb59615150b90d5897d929532e15702",
+      "sha256": "88e1e9bdf70bba085f4c8f2861cfac89ec021a5af318e21dc94e9f54c75b583c",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -3436,7 +3511,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings.",
+        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The warning's leaves come from the invocation's ResolvedShadow, Operation.MismatchDiff replaces the built-in walk, and warnShadowMismatch emits one shadowMismatchLogging event; a Warn panic is the Go logger_error.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -3491,9 +3566,10 @@
             "symbols": [
               "darkSource",
               "scheduleShadow",
-              "runShadow"
+              "runShadow",
+              "warnShadowMismatch"
             ],
-            "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
+            "sha256": "8d29f1a6fdd546e31e08a67056696a4c9c6689479b93a2269f1c74b7cba8050a"
           },
           {
             "path": "go/api.go",
@@ -3502,14 +3578,14 @@
               "Operation",
               "Event"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/internal/logging/logging.go",
             "symbols": [
               "Logger"
             ],
-            "sha256": "c26312555cbc1980a8af2a714ae58c0dfc8182624c44635f905d4147f5db7624"
+            "sha256": "70900d17293a0931fbcd11811bc389563d6dad9788b69fa01fb539e9f44a2428"
           }
         ]
       }
@@ -3537,7 +3613,7 @@
               "CallbackPanicError",
               "ErrNoRemote"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/redis_adapter.go",
@@ -3552,7 +3628,7 @@
     },
     {
       "path": "typescript/src/index.ts",
-      "sha256": "bbf222cec750670240b0475f1e4ab8a071d86fee2a10c3e1d30b8d314d38be5d",
+      "sha256": "4f3f9fbd2d017e343ecd59bec34f8e5f55212af598ff3fee3877adb8a8ef8a12",
       "candidateGoFiles": [
         "go/api.go",
         "go/bindings.go",
@@ -3563,7 +3639,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The TypeScript root barrel becomes exported declarations in one Go module/package. Cache construction, typed wrapper registration, policy, key and codec helpers are available directly; JavaScript import aliases and package subpath export validation do not have separate Go implementations.",
+        "rationale": "The TypeScript root barrel becomes exported declarations in one Go module/package. Cache construction, typed wrapper registration, policy, key and codec helpers are available directly; JavaScript import aliases and package subpath export validation do not have separate Go implementations. The mismatch-logging config, hook entry and level types are root declarations (MismatchLoggingPolicy, MismatchDiffLevel, MismatchEntry); metric labels are Event data.",
         "nativeAdaptations": [
           "B01"
         ],
@@ -3576,7 +3652,7 @@
               "Codec",
               "Remote"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/bindings.go",
@@ -3597,7 +3673,7 @@
             "symbols": [
               "Policy"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           },
           {
             "path": "go/protocol.go",
@@ -3611,7 +3687,7 @@
             "symbols": [
               "JSONCodec"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
           }
         ]
       }
@@ -3675,7 +3751,7 @@
               "EscapeRawPayload",
               "firstZstdFrame"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
           }
         ]
       }
@@ -3714,7 +3790,7 @@
               "TimerClock",
               "DeferredExecutor"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           }
         ]
       }
@@ -3751,7 +3827,7 @@
               "policyTTLMS",
               "ValidatePolicy"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           }
         ]
       }
@@ -3802,7 +3878,7 @@
           },
           {
             "path": "go/api.go",
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f",
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d",
             "symbols": [
               "systemClock",
               "newSystemClock"
@@ -3835,7 +3911,7 @@
             "symbols": [
               "ResolvePolicy"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           }
         ]
       }
@@ -3875,7 +3951,7 @@
             "symbols": [
               "runShadow"
             ],
-            "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
+            "sha256": "8d29f1a6fdd546e31e08a67056696a4c9c6689479b93a2269f1c74b7cba8050a"
           },
           {
             "path": "go/codec.go",
@@ -3883,7 +3959,7 @@
               "CompressPayload",
               "DecompressPayload"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
           },
           {
             "path": "go/redis_adapter.go",
@@ -4010,13 +4086,13 @@
     },
     {
       "path": "typescript/src/internal/runtime-config.ts",
-      "sha256": "7fbf42ce9d346f30d65b431b546649d9592405073dd5c900559f1e4e3c6fb703",
+      "sha256": "ff7542dcc67816453eeb1c85e54f00aa7d32aad61278891ee431ff9ae1ebb37f",
       "candidateGoFiles": [
         "go/policy.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Runtime policy parsing, leaf-wise inheritance, invocation snapshots and feature-local invalidation map to ParsePolicy, SnapshotPolicy and ResolvePolicy. Nil/Absent whole-provider results inherit while explicit null leaves remain malformed; constructor and wrapper validation occur through Go APIs.",
+        "rationale": "Runtime policy parsing, leaf-wise inheritance, invocation snapshots and feature-local invalidation map to ParsePolicy, SnapshotPolicy and ResolvePolicy. Nil/Absent whole-provider results inherit while explicit null leaves remain malformed; constructor and wrapper validation occur through Go APIs. Each layer's logMismatches shorthand expands before the leaf-wise merge in ResolvePolicy, and each mismatch-logging leaf validates independently into one LoggingConfigError.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -4028,23 +4104,27 @@
               "ParsePolicy",
               "SnapshotPolicy",
               "ResolvePolicy",
-              "ValidatePolicy"
+              "ValidatePolicy",
+              "expandMismatchLogging",
+              "resolveValueLeaf",
+              "resolveDiffLeaf"
             ],
-            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
+            "sha256": "436567152ae6c4c3d8fe9169bfbf27ac30c80b8cedcf43dcd5bd81daf88085dd"
           }
         ]
       }
     },
     {
       "path": "typescript/src/internal/shadow-log-json.ts",
-      "sha256": "6fae44c08e79ea2fe63bed8de91c621c1ec59672a415608ade3acf63b18ac91a",
+      "sha256": "ddab3366b00b83f19c796f3e457b9a12dc422e61f3f2b1b1d1c41731785687d5",
       "candidateGoFiles": [
         "go/metrics.go",
-        "go/codec.go"
+        "go/codec.go",
+        "go/shadow_log.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Mismatch previews use the Go JSON compatibility writer, byte-bounded UTF-8 output and the same truncation marker. Native type/prototype representation is a codec binding; failures return no preview and cannot suppress the shadow verdict or caller result.",
+        "rationale": "Warning content renders each compared value once with the Go JSON compatibility writer; the built-in walk runs over the parsed renderings with the same member order, array rule, root cases, depth cap (deep equality past it) and caps, materializing only the kept pointers up to their clamp, and the MismatchDiff hook's entries take the same clamps. Byte-bounded UTF-8 output uses the same truncation marker; a failure nulls only the fields it feeds and cannot suppress the verdict or caller result. Native type representation is a codec binding (B03): Go's decoder fails a rendering nested past 10,000 levels as hook_error. Hook entry sides honor json.Marshaler at every depth, as TypeScript sides honor toJSON, while the codec stored encoding reaches MarshalJSON only through a struct.",
         "nativeAdaptations": [
           "B03",
           "X01",
@@ -4054,18 +4134,56 @@
           {
             "path": "go/metrics.go",
             "symbols": [
-              "PreviewShadowLogKey",
-              "PreviewShadowLogJSON",
-              "ShadowMismatchLogDetails"
+              "PreviewShadowLogKey"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "9066cceb94a24bdc514eca2a9a7090a7d437cc2b18bc389bd0d83e97ff7b5448"
           },
           {
             "path": "go/codec.go",
             "symbols": [
               "appendJSON"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
+          },
+          {
+            "path": "go/shadow_log.go",
+            "symbols": [
+              "renderShadowMismatchLog",
+              "walkJSON",
+              "runMismatchHook",
+              "appendMismatchEntries"
+            ],
+            "sha256": "f7ddb1edd7e9b3b7319818f0adf1ecaf42a023d18aa8427a0602709f65921ff1"
+          }
+        ]
+      }
+    },
+    {
+      "path": "typescript/src/internal/thenable.ts",
+      "sha256": "359a72f7b3b3c05979dca303bc7450f49282505c0ff7dfd987519e7550767919",
+      "candidateGoFiles": [
+        "go/deadline.go",
+        "go/metrics.go"
+      ],
+      "mappingReview": {
+        "status": "reviewed-mapping-not-execution",
+        "rationale": "TypeScript application callbacks under a synchronous contract (comparators, the stale recovery predicate, the mismatch hook) and observers (loggers, metrics adapters) can still return a promise-like; isPromiseLike detects one and fulfills awaits it so a rejection is consumed and observer outcomes can wait for settlement. Go callbacks and observers are synchronous calls with no settlement to observe: callSafely turns a callback panic into CallbackPanicError, and isolatedLogger and FailureIsolatedObserver recover a logger or observer panic, which are the Go counterparts of a rejected promise.",
+        "goBindings": [
+          {
+            "path": "go/deadline.go",
+            "symbols": [
+              "callSafely"
+            ],
+            "sha256": "4c96942152e994adc4171e4d30de2de8be83ab6b3a33ed62793cc86819ce2b97"
+          },
+          {
+            "path": "go/metrics.go",
+            "symbols": [
+              "isolatedLogger",
+              "FailureIsolatedLogger",
+              "FailureIsolatedObserver"
+            ],
+            "sha256": "9066cceb94a24bdc514eca2a9a7090a7d437cc2b18bc389bd0d83e97ff7b5448"
           }
         ]
       }
@@ -4100,7 +4218,7 @@
     },
     {
       "path": "typescript/src/metrics.ts",
-      "sha256": "6c2607ec512c10362f1906ff082799d8b770f34cb3d61d5523dba908349d90d8",
+      "sha256": "92a149a709de87362ca58059df966d812d23a5915615a57f012ec7ecbc574f09",
       "candidateGoFiles": [
         "go/api.go",
         "go/metrics.go",
@@ -4109,7 +4227,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The backend-neutral Event stream expresses portable diagnostic outcomes, attribution and durations. Optional shadow/recovery hooks preserve admission semantics; FailureIsolatedObserver and FailureIsolatedLogger contain native exporter/logging failures. Exporter schemas are separately reviewed bindings.",
+        "rationale": "The backend-neutral Event stream expresses portable diagnostic outcomes, attribution and durations. Optional shadow/recovery hooks preserve admission semantics; FailureIsolatedObserver and FailureIsolatedLogger contain native exporter/logging failures. Exporter schemas are separately reviewed bindings. shadowMismatchLogging is an Event kind with the outcome in Event.Outcome, and warnDelivered reports a Warn panic as logger_error.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -4123,16 +4241,17 @@
               "Option",
               "Logger"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/metrics.go",
             "symbols": [
               "MetricsAdapter",
               "FailureIsolatedObserver",
-              "FailureIsolatedLogger"
+              "FailureIsolatedLogger",
+              "warnDelivered"
             ],
-            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
+            "sha256": "9066cceb94a24bdc514eca2a9a7090a7d437cc2b18bc389bd0d83e97ff7b5448"
           },
           {
             "path": "go/engine.go",
@@ -4148,7 +4267,7 @@
             "symbols": [
               "shadowEvent"
             ],
-            "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
+            "sha256": "8d29f1a6fdd546e31e08a67056696a4c9c6689479b93a2269f1c74b7cba8050a"
           }
         ]
       }
@@ -4184,13 +4303,13 @@
     },
     {
       "path": "typescript/src/prometheus.ts",
-      "sha256": "56c11cd6fba362c4b0ab16b222cd5785a37bdc81fdde67ae920557ba05ed5ec7",
+      "sha256": "b0f0d19fd359a45debf11ecd02af016cae13476c5e5b32bf5c63414870247c63",
       "candidateGoFiles": [
         "go/metrics_prometheus.go"
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "PrometheusMetrics preserves metric names, labels, histogram units and buckets using client_golang. Existing individually registered collectors require explicit schema-bearing bindings plus descriptor and registry-identity validation; this replaces prom-client registry introspection and makes histogram-schema knowledge an explicit caller precondition.",
+        "rationale": "PrometheusMetrics preserves metric names, labels, histogram units and buckets using client_golang. Existing individually registered collectors require explicit schema-bearing bindings plus descriptor and registry-identity validation; this replaces prom-client registry introspection and makes histogram-schema knowledge an explicit caller precondition. dialcache_shadow_mismatch_logging_counter is a twentieth collector schema.",
         "nativeAdaptations": [
           "B01",
           "X01"
@@ -4206,7 +4325,7 @@
               "NewPrometheusMetricsWithBindings",
               "ObserveEvent"
             ],
-            "sha256": "c29b357dff3917acb3dbfe3912a74f6c3b7a6312b9d110577bd30e960bc5d87e"
+            "sha256": "1027779b913bb890cd06ffe314d80840ce67c522bc12dad9b6e12b4224a9d340"
           }
         ]
       }
@@ -4233,7 +4352,7 @@
               "Remote",
               "ReadBudget"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/protocol.go",
@@ -4309,7 +4428,7 @@
               "Codec",
               "ContextCodec"
             ],
-            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
+            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
           },
           {
             "path": "go/codec.go",
@@ -4321,7 +4440,7 @@
               "SemanticEqual",
               "validateJSONScalarStrings"
             ],
-            "sha256": "387879a07365e10bddbabd21e61cab72102cd5e81f2afb980c33e3d4dbeb6268"
+            "sha256": "e4f36c61f72610eb57ad838c2359c28d664bd4c5c0f37e10b8b6789072b567f3"
           }
         ]
       }
@@ -4968,7 +5087,8 @@
           "go/metrics.go",
           "go/feature_replay_test.go",
           "go/behavior_replay_test.go",
-          "go/internal/testsuite/codec_test.go"
+          "go/internal/testsuite/codec_test.go",
+          "go/shadow_warning_test.go"
         ],
         "nativeAdaptations": [
           "B02",
@@ -5118,7 +5238,9 @@
           "go/metrics_prometheus.go",
           "go/metrics_datadog.go",
           "go/metrics_test.go",
-          "go/api_boundary_test.go"
+          "go/api_boundary_test.go",
+          "go/shadow_log.go",
+          "go/shadow_log_test.go"
         ],
         "nativeAdaptations": [
           "B02",

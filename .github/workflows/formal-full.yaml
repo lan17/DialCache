@@ -70,12 +70,17 @@ jobs:
     # challenge catalog alone, so a port-only change cannot alter it.
     if: (github.event_name != 'schedule' || github.ref == 'refs/heads/main') && inputs.mode != 'replay' && inputs.mode != 'mutations'
     runs-on: ubuntu-latest
-    # Shared-library challenges now execute the importing profiles' partitions,
-    # including clean baselines and mutant checks cached by exact source closure.
-    # The expanded partition campaign was still running after an hour in
-    # run 35568655690. Leave room for the full campaign on slower runners
-    # without reducing models, histories or partitions.
-    timeout-minutes: 150
+    # make formal-check runs every scheduled model, measures every catalogued
+    # model fault on four Quint workers, then checks the lint baseline and the
+    # kernel fixtures. Run 39239127644 on main spent 6.0, 134.6 and 2.3
+    # minutes on them, its 79 challenges 528 worker-minutes in their logged
+    # phases. Run 40245022083 reached the former 150-minute timeout with 78 of
+    # this catalog's 90 challenges done at 7.1 worker-minutes each; the 12 left
+    # put the campaign near 156 minutes. typescript/test/formal-validation.test.ts
+    # pins the challenges the timeout holds, so catalog growth fails the pull
+    # request until the timeout grows rather than reducing models, histories
+    # or partitions.
+    timeout-minutes: 210
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -205,9 +210,11 @@ jobs:
   # mutants: about 1 minute per TypeScript mutant on a fast runner and about 2
   # on the slow class (13 mutants took 17 minutes unsharded in run
   # 34669546872). typescript/test/formal-validation.test.ts pins the mutants
-  # a shard may hold so that the baselines (2-4 minutes), the slow-class cost and
-  # one hung cohort's 9-minute bound fit the timeout; growing the catalog past
-  # that fails the pull request until the matrix grows.
+  # a shard may hold so that setup and the baselines (1.0 to 1.6 minutes in
+  # the 18 shards of runs 40142189738, 40146831443 and 40245022083; the pin
+  # allows 2), the slow-class cost and one hung cohort's 9-minute bound fit
+  # the timeout; growing the catalog past that fails the pull request until
+  # the matrix grows.
   typescript-mutations:
     needs: generate
     if: inputs.mode != 'replay'
@@ -363,11 +370,13 @@ jobs:
           retention-days: 14
 
   # The Go lane bounds the whole workflow: every mutant replays the generated
-  # cohort, about 1.6 minutes per mutant on a fast runner and about 3 on the
-  # slow class (13 mutants took 25 minutes in run 34660598461 and 47-48 in
-  # runs 34669546872 and 34670045249), strictly in sequence. A shard compiles,
-  # runs the baselines (2-4 minutes) and its slice of the catalog; one hung
-  # cohort adds its 8-minute test bound before the shard fails.
+  # cohort, about 2.5 minutes per mutant on a fast runner and about 4.5 on the
+  # slow class (run 40146831443: 145 s per mutant on shard 3, 270 s on shard
+  # 2, whose seven mutants took 37 minutes), strictly in sequence. A shard
+  # compiles and runs the baselines (2.7 to 5.3 minutes from job start in the
+  # 35 shards of runs 40142189738, 40146831443 and 40245022083; the pin allows
+  # 5.5), then its slice of the catalog; one hung cohort adds its 8-minute test
+  # bound before the shard fails.
   # typescript/test/formal-validation.test.ts pins the mutants a shard may
   # hold within the timeout, so catalog growth fails the pull request until
   # the matrix grows.
@@ -378,9 +387,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     env:
-      MUTATION_SHARD: ${{ matrix.shard }}/10
+      MUTATION_SHARD: ${{ matrix.shard }}/15
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -433,7 +442,10 @@ jobs:
 
   # The Rust lane compiles the crate and its test binaries in release mode
   # once per mutant (dependencies are cached across mutants) and replays the
-  # generated cohort in about a minute; the budget mirrors go-mutations.
+  # generated cohort in about a minute; the budget mirrors go-mutations. On
+  # the slow class a shard's baselines take about 5.5 minutes and a mutant
+  # about 3.7 (run 40146831443), so four shards hold seven mutants in about
+  # 31 minutes.
   rust-mutations:
     needs: generate
     if: inputs.mode != 'replay'
@@ -441,9 +453,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     env:
-      MUTATION_SHARD: ${{ matrix.shard }}/3
+      MUTATION_SHARD: ${{ matrix.shard }}/4
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

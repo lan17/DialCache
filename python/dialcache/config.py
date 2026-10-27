@@ -78,11 +78,22 @@ def _shadow_map(value: Any) -> Any:
     result: dict[str, Any] = {}
     if "ramp" in value:
         result["ramp"] = value["ramp"]
-    if "log_mismatches" in value:
-        result["log_mismatches"] = value["log_mismatches"]
-    elif "logMismatches" in value:
-        result["log_mismatches"] = value["logMismatches"]
+    for native, portable in (("log_mismatches", "logMismatches"), ("mismatch_logging", "mismatchLogging")):
+        if native in value:
+            result[native] = value[native]
+        elif portable in value:
+            result[native] = value[portable]
+    if "mismatch_logging" in result:
+        result["mismatch_logging"] = _mismatch_logging_map(result["mismatch_logging"])
     return MappingProxyType(result)
+
+
+def _mismatch_logging_map(value: Any) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ConfigError("shadow.mismatch_logging must be an object")
+    # Leaf values stay unvalidated, like layer-map leaves, so a malformed
+    # runtime leaf fails open narrowly at resolution.
+    return MappingProxyType({leaf: value[leaf] for leaf in ("value", "diff") if leaf in value})
 
 
 @dataclass(frozen=True)
@@ -94,6 +105,14 @@ class Policy:
     ramp and optional shadow/recovery leaves remain available for narrow
     runtime fail-open resolution. Static operation setup uses
     :func:`validate_static_policy` to reject invalid defaults before calls.
+
+    ``shadow`` takes ``ramp`` and the confirmed-mismatch warning content:
+    ``mismatch_logging={"value": bool, "diff": "off" | "paths" | "values"}``,
+    both leaves off when omitted, and ``log_mismatches``, shorthand for
+    ``{"value": True, "diff": "values"}`` when true and for both leaves off
+    when false. A leaf written beside the shorthand overrides what it expands
+    to; a runtime overlay's leaves then win leaf by leaf. The camelCase names
+    ``mismatchLogging`` and ``logMismatches`` are accepted.
     """
 
     ttl_sec: Mapping[str, Any] = field(default_factory=dict)
@@ -125,7 +144,9 @@ class Policy:
         return cls(
             request_local=False,
             stale_on_error_max_age_sec=0,
-            shadow={"ramp": 0, "log_mismatches": False},
+            # Leaves merge independently, so both are written: an omitted one
+            # would let an inherited leaf survive disabled().
+            shadow={"ramp": 0, "mismatch_logging": {"value": False, "diff": "off"}},
             ramp={"local": 0, "remote": 0},
         )
 
@@ -189,14 +210,96 @@ def merge_policy(defaults: PolicyInput, runtime: PolicyInput) -> Policy | None:
     for name in ("request_local", "coalesce", "stale_on_error_max_age_sec", "remote_read_timeout_ms"):
         value = getattr(overlay, name)
         values[name] = getattr(base, name) if value is UNSET else value
-    if base.shadow is UNSET and overlay.shadow is UNSET:
-        values["shadow"] = UNSET
-    else:
-        values["shadow"] = {
-            **({} if base.shadow is UNSET else base.shadow),
-            **({} if overlay.shadow is UNSET else overlay.shadow),
-        }
+    values["shadow"] = _merge_shadow(base.shadow, overlay.shadow)
     return Policy(**values)
+
+
+def _merge_shadow(base: Any, overlay: Any) -> Any:
+    if base is UNSET and overlay is UNSET:
+        return UNSET
+    defaults: Mapping[str, Any] = {} if base is UNSET else base
+    runtime: Mapping[str, Any] = {} if overlay is UNSET else overlay
+    merged: dict[str, Any] = {}
+    if "ramp" in runtime:
+        merged["ramp"] = runtime["ramp"]
+    elif "ramp" in defaults:
+        merged["ramp"] = defaults["ramp"]
+    # Each layer's shorthand expands before the leaf-wise merge, so a runtime
+    # log_mismatches replaces both inherited leaves while a leaf written beside
+    # it still wins within its own layer.
+    inherited = expand_mismatch_logging(defaults)
+    written = expand_mismatch_logging(runtime)
+    # Only the runtime layer can carry a malformed shorthand: static validation
+    # rejects one in the operation's defaults. It stays raw, so admission
+    # records its config_resolution; its expanded leaves already won the merge.
+    if written.get("invalid"):
+        merged["log_mismatches"] = runtime["log_mismatches"]
+    group = {
+        leaf: written[leaf] if leaf in written else inherited[leaf]
+        for leaf in ("value", "diff")
+        if leaf in written or leaf in inherited
+    }
+    if group:
+        merged["mismatch_logging"] = group
+    return merged
+
+
+MISMATCH_DIFF_LEVELS = ("off", "paths", "values")
+
+
+@dataclass(frozen=True)
+class MismatchLogging:
+    """The effective mismatch-logging leaves and whether any written input was invalid."""
+
+    value: bool
+    diff: str
+    invalid: bool
+
+
+def expand_mismatch_logging(shadow: Mapping[str, Any]) -> dict[str, Any]:
+    """Expand one shadow group's shorthand into the leaves it stands for.
+
+    ``log_mismatches=True`` expands to ``{"value": True, "diff": "values"}`` and
+    ``False`` to ``{"value": False, "diff": "off"}``; then the leaves written in
+    the same group's ``mismatch_logging`` override them. A malformed shorthand
+    expands to both leaves off and is marked ``invalid``. An omitted leaf stays
+    omitted, and written leaves pass through unvalidated.
+    """
+    expanded: dict[str, Any] = {}
+    if "log_mismatches" in shadow:
+        shorthand = shadow["log_mismatches"]
+        if shorthand is True:
+            expanded = {"value": True, "diff": "values"}
+        elif shorthand is False:
+            expanded = {"value": False, "diff": "off"}
+        else:
+            expanded = {"value": False, "diff": "off", "invalid": True}
+    if "mismatch_logging" not in shadow:
+        return expanded
+    group = shadow["mismatch_logging"]
+    return {**expanded, **{leaf: group[leaf] for leaf in ("value", "diff") if leaf in group}}
+
+
+def resolve_mismatch_logging(shadow: Mapping[str, Any]) -> MismatchLogging:
+    """Resolve the effective mismatch-logging leaves of one shadow group.
+
+    Each leaf validates independently: an omitted leaf is off, an invalid leaf
+    acts off, and ``invalid`` reports that the group owes one config_resolution.
+    """
+    leaves = expand_mismatch_logging(shadow)
+    value = leaves.get("value", False)
+    diff = leaves.get("diff", "off")
+    valid_value = isinstance(value, bool)
+    valid_diff = _valid_diff_level(diff)
+    return MismatchLogging(
+        value=value if valid_value else False,
+        diff=diff if valid_diff else "off",
+        invalid=bool(leaves.get("invalid")) or not valid_value or not valid_diff,
+    )
+
+
+def _valid_diff_level(value: Any) -> bool:
+    return isinstance(value, str) and value in MISMATCH_DIFF_LEVELS
 
 
 def _valid_ramp(value: Any) -> bool:
@@ -229,6 +332,11 @@ def validate_static_policy(value: PolicyInput) -> Policy | None:
             raise ConfigError("shadow.ramp must be a finite number from 0 through 100")
         if "log_mismatches" in policy.shadow and not isinstance(policy.shadow["log_mismatches"], bool):
             raise ConfigError("shadow.log_mismatches must be a boolean")
+        mismatch_logging = policy.shadow.get("mismatch_logging", {})
+        if "value" in mismatch_logging and not isinstance(mismatch_logging["value"], bool):
+            raise ConfigError("shadow.mismatch_logging.value must be a boolean")
+        if "diff" in mismatch_logging and not _valid_diff_level(mismatch_logging["diff"]):
+            raise ConfigError('shadow.mismatch_logging.diff must be "off", "paths" or "values"')
     return policy
 
 

@@ -18,7 +18,7 @@ export const targetDescriptions = {
   check: 'TypeScript, Go, Rust and Python checks, docs build and reviewed inventories; no Quint generation or Docker',
   'check-ts': 'Typecheck, unit coverage, build and packed-package checks on Node 24',
   'check-go': 'Go vet, formatting check and default tests with race detection and coverage (go/coverage-unit.out)',
-  'check-rust': 'Rust formatting check, clippy with warnings denied and default tests including the smoke conformance run',
+  'check-rust': 'Rust formatting check, clippy with warnings denied (all targets and features, then the published library without test-util) and default tests including the smoke conformance run',
   'check-python': 'Python native, protocol, scenario and committed smoke tests with coverage (coverage/python/native.lcov)',
   docs: 'Check shared examples and links; generate native API references and the documentation site (Go, Rust and Python required)',
   audit: 'Check source, behavior, feature, Go, generated-fixture and generated-view freshness inventories, the Quint style caps and the course citations',
@@ -182,8 +182,13 @@ export function validationPlan(target, { directory = root, environment = process
     'check-ts': [pnpm('Typecheck TypeScript', 'typecheck'), pnpm('Run TypeScript unit tests with coverage', 'test'),
       pnpm('Build package', 'build'), pnpm('Check packed package on Node 24', 'test:package')],
     'check-go': [go('Go vet', 'vet', './...'), { label: 'Check Go formatting', command: 'gofmt', args: ['-l', 'go'], requireEmptyStdout: true }, nativeGo(false, { coverage: true })],
+    // Every other Rust step turns on test-util (--all-features, and the crate's
+    // dev-dependency on itself), which replaces shipped code such as the
+    // shadow-warning JSON renderer. The library is therefore linted once more
+    // with every published feature and without test-util, as applications build it.
     'check-rust': [cargo('Check Rust formatting', 'fmt', '--check'),
       cargo('Lint Rust with clippy', 'clippy', '--all-targets', '--all-features', '--', '-D', 'warnings'),
+      cargo('Lint the published Rust library without test-util', 'clippy', '--lib', '--features', 'redis,prometheus', '--', '-D', 'warnings'),
       cargo('Run Rust default tests', 'test', '--all-features')],
     'check-python': [{ label: 'Clear prior Python native coverage', remove: ['coverage/python/.coverage-native', 'coverage/python/native.lcov'] },
       python('Run Python native, wire, scenario and smoke tests with coverage', '-m', 'coverage', 'run',

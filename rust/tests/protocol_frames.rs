@@ -1,6 +1,6 @@
-//! Frame, decode, timestamp, duration and envelope conformance against the
-//! portable protocol corpus (`formal/catalogs/protocol-vectors.json` plus the
-//! Quint-generated frame and envelope artifacts).
+//! Frame, decode, timestamp, duration, envelope and mismatch-path conformance
+//! against the portable protocol corpus (`formal/catalogs/protocol-vectors.json`
+//! plus the Quint-generated frame and envelope artifacts).
 
 #[path = "formal/digest.rs"]
 mod digest;
@@ -10,6 +10,8 @@ mod digest;
 mod fixtures;
 #[path = "formal/frame_vectors.rs"]
 mod frame_vectors;
+#[path = "formal/mismatch_vectors.rs"]
+mod mismatch_vectors;
 
 use serde_json::{json, Value};
 
@@ -29,8 +31,8 @@ fn frame_assertions_distinguish_library_rejections_from_bad_fixtures() {
     assert!(!error.contains("PROTOCOL_ASSERTION_FAILURE"), "{error}");
 }
 
-/// The eight groups this test owns, with their fixed-corpus sizes.
-const GROUPS: [(&str, usize, Check); 8] = [
+/// The nine groups this test owns, with their fixed-corpus sizes.
+const GROUPS: [(&str, usize, Check); 9] = [
     ("frameVectors", 8, frame_vectors::check_frame_vector),
     (
         "trackedDecodeVectors",
@@ -58,6 +60,11 @@ const GROUPS: [(&str, usize, Check); 8] = [
         "compressionWriteVectors",
         6,
         frame_vectors::check_compression_write_vector,
+    ),
+    (
+        "mismatchPathVectors",
+        57,
+        mismatch_vectors::check_mismatch_path_vector,
     ),
 ];
 

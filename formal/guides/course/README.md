@@ -147,7 +147,7 @@ so the drift is caught by the check, not by a learner:
   symbol is no longer on those lines. Fix the citation, then reread the lesson:
   the code may have moved for a reason the lesson should mention.
 - **A quoted count comes from a check.** Quote a number only as `node
-  formal/tools/execution.mjs` prints it (`"regressions": 468`) or as `node
+  formal/tools/execution.mjs` prints it (`"regressions": 489`) or as `node
   formal/tools/check-source-audit.mjs` prints it (`guideSections: 195`); the
   check compares both with today's output. When an exercise changes a count, say
   so in words rather than quoting the new number.

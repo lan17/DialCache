@@ -114,6 +114,12 @@ mappings also accept the shared camelCase names. See the
 
 </LanguageContent>
 
+Within each config, the defaults or a runtime overlay, `shadow.logMismatches`
+first expands to the `shadow.mismatchLogging` leaves it stands for, and leaves
+written beside it win; only then do the leaves merge, runtime over defaults. The
+[mismatch logging table](shadow-validation.md#confirmed-mismatch-logging)
+shows the result for each combination.
+
 The policy names in the tables below use the shared JSON configuration shape,
 also accepted by the Go, Rust and Python policy parsers. Native names and units differ;
 use the selected language's API reference when constructing typed policy.
@@ -160,8 +166,9 @@ the runtime provider to return a sparse per-key ramp override of `0` or `100`.
 
 `shadow.ramp` selects its own stable exact-key cohort, independent of both
 serving ramps. Shadowing additionally needs a valid remote TTL and a metrics
-adapter with the outcome hook. `shadow.logMismatches` controls diagnostic
-warnings separately and defaults to `false`.
+adapter with the outcome hook. `shadow.mismatchLogging` controls diagnostic
+warnings separately, choosing the warning's content leaf by leaf, and
+`shadow.logMismatches` is shorthand for both leaves, which default to off.
 [Shadow validation](shadow-validation.md) explains eligibility, comparison,
 clean-miss fills, capacity, and the data-handling contract.
 

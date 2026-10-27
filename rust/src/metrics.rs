@@ -29,6 +29,8 @@ pub enum MetricKind {
     ShadowValidation,
     /// Seconds: validated value age at a match or mismatch verdict ([`Event::ShadowValueAge`]).
     ShadowValueAge,
+    /// Counter of confirmed-mismatch warning attempts ([`Event::ShadowMismatchLogging`]).
+    ShadowMismatchLogging,
     /// Seconds: how far a frame is dated ahead of the observing clock
     /// ([`Event::FutureTimestampOffset`]).
     FutureTimestampOffset,
@@ -62,7 +64,7 @@ const LABEL_KEY_TYPE: &str = "key_type";
 
 impl MetricKind {
     /// Every kind, in declaration order.
-    pub const ALL: [MetricKind; 19] = [
+    pub const ALL: [MetricKind; 20] = [
         MetricKind::Request,
         MetricKind::Miss,
         MetricKind::Disabled,
@@ -71,6 +73,7 @@ impl MetricKind {
         MetricKind::Coalesced,
         MetricKind::ShadowValidation,
         MetricKind::ShadowValueAge,
+        MetricKind::ShadowMismatchLogging,
         MetricKind::FutureTimestampOffset,
         MetricKind::StaleRecovery,
         MetricKind::StaleRecoveryValueAge,
@@ -95,6 +98,7 @@ impl MetricKind {
             Event::Coalesced { .. } => MetricKind::Coalesced,
             Event::ShadowValidation { .. } => MetricKind::ShadowValidation,
             Event::ShadowValueAge { .. } => MetricKind::ShadowValueAge,
+            Event::ShadowMismatchLogging { .. } => MetricKind::ShadowMismatchLogging,
             Event::FutureTimestampOffset { .. } => MetricKind::FutureTimestampOffset,
             Event::StaleRecovery { .. } => MetricKind::StaleRecovery,
             Event::StaleRecoveryValueAge { .. } => MetricKind::StaleRecoveryValueAge,
@@ -120,6 +124,7 @@ impl MetricKind {
             MetricKind::Coalesced => "coalesced",
             MetricKind::ShadowValidation => "shadowValidation",
             MetricKind::ShadowValueAge => "shadowValueAge",
+            MetricKind::ShadowMismatchLogging => "shadowMismatchLogging",
             MetricKind::FutureTimestampOffset => "futureTimestampOffset",
             MetricKind::StaleRecovery => "staleRecovery",
             MetricKind::StaleRecoveryValueAge => "staleRecoveryValueAge",
@@ -146,6 +151,7 @@ impl MetricKind {
                 | MetricKind::Invalidation
                 | MetricKind::Coalesced
                 | MetricKind::ShadowValidation
+                | MetricKind::ShadowMismatchLogging
                 | MetricKind::StaleRecovery
                 | MetricKind::Compression
         )
@@ -203,6 +209,7 @@ impl MetricKind {
             ],
             MetricKind::ShadowValidation
             | MetricKind::ShadowValueAge
+            | MetricKind::ShadowMismatchLogging
             | MetricKind::StaleRecovery
             | MetricKind::StaleRecoveryValueAge => OUTCOME,
             MetricKind::Compression => &[
@@ -255,6 +262,13 @@ impl MetricKind {
             } => {
                 push_outcome_base(&mut labels, outcome);
                 labels.push(("outcome", verdict.as_str().to_string()));
+            }
+            Event::ShadowMismatchLogging {
+                labels: outcome,
+                outcome: logging,
+            } => {
+                push_outcome_base(&mut labels, outcome);
+                labels.push(("outcome", logging.as_str().to_string()));
             }
             Event::StaleRecovery {
                 labels: outcome,
@@ -347,6 +361,7 @@ impl MetricKind {
             | Event::Invalidation { .. }
             | Event::Coalesced { .. }
             | Event::ShadowValidation { .. }
+            | Event::ShadowMismatchLogging { .. }
             | Event::StaleRecovery { .. }
             | Event::Compression { .. } => 1.0,
         }
@@ -375,7 +390,7 @@ mod tests {
     use crate::observe::{
         CoalescingScope, CompressionOperation, CompressionOutcome, DisabledReason, ErrorKind,
         Labels, Layer, MissReason, OutcomeLabels, RecoveryOutcome, SerializationOperation,
-        ShadowOutcome,
+        ShadowMismatchLoggingOutcome, ShadowOutcome,
     };
     use std::sync::Arc;
 
@@ -430,6 +445,10 @@ mod tests {
                 labels: outcome(),
                 outcome: ShadowOutcome::Mismatch,
                 seconds: 0.25,
+            },
+            MetricKind::ShadowMismatchLogging => Event::ShadowMismatchLogging {
+                labels: outcome(),
+                outcome: ShadowMismatchLoggingOutcome::HookError,
             },
             MetricKind::FutureTimestampOffset => Event::FutureTimestampOffset {
                 labels: base(),
@@ -489,7 +508,7 @@ mod tests {
         }
         let names: std::collections::HashSet<&str> =
             MetricKind::ALL.iter().map(|k| k.as_str()).collect();
-        assert_eq!(names.len(), 19);
+        assert_eq!(names.len(), 20);
     }
 
     #[test]
@@ -550,6 +569,15 @@ mod tests {
                 ("use_case", "lookup"),
                 ("key_type", "item"),
                 ("outcome", "mismatch"),
+            ])
+        );
+        assert_eq!(
+            pairs(MetricKind::ShadowMismatchLogging),
+            owned(&[
+                ("cache_namespace", "logical"),
+                ("use_case", "lookup"),
+                ("key_type", "item"),
+                ("outcome", "hook_error"),
             ])
         );
         assert_eq!(
@@ -615,6 +643,7 @@ mod tests {
                 "invalidation",
                 "coalesced",
                 "shadowValidation",
+                "shadowMismatchLogging",
                 "staleRecovery",
                 "compression",
             ]

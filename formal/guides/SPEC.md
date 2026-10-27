@@ -150,7 +150,7 @@ does not establish readability.
 | Serving ramp | A configured valid TTL implies 100 unless a ramp is supplied; finite [0, 100], admission is sample strictly less than ramp; invalid ramp disables only that layer |
 | Recovery | Off; zero disables inheritance; a positive maximum age must be a safe integer greater than remote TTL and at most 31,536,000 seconds; invalid optional age disables recovery |
 | Shadow | Off; valid independent ramp, outcome hook, and capacity are required; invalid optional policy preserves ordinary serving |
-| Mismatch logging | Off; malformed logging flag disables warnings |
+| Mismatch logging | Off: `value` false and `diff` `off`; each layer's `logMismatches` expands to both leaves, a leaf written beside it overriding the expansion, before the leaf-wise merge; an invalid leaf acts off, a malformed `logMismatches` expands to both leaves off, and one configuration error covers every invalid input |
 | Read deadline | Runtime -> operation -> instance -> 50 ms; positive safe integer at most 2,147,483,647 ms; invalid runtime budget bypasses caching |
 | Source deadline | Operation budget, otherwise 60,000 ms; explicit unbounded is allowed; finite budget has the same integer domain as read deadlines |
 | Local capacity / shadow capacity | 10,000 / 1 per instance; zero local capacity preserves eligible sharing |
@@ -258,7 +258,16 @@ a served job owns its detached raw source and retains capacity until settlement.
 C0 retained while fresh is not reclassified after it ages. C1 confirms payload
 identity even after freshness expiry or wall rollback; mismatch age clamps to
 zero, while future-frame diagnostics retain their exact layer and offset.
-Mismatch warnings require opt-in and a confirmed verdict.
+A mismatch warning requires a confirmed verdict and opted-in logging: `value`
+true or `diff` above `off`, as the job captured them at admission. It carries
+the field groups those leaves name. Each warning attempt reports one
+`shadowMismatchLogging` outcome and logging off reports none: `hook_error` when
+the `shadowMismatchDiff` hook (run only with `diff` on) or the built-in walk
+fails, else `render_error` when a rendered side has no JSON rendering (an absent
+side is not one), else `logger_error` when the logger fails, else `logged`. A
+failure nulls the fields it feeds and never falls back to logging more. The
+built-in walk (W10) reports nothing for identical renderings and one root entry
+for scalars that differ or for an absent side.
 
 Invalidation (C32–C39/W09) groups all tracked use-case/argument variants of the
 same namespace/type/id. It validates arguments before any mutation, advances

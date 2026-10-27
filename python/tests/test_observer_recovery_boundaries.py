@@ -79,6 +79,91 @@ def test_mismatch_details_are_logger_only(executor, log, observer_failure):
         assert warnings == []
 
 
+@pytest.mark.parametrize("logger_fails", [False, True], ids=["completes", "raises"])
+def test_drives_an_async_logger_for_a_warning_outside_shadow_validation(executor, logger_fails):
+    # One logger boundary owns every warning's awaitable, so a coroutine
+    # logger runs instead of being dropped unawaited, and its failure reaches
+    # neither the caller nor the loop's unhandled-exception handler.
+    logged = []
+    config_error = RuntimeError("policy unavailable")
+
+    class Logger:
+        async def warning(self, *args):
+            await asyncio.sleep(0)
+            logged.append(args)
+            if logger_fails:
+                raise RuntimeError("logger transport unavailable")
+
+    def provider(key):
+        raise config_error
+
+    cache = DialCache(clock=executor.clock, policy_provider=provider, logger=Logger())
+    with cache.enable():
+        result = executor.finish(
+            cache.get_or_load(
+                lambda: "source",
+                key="entity-id",
+                key_type="entity",
+                use_case="AsyncLogger",
+                default_config=Policy(ttl_sec={"local": 10}),
+            )
+        )
+    executor.drain()
+
+    assert result == "source"
+    assert logged == [("Could not resolve DialCache policy: %s", config_error)]
+
+
+@pytest.mark.parametrize("warning", ["key_construction", "config_resolution"])
+def test_a_logger_result_whose_class_raises_never_reaches_the_caller(executor, warning):
+    # The awaitable check reads the result's class, so it runs inside the
+    # logger boundary: a raise there is a failed call, not the caller's error.
+    logged = []
+    failure = RuntimeError("dependency unavailable")
+
+    class Uninspectable:
+        @property
+        def __class__(self):
+            raise RuntimeError("logger result unavailable")
+
+    class Logger:
+        def warning(self, *args):
+            logged.append(args)
+            return Uninspectable()
+
+    def provider(key):
+        raise failure
+
+    def select_key():
+        raise failure
+
+    cache = DialCache(
+        clock=executor.clock,
+        policy_provider=provider if warning == "config_resolution" else None,
+        logger=Logger(),
+    )
+
+    @cache.cached(
+        key_type="entity",
+        cache_key=select_key if warning == "key_construction" else (lambda: "entity-id"),
+        use_case="UninspectableLogger",
+        default_config=Policy(ttl_sec={"local": 10}),
+    )
+    def load():
+        return "source"
+
+    with cache.enable():
+        result = executor.finish(load())
+    executor.drain()
+
+    message = {
+        "key_construction": "Could not construct DialCache key: %s",
+        "config_resolution": "Could not resolve DialCache policy: %s",
+    }[warning]
+    assert result == "source"
+    assert logged == [(message, failure)]
+
+
 def failing_recovery_call(executor, cache, failure):
     def source():
         raise failure

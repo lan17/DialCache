@@ -571,7 +571,10 @@ every cohort crashed, so the gate names it while the rest of the shard is
 measured; a settlement violation under a mutant ([PORTING.md](./PORTING.md))
 is recorded the same way, naming the first violating history and rule. New
 mutants therefore require `generated` and `portable`; require
-`ordinary` only where a unit test pins the fault on purpose. To measure one
+`ordinary` only where a unit test pins the fault on purpose. A fault only the
+checked-in vectors reach, such as the built-in mismatch walk over nested
+values, requires `portable` in place of `generated` (with `fixed` in Go and
+Rust), and no challenge can map to it. To measure one
 mutant while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
 `MUTATION_ONLY=M18 make mutations-go`, one partial run per port at a time
 (they share `partial/`); the partial report under
