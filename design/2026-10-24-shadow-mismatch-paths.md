@@ -2,7 +2,7 @@
 
 - **Status:** Implemented
 - **Issue:** #243, which tracked the work after the TypeScript reference; #242 completes it
-- **Pull requests:** #242
+- **Pull requests:** #242, #250
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
 - **Supersedes:** the design in pull request #138, which is unmerged; the
   decisions it carries are listed under [Carried decisions](#carried-decisions)
@@ -998,7 +998,7 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   `kernel/shadow.qnt` with logging off. `kernel/shadow.qnt` keeps the
   captured `Logging` leaves, `LOGGING_OFF`, `logs` and the diff levels, and
   does not import the new module.
-- **2026-10-28, #248, TypeScript:** at the maintainer's request in session
+- **2026-10-28, #250, TypeScript:** at the maintainer's request in session
   that day ("how we can leverage setImmediete and some other optimizations to
   make sure we are not taking as long and also we are not blocking event
   loop and also that its still correct"), the warning returns to the event
