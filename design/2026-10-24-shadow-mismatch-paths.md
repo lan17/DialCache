@@ -2,7 +2,7 @@
 
 - **Status:** Implemented
 - **Issue:** #243, which tracked the work after the TypeScript reference; #242 completes it
-- **Pull requests:** #242
+- **Pull requests:** #242, #250
 - **Baseline:** `main` at `b4e4fba`, the commit the record was written against
 - **Supersedes:** the design in pull request #138, which is unmerged; the
   decisions it carries are listed under [Carried decisions](#carried-decisions)
@@ -998,3 +998,29 @@ Reviewed and approved by the maintainer on #138; carried unchanged:
   `kernel/shadow.qnt` with logging off. `kernel/shadow.qnt` keeps the
   captured `Logging` leaves, `LOGGING_OFF`, `logs` and the diff levels, and
   does not import the new module.
+- **2026-10-28, #250, TypeScript:** at the maintainer's request in session
+  that day ("how we can leverage setImmediete and some other optimizations to
+  make sure we are not taking as long and also we are not blocking event
+  loop and also that its still correct"), the warning returns to the event
+  loop after each native rendering or parse of a side whose rendering is at
+  least 65,536 UTF-16 code units long; each such step, the walk and the hook
+  still run without a break. The replay histories' values are shorter than
+  that, so they replay the warning as one step, and native tests cover the
+  breaks. The warning also holds the job's shadow capacity slot until it
+  reaches the logger, as Go and Rust do, so Failure handling's "TypeScript
+  and Python render after the slot is released" no longer holds for
+  TypeScript; the slot stays a port detail. With the default
+  `JsonSerializer`, the walk reads the cached value that `JSON.parse` of the
+  payload produced instead of parsing that side's rendering again, comparing
+  a number beyond double range as the `null` the rendering writes. The two
+  hold the same JSON, so the output D3 and step 1 of the computation describe
+  is unchanged; only a comparator that mutates the cached value, which its
+  contract forbids, can make the diff name members that `cachedValueJson`
+  does not show, or fail the warning with `render_error`. The walk also skips
+  members and items whose values are identical before sorting, and a
+  built-in `diffJson` side is rendered only as far as its 1 KiB clamp reads.
+  The vectors, the existing tests and a seeded fuzz against `main` at
+  `bae1e5e` agree on every output. On one Apple-silicon Mac, with the
+  default `JsonSerializer`, a 7.3 MB object of 150,000 string members took
+  about 0.11 s per warning at `diff: "paths"`, against 0.14 s on `main`, in
+  steps of at most about 0.03 s, and 0.05 s for the value fields alone.

@@ -2,19 +2,24 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { DialCacheKey, JsonSerializer, type Serializer } from "../src/index.js";
+import { RedisCache } from "../src/internal/redis-cache.js";
 import {
   SHADOW_LOG_KEY_MAX_BYTES,
   SHADOW_LOG_TRUNCATION_MARKER,
   SHADOW_LOG_VALUE_MAX_BYTES,
   SHADOW_MISMATCH_PATH_MAX_BYTES,
+  SHADOW_MISMATCH_SIDE_MAX_BYTES,
   diffShadowMismatchJson,
   failedShadowMismatchLogFields,
   previewShadowLogKey,
   renderShadowMismatchLog,
+  shadowMismatchLogSteps,
   type JsonValue,
   type ShadowMismatchJsonEntry,
   type ShadowMismatchLogPlan,
 } from "../src/internal/shadow-log-json.js";
+import { FakeRedis } from "./fake-redis.js";
 
 const VALUE_ONLY: ShadowMismatchLogPlan = { value: true, diff: "off" };
 const PATHS_ONLY: ShadowMismatchLogPlan = { value: false, diff: "paths" };
@@ -256,6 +261,32 @@ describe("shadow mismatch log JSON", () => {
         ],
         count: 5,
       });
+      // "[" and the first item fill exactly 1 KiB, and the rest overflows it.
+      const filled = ["x".repeat(1021), "y"];
+      expect(diffShadowMismatchJson(filled, [])).toStrictEqual({
+        entries: [{ path: "", cached: `${JSON.stringify(filled).slice(0, 1010)}${SHADOW_LOG_TRUNCATION_MARKER}`, source: [] }],
+        count: 1,
+      });
+    });
+
+    it("renders a long built-in side only as far as its clamp reads", () => {
+      const cached = { list: Array.from({ length: 100_000 }, (_, index) => index), blob: "x".repeat(1 << 20) };
+      const stringify = vi.spyOn(JSON, "stringify");
+      try {
+        const { entries } = diffShadowMismatchJson(cached, { list: [], blob: "y" });
+
+        expect(entries.map(({ path }) => path)).toStrictEqual(["/blob", "/list"]);
+        const rendered = stringify.mock.results.map(({ value }) => (typeof value === "string" ? value.length : 0));
+        expect(rendered.length).toBeLessThan(2 * SHADOW_MISMATCH_SIDE_MAX_BYTES);
+        expect(Math.max(...rendered)).toBeLessThanOrEqual(SHADOW_MISMATCH_SIDE_MAX_BYTES + 3);
+      } finally {
+        stringify.mockRestore();
+      }
+    });
+
+    it("reports equal-length array items that differ in JSON type", () => {
+      expect(renderShadowMismatchLog(PATHS_ONLY, [1, 0, ""], ["1", false, 0]).fields.mismatchPaths)
+        .toStrictEqual(["/0", "/1", "/2"]);
     });
 
     it("caps the walk at 32 reference tokens however deep the difference lies", () => {
@@ -489,6 +520,72 @@ describe("shadow mismatch log JSON", () => {
       expect(JSON.parse(fields.diffJson!)).toStrictEqual([
         { path: "/blob", cached: `"${"x".repeat(1009)}${SHADOW_LOG_TRUNCATION_MARKER}`, source: "y" },
       ]);
+    });
+
+    it("yields after each native rendering or parse of a long side and never for short ones", () => {
+      const yields = (cached: unknown, source: unknown, cachedIsParsedJson: boolean): number => {
+        const steps = shadowMismatchLogSteps(PATHS_ONLY, cached, source, undefined, cachedIsParsedJson);
+        let count = 0;
+        while (steps.next().done !== true) {
+          count += 1;
+        }
+        return count;
+      };
+      const long = (version: number) => ({ blob: "x".repeat(64 * 1024), version });
+      // A string whose rendering, quotes included, is `length` code units.
+      const rendered = (length: number) => "x".repeat(length - 2);
+
+      expect(yields(long(1), long(2), false)).toBe(4);
+      // The walk reads the serializer's tree instead of parsing the rendering.
+      expect(yields(long(1), long(2), true)).toBe(3);
+      expect(yields(long(1), { version: 2 }, false)).toBe(2);
+      expect(yields({ version: 1 }, { version: 2 }, false)).toBe(0);
+      expect(yields(rendered(64 * 1024), rendered(64 * 1024 - 1), false)).toBe(2);
+    });
+  });
+
+  describe("a cached value the JSON serializer parsed", () => {
+    // Payloads as another port can write them: a number literal beyond double
+    // range parses as an infinity, which renders as null.
+    it.each([
+      ["an overflowing member", '{"big":1e400,"n":1}', { big: null, n: 2 }, ["/n"]],
+      ["overflowing items in a root of another kind", "[1e400,-1e400,1]", "x", [""]],
+      [
+        "an overflow past the depth cap",
+        JSON.stringify({ deep: nestMembers(40, 0), n: 1 }).replace(":0", ":1e400"),
+        { deep: nestMembers(40, null), n: 2 },
+        ["/n"],
+      ],
+      ["an own __proto__ member", '{"__proto__":1,"a":1}', JSON.parse('{"__proto__":1,"a":2}') as unknown, ["/a"]],
+    ])("logs what a second parse of its rendering logs for %s", (_name, payload, source, paths) => {
+      const cached: unknown = JSON.parse(payload);
+      for (const plan of [PATHS_ONLY, VALUES_ONLY, EVERYTHING]) {
+        const content = renderShadowMismatchLog(plan, cached, source, undefined, true);
+
+        expect(content).toStrictEqual(renderShadowMismatchLog(plan, cached, source));
+        expect(content.fields.mismatchPaths).toStrictEqual(paths);
+      }
+    });
+
+    it("is recognized only from a serializer that loads as JsonSerializer does", () => {
+      class KeepsLoad extends JsonSerializer {}
+      class OverridesLoad extends JsonSerializer {
+        override async load(value: string | Buffer): Promise<unknown> {
+          return await super.load(value);
+        }
+      }
+      const custom: Serializer = { dump: (value) => JSON.stringify(value), load: (value) => JSON.parse(String(value)) };
+      const loadsParsedJson = (configured: Serializer | undefined, perKey: Serializer | null): boolean => new RedisCache({
+        redis: { client: new FakeRedis(), ...(configured === undefined ? {} : { serializer: configured }) },
+        metrics: null,
+      }).loadsParsedJson(new DialCacheKey({ keyType: "user_id", id: "1", useCase: "ShadowParsedJson", serializer: perKey }));
+
+      expect(loadsParsedJson(undefined, null)).toBe(true);
+      expect(loadsParsedJson(new JsonSerializer(), null)).toBe(true);
+      expect(loadsParsedJson(undefined, new KeepsLoad())).toBe(true);
+      expect(loadsParsedJson(custom, new JsonSerializer())).toBe(true);
+      expect(loadsParsedJson(undefined, new OverridesLoad())).toBe(false);
+      expect(loadsParsedJson(custom, null)).toBe(false);
     });
   });
 
