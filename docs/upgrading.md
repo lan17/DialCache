@@ -243,9 +243,18 @@ characters.
 
 `DialCacheKeyConfig.disabled()` now turns logging off with
 `shadow.mismatchLogging: { value: false, diff: "off" }` in place of
-`shadow.logMismatches: false`. On one Apple-silicon Mac, a 6.3 MB object of
-150,000 members took about 0.12 seconds per warning at `diff: "paths"`, against
-0.06 seconds for the value fields alone.
+`shadow.logMismatches: false`. On one Apple-silicon Mac, with the default
+`JsonSerializer`, a 7.3 MB object of 150,000 string members took about 0.11
+seconds per warning at `diff: "paths"`, against 0.05 seconds for the value
+fields alone.
+
+A warning now holds the job's shadow capacity until it reaches the logger, as
+in Go and Rust; earlier releases released it before building the warning. So
+while a warning is built, further jobs for the same key and jobs beyond
+`shadowMaxInFlight` report `dropped`. For a side whose rendering is at least
+65,536 characters long, the warning returns to the event loop after each
+`JSON.stringify` and `JSON.parse` of it, in steps of at most about 0.03 seconds
+on that object.
 
 </LanguageContent>
 

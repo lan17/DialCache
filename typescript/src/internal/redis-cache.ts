@@ -238,6 +238,14 @@ export class RedisCache {
   }
 
   /**
+   * Whether the key's serializer loads as the built-in JSON serializer does,
+   * so a decoded value is a fresh `JSON.parse` tree or the absent value.
+   */
+  loadsParsedJson(key: DialCacheKey): boolean {
+    return this.serializerFor(key).load === JsonSerializer.prototype.load;
+  }
+
+  /**
    * Start a measured Redis read for detached shadow work.
    *
    * The bounded result may reject before the semantic client operation settles,

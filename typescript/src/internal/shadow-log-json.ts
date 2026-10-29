@@ -11,6 +11,15 @@ export const SHADOW_MISMATCH_SIDE_MAX_BYTES = 1024;
 export const SHADOW_MISMATCH_MAX_DEPTH = 32;
 export const SHADOW_LOG_TRUNCATION_MARKER = "...[truncated]";
 
+/**
+ * A side rendered shorter than this, in UTF-16 code units, renders, parses and
+ * walks in about a millisecond or less, so returning to the event loop after
+ * its steps would only delay the warning. The TypeScript replays rely on it:
+ * their harness drains one zero-time tick per input, in which a chain of
+ * immediates cannot finish.
+ */
+const LONG_RENDERING_LENGTH = 64 * 1024;
+
 const UTF8_ENCODER = new TextEncoder();
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const TRUNCATION_MARKER_BYTES = UTF8_ENCODER.encode(SHADOW_LOG_TRUNCATION_MARKER);
@@ -71,6 +80,22 @@ export function previewShadowLogKey(value: string): string {
   return clampUtf8(value, SHADOW_LOG_KEY_MAX_BYTES);
 }
 
+/** Runs `shadowMismatchLogSteps` to the end without pausing. */
+export function renderShadowMismatchLog(
+  plan: ShadowMismatchLogPlan,
+  cachedValue: unknown,
+  sourceValue: unknown,
+  hook?: ShadowMismatchEntriesHook,
+  cachedIsParsedJson = false,
+): ShadowMismatchLogContent {
+  const steps = shadowMismatchLogSteps(plan, cachedValue, sourceValue, hook, cachedIsParsedJson);
+  let step = steps.next();
+  while (step.done !== true) {
+    step = steps.next();
+  }
+  return step.value;
+}
+
 /**
  * Builds the content fields the plan requests for one confirmed mismatch.
  * Each side is rendered to native JSON at most once, and every built-in field
@@ -80,16 +105,29 @@ export function previewShadowLogKey(value: string): string {
  * the top-level `undefined` a negative-cache entry stores, is not a failure:
  * its value field is `null`, and the built-in reports the other side whole at
  * the root.
+ *
+ * Each `yield` follows one native JSON rendering or parse of a long side,
+ * which cannot be interrupted, so a caller can return to the event loop
+ * between them. `cachedIsParsedJson` says the cached value is the JSON
+ * serializer's `JSON.parse` of the payload. It holds the JSON its rendering
+ * parses back to, so the built-in walk reads it instead of a second parse.
  */
-export function renderShadowMismatchLog(
+export function* shadowMismatchLogSteps(
   plan: ShadowMismatchLogPlan,
   cachedValue: unknown,
   sourceValue: unknown,
-  hook?: ShadowMismatchEntriesHook,
-): ShadowMismatchLogContent {
+  hook: ShadowMismatchEntriesHook | undefined,
+  cachedIsParsedJson: boolean,
+): Generator<void, ShadowMismatchLogContent, void> {
   const renderSides = plan.value || (plan.diff !== "off" && hook === undefined);
   const cachedJson = renderSides ? renderJson(cachedValue) : null;
+  if (isLongRendering(cachedJson)) {
+    yield;
+  }
   const sourceJson = renderSides ? renderJson(sourceValue) : null;
+  if (isLongRendering(sourceJson)) {
+    yield;
+  }
   let diffFailed = false;
   let renderFailed = renderSides
     && ((cachedJson === null && cachedValue !== undefined) || (sourceJson === null && sourceValue !== undefined));
@@ -102,7 +140,7 @@ export function renderShadowMismatchLog(
       diff = runShadowMismatchHook(hook, cachedValue, sourceValue);
       diffFailed = diff === null;
     } else if (!renderFailed) {
-      diff = walkRenderedJson(cachedJson, sourceJson);
+      diff = yield* walkRenderedJson(cachedJson, sourceJson, cachedIsParsedJson ? cachedValue as JsonValue : undefined);
     }
 
     if (diff === null) {
@@ -114,7 +152,7 @@ export function renderShadowMismatchLog(
     } else {
       let diffJson: string | null = null;
       if (withValues) {
-        diffJson = renderDiffJson(diff.entries);
+        diffJson = renderDiffJson(diff.entries, hook === undefined ? boundJsonEntry : boundEntry);
         renderFailed ||= diffJson === null;
       }
       diffFields = {
@@ -164,8 +202,7 @@ export function failedShadowMismatchLogFields(plan: ShadowMismatchLogPlan): Shad
  */
 export function diffShadowMismatchJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff {
   const diff = walkJson(cached, source);
-  // JSON values always render, so every entry bounds.
-  return { count: diff.count, entries: diff.entries.map((entry) => boundEntry(entry)!) };
+  return { count: diff.count, entries: diff.entries.map(boundJsonEntry) };
 }
 
 /** Entries before the pointer and side clamps, from the walk or the hook. */
@@ -180,20 +217,41 @@ interface RawMismatchEntry {
   readonly source?: unknown;
 }
 
-/** `null` is an absent side; a side that failed to render never reaches here. */
-function walkRenderedJson(cachedJson: string | null, sourceJson: string | null): RawMismatchDiff {
+/**
+ * `null` is an absent side; a side that failed to render never reaches here.
+ * `cachedTree`, when given, is the JSON serializer's parse of the payload that
+ * `cachedJson` renders: the same JSON, except that a number beyond double
+ * range is an infinity (see `jsonLeaf`).
+ */
+function* walkRenderedJson(
+  cachedJson: string | null,
+  sourceJson: string | null,
+  cachedTree: JsonValue | undefined,
+): Generator<void, ShadowMismatchJsonDiff, void> {
   if (cachedJson === sourceJson) {
     return { entries: [], count: 0 };
   }
-  // Each string came from successful native JSON rendering, so this is the
-  // single boundary from arbitrary values to the closed JSON domain.
+  // Each string came from successful native JSON rendering, so parsing it is
+  // a boundary from arbitrary values to the closed JSON domain.
   if (cachedJson === null) {
     return { entries: [{ path: "", source: JSON.parse(sourceJson!) as JsonValue }], count: 1 };
   }
+  const cached = cachedTree === undefined ? JSON.parse(cachedJson) as JsonValue : cachedTree;
   if (sourceJson === null) {
-    return { entries: [{ path: "", cached: JSON.parse(cachedJson) as JsonValue }], count: 1 };
+    return { entries: [{ path: "", cached }], count: 1 };
   }
-  return walkJson(JSON.parse(cachedJson) as JsonValue, JSON.parse(sourceJson) as JsonValue);
+  if (cachedTree === undefined && isLongRendering(cachedJson)) {
+    yield;
+  }
+  const source = JSON.parse(sourceJson) as JsonValue;
+  if (isLongRendering(sourceJson)) {
+    yield;
+  }
+  return walkJson(cached, source);
+}
+
+function isLongRendering(json: string | null): boolean {
+  return json !== null && json.length >= LONG_RENDERING_LENGTH;
 }
 
 function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff {
@@ -211,7 +269,7 @@ function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff 
   const walk = (left: JsonValue, right: JsonValue): void => {
     const kind = jsonKind(left);
     if (kind !== jsonKind(right) || kind === "primitive") {
-      if (left !== right) {
+      if (jsonLeaf(left) !== jsonLeaf(right)) {
         report({ cached: left, source: right });
       }
       return;
@@ -230,18 +288,38 @@ function walkJson(cached: JsonValue, source: JsonValue): ShadowMismatchJsonDiff 
         return;
       }
       for (let index = 0; index < leftItems.length; index += 1) {
-        tokens.push(index);
-        walk(leftItems[index]!, rightItems[index]!);
-        tokens.pop();
+        const leftItem = leftItems[index]!;
+        const rightItem = rightItems[index]!;
+        if (leftItem !== rightItem) {
+          tokens.push(index);
+          walk(leftItem, rightItem);
+          tokens.pop();
+        }
       }
       return;
     }
     const leftMembers = left as JsonObject;
     const rightMembers = right as JsonObject;
-    const names = Object.keys(leftMembers);
-    for (const name of Object.keys(rightMembers)) {
-      if (!Object.hasOwn(leftMembers, name)) {
+    // Equal primitives report nothing, so only the other members are sorted
+    // and visited; sorting a subset keeps its relative order.
+    const names: string[] = [];
+    let shared = 0;
+    for (const name of Object.keys(leftMembers)) {
+      if (!Object.hasOwn(rightMembers, name)) {
         names.push(name);
+      } else {
+        shared += 1;
+        if (leftMembers[name] !== rightMembers[name]) {
+          names.push(name);
+        }
+      }
+    }
+    const rightNames = Object.keys(rightMembers);
+    if (shared < rightNames.length) {
+      for (const name of rightNames) {
+        if (!Object.hasOwn(leftMembers, name)) {
+          names.push(name);
+        }
       }
     }
     // The default sort order is UTF-16 code units.
@@ -273,7 +351,7 @@ function jsonValuesEqual(cached: JsonValue, source: JsonValue): boolean {
       return false;
     }
     if (kind === "primitive") {
-      if (left !== right) {
+      if (jsonLeaf(left) !== jsonLeaf(right)) {
         return false;
       }
     } else if (kind === "array") {
@@ -301,6 +379,13 @@ function jsonValuesEqual(cached: JsonValue, source: JsonValue): boolean {
     }
   }
   return true;
+}
+
+// A cached payload another port wrote can hold a number literal beyond double
+// range, such as 1e400. JSON.parse reads it as an infinity, which renders as
+// null.
+function jsonLeaf(value: JsonValue): JsonValue {
+  return typeof value === "number" && !Number.isFinite(value) ? null : value;
 }
 
 function jsonKind(value: JsonValue): "array" | "object" | "primitive" {
@@ -377,10 +462,13 @@ function runShadowMismatchHook(
  * Renders entries with their bounded sides; a side with no JSON rendering
  * makes the whole field `null`, and later sides are not rendered.
  */
-function renderDiffJson(entries: readonly RawMismatchEntry[]): string | null {
+function renderDiffJson(
+  entries: readonly RawMismatchEntry[],
+  bound: (entry: RawMismatchEntry) => ShadowMismatchJsonEntry | null,
+): string | null {
   const bounded: ShadowMismatchJsonEntry[] = [];
   for (const entry of entries) {
-    const next = boundEntry(entry);
+    const next = bound(entry);
     if (next === null) {
       return null;
     }
@@ -390,10 +478,9 @@ function renderDiffJson(entries: readonly RawMismatchEntry[]): string | null {
 }
 
 /**
- * The one clamp rule for built-in and hook entries: the pointer is clamped,
- * and each present side is rendered once and kept as JSON, or as its clamped
- * text when the rendering exceeds the side cap. `null` when a side has no
- * JSON rendering.
+ * The clamp rule for hook entries: the pointer is clamped, and each present
+ * side is rendered once and kept as JSON, or as its clamped text when the
+ * rendering exceeds the side cap. `null` when a side has no JSON rendering.
  */
 function boundEntry(entry: RawMismatchEntry): ShadowMismatchJsonEntry | null {
   const bounded: { path: string; cached?: JsonValue; source?: JsonValue } = { path: clampPointer(entry.path) };
@@ -410,6 +497,73 @@ function boundEntry(entry: RawMismatchEntry): ShadowMismatchJsonEntry | null {
     bounded[side] = clamped === json ? JSON.parse(json) as JsonValue : clamped;
   }
   return bounded;
+}
+
+/**
+ * `boundEntry`'s rule for a built-in entry, whose sides are JSON values: a
+ * side that fits is kept as it is, and one that does not is rendered only as
+ * far as the clamp reads.
+ */
+function boundJsonEntry(entry: RawMismatchEntry): ShadowMismatchJsonEntry {
+  return {
+    path: clampPointer(entry.path),
+    ...(Object.hasOwn(entry, "cached") ? { cached: boundJsonSide(entry.cached as JsonValue) } : {}),
+    ...(Object.hasOwn(entry, "source") ? { source: boundJsonSide(entry.source as JsonValue) } : {}),
+  };
+}
+
+function boundJsonSide(value: JsonValue): JsonValue {
+  const json = jsonPrefix(value, SHADOW_MISMATCH_SIDE_MAX_BYTES);
+  const clamped = clampUtf8(json, SHADOW_MISMATCH_SIDE_MAX_BYTES);
+  return clamped === json ? value : clamped;
+}
+
+/**
+ * The JSON text of `value`, or a prefix of it longer than `limit` code units.
+ * Each code unit is at least one UTF-8 byte, so such a prefix overflows a
+ * `limit`-byte clamp, which keeps the same leading bytes from it as from the
+ * whole text. A string or member name is cut to `limit + 1` code units before
+ * quoting, so any escape the cut changes lies past `limit`. Each nesting level
+ * adds a code unit, so the recursion is at most `limit` deep.
+ */
+function jsonPrefix(value: JsonValue, limit: number): string {
+  const pieces: string[] = [];
+  let length = 0;
+  const emit = (piece: string): boolean => {
+    pieces.push(piece);
+    length += piece.length;
+    return length > limit;
+  };
+  const quote = (text: string): string => JSON.stringify(text.length > limit ? text.slice(0, limit + 1) : text);
+  const write = (item: JsonValue): boolean => {
+    if (item === null || typeof item !== "object") {
+      return emit(typeof item === "string" ? quote(item) : JSON.stringify(item));
+    }
+    if (Array.isArray(item)) {
+      if (emit("[")) {
+        return true;
+      }
+      for (let index = 0; index < item.length; index += 1) {
+        if ((index > 0 && emit(",")) || write(item[index]!)) {
+          return true;
+        }
+      }
+      return emit("]");
+    }
+    if (emit("{")) {
+      return true;
+    }
+    let first = true;
+    for (const name of Object.keys(item)) {
+      if ((!first && emit(",")) || emit(`${quote(name)}:`) || write((item as JsonObject)[name]!)) {
+        return true;
+      }
+      first = false;
+    }
+    return emit("}");
+  };
+  write(value);
+  return pieces.join("");
 }
 
 function clampPointer(path: string): string {
