@@ -478,6 +478,7 @@ describe("full formal workflow shape", () => {
   const lanes = ["typescript-parity", "go-parity", "rust-parity", "python-parity", "typescript-mutations", "go-mutations", "rust-mutations"];
   const needsOf = (job: Job) => (job.needs === undefined ? [] : [job.needs].flat());
   let jobs: Record<string, Job>;
+  let setupSteps: Step[];
 
   beforeEach(async () => {
     // yaml is not a project dependency and vitest does not declare it: it is in
@@ -494,6 +495,19 @@ describe("full formal workflow shape", () => {
     }
     const { parse } = await import(pathToFileURL(yamlPath).href) as { parse(text: string): { jobs: Record<string, Job> } };
     jobs = parse(readFileSync(new URL("../../.github/workflows/formal-full.yaml", import.meta.url), "utf8")).jobs;
+    setupSteps = (parse(readFileSync(new URL("../../.github/actions/setup-validation/action.yml", import.meta.url), "utf8")) as unknown as { runs: { steps: Step[] } }).runs.steps;
+  });
+
+  it("pins one exact Node patch for every formal shard and merge", () => {
+    const nodeSteps = setupSteps.filter(step => step.uses?.startsWith("actions/setup-node@"));
+    expect(nodeSteps).toHaveLength(1);
+    // A floating major can resolve differently across runner caches in the same run.
+    expect(nodeSteps[0]!.with?.["node-version"]).toMatch(/^24\.\d+\.\d+$/);
+    for (const [name, job] of Object.entries(jobs)) {
+      if (!job.steps.some(step => step.run?.includes("make "))) continue;
+      expect(job.steps.filter(step => step.uses === "./.github/actions/setup-validation"), name).toHaveLength(1);
+      expect(job.steps.some(step => step.uses?.startsWith("actions/setup-node@")), name).toBe(false);
+    }
   });
 
   it("runs the model check beside generation so the port and mutation lanes wait only for the corpus", () => {
