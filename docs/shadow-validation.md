@@ -305,7 +305,8 @@ holding the shadow slot after timeout.
 Scheduling and shadow deadline timers are unreferenced and do not keep an
 otherwise idle Node process alive. Detachment uses the event loop, not a worker;
 synchronous source, codec, comparator and logger work still consumes it, as do
-mismatch-warning rendering and `shadowMismatchDiff`.
+mismatch-warning rendering and `shadowMismatchDiff`. A mismatch warning keeps
+the job's capacity until it reaches the logger.
 
 </LanguageContent>
 
@@ -692,10 +693,20 @@ const getUser = dialcache.cached(fetchUser, {
 });
 ```
 
-Rendering, the walk, and the hook run on the event loop after the job releases
-its capacity slot. On one Apple-silicon Mac, a 6.3 MB object of 150,000 members
-took about 0.12 seconds per warning at `diff: "paths"`, against 0.06 seconds for
-the value fields alone.
+Rendering, the walk, and the hook run on the event loop after the verdict and
+hold the job's shadow capacity until the warning reaches the logger, so while
+one is built, further jobs for the same key and jobs beyond capacity report
+`dropped`. After each `JSON.stringify` or `JSON.parse` of a side whose rendering
+is at least 65,536 characters long, the warning returns to the event loop, so
+other work runs between those steps; each of them, the walk and the hook still
+run without a break. With the default `JsonSerializer`, the walk reads the
+cached value as it was decoded instead of parsing its rendering again, so a
+comparator that mutates the cached value, which its contract forbids, can make
+the diff name members that `cachedValueJson` does not show, or fail the
+warning with `render_error`. On one Apple-silicon Mac, with the default
+`JsonSerializer`, a 7.3 MB object of 150,000 string members took about 0.11
+seconds per warning at `diff: "paths"`, in steps of at most about 0.03 seconds,
+against 0.05 seconds for the value fields alone.
 
 </LanguageContent>
 

@@ -55,7 +55,7 @@ import {
 import {
   failedShadowMismatchLogFields,
   previewShadowLogKey,
-  renderShadowMismatchLog,
+  shadowMismatchLogSteps,
   type ShadowMismatchLogContent,
   type ShadowMismatchLogPlan,
 } from "./internal/shadow-log-json.js";
@@ -287,6 +287,7 @@ interface ShadowValidationPlan<Value> {
 interface ShadowMismatchDetails {
   readonly logPlan: ShadowMismatchLogPlan;
   readonly cachedValue: unknown;
+  readonly cachedIsParsedJson: boolean;
   readonly sourceValue: unknown;
   readonly mismatchDiff: ShadowMismatchDiff<never> | undefined;
 }
@@ -1074,6 +1075,9 @@ export class DialCache {
   ): void {
     const pendingRedisReads = new Set<Promise<void>>();
     let operationFinished = false;
+    // A confirmed mismatch keeps the slot until its warning is built, so the
+    // warnings in flight stay within shadowMaxInFlight.
+    let warningPending = false;
     let released = false;
     let signalShadowTimeout = (): void => undefined;
     const shadowTimeoutSignal = new Promise<void>((resolve) => {
@@ -1090,7 +1094,7 @@ export class DialCache {
       }
     };
     const maybeRelease = (): void => {
-      if (operationFinished && pendingRedisReads.size === 0) {
+      if (operationFinished && !warningPending && pendingRedisReads.size === 0) {
         release();
       }
     };
@@ -1271,7 +1275,14 @@ export class DialCache {
             return "superseded";
           }
           if (logPlan !== null) {
-            mismatchDetails = { logPlan, cachedValue, sourceValue, mismatchDiff: plan.mismatchDiff };
+            mismatchDetails = {
+              logPlan,
+              cachedValue,
+              cachedIsParsedJson: redisCache.loadsParsedJson(key),
+              sourceValue,
+              mismatchDiff: plan.mismatchDiff,
+            };
+            warningPending = true;
           }
           validatedValueAgeSeconds = shadowValueAgeSeconds(originalFrame.createdAtMs);
           return "mismatch";
@@ -1282,15 +1293,23 @@ export class DialCache {
     });
 
     void validation.then(
-      (outcome) => this.recordShadowValidation(key, outcome, mismatchDetails, validatedValueAgeSeconds),
+      async (outcome) => {
+        this.recordShadowValidation(key, outcome, validatedValueAgeSeconds);
+        // Only a confirmed mismatch with logging on carries details.
+        if (mismatchDetails !== undefined) {
+          await this.warnShadowMismatch(key, mismatchDetails, validatedValueAgeSeconds);
+        }
+      },
       () => this.recordShadowValidation(key, "timeout"),
-    );
+    ).then(() => {
+      warningPending = false;
+      maybeRelease();
+    });
   }
 
   private recordShadowValidation(
     key: DialCacheKey,
     outcome: ShadowValidationOutcome,
-    mismatchDetails?: ShadowMismatchDetails,
     valueAgeSeconds?: number,
   ): void {
     const labels = {
@@ -1303,22 +1322,20 @@ export class DialCache {
     if (valueAgeSeconds !== undefined) {
       this.metrics?.observeShadowValueAge?.(labels, valueAgeSeconds);
     }
-    // Only a confirmed mismatch with logging on carries details.
-    if (mismatchDetails !== undefined) {
-      this.warnShadowMismatch(key, mismatchDetails, valueAgeSeconds);
-    }
   }
 
   /**
    * Emits the confirmed-mismatch warning and its one `shadowMismatchLogging`
    * event. Runs after the verdict was recorded and never changes it; any
    * construction failure logs less, never more, and nothing reaches the caller.
+   * After each native JSON rendering or parse of a long side, which blocks the
+   * event loop for as long as the side is large, it returns to the event loop.
    */
-  private warnShadowMismatch(
+  private async warnShadowMismatch(
     key: DialCacheKey,
     details: ShadowMismatchDetails,
     valueAgeSeconds: number | undefined,
-  ): void {
+  ): Promise<void> {
     const metadata = {
       cacheNamespace: key.namespace,
       useCase: key.useCase,
@@ -1330,12 +1347,19 @@ export class DialCache {
     let content: ShadowMismatchLogContent;
     try {
       cacheKey = previewShadowLogKey(key.urn);
-      content = renderShadowMismatchLog(
+      const steps = shadowMismatchLogSteps(
         details.logPlan,
         details.cachedValue,
         details.sourceValue,
         details.mismatchDiff,
+        details.cachedIsParsedJson,
       );
+      let step = steps.next();
+      while (step.done !== true) {
+        await yieldUnreferencedImmediate();
+        step = steps.next();
+      }
+      content = step.value;
     } catch {
       // Last resort: nothing may escape into the detached verdict handler.
       content = { fields: failedShadowMismatchLogFields(details.logPlan), failure: "render_error" };

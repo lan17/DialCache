@@ -1008,6 +1008,138 @@ describe("DialCache Redis shadow confirmation", () => {
     }
   });
 
+  it("returns to the event loop while it builds a long warning and holds the shadow slot until it logs", async () => {
+    const useCase = "ShadowMismatchLongWarning";
+    const cached = { id: "long", blob: "x".repeat(64 * 1024), version: 1 };
+    const payload = JSON.stringify(cached);
+    const redis = new ScriptedRedis([
+      () => payload,
+      () => payload,
+      () => JSON.stringify({ id: "during", version: 1 }),
+      () => JSON.stringify({ id: "after", version: 1 }),
+    ]);
+    const metrics = new RecordingMetrics();
+    const order: string[] = [];
+    const dialcache = createCache(redis, metrics, {
+      shadowMaxInFlight: 1,
+      logger: { debug: () => undefined, error: () => undefined, warn: () => order.push("warning") },
+    });
+    const getUser = dialcache.cached(async (id: string) => id === "long" ? { ...cached, version: 2 } : { id, version: 1 }, {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { mismatchLogging: { diff: "paths" } })),
+      cacheKey: (id) => id,
+    });
+    const recordVerdict = metrics.shadowValidation.bind(metrics);
+    let during: Promise<unknown> | undefined;
+    metrics.shadowValidation = (labels) => {
+      recordVerdict(labels);
+      if (labels.outcome === "mismatch") {
+        setImmediate(() => order.push("immediate"));
+        during = dialcache.enable(async () => await getUser("during"));
+      }
+    };
+    const parse = vi.spyOn(JSON, "parse");
+
+    try {
+      await dialcache.enable(async () => await getUser("long"));
+      await waitForMismatchLoggingEvents(metrics, 1);
+      await during;
+      await waitForShadowEvents(metrics, 2);
+      expect(order).toEqual(["immediate", "warning"]);
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch", "dropped"]);
+      // The served read and the shadow job each decode the payload; the walk
+      // reads that decoded value instead of parsing its identical rendering.
+      expect(parse.mock.calls.filter(([text]) => text === payload)).toHaveLength(2);
+    } finally {
+      parse.mockRestore();
+    }
+
+    await dialcache.enable(async () => await getUser("after"));
+    await waitForShadowEvents(metrics, 3);
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch", "dropped", "match"]);
+  });
+
+  it("frees the shadow slot when the deadline rejects a confirmed mismatch as it settles", async () => {
+    let nowMs = 0;
+    let confirmed = false;
+    const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => nowMs);
+    try {
+      const useCase = "ShadowMismatchLateSettlement";
+      const payload = JSON.stringify({ id: "late", version: 1 });
+      const redis = new ScriptedRedis([
+        () => payload,
+        () => {
+          confirmed = true;
+          return payload;
+        },
+        () => JSON.stringify({ id: "after", version: 1 }),
+      ]);
+      const metrics = new RecordingMetrics();
+      const warn = vi.fn();
+      const dialcache = createCache(redis, metrics, {
+        shadowMaxInFlight: 1,
+        logger: { debug: () => undefined, error: () => undefined, warn },
+      });
+      // The warning details read the serializer's load after the job's last
+      // deadline check, so the deadline passes before the settled job is checked.
+      const serializer: Serializer<{ readonly id: string; readonly version: number }> = {
+        dump: (value) => JSON.stringify(value),
+        get load() {
+          if (confirmed) {
+            nowMs = 1_000;
+          }
+          return (value: string | Buffer) => JSON.parse(String(value)) as { readonly id: string; readonly version: number };
+        },
+      };
+      const getUser = dialcache.cached(async (id: string) => ({ id, version: id === "late" ? 2 : 1 }), {
+        ...trackedOptions(useCase, remoteConfig(100, 100, { mismatchLogging: { diff: "paths" } })),
+        cacheKey: (id) => id,
+        fallbackTimeoutMs: 10,
+        serializer,
+      });
+
+      await dialcache.enable(async () => await getUser("late"));
+      await waitForShadowEvents(metrics, 1);
+      confirmed = false;
+      nowMs = 2_000;
+      await dialcache.enable(async () => await getUser("after"));
+      await waitForShadowEvents(metrics, 2);
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "match"]);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("walks a custom serializer's value from its rendering", async () => {
+    // A serializer that revives dates hands the comparator Date members, but
+    // the walk, like the value fields, reads what they render as.
+    const useCase = "ShadowMismatchRevivingSerializer";
+    const at = "2026-10-28T00:00:00.000Z";
+    const payload = JSON.stringify({ at, version: 1 });
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, { logger: { debug: () => undefined, error: () => undefined, warn } });
+    const reviving: Serializer<{ readonly at: Date; readonly version: number }> = {
+      dump: (value) => JSON.stringify(value),
+      load: (value) => {
+        const loaded = JSON.parse(String(value)) as { readonly at: string; readonly version: number };
+        return { ...loaded, at: new Date(loaded.at) };
+      },
+    };
+    const getEvent = dialcache.cached(async () => ({ at: new Date(at), version: 2 }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { mismatchLogging: { diff: "paths" } })),
+      cacheKey: () => "123",
+      serializer: reviving,
+    });
+
+    await dialcache.enable(async () => await getEvent());
+    await waitForMismatchLoggingEvents(metrics, 1);
+
+    expect(warn.mock.calls[0]?.[1]).toMatchObject({ mismatchPaths: ["/version"], mismatchPathCount: 1 });
+  });
+
   it.each([
     ["null", null],
     ["a string", "paths"],

@@ -10,8 +10,8 @@
   "inputs": {
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
-    "sourceAuditDispositionsSha256": "c95ce03c30df574246e5943e2d69e084ed809b5d3e2a3d0f0abf5a2123bc8aaa",
-    "featureCoverageSha256": "3f33092274a0046c2d793790b1b4999021021e018f47ae65c15d3a0313776fd2",
+    "sourceAuditDispositionsSha256": "308073255328096e21c27cfa90e73e6d9e39bf9e2aad15e73abd10a390480230",
+    "featureCoverageSha256": "e494cdc5c0d26f495de2fe780b5c43d2e028d252cfaa6e8a10c544b6d58d1584",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -21,7 +21,7 @@
     "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 23,
     "sourceFiles": 28,
-    "sourceDeclarations": 878,
+    "sourceDeclarations": 887,
     "casesWithScheduledChecks": 272,
     "requiredWitnesses": 535,
     "casesWithQuintRegressionReplay": 198,
@@ -3499,7 +3499,7 @@
     },
     {
       "path": "typescript/src/dialcache.ts",
-      "sha256": "88e1e9bdf70bba085f4c8f2861cfac89ec021a5af318e21dc94e9f54c75b583c",
+      "sha256": "04d7eda97dd9da30e3d7fe97117de4f69e4ad7d43ecd8ff1ba9f2b2a61118e6c",
       "candidateGoFiles": [
         "go/cache.go",
         "go/bindings.go",
@@ -3511,7 +3511,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The warning's leaves come from the invocation's ResolvedShadow, Operation.MismatchDiff replaces the built-in walk, and warnShadowMismatch emits one shadowMismatchLogging event; a Warn panic is the Go logger_error.",
+        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The warning's leaves come from the invocation's ResolvedShadow, Operation.MismatchDiff replaces the built-in walk, and warnShadowMismatch emits one shadowMismatchLogging event; a Warn panic is the Go logger_error. Both ports hold the job's shadow capacity until the warning is logged; TypeScript returns to the event loop between the native JSON steps of a long side, where Go builds the warning on the job's goroutine.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -3918,7 +3918,7 @@
     },
     {
       "path": "typescript/src/internal/redis-cache.ts",
-      "sha256": "6fd0f9d16289efd66d60cfdf538d44fb520301a45634f72c5aaaaf4f79deae79",
+      "sha256": "3c6e14bc665a7807870752d8a346144efa4e7b892a4d4087465a33cce78b4143",
       "candidateGoFiles": [
         "go/engine.go",
         "go/shadow.go",
@@ -3927,7 +3927,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Serving, retained stale recovery, compression, timestamp validation and local publication are in execution methods; detached shadow validation is separate. A raw semantic read is normalized before serving, elapsed deadlines retain acquired snapshots, and both tracked refill timestamp checks precede a complete frame write.",
+        "rationale": "Serving, retained stale recovery, compression, timestamp validation and local publication are in execution methods; detached shadow validation is separate. A raw semantic read is normalized before serving, elapsed deadlines retain acquired snapshots, and both tracked refill timestamp checks precede a complete frame write. loadsParsedJson, which lets the TypeScript warning walk the JSON serializer's decoded value, is a TypeScript speed-up with no Go counterpart.",
         "nativeAdaptations": [
           "B02",
           "B03"
@@ -4116,7 +4116,7 @@
     },
     {
       "path": "typescript/src/internal/shadow-log-json.ts",
-      "sha256": "ddab3366b00b83f19c796f3e457b9a12dc422e61f3f2b1b1d1c41731785687d5",
+      "sha256": "d87c767194f855013cf2626e77abe82e7106e9d1145b9d51337a098f669e2bdb",
       "candidateGoFiles": [
         "go/metrics.go",
         "go/codec.go",
@@ -4124,7 +4124,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Warning content renders each compared value once with the Go JSON compatibility writer; the built-in walk runs over the parsed renderings with the same member order, array rule, root cases, depth cap (deep equality past it) and caps, materializing only the kept pointers up to their clamp, and the MismatchDiff hook's entries take the same clamps. Byte-bounded UTF-8 output uses the same truncation marker; a failure nulls only the fields it feeds and cannot suppress the verdict or caller result. Native type representation is a codec binding (B03): Go's decoder fails a rendering nested past 10,000 levels as hook_error. Hook entry sides honor json.Marshaler at every depth, as TypeScript sides honor toJSON, while the codec stored encoding reaches MarshalJSON only through a struct.",
+        "rationale": "Warning content renders each compared value once with the Go JSON compatibility writer; the built-in walk runs over the parsed renderings with the same member order, array rule, root cases, depth cap (deep equality past it) and caps, materializing only the kept pointers up to their clamp, and the MismatchDiff hook's entries take the same clamps. TypeScript's walk reads the JSON serializer's decoded cached value in place of a second parse, skips identical members and items, and renders a built-in side only as far as its clamp reads; the output is the same. Byte-bounded UTF-8 output uses the same truncation marker; a failure nulls only the fields it feeds and cannot suppress the verdict or caller result. Native type representation is a codec binding (B03): Go's decoder fails a rendering nested past 10,000 levels as hook_error. Hook entry sides honor json.Marshaler at every depth, as TypeScript sides honor toJSON, while the codec stored encoding reaches MarshalJSON only through a struct.",
         "nativeAdaptations": [
           "B03",
           "X01",

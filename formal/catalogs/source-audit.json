@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "e318acf6936ad4c9126363eff2c803d00a20596f92a00c543e645cb6ca765c34",
+      "sha256": "0d3939165eb2e9f598b3f9dd73416bbf02e51687dd4016081de4f28bad7607cc",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "f35d61a95ac2f9ad9dcc5d1f86c5b151b1260f7e7679f75a161777cbe39e8e84",
+      "sha256": "025578fcc08746c0e943bc6c4a98ffb33f46a4a9479c33ef65e49798a9531740",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -758,7 +758,7 @@
     },
     {
       "path": "typescript/test/dialcache-shadow-confirmation.test.ts",
-      "sha256": "db7d43c1428fbf4a84bcde1dc3876a1b56508b26309c25faf99d4ae95d7145a1",
+      "sha256": "eb7c7a0cc6a6a9caf0ddfaa509b88b20192400d83a7f30b0802f3f1b9291228f",
       "entries": [
         {"title":"skips confirmation when the served Redis payload semantically matches SoT","contracts":["C50"]},
         {"title":"confirms a mismatch only when C1 is byte-identical to the served C0","contracts":["C51"]},
@@ -774,6 +774,9 @@
         {"title":"logs the exact value age the verdict observed as cachedValueAgeSeconds","contracts":["C57","C60"]},
         {"title":"logs the documented GetUser example at diff $diff","contracts":["C60","X01"]},
         {"title":"emits one logged event per confirmed mismatch after its verdict and none for a match","contracts":["C60","X01"]},
+        {"title":"returns to the event loop while it builds a long warning and holds the shadow slot until it logs","contracts":["C54","C60","B02"]},
+        {"title":"frees the shadow slot when the deadline rejects a confirmed mismatch as it settles","contracts":["C54","C60","B02"]},
+        {"title":"walks a custom serializer's value from its rendering","contracts":["C60","B03"]},
         {"title":"rejects %s as shadowMismatchDiff where each API captures it","contracts":["B01"]},
         {"title":"logs shadowMismatchDiff entries in place of the built-in walk through %s()","contracts":["C60"]},
         {"title":"logs null diff fields and hook_error without touching the verdict when the hook $name","contracts":["C30","C60"]},
@@ -1080,7 +1083,7 @@
     },
     {
       "path": "typescript/test/shadow-log-json.test.ts",
-      "sha256": "2dab2b5558563125f731410b170a41c8c216ff28d54a012b3744ce387c99213f",
+      "sha256": "e14254c394cef87dc3ab5cd71a40550738dc8dba4eda5a35903b6dcb7e64664b",
       "entries": [
         {"title":"uses native JSON for the values supplied to the comparator","contracts":["B03","X01"]},
         {"title":"returns null independently for values that native JSON cannot serialize","contracts":["B03","X01"]},
@@ -1094,6 +1097,8 @@
         {"title":"clamps each pointer to 512 bytes without splitting UTF-8 sequences","contracts":["W10","X01"]},
         {"title":"builds each kept pointer only as far as its clamp reads, however long the member names above it","contracts":["W10","X01"]},
         {"title":"replaces each side over 1 KiB with its clamped JSON text","contracts":["W10","X01"]},
+        {"title":"renders a long built-in side only as far as its clamp reads","contracts":["X01","X02"]},
+        {"title":"reports equal-length array items that differ in JSON type","contracts":["W10","C60"]},
         {"title":"caps the walk at 32 reference tokens however deep the difference lies","contracts":["W10","C60","X01"]},
         {"title":"compares equal containers past the depth cap regardless of member order and depth","contracts":["W10","C60","X01"]},
         {"title":"renders exactly the fields requested by %s","contracts":["C60"]},
@@ -1107,6 +1112,9 @@
         {"title":"clamps diffJson to 8 KiB with the truncation marker","contracts":["X01"]},
         {"title":"fails every field %s requests closed to null, in rendering order","contracts":["C60"]},
         {"title":"clamps each built-in diffJson side to 1 KiB","contracts":["X01"]},
+        {"title":"yields after each native rendering or parse of a long side and never for short ones","contracts":["B02","X02"]},
+        {"title":"logs what a second parse of its rendering logs for %s","contracts":["W10","C60","B03"]},
+        {"title":"is recognized only from a serializer that loads as JsonSerializer does","contracts":["B03","X02"]},
         {"title":"takes the entries from the hook and never runs the built-in walk","contracts":["C60"]},
         {"title":"renders neither root side when the hook supplies the entries and value is off","contracts":["C60","B03"]},
         {"title":"fails closed with hook_error and no fallback when the hook %s","contracts":["C60","B02"]},

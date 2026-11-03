@@ -1992,8 +1992,8 @@
         "edits": [
           {
             "path": "typescript/src/dialcache.ts",
-            "before": "if (operationFinished && pendingRedisReads.size === 0) {",
-            "after": "if (operationFinished) {"
+            "before": "if (operationFinished && !warningPending && pendingRedisReads.size === 0) {",
+            "after": "if (operationFinished && !warningPending) {"
           }
         ],
         "requiredDetections": [
@@ -2153,8 +2153,8 @@
         "edits": [
           {
             "path": "typescript/src/internal/shadow-log-json.ts",
-            "before": "    if (kind !== jsonKind(right) || kind === \"primitive\") {\n      if (left !== right) {",
-            "after": "    if (kind !== jsonKind(right)) {\n      return;\n    }\n    if (kind === \"primitive\") {\n      if (left !== right) {"
+            "before": "    if (kind !== jsonKind(right) || kind === \"primitive\") {\n      if (jsonLeaf(left) !== jsonLeaf(right)) {",
+            "after": "    if (kind !== jsonKind(right)) {\n      return;\n    }\n    if (kind === \"primitive\") {\n      if (jsonLeaf(left) !== jsonLeaf(right)) {"
           }
         ],
         "requiredDetections": [
@@ -2180,7 +2180,7 @@
       "id": "M68",
       "case": "W10.mismatch-paths",
       "description": "Treat an absent compared value as a value with no JSON rendering",
-      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog counts any side without a rendering as a render failure, the top-level undefined included; Go go/shadow_log.go renderRoot reports an Absent root as failed; Rust rust/src/shadow_log.rs rendered_side maps the absent marker to a side with no rendering. An absent side against a present one therefore logs null difference fields with render_error instead of one entry at \"\" carrying the present side (D13). TypeScript and Go also fail the value fields this way, while Rust's value fields keep their absent handling. The shadow profile has no absent value, so only the absent-side vectors reach the rule.",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts shadowMismatchLogSteps counts any side without a rendering as a render failure, the top-level undefined included; Go go/shadow_log.go renderRoot reports an Absent root as failed; Rust rust/src/shadow_log.rs rendered_side maps the absent marker to a side with no rendering. An absent side against a present one therefore logs null difference fields with render_error instead of one entry at \"\" carrying the present side (D13). TypeScript and Go also fail the value fields this way, while Rust's value fields keep their absent handling. The shadow profile has no absent value, so only the absent-side vectors reach the rule.",
       "typescript": {
         "edits": [
           {
@@ -2212,13 +2212,13 @@
       "id": "M69",
       "case": "C60.logging-outcomes",
       "description": "Fall back to the built-in walk when the mismatch diff hook fails",
-      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log keep the hook_error outcome when the shadowMismatchDiff hook fails but then walk both renderings, unless a rendering already failed, and log the walk's paths, count and entries. The warning therefore carries difference fields the use case's hook did not produce instead of null ones (D6). Each port renders the sides for the fallback itself, since with a hook and value off the warning renders neither.",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts shadowMismatchLogSteps, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log keep the hook_error outcome when the shadowMismatchDiff hook fails but then walk both renderings, unless a rendering already failed, and log the walk's paths, count and entries. The warning therefore carries difference fields the use case's hook did not produce instead of null ones (D6). Each port renders the sides for the fallback itself, since with a hook and value off the warning renders neither.",
       "typescript": {
         "edits": [
           {
             "path": "typescript/src/internal/shadow-log-json.ts",
             "before": "      diff = runShadowMismatchHook(hook, cachedValue, sourceValue);\n      diffFailed = diff === null;",
-            "after": "      diff = runShadowMismatchHook(hook, cachedValue, sourceValue);\n      diffFailed = diff === null;\n      if (diff === null && !renderFailed) {\n        diff = walkRenderedJson(renderJson(cachedValue), renderJson(sourceValue));\n      }"
+            "after": "      diff = runShadowMismatchHook(hook, cachedValue, sourceValue);\n      diffFailed = diff === null;\n      if (diff === null && !renderFailed) {\n        diff = yield* walkRenderedJson(renderJson(cachedValue), renderJson(sourceValue), undefined);\n      }"
           }
         ],
         "requiredDetections": [
@@ -2245,7 +2245,7 @@
       "id": "M70",
       "case": "C60.outcome-precedence",
       "description": "Run the mismatch diff hook when diff is off",
-      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log call the shadowMismatchDiff hook when the captured diff leaf is off and record its failure as the warning's failure. A warning that logs only the value fields therefore reports hook_error from a hook that should never have run, outranking the render_error or logged outcome it owes.",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts shadowMismatchLogSteps, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log call the shadowMismatchDiff hook when the captured diff leaf is off and record its failure as the warning's failure. A warning that logs only the value fields therefore reports hook_error from a hook that should never have run, outranking the render_error or logged outcome it owes.",
       "typescript": {
         "edits": [
           {
@@ -2311,7 +2311,7 @@
       "id": "M72",
       "case": "C60.outcome-precedence",
       "description": "Report render_error over hook_error when both fail",
-      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log check the render failure before the difference-computation failure when they name the warning's failure. A failing shadowMismatchDiff hook beside a side with no JSON rendering therefore reports render_error, as the warning's loggingOutcome and the shadowMismatchLogging event, instead of hook_error.",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts shadowMismatchLogSteps, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log check the render failure before the difference-computation failure when they name the warning's failure. A failing shadowMismatchDiff hook beside a side with no JSON rendering therefore reports render_error, as the warning's loggingOutcome and the shadowMismatchLogging event, instead of hook_error.",
       "typescript": {
         "edits": [
           {
@@ -2410,7 +2410,7 @@
       "id": "M75",
       "case": "C60.warning-field-groups",
       "description": "Log the difference entries with their values at diff paths",
-      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts renderShadowMismatchLog, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log treat every diff level above off as values, so a warning at diff paths also carries diffJson with each entry's cached and source sides. The paths level, which a cache of user data can leave on in production, therefore logs values.",
+      "rationale": "TypeScript typescript/src/internal/shadow-log-json.ts shadowMismatchLogSteps, Go go/shadow_log.go renderShadowMismatchLog and Rust rust/src/shadow_log.rs render_mismatch_log treat every diff level above off as values, so a warning at diff paths also carries diffJson with each entry's cached and source sides. The paths level, which a cache of user data can leave on in production, therefore logs values.",
       "typescript": {
         "edits": [
           {
