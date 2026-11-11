@@ -109,12 +109,6 @@ disables the deadline), compression on, and shadow capacity one. Invalid
 operation configuration returns an error wrapping `ErrInvalidPolicy` or
 `ErrInvalidOperation` before execution.
 
-The remote-read deadline is the only Redis deadline the cache sets. Redis
-writes, `Invalidate` and the policy provider have no library deadline: set
-go-redis `ReadTimeout` and `WriteTimeout` (a `SET` waits for its reply), pass
-`Invalidate` a context with the budget you want, and give the provider its own
-deadline. A provider error or panic runs the loader uncached.
-
 `WithRemote` requires atomic primary snapshots, complete client-stamped frame
 writes, and surfaced invalidation errors. The bundled `RedisAdapter` uses
 go-redis with standalone, Sentinel or Cluster clients. For a direct
@@ -130,18 +124,12 @@ and affects shared remote authority; other processes' local entries and
 already acquired snapshots retain the documented lifetime rules.
 
 Source errors retain their identity. A source deadline returns
-`FallbackTimeoutError` and cancels the source context; a source that ignores
-its context keeps running. The source context ends when the source returns, so
-work the loader starts that must outlive the call needs its own context. A caller whose context ends stops waiting with that
-context's error and no stale recovery, while a coalesced flight continues for
-its other callers on a context that no single caller's cancellation ends; under
-`NoTimeout` that flight runs until the source returns, even after every caller
-has left. A read deadline returns `RemoteReadTimeoutError` to cache plumbing and requests
-cancellation through the adapter context; it cannot prove a dispatched command
-stopped. Shadow work runs on a context detached from the caller that ends with
-the shadow job. Source/codec/provider/comparator panics become
-`CallbackPanicError`; telemetry panics are ignored. Cache plumbing fails open
-while explicit maintenance errors are returned.
+`FallbackTimeoutError` and does not cancel raw source work. A read deadline
+returns `RemoteReadTimeoutError` to cache plumbing and requests cancellation
+through the adapter context; it cannot prove a dispatched command stopped.
+Source/codec/provider/comparator panics become `CallbackPanicError`; telemetry
+panics are ignored. Cache plumbing fails open while explicit maintenance errors
+are returned. Applications still own cancellation of the source context.
 
 `WithClock` separates wall time from elapsed time. The default clock preserves
 fractional milliseconds through `PreciseClock.ElapsedTime`. Custom clocks can
