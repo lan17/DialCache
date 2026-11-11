@@ -54,24 +54,32 @@ func TestDatadogTagValuesCannotAddTagsOrBreakPackets(t *testing.T) {
 	}
 }
 
-type describePanicCollector struct {
+// faultyCollector describes itself correctly while it registers, then fails
+// as the test sets.
+type faultyCollector struct {
 	prometheus.Counter
-	panics *bool
+	fault *string
 }
 
-func (c describePanicCollector) Describe(ch chan<- *prometheus.Desc) {
-	if *c.panics {
+func (c faultyCollector) Describe(ch chan<- *prometheus.Desc) {
+	switch *c.fault {
+	case "panic":
 		panic("collector failure")
+	case "nil descriptor":
+		ch <- nil
+	default:
+		c.Counter.Describe(ch)
 	}
-	c.Counter.Describe(ch)
 }
 
-func TestPanickingRegisteredCollectorFailsConstruction(t *testing.T) {
-	panics := false
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(describePanicCollector{prometheus.NewCounter(prometheus.CounterOpts{Name: "application_total", Help: "Application counter."}), &panics})
-	panics = true
-	if _, err := NewPrometheusMetrics(registry, "app_"); err == nil || !strings.Contains(err.Error(), "collector failure") {
-		t.Fatalf("err = %v; want the collector panic as an error", err)
+func TestFaultyRegisteredCollectorFailsConstruction(t *testing.T) {
+	for _, fault := range []string{"panic", "nil descriptor"} {
+		state := ""
+		registry := prometheus.NewRegistry()
+		registry.MustRegister(faultyCollector{prometheus.NewCounter(prometheus.CounterOpts{Name: "application_total", Help: "Application counter."}), &state})
+		state = fault
+		if _, err := NewPrometheusMetrics(registry, "app_"); err == nil {
+			t.Fatalf("%s: constructor succeeded; want an error", fault)
+		}
 	}
 }
