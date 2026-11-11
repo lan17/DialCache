@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -562,6 +563,14 @@ func EscapeRawPayload(payload Payload) Payload {
 	}
 	return payload
 }
+
+// A new encoder allocates its match tables on first use (about 1.3 MiB at the
+// default level), so idle encoders are pooled per level. They run through the
+// streaming API with concurrency 1, which makes no channels: EncodeAll makes
+// one on first use, and a channel made inside a testing/synctest bubble must
+// never be used from outside it.
+var zstdEncoders [zstd.SpeedBestCompression + 1]sync.Pool
+
 func CompressPayload(payload Payload, config CompressionConfig, limit ...int) (CompressionWriteResult, error) {
 	maximum := MaxDecompressedBytes
 	if len(limit) > 0 {
@@ -583,12 +592,24 @@ func CompressPayload(payload Payload, config CompressionConfig, limit ...int) (C
 		result.Outcome = "write_over_limit"
 		return result, nil
 	}
-	writer, err := zstd.NewWriter(nil, zstd.WithEncoderConcurrency(1), zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(resolved.Level)), zstd.WithEncoderCRC(false))
+	level := zstd.EncoderLevelFromZstd(resolved.Level)
+	writer, _ := zstdEncoders[level].Get().(*zstd.Encoder)
+	if writer == nil {
+		writer, err = zstd.NewWriter(nil, zstd.WithEncoderConcurrency(1), zstd.WithEncoderLevel(level), zstd.WithEncoderCRC(false))
+		if err != nil {
+			return result, err
+		}
+	}
+	var output bytes.Buffer
+	writer.ResetContentSize(&output, int64(len(payload.Bytes)))
+	if _, err = writer.Write(payload.Bytes); err == nil {
+		err = writer.Close()
+	}
 	if err != nil {
 		return result, err
 	}
-	defer writer.Close()
-	compressed := writer.EncodeAll(payload.Bytes, nil)
+	zstdEncoders[level].Put(writer)
+	compressed := output.Bytes()
 	result.Outcome = "not_smaller"
 	if len(compressed)+1 >= len(raw.Bytes) {
 		return result, nil

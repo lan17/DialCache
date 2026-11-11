@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"slices"
+	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	. "github.com/lan17/DialCache/go"
@@ -67,4 +69,23 @@ func TestCorruptCompressedFrameFailsOpen(t *testing.T) {
 			t.Fatalf("coalesce=%v: value=%q err=%v writes=%d errors=%v", coalesce, value, err, remote.writes, errors)
 		}
 	}
+}
+
+// Pooled zstd encoders are shared across goroutines, so they must hold no
+// channel: using a channel made inside a testing/synctest bubble from outside
+// that bubble is a fatal error.
+func TestCompressPayloadAcrossSynctestBubbles(t *testing.T) {
+	value := Payload{Bytes: []byte(strings.Repeat("dialcache ", 1000))}
+	roundTrip := func(t *testing.T) {
+		compressed, err := CompressPayload(value, CompressionConfig{ThresholdBytes: 1, Level: 3})
+		if err != nil || compressed.Outcome != "compressed" {
+			t.Fatal(compressed.Outcome, err)
+		}
+		if decoded := DecompressPayload(compressed.Payload); decoded.Outcome != "decompressed" || !bytes.Equal(decoded.Payload.Bytes, value.Bytes) {
+			t.Fatal(decoded.Outcome)
+		}
+	}
+	synctest.Test(t, roundTrip)
+	roundTrip(t)
+	synctest.Test(t, roundTrip)
 }
