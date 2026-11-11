@@ -44,8 +44,9 @@ flowchart LR
   tells them apart settles the case, with a comment recording the intended behavior. Neither side
   is edited just to make the other pass, and a settlement that would change contract text waits for
   the maintainer.
-- **User docs** explain the contracts to people using the library. **Design records** explain why a
-  change took its shape. Neither defines behavior.
+- **User docs** tell people using the library what it does and how to use it, without
+  implementation details. **Design records** explain why a change took its shape. Neither defines
+  behavior.
 
 ## The life of a change
 
