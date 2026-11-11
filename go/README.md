@@ -114,8 +114,8 @@ writes, and surfaced invalidation errors. The bundled `RedisAdapter` uses
 go-redis with standalone, Sentinel or Cluster clients; `NewRedisClient` builds
 one from standard `redis.UniversalOptions` and fills zero budget fields. For a
 direct `*redis.ClusterClient`, tracked reads select the slot primary even when
-replica reads are enabled. Standalone and Sentinel `*redis.Client` handles must
-already target the primary; keep Sentinel's
+replica reads are enabled, and they need `MULTI` and `EXEC` in Redis ACLs.
+Standalone and Sentinel `*redis.Client` handles must already target the primary; keep Sentinel's
 `FailoverOptions.ReplicaOnly` false so replica lag cannot hide an invalidation
 watermark. `NewRedisClient` rejects Sentinel `ReadOnly`; the adapter cannot see
 that option on a client built elsewhere. Writes and invalidation wait
