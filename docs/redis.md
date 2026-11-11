@@ -120,8 +120,10 @@ clients. Install the module; go-redis is part of its dependency graph:
 go get github.com/lan17/DialCache/go@latest
 ```
 
-Create the appropriate `redis.UniversalClient` in your application, then pass
-`dialcache.NewRedisAdapter(client)` to `dialcache.WithRemote`. For a direct
+Create a `redis.UniversalClient` with `dialcache.NewRedisClient`, which takes
+standard `redis.UniversalOptions` and fills zero budget fields, or build one
+yourself. Then pass `dialcache.NewRedisAdapter(client)` to `dialcache.WithRemote`.
+For a direct
 `*redis.ClusterClient`, a tracked read wraps its `MGET` in `MULTI` and `EXEC`,
 still in one round trip. go-redis sends that transaction to the slot primary even
 when replica reads are enabled, follows `MOVED` and `ASK` for it, and runs the
@@ -129,7 +131,8 @@ cluster client's hooks. Allow `MULTI` and `EXEC` in Redis ACLs and proxies; when
 they are rejected, tracked reads fail open to the source. Standalone and Sentinel
 `*redis.Client` handles must already target
 the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false. Reading a replica
-can hide an invalidation watermark, and the adapter cannot see that option. Set
+can hide an invalidation watermark. `NewRedisClient` rejects Sentinel `ReadOnly`;
+the adapter cannot see that option on a client built elsewhere. Set
 connection, read/write and retry budgets on the native client
 ([Redis client budgets](languages/go.md#redis-client-budgets)); close it only
 after application work is drained. The

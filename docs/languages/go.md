@@ -77,11 +77,13 @@ insertion order. These binding details do not change sorted cache-key arguments.
 ## Integrations
 
 `NewRedisAdapter` wraps an application-owned go-redis standalone, Sentinel or
-Cluster client; supply it with `WithRemote`. Tracked reads override replica routing
+Cluster client; supply it with `WithRemote`. `NewRedisClient` builds that client
+from standard `redis.UniversalOptions` with
+[Redis client budgets](#redis-client-budgets). Tracked reads override replica routing
 for direct `*redis.ClusterClient` clients and follow `MOVED` and `ASK`.
 Standalone/Sentinel clients must target the primary; keep Sentinel's
-`FailoverOptions.ReplicaOnly` false. Size the client's pool and timeouts for the
-cache, as [Redis client budgets](#redis-client-budgets) describes.
+`FailoverOptions.ReplicaOnly` false. `NewRedisClient` rejects Sentinel `ReadOnly`,
+which go-redis turns into `ReplicaOnly`.
 See [Redis and Valkey](../redis.md) and [invalidation](../invalidation.md).
 
 `WithObserver` receives typed diagnostic events and `WithMetrics` connects
@@ -102,7 +104,7 @@ replaces the built-in difference computation of confirmed-mismatch warnings; a
 DialCache bounds only its own wait for a remote read. `Write` and `Invalidate`
 wait for the client
 ([remote-read deadlines](../redis.md#remote-read-deadlines-and-async-liveness)).
-The go-redis defaults do not fit a 50 ms read budget. The pool holds 10
+The go-redis defaults do not fit the default 50 ms read budget. The pool holds 10
 connections per `GOMAXPROCS`, reads and writes may wait 5 seconds, a failed
 command is retried 3 times, and a connect is attempted 5 times. On a container
 limited to one or two CPUs, a Redis slowdown of a few tens of milliseconds at a
@@ -111,24 +113,43 @@ call the source. One stalled miss-path write or invalidation can block its
 caller for many seconds. Size the pool as reads per second times the read
 budget, plus room for writes, and keep every wait short. Use a client that
 serves only DialCache, so a cache stall does not take connections from other
-Redis work. A starting point for up to about 1,000 reads per second (excerpt):
+Redis work.
+
+`NewRedisClient` takes standard go-redis options, and `redis.NewUniversalClient`
+picks the client: Sentinel when `MasterName` is set, Cluster for more than one
+address or `IsClusterMode`, otherwise standalone. Redis and Valkey work the same
+way. The caller owns the returned client and closes it after draining cache work
+(excerpt):
 
 ```go
-client := redis.NewClient(&redis.Options{
-	Addr:                  addr,
-	Protocol:              2, // RESP3 also works
-	PoolSize:              64,
-	MinIdleConns:          8,
-	PoolTimeout:           100 * time.Millisecond,
-	DialTimeout:           500 * time.Millisecond,
-	DialerRetries:         1, // 0 means 5 attempts
-	ReadTimeout:           250 * time.Millisecond,
-	WriteTimeout:          250 * time.Millisecond,
-	MaxRetries:            -1, // 0 means 3 retries
-	ConnMaxIdleTime:       3 * time.Minute,
-	ContextTimeoutEnabled: true,
+client, err := dialcache.NewRedisClient(&redis.UniversalOptions{
+	Addrs: []string{"redis:6379"},
 })
+if err != nil {
+	return err
+}
+defer client.Close()
+cache, err := dialcache.New(dialcache.WithRemote(dialcache.NewRedisAdapter(client)))
 ```
+
+A zero field gets the value below, which fits up to about 1,000 reads per second.
+A field you set keeps your value. `ContextTimeoutEnabled` is always set.
+
+| Option | Value | go-redis default |
+| --- | --- | --- |
+| `PoolSize` | 64 | 10 per `GOMAXPROCS` |
+| `MinIdleConns` | 8 | 0 |
+| `PoolTimeout` | 100 ms | `ReadTimeout` + 1 s |
+| `DialTimeout` | 500 ms | 5 s |
+| `DialerRetries` | 1 | 5 |
+| `ReadTimeout`, `WriteTimeout` | 250 ms | 5 s |
+| `MaxRetries` | -1 (no retries) | 3 |
+| `ConnMaxIdleTime` | 3 min | 30 min |
+| `Protocol` | 2 (RESP3 also works) | 3 |
+
+`PoolSize` and `MinIdleConns` apply to each Redis node. `MinIdleConns` opens its
+connections in the background when the client starts; set it to -1 for none.
+Build one client per process and reuse it.
 
 Give `Invalidate` a context deadline. Do not derive a socket deadline from
 `ReadBudget`: a deadline that cuts a slow command closes its connection, and the
