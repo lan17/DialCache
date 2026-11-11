@@ -14,8 +14,8 @@ as well as values.
 
 [Deadlines](#fallback-deadlines) bound remote reads and source loaders separately.
 Injected operations still need [application-owned budgets](#application-owned-budgets).
-Detached [shadow work](shadow-validation.md) has its own registry and capacity;
-it is not another caller coalescing scope.
+[Shadow work](shadow-validation.md) has a separate capacity limit and does not
+enable caller coalescing.
 
 ## Request coalescing
 
@@ -38,8 +38,8 @@ When request-local caching is active and coalescing is enabled, callers with the
 same key in one outer enabled scope share in-flight work before the
 request-local lookup.
 
-The resolved value is memoized for later sequential calls in that scope. A
-different outer request has a different request-local flight registry.
+Successful results are memoized for later sequential calls in that scope.
+Request-local sharing does not cross the outer request boundary.
 
 ### Process scope
 
@@ -418,9 +418,8 @@ Followers remain counted until their leader's cache operation settles,
 including by deadline rejection. The underlying source operation may continue
 after that point.
 
-Request-local flights are deliberately excluded because their lifecycle is
-bounded by the outer enabled scope. Shadow jobs are also excluded; they use
-their own capacity registry and outcome metrics.
+The snapshot excludes request-local work and shadow jobs. Monitor shadow
+outcome metrics separately.
 Use cases with `coalesce: false` never register process flights and therefore do
 not appear in this state.
 The oldest-leader age uses a monotonic clock and is computed when the snapshot is
@@ -432,8 +431,6 @@ There is no library-wide cap or age-based replacement for caller-path
 request-local or process-scoped flights. The instance shadow capacity bounds only
 detached shadow jobs.
 
-A registry cap would bound only DialCache metadata. Overflow or eviction could
-still create unbounded source work and unsafe duplicate publication.
 DialCache's remote-read and fallback deadlines cover only those phases;
 provider, serializer, and Redis-write settlement remains application-owned.
 Admission control and backpressure remain responsible for bounding

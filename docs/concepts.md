@@ -56,9 +56,9 @@ a disabled one can opt a smaller region back in.
 
 <LanguageContent language="typescript">
 
-Enabled state follows the asynchronous call chain through Node's
-`AsyncLocalStorage`, independently for each instance. `enable()` and `disable()`
-restore the previous state when their callbacks settle. See the
+Enabled state follows the asynchronous call chain independently for each
+instance. `enable()` and `disable()` restore the previous state when their
+callbacks settle. See the
 [TypeScript guide](languages/typescript.md).
 
 </LanguageContent>
@@ -81,10 +81,9 @@ derive nested scopes. See the [Rust guide](languages/rust.md).
 
 <LanguageContent language="python">
 
-Enabled state travels through `contextvars`. Enter `cache.enable()` with `with`
-or `async with`; nested `enable()` and `disable()` preserve the live outer
-memo. Calls from retained task contexts pass through after that outer scope
-closes. See the [Python guide](languages/python.md).
+Enter `cache.enable()` with `with` or `async with`; nested `enable()` and
+`disable()` preserve the live outer memo. Calls from retained task contexts pass
+through after that outer scope closes. See the [Python guide](languages/python.md).
 
 </LanguageContent>
 
@@ -112,9 +111,9 @@ when they use the same Redis server.
 
 ### Request-local cache
 
-Enabling request-local policy memoizes successful results until the outermost enabled
-scope closes. State is allocated lazily. It has no TTL, ramp, capacity limit,
-or eviction; keep scopes short-lived with bounded key cardinality.
+Enabling request-local policy memoizes successful results until the outermost
+enabled scope closes. It has no TTL, ramp, capacity limit, or eviction; keep
+scopes short-lived with bounded key cardinality.
 A local or remote TTL does not enable request-local caching; opt into it explicitly.
 
 ### Process-local cache

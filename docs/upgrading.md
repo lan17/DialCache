@@ -260,8 +260,8 @@ names the old shapes:
   `LoggingConfigError` now covers every invalid leaf and shorthand. Unkeyed
   `ShadowPolicy` and `ResolvedShadow` literals no longer compile.
 - `ShadowMismatchLogDetails`, `ShadowMismatchDetails` and
-  `PreviewShadowLogJSON` are removed, since each value now renders once for
-  every field; `PreviewShadowLogKey` and the `ShadowLog*` constants remain.
+  `PreviewShadowLogJSON` are removed; `PreviewShadowLogKey` and the `ShadowLog*`
+  constants remain.
 - `FailureIsolatedLogger` returns an already isolated logger unchanged, so a
   `Warn` panic stays observable as `logger_error`.
 - Observers receive the new `shadowMismatchLogging` event kind, and the
@@ -287,10 +287,9 @@ built and logged, the `MismatchDiff` hook and the built-in walk included.
 `WithShadowCapacity` therefore bounds that work too, and while a slow hook,
 observer or logger runs, jobs beyond capacity report `dropped`.
 
-The value fields cost what they did before, since each side was already
-rendered in full. On one Apple-silicon Mac, a 6.3 MB map of 150,000 members took
-about 0.6 seconds per warning at `MismatchDiffPaths`, against about 0.5 seconds
-for the value fields alone.
+The cost of logging value fields is unchanged. On one Apple-silicon Mac, a
+6.3 MB map of 150,000 members took about 0.6 seconds per warning at
+`MismatchDiffPaths`, against about 0.5 seconds for the value fields alone.
 
 </LanguageContent>
 

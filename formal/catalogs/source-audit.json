@@ -49,7 +49,7 @@
     },
     {
       "path": "docs/coalescing.md",
-      "sha256": "cc3c776553de55a2c384c747f7804556e3d0196b3fde53a18cd628cec968556e",
+      "sha256": "90f3ea7bb7ff2dedde1e85e750198352367722cf19cc8b329b560b2ed6fe8c3a",
       "entries": [
         {"title":"Coalescing and liveness","contracts":["C11"]},
         {"title":"Request coalescing","contracts":["C11"]},
@@ -72,7 +72,7 @@
     },
     {
       "path": "docs/concepts.md",
-      "sha256": "f8c042f4a7f446a3305563730062fd048d70c5424a38a3c71bc5cfa2627b5271",
+      "sha256": "afa3488fb34b1b3928c81b0bd5941716f35ea4da17a8b57605c9b415dc28f67d",
       "entries": [
         {"title":"How DialCache works","contracts":["C01"]},
         {"title":"Identity governs reuse","contracts":["W01","E04"]},
@@ -90,7 +90,7 @@
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "cc25114e5a5512d2dd48cf8b6c7466a395a0b449cf818946fd4d8b0c5acdd64e",
+      "sha256": "cb5fbd3024a94c10c56aa83a9fce67cbef1604d8e62bed8d3913e657e0ad4968",
       "entries": [
         {"title":"Configuration and rollout","contracts":["C16"]},
         {"title":"What belongs where","contracts":["C16","B01"]},
@@ -130,7 +130,7 @@
     },
     {
       "path": "docs/invalidation.md",
-      "sha256": "9eb7ac9c831c4616632825d6aa8676555efdd42986134c91206d58248e8d2ad9",
+      "sha256": "01ac3cc3e29de0aefcde55b7d19d27c8f14fcdbf2e7990f239be8dc48ad5ec4d",
       "entries": [
         {"title":"Targeted invalidation","contracts":["C32"]},
         {"title":"Watermarks: an entity-wide cutoff","contracts":["C32","C33"]},
@@ -261,7 +261,7 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "754d156cff4d53d65ea33aef458839a8459aacfeac0d59303a292113d667545d",
+      "sha256": "dff2373d06ba29328a99024ff26867075af637f6ad35b9f9489b9ea2613e7516",
       "entries": [
         {"title":"Redis and Valkey","contracts":["E01"]},
         {"title":"Install a client","contracts":["B01","E01"]},
@@ -320,7 +320,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "f35d61a95ac2f9ad9dcc5d1f86c5b151b1260f7e7679f75a161777cbe39e8e84",
+      "sha256": "0de57723b9b508ba25b6702259e9c836040264cc388e1909eaa275a046e884aa",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},

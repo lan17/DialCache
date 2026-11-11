@@ -39,10 +39,8 @@ For example, a rollout can change the local ramp without repeating the TTL:
 | `ttlSec.local` | `60` | omitted | `60` seconds |
 | `ramp.local` | `100` | `10` | 10% key cohort |
 
-The following executed example starts with request-local and process-local
-caching, overrides only coalescing, then explicitly disables both layers. The
-assertions check source calls, so a sparse overlay that accidentally discards
-inherited defaults fails the example.
+This example starts with request-local and process-local caching, overrides
+only coalescing, then explicitly disables both layers.
 
 <LanguageContent language="typescript">
 
