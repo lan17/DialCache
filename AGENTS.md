@@ -148,14 +148,14 @@ the one the ruleset requires.
 
 #### Docs
 
-`docs/` and the READMEs are a reference for people who use the library, not notes for agents or
-maintainers. Write what a user needs to call, configure and operate it, and add a detail only when
-a user would change their code, configuration or operations because of it. Leave out how it works
-inside: internal types, contexts, goroutines, closures, locks, coalescing internals, source paths
-and contract or catalog IDs. A port note belongs only where users of that port must act
-differently. Keep sections short, with one concrete example. The reason for surprising code goes
-in a comment beside it, a change's effect in the PR description, a decision in a design record and
-validation detail in `formal/`.
+`docs/` and the READMEs are a reference for people who use the library, not notes for agents. Write
+what a user needs to call, configure and operate it, and add a detail only when a user would change
+their code, configuration or operations because of it. Leave out how it works inside: internal
+types, contexts, goroutines, closures, locks, coalescing internals, source paths and contract or
+catalog IDs. A port note belongs only where users of that port must act differently. Keep sections
+short, with one concrete example. The reason for surprising code goes in a comment beside it, a
+change's effect in the PR description, a decision in a design record and validation detail in
+`formal/`.
 
 1. Follow [docs/authoring.md](docs/authoring.md), checking claims and defaults against source.
    Never cite a design record as the source of a guarantee.
