@@ -94,6 +94,9 @@ func awaitDeadline[T any](ctx context.Context, clock Clock, p *pending[T], start
 		}
 		break
 	}
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
 	if onTimeout != nil {
 		onTimeout()
 	}

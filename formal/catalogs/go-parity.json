@@ -3559,7 +3559,7 @@
               "awaitDeadline",
               "callSafely"
             ],
-            "sha256": "8cd5faddb7a02718a7612de9855f438a91f1f68d5ab8eb43ebd53d398baea8da"
+            "sha256": "1ed105fdd7c547af2dfa45ddfb87e279518b2b255b39a9ae7dc0663e33e4e649"
           },
           {
             "path": "go/shadow.go",
@@ -3780,7 +3780,7 @@
               "awaitDeadline",
               "deferWork"
             ],
-            "sha256": "8cd5faddb7a02718a7612de9855f438a91f1f68d5ab8eb43ebd53d398baea8da"
+            "sha256": "1ed105fdd7c547af2dfa45ddfb87e279518b2b255b39a9ae7dc0663e33e4e649"
           },
           {
             "path": "go/api.go",
@@ -4174,7 +4174,7 @@
             "symbols": [
               "callSafely"
             ],
-            "sha256": "8cd5faddb7a02718a7612de9855f438a91f1f68d5ab8eb43ebd53d398baea8da"
+            "sha256": "1ed105fdd7c547af2dfa45ddfb87e279518b2b255b39a9ae7dc0663e33e4e649"
           },
           {
             "path": "go/metrics.go",

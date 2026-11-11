@@ -329,33 +329,36 @@ func TestContextEndedCallerGetsItsErrorOverAReadyResult(t *testing.T) {
 }
 
 func TestContextServedShadowOutlivesCaller(t *testing.T) {
-	outcomes := make(chan string, 4)
-	cache := MustNew(WithRemote(newContextRemote()), WithShadowOutcomes(func(e Event) { outcomes <- e.Outcome }))
-	op := contextOperation("served-shadow", Policy{RemoteTTL: time.Minute, Shadow: &ShadowPolicy{Ramp: Ptr(100.0)}})
-	ctx, done := cache.Enable(context.Background())
-	defer done()
-	if _, err := GetOrLoad(ctx, cache, op, func(context.Context) (string, error) { return "value", nil }); err != nil {
-		t.Fatal(err)
-	}
-
-	callerCtx, cancel := context.WithCancel(ctx)
-	returned := make(chan struct{})
-	load := func(ctx context.Context) (string, error) {
-		<-returned
-		return "value", ctx.Err()
-	}
-	if v, err := GetOrLoad(callerCtx, cache, op, load); v != "value" || err != nil {
-		t.Fatalf("hit = (%q, %v)", v, err)
-	}
-	cancel()
-	close(returned)
-	select {
-	case outcome := <-outcomes:
-		if outcome != "match" {
-			t.Fatalf("shadow outcome = %q, want match after the caller left", outcome)
+	// Without coalescing the shadow job starts from the caller's own context.
+	for _, coalesce := range []bool{true, false} {
+		outcomes := make(chan string, 4)
+		cache := MustNew(WithRemote(newContextRemote()), WithShadowOutcomes(func(e Event) { outcomes <- e.Outcome }))
+		op := contextOperation("served-shadow", Policy{RemoteTTL: time.Minute, Coalesce: Ptr(coalesce), Shadow: &ShadowPolicy{Ramp: Ptr(100.0)}})
+		ctx, done := cache.Enable(context.Background())
+		if _, err := GetOrLoad(ctx, cache, op, func(context.Context) (string, error) { return "value", nil }); err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("no shadow verdict")
+
+		callerCtx, cancel := context.WithCancel(ctx)
+		returned := make(chan struct{})
+		load := func(ctx context.Context) (string, error) {
+			<-returned
+			return "value", ctx.Err()
+		}
+		if v, err := GetOrLoad(callerCtx, cache, op, load); v != "value" || err != nil {
+			t.Fatalf("coalesce=%v: hit = (%q, %v)", coalesce, v, err)
+		}
+		cancel()
+		close(returned)
+		select {
+		case outcome := <-outcomes:
+			if outcome != "match" {
+				t.Fatalf("coalesce=%v: shadow outcome = %q, want match after the caller left", coalesce, outcome)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("coalesce=%v: no shadow verdict", coalesce)
+		}
+		done()
 	}
 }
 
