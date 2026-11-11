@@ -108,6 +108,8 @@ Set `Operation.Identity.Tracked` and call
 `cache.Invalidate(ctx, identity, buffer)` after the source commit. The buffer
 is a `time.Duration` in whole milliseconds. Missing remote configuration returns
 `ErrNoRemote`; handle mutation errors as failed maintenance.
+`cache.InvalidateMany(ctx, identities, buffer)` invalidates several entities
+with one timestamp; the batch can partially fail, and retrying all of it is safe.
 
 </LanguageContent>
 

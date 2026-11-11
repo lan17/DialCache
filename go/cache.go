@@ -5,6 +5,7 @@ package dialcache
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -158,8 +159,8 @@ func (c *Cache) emit(event Event) {
 // the invalidation plus futureBuffer are no longer served. It requires a
 // remote adapter and returns its error. Local entries expire by TTL.
 func (c *Cache) Invalidate(ctx context.Context, identity Identity, futureBuffer time.Duration) (err error) {
-	if futureBuffer < 0 || futureBuffer > MaxSupportedDuration || futureBuffer%time.Millisecond != 0 {
-		return fmt.Errorf("%w: future buffer must be whole milliseconds within 365 days", ErrInvalidOperation)
+	if err := checkFutureBuffer(futureBuffer); err != nil {
+		return err
 	}
 	if identity.Namespace == "" {
 		identity.Namespace = c.settings.namespace
@@ -179,13 +180,99 @@ func (c *Cache) Invalidate(ctx context.Context, identity Identity, futureBuffer 
 	if err != nil {
 		return err
 	}
-	now := c.settings.clock.WallMS()
-	bufferMS := int64(futureBuffer / time.Millisecond)
-	if now < 0 || uint64(now) > MaxSafeInteger-uint64(bufferMS) {
-		return fmt.Errorf("%w: invalid invalidation timestamp", ErrInvalidOperation)
+	now, bufferMS, err := c.invalidationTime(futureBuffer)
+	if err != nil {
+		return err
 	}
 	_, err = callSafely(func() (struct{}, error) {
 		return struct{}{}, c.settings.remote.Invalidate(ctx, watermark, now, bufferMS)
 	})
 	return err
+}
+
+// InvalidateMany invalidates each entity as Invalidate does, with one
+// invalidation timestamp; an entity named more than once is invalidated once.
+// Every identity is checked before anything is dispatched. Each watermark
+// advances atomically, but the batch can partially complete, and retrying the
+// whole batch is safe because watermarks only advance.
+func (c *Cache) InvalidateMany(ctx context.Context, identities []Identity, futureBuffer time.Duration) (err error) {
+	if err := checkFutureBuffer(futureBuffer); err != nil {
+		return err
+	}
+	type entityType struct{ namespace, keyType string }
+	var types []entityType
+	defer func() {
+		if err != nil {
+			c.settings.logger.Warn("Error writing DialCache invalidation watermarks", err)
+			for _, t := range types {
+				c.emit(Event{Kind: "error", Data: map[string]any{"cacheNamespace": t.namespace, "keyType": t.keyType, "useCase": "watermark", "layer": "remote", "error": "invalidation", "inFallback": false}})
+			}
+		}
+	}()
+	var watermarks []string
+	var entities []Identity
+	seen := map[string]bool{}
+	for _, identity := range identities {
+		if identity.Namespace == "" {
+			identity.Namespace = c.settings.namespace
+		}
+		identity.Tracked = true
+		_, _, watermark, err := identity.Keys()
+		if err != nil {
+			return err
+		}
+		if !seen[watermark] {
+			seen[watermark] = true
+			watermarks = append(watermarks, watermark)
+			entities = append(entities, identity)
+		}
+	}
+	for _, identity := range entities {
+		c.emit(Event{Kind: "invalidation", Data: map[string]any{"cacheNamespace": identity.Namespace, "keyType": identity.KeyType, "layer": "remote"}})
+		if t := (entityType{identity.Namespace, identity.KeyType}); !slices.Contains(types, t) {
+			types = append(types, t)
+		}
+	}
+	if c.settings.remote == nil {
+		return ErrNoRemote
+	}
+	if len(watermarks) == 0 {
+		return nil
+	}
+	now, bufferMS, err := c.invalidationTime(futureBuffer)
+	if err != nil {
+		return err
+	}
+	if batch, ok := c.settings.remote.(RemoteBatchInvalidator); ok {
+		_, err = callSafely(func() (struct{}, error) {
+			return struct{}{}, batch.InvalidateMany(ctx, watermarks, now, bufferMS)
+		})
+		return err
+	}
+	for _, watermark := range watermarks {
+		if _, err = callSafely(func() (struct{}, error) {
+			return struct{}{}, c.settings.remote.Invalidate(ctx, watermark, now, bufferMS)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkFutureBuffer(futureBuffer time.Duration) error {
+	if futureBuffer < 0 || futureBuffer > MaxSupportedDuration || futureBuffer%time.Millisecond != 0 {
+		return fmt.Errorf("%w: future buffer must be whole milliseconds within 365 days", ErrInvalidOperation)
+	}
+	return nil
+}
+
+// invalidationTime samples the clock once per logical invalidation so every
+// dispatch and retry proposes the same cutoff.
+func (c *Cache) invalidationTime(futureBuffer time.Duration) (now, bufferMS int64, err error) {
+	now = c.settings.clock.WallMS()
+	bufferMS = int64(futureBuffer / time.Millisecond)
+	if now < 0 || uint64(now) > MaxSafeInteger-uint64(bufferMS) {
+		return 0, 0, fmt.Errorf("%w: invalid invalidation timestamp", ErrInvalidOperation)
+	}
+	return now, bufferMS, nil
 }

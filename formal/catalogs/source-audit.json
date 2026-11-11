@@ -130,7 +130,7 @@
     },
     {
       "path": "docs/invalidation.md",
-      "sha256": "9eb7ac9c831c4616632825d6aa8676555efdd42986134c91206d58248e8d2ad9",
+      "sha256": "bdd42301c7b0b1f001393d16c7ec3bbf9b7a8191acd2370b9fa5c15cec1c6804",
       "entries": [
         {"title":"Targeted invalidation","contracts":["C32"]},
         {"title":"Watermarks: an entity-wide cutoff","contracts":["C32","C33"]},
@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "514e3c9ab39e25d572b98dba915190ec2c368069f3d88a557657ffaeaffbf3c3",
+      "sha256": "af93ee3438211406eee7c42abaf418fdff5b58c8ed59c21488661fc6db915f75",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -1800,7 +1800,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "0d77c6caf885d508febae846a4a06dc33cd63e0d2b18faccdfc4ac8781d271fb",
+      "sha256": "9dfbb903c3bae28c45d74c130b32d262a8f2dfe6cb7a5f71e43d1cba3d01995a",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},

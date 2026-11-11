@@ -11,7 +11,7 @@
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
     "sourceAuditDispositionsSha256": "c95ce03c30df574246e5943e2d69e084ed809b5d3e2a3d0f0abf5a2123bc8aaa",
-    "featureCoverageSha256": "c96d4c5aa3879cfc50a12fc210e4011d0e4605d2da7c79c50d74caa09d63f1f1",
+    "featureCoverageSha256": "4dd17877dc91d4dcf3756680cae6297959f180a4d9eade21a0389a5b8be92789",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -3425,7 +3425,7 @@
               "RecoveryPredicate",
               "MismatchEntry"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "6ad623a205c8a4429b57147ea7688100f69f7285860a911f1a346b06784ecb0a"
           }
         ]
       }
@@ -3455,7 +3455,7 @@
               "WithEnabled",
               "WithDisabled"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "9adb51a8284079765961022c339c87d3573d548543b65213cdf014822f43d722"
           }
         ]
       }
@@ -3529,7 +3529,7 @@
               "IsEnabled",
               "Invalidate"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "9adb51a8284079765961022c339c87d3573d548543b65213cdf014822f43d722"
           },
           {
             "path": "go/bindings.go",
@@ -3578,7 +3578,7 @@
               "Operation",
               "Event"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "6ad623a205c8a4429b57147ea7688100f69f7285860a911f1a346b06784ecb0a"
           },
           {
             "path": "go/internal/logging/logging.go",
@@ -3613,7 +3613,7 @@
               "CallbackPanicError",
               "ErrNoRemote"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "6ad623a205c8a4429b57147ea7688100f69f7285860a911f1a346b06784ecb0a"
           },
           {
             "path": "go/redis_adapter.go",
@@ -3621,7 +3621,7 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "c0ad11f98c16469475b204afc84793cfb745abc2ed51d5e0f51efbc8c3b2ea8e"
           }
         ]
       }
@@ -3652,7 +3652,7 @@
               "Codec",
               "Remote"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "6ad623a205c8a4429b57147ea7688100f69f7285860a911f1a346b06784ecb0a"
           },
           {
             "path": "go/bindings.go",
@@ -3666,7 +3666,7 @@
             "symbols": [
               "New"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "9adb51a8284079765961022c339c87d3573d548543b65213cdf014822f43d722"
           },
           {
             "path": "go/policy.go",
@@ -3790,7 +3790,7 @@
               "TimerClock",
               "DeferredExecutor"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "6ad623a205c8a4429b57147ea7688100f69f7285860a911f1a346b06784ecb0a"
           }
         ]
       }
@@ -3866,7 +3866,7 @@
             "symbols": [
               "New"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "9adb51a8284079765961022c339c87d3573d548543b65213cdf014822f43d722"
           },
           {
             "path": "go/engine.go",
@@ -3878,7 +3878,7 @@
           },
           {
             "path": "go/api.go",
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d",
+            "sha256": "6ad623a205c8a4429b57147ea7688100f69f7285860a911f1a346b06784ecb0a",
             "symbols": [
               "systemClock",
               "newSystemClock"
@@ -3967,7 +3967,7 @@
               "Read",
               "Write"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "c0ad11f98c16469475b204afc84793cfb745abc2ed51d5e0f51efbc8c3b2ea8e"
           }
         ]
       }
@@ -3981,7 +3981,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Maintenance computes one writer timestamp and forwards it with the future buffer to the adapter. The adapter validates the supported domain and dispatches the Go-owned Lua script. Explicit failures remain surfaced and observed instead of adopting fail-open source behavior.",
+        "rationale": "Maintenance computes one writer timestamp and forwards it with the future buffer to the adapter. The adapter validates the supported domain and dispatches the Go-owned Lua script. Explicit failures remain surfaced and observed instead of adopting fail-open source behavior. Go adds InvalidateMany, which derives every watermark key before dispatch, invalidates each distinct entity with one writer timestamp, and uses an optional RemoteBatchInvalidator (RedisAdapter pipelines EVALSHA with one EVAL retry per failed key) or falls back to Remote.Invalidate per key; TypeScript has no batch API, so this is a binding addition with the scalar per-entity transition.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -3990,18 +3990,20 @@
           {
             "path": "go/cache.go",
             "symbols": [
-              "Invalidate"
+              "Invalidate",
+              "InvalidateMany"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "9adb51a8284079765961022c339c87d3573d548543b65213cdf014822f43d722"
           },
           {
             "path": "go/redis_adapter.go",
             "symbols": [
               "Invalidate",
+              "InvalidateMany",
               "InvalidateDecimal",
               "InvalidationScript"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "c0ad11f98c16469475b204afc84793cfb745abc2ed51d5e0f51efbc8c3b2ea8e"
           }
         ]
       }
@@ -4054,7 +4056,7 @@
               "ValidateRedisInvalidationReply",
               "RedisProtocolError"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "c0ad11f98c16469475b204afc84793cfb745abc2ed51d5e0f51efbc8c3b2ea8e"
           }
         ]
       }
@@ -4079,7 +4081,7 @@
               "InvalidationScript",
               "InvalidateDecimal"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "c0ad11f98c16469475b204afc84793cfb745abc2ed51d5e0f51efbc8c3b2ea8e"
           }
         ]
       }
@@ -4241,7 +4243,7 @@
               "Option",
               "Logger"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "6ad623a205c8a4429b57147ea7688100f69f7285860a911f1a346b06784ecb0a"
           },
           {
             "path": "go/metrics.go",
@@ -4296,7 +4298,7 @@
               "Write",
               "InvalidateDecimal"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "c0ad11f98c16469475b204afc84793cfb745abc2ed51d5e0f51efbc8c3b2ea8e"
           }
         ]
       }
@@ -4350,9 +4352,10 @@
             "path": "go/api.go",
             "symbols": [
               "Remote",
+              "RemoteBatchInvalidator",
               "ReadBudget"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "6ad623a205c8a4429b57147ea7688100f69f7285860a911f1a346b06784ecb0a"
           },
           {
             "path": "go/protocol.go",
@@ -4369,7 +4372,7 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "c0ad11f98c16469475b204afc84793cfb745abc2ed51d5e0f51efbc8c3b2ea8e"
           }
         ]
       }
@@ -4401,7 +4404,7 @@
             "symbols": [
               "InvalidationScript"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "c0ad11f98c16469475b204afc84793cfb745abc2ed51d5e0f51efbc8c3b2ea8e"
           }
         ]
       }
@@ -4428,7 +4431,7 @@
               "Codec",
               "ContextCodec"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "6ad623a205c8a4429b57147ea7688100f69f7285860a911f1a346b06784ecb0a"
           },
           {
             "path": "go/codec.go",
@@ -4469,7 +4472,7 @@
               "Write",
               "InvalidateDecimal"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "c0ad11f98c16469475b204afc84793cfb745abc2ed51d5e0f51efbc8c3b2ea8e"
           }
         ]
       }

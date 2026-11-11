@@ -55,7 +55,8 @@ cannot change that static source budget.
 Cache plumbing fails open and source errors preserve identity. Use `errors.Is`
 and `errors.As` for native error handling. `FallbackTimeoutError` reports a
 source deadline; callback panics become `CallbackPanicError`. `Invalidate`
-returns maintenance errors, including `ErrNoRemote` without an adapter.
+and `InvalidateMany` return maintenance errors, including `ErrNoRemote` without
+an adapter.
 
 ## Identity and values
 

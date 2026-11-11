@@ -122,6 +122,10 @@ command with an invalid reply does not trigger a retry. No value write creates
 or extends a watermark. `Invalidate` needs a remote (`ErrNoRemote` otherwise)
 and affects shared remote authority; other processes' local entries and
 already acquired snapshots retain the documented lifetime rules.
+`InvalidateMany` applies the same transition to several entities with one
+timestamp. `RedisAdapter` pipelines it and retries each failed `EVALSHA` with
+`EVAL`; a remote without `InvalidateMany` gets one `Invalidate` per entity.
+The batch can partially complete; retrying all of it is safe.
 
 Source errors retain their identity. A source deadline returns
 `FallbackTimeoutError` and does not cancel raw source work. A read deadline

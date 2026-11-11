@@ -1885,7 +1885,7 @@
           "test": "TestRedisIntegration",
           "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "69098d9e0cef31d38c94320d3bfd5a728cc175fc70a0d9c0c58542a0ac5cba5f"
+          "sha256": "7f205142533e56e1be340211438ea02fc273e8f1e360ba6da820db5cab308ab4"
         },
         {
           "test": "TestRedisAdapterReadsAndBoundaries",
@@ -2032,7 +2032,7 @@
           "test": "TestRedisIntegration",
           "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "69098d9e0cef31d38c94320d3bfd5a728cc175fc70a0d9c0c58542a0ac5cba5f"
+          "sha256": "7f205142533e56e1be340211438ea02fc273e8f1e360ba6da820db5cab308ab4"
         }
       ],
       "adaptation": "Real-server dispatch, Lua semantics, topology and mixed-language data are outside an in-memory conformance driver.",

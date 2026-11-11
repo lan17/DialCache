@@ -270,6 +270,7 @@ func TestRedisIntegration(t *testing.T) {
 			t.Run("invalidation-vectors", func(t *testing.T) { testInvalidationVectors(t, environment) })
 			t.Run("mixed-typescript-go", func(t *testing.T) { testMixedLanguage(t, environment) })
 			t.Run("complete-frame-and-primary-read", func(t *testing.T) { testPrimaryRead(t, environment) })
+			t.Run("batch-invalidation", func(t *testing.T) { testBatchInvalidation(t, environment) })
 		})
 	}
 }
@@ -546,6 +547,88 @@ func testMixedLanguage(t *testing.T, environment redisEnvironment) {
 	results = runTypeScript(t, environment, []map[string]any{{"op": "read", "key": key, "watermark": watermark}})
 	if results[0]["kind"] != "miss" || results[0]["reason"] != "watermark_fenced" {
 		t.Fatal("Go invalidation did not fence TS", results)
+	}
+}
+
+func testBatchInvalidation(t *testing.T, environment redisEnvironment) {
+	ctx := context.Background()
+	cache := MustNew(WithRemote(NewRedisAdapter(environment.client)), WithNamespace("batch"))
+	ids := []string{"e0", "e1", "e2", "e3", "e4", "e5", "e6", "e7", "id with space", "é"}
+	identity := func(id string) Identity {
+		return Identity{Namespace: "batch", KeyType: "entity", ID: id, UseCase: "read", Tracked: true}
+	}
+	read := func(id, value string) string {
+		t.Helper()
+		scope, done := cache.Enable(ctx)
+		defer done()
+		got, err := GetOrLoad(scope, cache, Operation[string]{Identity: identity(id), Policy: Policy{RemoteTTL: time.Minute}}, func(context.Context) (string, error) { return value, nil })
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	primaries := make(map[string]bool)
+	watermarks := make([]string, len(ids))
+	for i, id := range ids {
+		if read(id, "old") != "old" || read(id, "new") != "old" {
+			t.Fatalf("%s was not cached", id)
+		}
+		_, _, watermarks[i], _ = identity(id).Keys()
+		if cluster, ok := environment.client.(*redis.ClusterClient); ok {
+			primary, err := cluster.MasterForKey(ctx, watermarks[i])
+			if err != nil {
+				t.Fatal(err)
+			}
+			primaries[primary.Options().Addr] = true
+		}
+	}
+	if environment.cluster && len(primaries) < 2 {
+		t.Fatalf("batch covers %d cluster primaries; want several", len(primaries))
+	}
+	// An empty script cache makes every pipelined EVALSHA fail, so each key
+	// also exercises the EVAL retry.
+	flush := func(ctx context.Context, client *redis.Client) error { return client.ScriptFlush(ctx).Err() }
+	if cluster, ok := environment.client.(*redis.ClusterClient); ok {
+		if err := cluster.ForEachMaster(ctx, flush); err != nil {
+			t.Fatal(err)
+		}
+	} else if err := flush(ctx, environment.client.(*redis.Client)); err != nil {
+		t.Fatal(err)
+	}
+	batch := []Identity{{KeyType: "entity", ID: ids[0]}}
+	for _, id := range ids {
+		batch = append(batch, identity(id))
+	}
+	before := time.Now().UnixMilli()
+	if err := cache.InvalidateMany(ctx, batch, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	after := time.Now().UnixMilli()
+	var cutoff int64
+	for i, watermark := range watermarks {
+		raw, err := primaryCommands(t, environment, watermark).Get(ctx, watermark).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || value < before+60000 || value > after+60000 || i > 0 && value != cutoff {
+			t.Fatalf("watermark %s = %q, want one cutoff in [%d, %d]", watermark, raw, before+60000, after+60000)
+		}
+		cutoff = value
+	}
+	for _, id := range ids {
+		if got := read(id, "new"); got != "new" {
+			t.Fatalf("%s served %q after batch invalidation", id, got)
+		}
+	}
+	var actions []map[string]any
+	for _, id := range ids {
+		actions = append(actions, map[string]any{"op": "read", "identity": map[string]any{"namespace": "batch", "keyType": "entity", "id": id, "useCase": "read", "trackForInvalidation": true}})
+	}
+	for i, result := range runTypeScript(t, environment, actions) {
+		if result["kind"] != "miss" || result["reason"] != "watermark_fenced" || result["observedWatermarkMs"] != float64(cutoff) {
+			t.Fatalf("TypeScript read of %s after Go batch invalidation: %v", ids[i], result)
+		}
 	}
 }
 

@@ -140,21 +140,66 @@ func ValidateRedisInvalidationReply(reply any) error {
 // replies are errors and are never retried. The monotonic script is idempotent
 // even if the first command executed before its response was lost.
 func (adapter *RedisAdapter) Invalidate(ctx context.Context, key string, invalidatedAtMS, futureMS int64) error {
+	futureArg, invalidatedAtArg, err := invalidationArgs(invalidatedAtMS, futureMS)
+	if err != nil {
+		return err
+	}
+	return adapter.InvalidateDecimal(ctx, key, futureArg, invalidatedAtArg)
+}
+
+// InvalidateMany pipelines Invalidate's dispatch for every key: each EVALSHA
+// failure gets one EVAL retry with identical arguments, and an accepted but
+// invalid reply is an error that is not retried. Every key is attempted; the
+// first failure in key order is returned, and other keys may have advanced.
+func (adapter *RedisAdapter) InvalidateMany(ctx context.Context, keys []string, invalidatedAtMS, futureMS int64) error {
+	futureArg, invalidatedAtArg, err := invalidationArgs(invalidatedAtMS, futureMS)
+	if err != nil {
+		return err
+	}
+	pipe := adapter.client.Pipeline()
+	commands := make([]*redis.Cmd, len(keys))
+	for i, key := range keys {
+		commands[i] = pipe.EvalSha(ctx, invalidationScriptSHA1(), []string{key}, futureArg, invalidatedAtArg)
+	}
+	_, _ = pipe.Exec(ctx)
+	pipe = adapter.client.Pipeline()
+	for i, command := range commands {
+		if command.Err() != nil {
+			commands[i] = pipe.Eval(ctx, InvalidationScript, []string{keys[i]}, futureArg, invalidatedAtArg)
+		}
+	}
+	_, _ = pipe.Exec(ctx)
+	for _, command := range commands {
+		reply, err := command.Result()
+		if err != nil {
+			return err
+		}
+		if err := ValidateRedisInvalidationReply(reply); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func invalidationArgs(invalidatedAtMS, futureMS int64) (futureArg, invalidatedAtArg string, err error) {
 	if futureMS < 0 || futureMS > MaxSupportedDurationMS {
-		return errors.New("invalid future buffer")
+		return "", "", errors.New("invalid future buffer")
 	}
 	if invalidatedAtMS < 0 || uint64(invalidatedAtMS) > MaxSafeInteger || uint64(invalidatedAtMS) > MaxSafeInteger-uint64(futureMS) {
-		return errors.New("invalid invalidation timestamp")
+		return "", "", errors.New("invalid invalidation timestamp")
 	}
-	return adapter.InvalidateDecimal(ctx, key, strconv.FormatInt(futureMS, 10), strconv.FormatInt(invalidatedAtMS, 10))
+	return strconv.FormatInt(futureMS, 10), strconv.FormatInt(invalidatedAtMS, 10), nil
+}
+
+func invalidationScriptSHA1() string {
+	digest := sha1.Sum([]byte(InvalidationScript))
+	return hex.EncodeToString(digest[:])
 }
 
 // InvalidateDecimal exposes the script's raw decimal boundary for out-of-band
 // tooling and conformance replay. Validation inside Lua precedes every mutation.
 func (adapter *RedisAdapter) InvalidateDecimal(ctx context.Context, key, futureMS, invalidatedAtMS string) error {
-	digest := sha1.Sum([]byte(InvalidationScript))
-	hash := hex.EncodeToString(digest[:])
-	reply, err := adapter.client.EvalSha(ctx, hash, []string{key}, futureMS, invalidatedAtMS).Result()
+	reply, err := adapter.client.EvalSha(ctx, invalidationScriptSHA1(), []string{key}, futureMS, invalidatedAtMS).Result()
 	if err != nil {
 		reply, err = adapter.client.Eval(ctx, InvalidationScript, []string{key}, futureMS, invalidatedAtMS).Result()
 	}

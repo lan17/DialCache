@@ -69,6 +69,14 @@ type Remote interface {
 	Invalidate(ctx context.Context, watermarkKey string, invalidatedAtMS, futureBufferMS int64) error
 }
 
+// RemoteBatchInvalidator is an optional Remote extension: InvalidateMany
+// applies Remote.Invalidate's transition to each watermark key with one
+// timestamp, in fewer round trips. Cache.InvalidateMany falls back to
+// Remote.Invalidate per key when a remote does not implement it.
+type RemoteBatchInvalidator interface {
+	InvalidateMany(ctx context.Context, watermarkKeys []string, invalidatedAtMS, futureBufferMS int64) error
+}
+
 type Payload struct {
 	Bytes  []byte
 	Binary bool
