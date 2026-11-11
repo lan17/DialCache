@@ -132,8 +132,10 @@ defer client.Close()
 cache, err := dialcache.New(dialcache.WithRemote(dialcache.NewRedisAdapter(client)))
 ```
 
-A zero field gets the value below, which fits up to about 1,000 reads per second.
-A field you set keeps your value. `ContextTimeoutEnabled` is always set.
+A zero field gets the value below. It is a starting point for up to about 1,000
+reads per second at normal Redis latency; measure pool waits and source
+fallbacks under load before you rely on it. A field you set keeps your value.
+`ContextTimeoutEnabled` is always set.
 
 | Option | Value | go-redis default |
 | --- | --- | --- |
@@ -146,6 +148,11 @@ A field you set keeps your value. `ContextTimeoutEnabled` is always set.
 | `MaxRetries` | -1 (no retries) | 3 |
 | `ConnMaxIdleTime` | 3 min | 30 min |
 | `Protocol` | 2 (RESP3 also works) | 3 |
+
+A read that DialCache stopped waiting for keeps its connection until Redis
+replies or `ReadTimeout` ends. In a slowdown longer than the read budget, the
+pool fills: other commands wait `PoolTimeout`, then reads call the source and
+cache writes fail.
 
 `PoolSize` and `MinIdleConns` apply to each Redis node. `MinIdleConns` opens its
 connections in the background when the client starts; set it to -1 for none.

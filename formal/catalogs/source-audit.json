@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "6c6411263aa2080156bf751ed220c2d935e76d20b7143a770a1196d983e93bc0",
+      "sha256": "f1390cb8a17e1af1b4990db4c2068f36824206bb8b75500ef23732905fdbe85b",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
