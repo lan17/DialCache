@@ -132,6 +132,24 @@ def verify_version_commit(root, version, base, head):
             raise ValueError(f"Release changes the file mode of {path}")
 
 
+def formal_run_passed(runs, sha):
+    """A release needs a passed formal Mutations or Full run on its exact source commit."""
+    titles = ("Formal mutations on main", "Formal full on main")
+    return any(
+        run["head_sha"] == sha and run["conclusion"] == "success" and run["display_title"] in titles
+        for run in runs
+    )
+
+
+def require_formal_run(repository, sha):
+    runs = json.loads(subprocess.check_output([
+        "gh", "api", f"repos/{repository}/actions/workflows/formal-full.yaml/runs?head_sha={sha}&status=success",
+        "--jq", ".workflow_runs",
+    ]))
+    if not formal_run_passed(runs, sha):
+        raise ValueError(f"No passed formal Mutations or Full run on main at {sha}; dispatch formal-full.yaml first")
+
+
 def published_crate_matches(index, version, archive):
     """Accept a retry only when the registry contains this exact packaged crate."""
     validate_version(version)
@@ -171,6 +189,9 @@ def main():
     verify.add_argument("version")
     verify.add_argument("base")
     verify.add_argument("head")
+    formal = commands.add_parser("formal")
+    formal.add_argument("repository")
+    formal.add_argument("sha")
     published = commands.add_parser("published")
     published.add_argument("version")
     published.add_argument("archive", type=Path)
@@ -179,6 +200,8 @@ def main():
         update_versions(args.root, args.version)
     elif args.command == "verify":
         verify_version_commit(args.root, args.version, args.base, args.head)
+    elif args.command == "formal":
+        require_formal_run(args.repository, args.sha)
     else:
         print(f"published={str(check_published(args.version, args.archive)).lower()}")
 

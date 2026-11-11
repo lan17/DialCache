@@ -223,8 +223,8 @@ sequenceDiagram
 Semantic Release computes each version from the Conventional Commit types, such as `feat` and `fix`,
 in the titles of pull requests merged since the last release tag. No one picks a version number by
 hand. The maintainer dispatches the `Release` workflow from the current `main` commit after a Full
-run has passed on it; the workflow rejects any other commit but does not check the run. It
-opens a `release:` pull request. Merging that pull request publishes to npm, crates.io and PyPI,
+run has passed on it; the workflow rejects any other commit, and it refuses to start unless a
+formal Mutations or Full run passed on that commit. It opens a `release:` pull request. Merging that pull request publishes to npm, crates.io and PyPI,
 creates the GitHub release and tags the Go module. The steps are in
 [docs/maintainers.md](docs/maintainers.md#releasing).
 

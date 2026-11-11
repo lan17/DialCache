@@ -21,6 +21,7 @@ jobs:
     # The preparation run can create a branch and PR, but it cannot publish to
     # registries, tag a release, approve the PR, merge it, or bypass branch protection.
     permissions:
+      actions: read
       contents: write
       pull-requests: write
     steps:
@@ -49,6 +50,8 @@ jobs:
           python -m venv .formal-traces/python-release-env
           .formal-traces/python-release-env/bin/python -m pip install 'build>=1.2,<2' 'twine>=7,<8'
       - name: Verify release source
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "Release workflow must be run from main; got $GITHUB_REF" >&2
@@ -61,6 +64,7 @@ jobs:
             echo "Release source $GITHUB_SHA is not current origin/main $remote_main" >&2
             exit 1
           fi
+          python3 scripts/release.py formal "$GITHUB_REPOSITORY" "$GITHUB_SHA"
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - name: Resolve release
@@ -180,6 +184,7 @@ jobs:
     # contents: write pushes the release tag and GitHub release;
     # id-token: write mints the OIDC token for npm trusted publishing.
     permissions:
+      actions: read
       contents: write
       id-token: write
     steps:
@@ -202,6 +207,8 @@ jobs:
           workspaces: rust
       - name: Verify publish source
         id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "Release publish must run from main; got $GITHUB_REF" >&2
@@ -229,6 +236,7 @@ jobs:
           fi
           release_parent="$(git rev-parse "${GITHUB_SHA}^")"
           python3 scripts/release.py verify "$release_version" "$release_parent" "$GITHUB_SHA"
+          python3 scripts/release.py formal "$GITHUB_REPOSITORY" "$release_parent"
           if git rev-parse --verify --quiet "refs/tags/v$release_version" >/dev/null; then
             echo "Release tag v$release_version already exists" >&2
             exit 1

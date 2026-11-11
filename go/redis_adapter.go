@@ -159,7 +159,7 @@ func (adapter *RedisAdapter) InvalidateDecimal(ctx context.Context, key, futureM
 		reply, err = adapter.client.Eval(ctx, InvalidationScript, []string{key}, futureMS, invalidatedAtMS).Result()
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrRemoteUnavailable, err)
 	}
 	return ValidateRedisInvalidationReply(reply)
 }

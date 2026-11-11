@@ -428,5 +428,26 @@ class PublishedCrateTests(unittest.TestCase):
                 release.check_published(NEXT_VERSION, self.archive)
 
 
+class FormalRunTests(unittest.TestCase):
+    SHA = "a" * 40
+
+    def run_for(self, title, conclusion="success", sha=SHA):
+        return {"display_title": title, "conclusion": conclusion, "head_sha": sha}
+
+    def test_accepts_passed_mutations_or_full_run_on_main_at_the_commit(self):
+        for title in ("Formal mutations on main", "Formal full on main"):
+            self.assertTrue(release.formal_run_passed([self.run_for(title)], self.SHA))
+
+    def test_rejects_replay_failed_branch_or_other_commit_runs(self):
+        runs = [
+            self.run_for("Formal replay on main"),
+            self.run_for("Formal mutations on main", conclusion="failure"),
+            self.run_for("Formal mutations on feature"),
+            self.run_for("Formal full on main", sha="b" * 40),
+        ]
+        self.assertFalse(release.formal_run_passed(runs, self.SHA))
+        self.assertFalse(release.formal_run_passed([], self.SHA))
+
+
 if __name__ == "__main__":
     unittest.main()

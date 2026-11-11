@@ -185,6 +185,10 @@ var ErrInvalidOption = errors.New("dialcache: invalid option")
 // ErrValueType reports a shared in-process value of a different Go type.
 var ErrValueType = errors.New("dialcache: cached value has a different type than requested")
 
+// ErrRemoteUnavailable wraps a failed Redis command in RedisAdapter
+// invalidation; the client's error stays wrapped beside it.
+var ErrRemoteUnavailable = errors.New("dialcache: remote unavailable")
+
 type FallbackTimeoutError struct {
 	UseCase string
 	Timeout time.Duration
@@ -193,6 +197,9 @@ type FallbackTimeoutError struct {
 func (e *FallbackTimeoutError) Error() string {
 	return fmt.Sprintf("DialCache fallback timed out for %s after %dms", e.UseCase, e.Timeout.Milliseconds())
 }
+
+// Unwrap lets errors.Is match context.DeadlineExceeded.
+func (e *FallbackTimeoutError) Unwrap() error { return context.DeadlineExceeded }
 
 type RemoteReadTimeoutError struct{ Timeout time.Duration }
 

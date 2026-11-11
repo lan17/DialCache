@@ -107,7 +107,9 @@ Missing Redis configuration and mutation failures reject the returned promise.
 Set `Operation.Identity.Tracked` and call
 `cache.Invalidate(ctx, identity, buffer)` after the source commit. The buffer
 is a `time.Duration` in whole milliseconds. Missing remote configuration returns
-`ErrNoRemote`; handle mutation errors as failed maintenance.
+`ErrNoRemote`. With `RedisAdapter`, a failed Redis command returns an error
+that matches `ErrRemoteUnavailable` with `errors.Is` and wraps the client's
+error; handle mutation errors as failed maintenance.
 
 </LanguageContent>
 

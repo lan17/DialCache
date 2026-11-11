@@ -233,7 +233,8 @@ disables it; omission uses 60 seconds. A deadline rejects with
 
 Set `Operation.SourceTimeout` to a whole-millisecond `time.Duration`. Zero uses
 the 60-second default and `dialcache.NoTimeout` disables it. A source deadline
-returns `FallbackTimeoutError`; use `errors.As` to inspect it.
+returns `FallbackTimeoutError`; use `errors.As` to inspect it. It also matches
+`context.DeadlineExceeded` with `errors.Is`.
 
 </LanguageContent>
 

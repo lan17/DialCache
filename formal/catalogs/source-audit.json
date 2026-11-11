@@ -49,7 +49,7 @@
     },
     {
       "path": "docs/coalescing.md",
-      "sha256": "cc3c776553de55a2c384c747f7804556e3d0196b3fde53a18cd628cec968556e",
+      "sha256": "9ab7c5ddaef5550737f05a8cab69fd84711fe568c5f8c69b750198c833bf49e0",
       "entries": [
         {"title":"Coalescing and liveness","contracts":["C11"]},
         {"title":"Request coalescing","contracts":["C11"]},
@@ -130,7 +130,7 @@
     },
     {
       "path": "docs/invalidation.md",
-      "sha256": "9eb7ac9c831c4616632825d6aa8676555efdd42986134c91206d58248e8d2ad9",
+      "sha256": "6f373830f0b8a6940dda5b2854af566430fe8d46f0984773ea1d2193b2e503e4",
       "entries": [
         {"title":"Targeted invalidation","contracts":["C32"]},
         {"title":"Watermarks: an entity-wide cutoff","contracts":["C32","C33"]},
@@ -217,7 +217,7 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "61eda3022f04eb70fd70ff8d4ea49959914599dc02802c1778e56e9b0c09adcf",
+      "sha256": "024961d825dffb3ce3b767bb2ea40ddefe0931c77faeb6245535c3b9467140c0",
       "entries": [
         {"title":"Maintainer guide","contracts":["B01"]},
         {"title":"Validation","contracts":["B01"]},

@@ -424,8 +424,8 @@ func TestRedisAdapterSurfacesInvalidationRetryError(t *testing.T) {
 		return fmt.Errorf("unexpected mutation command %q", cmd.Name())
 	})
 	err := adapter.Invalidate(context.Background(), "watermark", 1700000000000, 123)
-	if err != terminalError || !errors.Is(err, terminalCause) || errors.Is(err, missingScript) {
-		t.Fatalf("Go adapter changed terminal EVAL error identity/cause: %v", err)
+	if !errors.Is(err, ErrRemoteUnavailable) || !errors.Is(err, terminalError) || !errors.Is(err, terminalCause) || errors.Is(err, missingScript) {
+		t.Fatalf("Go adapter changed terminal EVAL error or cause: %v", err)
 	}
 	if len(calls) != 2 || calls[0][0] != "evalsha" || calls[1][0] != "eval" || calls[1][1] != InvalidationScript || !reflect.DeepEqual(calls[0][2:], calls[1][2:]) {
 		t.Fatalf("fallback did not preserve one logical invalidation: %#v", calls)

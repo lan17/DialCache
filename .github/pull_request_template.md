@@ -36,4 +36,6 @@ Not run: {each required lane not run and why, or "none"}
 
 {Issues filed for deferred work and temporary bridges, or "None."}
 
-{For a breaking change, end with a `BREAKING CHANGE:` paragraph; delete this line otherwise.}
+{For a breaking change, end with a `BREAKING CHANGE:` paragraph; delete this line otherwise. A removed or
+changed exported Go identifier is a breaking change: compare `go/` with the latest `go/vX.Y.Z` tag using
+`go run golang.org/x/exp/cmd/apidiff`.}
