@@ -105,6 +105,16 @@ func TestRedisAdapterReadsAndBoundaries(t *testing.T) {
 			t.Fatalf("reply %#v: %#v %v", test.reply, got, err)
 		}
 	}
+	corrupt := append([]byte{}, raw...)
+	corrupt[9] = 2 // no such payload encoding
+	adapter := hookedRedis(t, func(cmd redis.Cmder) error {
+		cmd.(*redis.StringCmd).SetVal(string(corrupt))
+		return nil
+	})
+	var payload *RedisPayloadError
+	if _, err := adapter.Read(context.Background(), "value", ""); !errors.As(err, &payload) {
+		t.Fatalf("undecodable frame: %v, want *RedisPayloadError", err)
+	}
 	for _, reply := range []any{nil, "", 0, int64(0), float64(1), "1", []byte("1")} {
 		if ValidateRedisInvalidationReply(reply) == nil {
 			t.Fatalf("invalid invalidation reply %T accepted", reply)
@@ -138,5 +148,27 @@ func TestNormalizeReadResultBoundary(t *testing.T) {
 		if (got.Kind == "hit") != test.hit || got.Reason != test.reason || !reflect.DeepEqual(got.ObservedWatermarkMS, test.fence) {
 			t.Fatalf("%#v: %#v", test.raw, got)
 		}
+	}
+}
+
+// A corrupt stored frame is a payload error, so a hot corrupt key does not
+// open the read circuit while Redis answers.
+func TestCircuitBreakerIgnoresUndecodableFrames(t *testing.T) {
+	raw, _ := EncodeFrame(Frame{CreatedAtMS: 2, Payload: []byte("1")})
+	raw[9] = 2
+	reads := 0
+	breaker, err := NewCircuitBreaker(hookedRedis(t, func(cmd redis.Cmder) error {
+		reads++
+		cmd.(*redis.StringCmd).SetVal(string(raw))
+		return nil
+	}), CircuitBreakerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 200 {
+		_, _ = breaker.Read(context.Background(), "value", "")
+	}
+	if reads != 200 {
+		t.Fatalf("Redis reads = %d, want 200: the read circuit opened", reads)
 	}
 }

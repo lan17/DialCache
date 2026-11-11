@@ -84,7 +84,9 @@ func (adapter *RedisAdapter) Read(ctx context.Context, valueKey, watermarkKey st
 	}
 	result := DecodeFrame(value, watermarkKey != "", watermark)
 	if err := result.Error(); err != nil {
-		return ReadResult{}, err
+		// Redis answered; the stored frame is bad, which callers such as the
+		// circuit breaker must not count as a Redis failure.
+		return ReadResult{}, &RedisPayloadError{err.Error()}
 	}
 	return result, nil
 }

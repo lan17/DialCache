@@ -11,7 +11,7 @@
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
     "sourceAuditDispositionsSha256": "c95ce03c30df574246e5943e2d69e084ed809b5d3e2a3d0f0abf5a2123bc8aaa",
-    "featureCoverageSha256": "82c4622cb6bee59bd06859a94596110a7f6ecafc5188536b07c71bad8c98915a",
+    "featureCoverageSha256": "1472a30b054e1d6f70c60d1e5685f98cae857bd4c1923c84cd74d1fe3b281c46",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -3621,7 +3621,7 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "fddd3c219eb761df9fe7102130d477e84b5a56a9e8a638d43b19464eb61a2de6"
           }
         ]
       }
@@ -3967,7 +3967,7 @@
               "Read",
               "Write"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "fddd3c219eb761df9fe7102130d477e84b5a56a9e8a638d43b19464eb61a2de6"
           }
         ]
       }
@@ -4001,7 +4001,7 @@
               "InvalidateDecimal",
               "InvalidationScript"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "fddd3c219eb761df9fe7102130d477e84b5a56a9e8a638d43b19464eb61a2de6"
           }
         ]
       }
@@ -4054,7 +4054,7 @@
               "ValidateRedisInvalidationReply",
               "RedisProtocolError"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "fddd3c219eb761df9fe7102130d477e84b5a56a9e8a638d43b19464eb61a2de6"
           }
         ]
       }
@@ -4079,7 +4079,7 @@
               "InvalidationScript",
               "InvalidateDecimal"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "fddd3c219eb761df9fe7102130d477e84b5a56a9e8a638d43b19464eb61a2de6"
           }
         ]
       }
@@ -4296,7 +4296,7 @@
               "Write",
               "InvalidateDecimal"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "fddd3c219eb761df9fe7102130d477e84b5a56a9e8a638d43b19464eb61a2de6"
           }
         ]
       }
@@ -4369,7 +4369,7 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "fddd3c219eb761df9fe7102130d477e84b5a56a9e8a638d43b19464eb61a2de6"
           }
         ]
       }
@@ -4401,7 +4401,7 @@
             "symbols": [
               "InvalidationScript"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "fddd3c219eb761df9fe7102130d477e84b5a56a9e8a638d43b19464eb61a2de6"
           }
         ]
       }
@@ -4469,7 +4469,7 @@
               "Write",
               "InvalidateDecimal"
             ],
-            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
+            "sha256": "fddd3c219eb761df9fe7102130d477e84b5a56a9e8a638d43b19464eb61a2de6"
           }
         ]
       }

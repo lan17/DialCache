@@ -991,7 +991,7 @@
           "test": "TestRedisAdapterReadsAndBoundaries",
           "path": "go/redis_adapter_test.go",
           "scope": "Tracked native MGET validates pair length and element types; mutation validators reject non-OK and non-integer-one reply domains.",
-          "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
+          "sha256": "c2d4356e59aae01817a8df9fe9ae82c7b992dfdb1c326127e38744cfdf25d1d2"
         }
       ],
       "adaptation": "Redis drivers expose bulk strings and integer replies through different host representations; arbitrary truthiness is not a protocol.",
@@ -1843,7 +1843,7 @@
           "test": "TestRedisAdapterMutationDispatch",
           "path": "go/redis_adapter_test.go",
           "scope": "Native SET uses the supplied complete frame and ceil-PX TTL; invalid TTL never dispatches; EVALSHA rejection retries identical EVAL arguments and an invalid reply does not retry.",
-          "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
+          "sha256": "c2d4356e59aae01817a8df9fe9ae82c7b992dfdb1c326127e38744cfdf25d1d2"
         }
       ],
       "adaptation": "Pure vectors prove bytes and bounds; command-boundary tests prove actual command count and arguments.",
@@ -1891,7 +1891,7 @@
           "test": "TestRedisAdapterReadsAndBoundaries",
           "path": "go/redis_adapter_test.go",
           "scope": "Tracked native MGET validates pair length and element types; mutation validators reject non-OK and non-integer-one reply domains.",
-          "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
+          "sha256": "c2d4356e59aae01817a8df9fe9ae82c7b992dfdb1c326127e38744cfdf25d1d2"
         }
       ],
       "adaptation": "Batch atomicity naming is GLIDE-specific; the MGET command itself is atomic. This is E01 adapter/environment evidence, not a proof from core replay.",
@@ -1939,7 +1939,7 @@
           "test": "TestRedisAdapterMutationDispatch",
           "path": "go/redis_adapter_test.go",
           "scope": "Native SET uses the supplied complete frame and ceil-PX TTL; invalid TTL never dispatches; EVALSHA rejection retries identical EVAL arguments and an invalid reply does not retry.",
-          "sha256": "205e25513e3edfb0ccbe5b477a8a69b19b4f3b235be63e7c22eb7de2eb42585b"
+          "sha256": "c2d4356e59aae01817a8df9fe9ae82c7b992dfdb1c326127e38744cfdf25d1d2"
         },
         {
           "path": "go/feature_boundary_test.go",

@@ -67,11 +67,11 @@ const (
 //
 // A read counts as failed when its context ends before it returns, which the
 // cache does at the read deadline, so a hung Redis opens the read circuit
-// without waiting for the client's own timeout. *RedisPayloadError and
+// without waiting for the client's own timeout. *RedisPayloadError, which
+// RedisAdapter also returns for an undecodable stored frame, and
 // *RedisProtocolError count as successes because Redis answered; every other
-// error counts as a failure, including an undecodable stored frame. A write
-// whose caller context ended is not counted as failed. Invalidate always
-// reaches remote and returns its error unchanged.
+// error counts as a failure. A write whose caller context ended is not counted
+// as failed. Invalidate always reaches remote and returns its error unchanged.
 func NewCircuitBreaker(remote Remote, options CircuitBreakerOptions) (Remote, error) {
 	if remote == nil {
 		return nil, fmt.Errorf("%w: circuit breaker requires a remote", ErrInvalidOption)
