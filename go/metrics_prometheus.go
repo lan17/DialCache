@@ -31,13 +31,13 @@ func PrometheusCollectorSchemas(prefix string) []PrometheusCollectorSchema {
 		{Kind: "staleRecovery", Name: prefix + "dialcache_stale_recovery_counter", Help: "DialCache stale-on-error Redis recovery outcomes.", Labels: []string{"cache_namespace", "use_case", "key_type", "outcome"}},
 		{Kind: "staleRecoveryValueAge", Name: prefix + "dialcache_stale_recovery_value_age_histogram", Help: "Age in seconds of Redis values served by DialCache stale-on-error recovery.", Labels: []string{"cache_namespace", "use_case", "key_type", "outcome"}, Buckets: []float64{1, 5, 15, 60, 300, 900, 3600, 10800, 43200, 86400, 259200, 604800}},
 		{Kind: "compression", Name: prefix + "dialcache_compression_counter", Help: "DialCache Redis payload compression and decompression outcomes.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer", "outcome"}},
-		{Kind: "get", Name: prefix + "dialcache_get_timer", Help: "DialCache cache get latency in seconds.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer"}, Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}},
-		{Kind: "fallback", Name: prefix + "dialcache_fallback_timer", Help: "Time DialCache waited for the fallback function in seconds.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer"}, Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}},
-		{Kind: "serialization", Name: prefix + "dialcache_serialization_timer", Help: "DialCache serialization latency in seconds.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer", "operation"}, Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}},
+		{Kind: "get", Name: prefix + "dialcache_get_timer", Help: "DialCache cache get latency in seconds.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer"}, Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}},
+		{Kind: "fallback", Name: prefix + "dialcache_fallback_timer", Help: "Time DialCache waited for the fallback function in seconds.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer"}, Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}},
+		{Kind: "serialization", Name: prefix + "dialcache_serialization_timer", Help: "DialCache serialization latency in seconds.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer", "operation"}, Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}},
 		{Kind: "size", Name: prefix + "dialcache_size_histogram", Help: "Serialized DialCache value sizes in bytes.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer"}, Buckets: []float64{100, 1000, 10000, 100000, 1000000, 10000000}},
 		{Kind: "storedSize", Name: prefix + "dialcache_stored_size_histogram", Help: "Stored DialCache payload sizes in bytes, after compression and escaping.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer"}, Buckets: []float64{100, 1000, 10000, 100000, 1000000, 10000000}},
 		{Kind: "compressionRatio", Name: prefix + "dialcache_compression_ratio_histogram", Help: "Compressed-to-original DialCache payload size ratio for compressed writes.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer"}, Buckets: []float64{0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1}},
-		{Kind: "compressionDuration", Name: prefix + "dialcache_compression_timer", Help: "DialCache payload compression and decompression latency in seconds.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer", "operation"}, Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}},
+		{Kind: "compressionDuration", Name: prefix + "dialcache_compression_timer", Help: "DialCache payload compression and decompression latency in seconds.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer", "operation"}, Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}},
 	}
 }
 
@@ -87,22 +87,11 @@ func NewPrometheusMetrics(registry *prometheus.Registry, prefix string) (*Promet
 	return NewPrometheusMetricsWithBindings(registry, prefix, nil)
 }
 
-// collectorDescriptions calls Describe and renders each descriptor on the
-// caller's goroutine, so the constructor's recover turns a panicking collector
-// or a nil descriptor into an error.
 func collectorDescriptions(collector prometheus.Collector) []string {
 	ch := make(chan *prometheus.Desc)
-	result := make(chan []*prometheus.Desc, 1)
-	go func() {
-		var descs []*prometheus.Desc
-		for desc := range ch {
-			descs = append(descs, desc)
-		}
-		result <- descs
-	}()
-	func() { defer close(ch); collector.Describe(ch) }()
+	go func() { collector.Describe(ch); close(ch) }()
 	var descriptions []string
-	for _, desc := range <-result {
+	for desc := range ch {
 		descriptions = append(descriptions, desc.String())
 	}
 	return descriptions

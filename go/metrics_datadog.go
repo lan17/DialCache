@@ -4,7 +4,6 @@ import (
 	"errors"
 	"reflect"
 	"regexp"
-	"strings"
 )
 
 // DogStatsDClient leaves transport, buffering, flushing and ownership with the
@@ -36,11 +35,6 @@ var datadogSuffixes = map[string]string{
 var counterKinds = map[string]bool{"request": true, "miss": true, "disabled": true, "error": true, "invalidation": true, "coalesced": true, "shadowValidation": true, "shadowMismatchLogging": true, "staleRecovery": true, "compression": true}
 var datadogNamespace = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$`)
 
-// A caller-supplied label value holding a DogStatsD delimiter would add a tag
-// or corrupt the packet. These are the characters hot-shots, the usual
-// TypeScript client, replaces in tag values.
-var datadogTagValue = strings.NewReplacer("|", "_", "@", "_", ",", "_", "#", "_", "\n", "_", "\r", "_")
-
 func NewDatadogMetrics(options DatadogMetricsOptions) (*DatadogMetrics, error) {
 	if options.Client == nil || (reflect.ValueOf(options.Client).Kind() == reflect.Pointer && reflect.ValueOf(options.Client).IsNil()) {
 		return nil, errors.New("Datadog client is required")
@@ -71,9 +65,6 @@ func (adapter *DatadogMetrics) ObserveEvent(event Event) error {
 		return nil
 	}
 	labels := metricLabels(event, kind)
-	for name, value := range labels {
-		labels[name] = datadogTagValue.Replace(value)
-	}
 	if counterKinds[kind] {
 		return adapter.client.Increment(adapter.names[kind], 1, labels)
 	}

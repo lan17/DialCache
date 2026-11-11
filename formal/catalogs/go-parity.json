@@ -10,8 +10,8 @@
   "inputs": {
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
-    "sourceAuditDispositionsSha256": "39d666b39969d54782a4182eb21e4138cd93e2ec90bd0e999136a299860f3709",
-    "featureCoverageSha256": "af6f710a72e9f4404cd8e0ac7be9c8c2e10bc0760d9f2cb56b16839c5a7fc3df",
+    "sourceAuditDispositionsSha256": "c95ce03c30df574246e5943e2d69e084ed809b5d3e2a3d0f0abf5a2123bc8aaa",
+    "featureCoverageSha256": "05a3c11f7dedf7adf21edb89e449c7fd288666a613f43ee572e2f2b777ef28e4",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -3483,7 +3483,7 @@
               "NewDatadogMetrics",
               "ObserveEvent"
             ],
-            "sha256": "aa36fdac7d776cf35d11890490c0c98bf7f67112c7f8b599b22a098d72681b35"
+            "sha256": "d398ab0e2690ae6d6614d4f50d8de7d324ce85717bd2fba1158afa30aac440bb"
           },
           {
             "path": "go/metrics.go",
@@ -4303,7 +4303,7 @@
     },
     {
       "path": "typescript/src/prometheus.ts",
-      "sha256": "d3dc382c73965f4974fa98480d83e9920e8be329cb622934b7b1f0dd3ad57c58",
+      "sha256": "b0f0d19fd359a45debf11ecd02af016cae13476c5e5b32bf5c63414870247c63",
       "candidateGoFiles": [
         "go/metrics_prometheus.go"
       ],
@@ -4325,7 +4325,7 @@
               "NewPrometheusMetricsWithBindings",
               "ObserveEvent"
             ],
-            "sha256": "f493e64c153305d568c5bcb79afdb1a0e5f79467c45c56b6e1937f73df02d27c"
+            "sha256": "1027779b913bb890cd06ffe314d80840ce67c522bc12dad9b6e12b4224a9d340"
           }
         ]
       }

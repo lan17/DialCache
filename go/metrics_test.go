@@ -192,7 +192,7 @@ func TestPrometheusReuseAndConflictIsolation(t *testing.T) {
 		case "test_dialcache_get_timer":
 			sawHistogram = true
 			hist := family.Metric[0].Histogram
-			if hist.GetSampleCount() != 1 || hist.GetSampleSum() != 0.25 || len(hist.Bucket) != 14 {
+			if hist.GetSampleCount() != 1 || hist.GetSampleSum() != 0.25 || len(hist.Bucket) != 12 {
 				t.Fatalf("wrong histogram: %v", hist)
 			}
 		}
