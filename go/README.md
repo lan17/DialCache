@@ -10,20 +10,11 @@ policy, request and process coalescing, tracked invalidation, source/read
 deadlines, stale recovery, dark and served-hit shadow validation, compression,
 and failure-isolated observability.
 
-The [Quint models](../formal/README.md) are the behavioral source of truth. All three
-implementations replay the same sampled histories and named public-action
-regressions, plus fixed scenarios and Quint-derived protocol vectors. The current
-inventory comes from [execution.json](../formal/catalogs/execution.json); real integration
-checks run invalidation cases on Redis, Valkey and Redis Cluster and exercise
-bidirectional TypeScript/Go payload and invalidation interoperability.
-These are finite checks of the documented contract, not proof of every
-possible input or schedule. See [parity acceptance](../formal/guides/GO-PARITY.md)
-and the [feature and corner-case map](../formal/guides/FEATURE-COVERAGE.md).
-
 ## Use
 
-The module requires Go 1.25 or later; CI pins the toolchain. Applications own
+The module requires Go 1.25 or later. Applications own
 their Redis client and its connection, retry and resource budgets.
+The library has no Node.js dependency.
 
 Releases tag the commit that publishes npm version `X.Y.Z` as `go/vX.Y.Z`, so
 one version number names one behavior contract in both languages; npm versions
@@ -61,8 +52,8 @@ value, err := displayName(ctx, "42")
 ```
 
 One `Cache` serves every value type: `Cached[T, Arg]` and `GetOrLoad[T]` are
-generic functions over the same instance, so one local capacity, coalescing
-table and shadow budget cover the whole process. Caching is off until `Enable`
+generic functions over the same instance. Its local capacity and shadow budget
+are shared across those types. Caching is off until `Enable`
 returns a request-scoped context; calls with any other context pass straight
 through to their source without key selection, policy resolution, coalescing
 or a source deadline. `done` closes the scope, ending its request memo and
@@ -97,8 +88,9 @@ fields. `WithPolicyProvider` resolves a sparse overlay once per enabled
 invocation: return a typed `*PolicyOverlay`, a `JSONPolicy` map in the shared
 JSON shape, or `RawPolicy` around an arbitrary decoded reply. A nil overlay
 inherits; explicit null leaves keep their invalid-value meaning. Malformed
-invocation policy bypasses caching, while invalid layer, recovery and shadow
-leaves have the narrower consequences defined in Quint.
+invocation policy bypasses caching. An invalid layer TTL or ramp leaf disables
+only that layer; an invalid recovery age disables stale recovery, and an invalid
+shadow ramp disables shadow validation.
 
 `New` takes options and returns an error wrapping `ErrInvalidOption` for an
 invalid one; `MustNew` panics instead. Defaults are namespace `urn`
@@ -141,8 +133,7 @@ are returned. Applications still own cancellation of the source context.
 fractional milliseconds through `PreciseClock.ElapsedTime`. Custom clocks can
 implement that optional interface; existing `ElapsedMS`-only clocks retain their
 supplied integer resolution. Source/read/shadow deadlines compare precise
-elapsed durations, and millisecond timers round remaining delays upward. A
-timer callback rechecks elapsed time before declaring a timeout. Local expiry
+elapsed durations, and millisecond timers round remaining delays upward. Local expiry
 matches TypeScript's whole-millisecond monotonic clock observations at insertion
 and lookup; it does not use the fractional deadline-clock resolution. A custom clock should
 implement `TimerClock` for corresponding deadline delivery; `DeferredExecutor` provides
@@ -174,7 +165,7 @@ in-memory values as immutable.
 
 Compression defaults to a 4,096-byte threshold and zstd level 3;
 `WithCompression` tunes both. `WithoutCompression` disables compressed writes;
-reads still accept compressed entries, and raw marker collisions are escaped.
+reads still accept compressed entries.
 The wire contract requires interoperable decompression, not identical
 compressed bytes.
 
@@ -197,62 +188,9 @@ their actual instances and construction schemas through
 Go's native registry cannot expose empty histogram buckets; see the precise
 [binding contract](../formal/guides/GO-PARITY.md#current-configuration-and-observability-bindings).
 
-## Validation and reproducing a trace
+## Development
 
-Use the repository [Make targets](../Makefile) from its root. CI pins Go
-1.27.1, Node 24 and pnpm 10.33.0. Full generation and exploration additionally
-need Quint 0.32.0 with Rust evaluator 0.6.0, but no Java. The separate
-`make model-check` target needs Java 21 and `tar` for checksummed standalone
-Apalache; integration needs Docker. Go conformance tests use the shared Node
-replay coordinator for command mappings and assertions. The cache library itself
-has no Node dependency.
-Follow the
-[shared prerequisite guide](../formal/guides/VALIDATION.md#prerequisites)
-once, then:
-
-```sh
-make check-go      # Native checks, committed cases/smoke and race detection.
-make formal        # Quint model/corpus checks, then prepared TS, Go and Rust replay.
-make model-check   # Separate finite symbolic checks.
-make mutations-go  # Go fault catalog over the generated corpus and witness evidence.
-make integration-go
-```
-
-`make check` runs all three languages' fast checks.
-`make ci NODE22_BIN=/path/to/node22/bin/node` runs all local lanes in order,
-including symbolic checks and the exact Node 22.15.0 packed-package floor. After
-`make formal-generate`, `make formal-go` prepares Go with the shared witness
-evidence bound as an input and replays the corpus; it does not depend on the
-TypeScript replay. The Go parity and mutation lanes depend only on the generated
-corpus and shared witness evidence and run in parallel with the TypeScript lanes
-in hosted CI, whose aggregate requires all of them.
-Reports and traces are kept in `.formal-traces/`. Source, corpus or witness
-changes invalidate completion reports; mutation reports record the exact
-source, corpus and witness fingerprints they measured.
-
-The same targets run in CI. PRs retain native/race/smoke/audit and real-server
-integration checks; model/generator changes trigger fixture recomputation.
-The complete formal, symbolic and mutation workflow runs manually and weekly. A smoke
-pass does not satisfy the full parity inventory. Behavior/model changes
-still need full validation before merge, as do releases and new ports.
-
-Without overrides, Go runs fixed scenarios, protocol vectors and the registered
-committed smoke traces. `_TRACE_FILE` overrides reproduce one trace instead
-of a directory. Full directory replay rejects empty/incompatible corpora and
-requires exact witness/corpus/definition hashes. The shared coordinator supplies
-external commands and checks observations; all cache behavior executes in Go.
-Native source/adapter gates and clocks control the run. Expected states stay in
-the coordinator and never enter the native driver. The witness report Go
-consumes certifies reached boundaries only. It is produced by the shared
-`node formal/tools/witnesses.mjs evaluate` command over the same corpus and binds only
-Quint models, the manifest/registry files and the `formal/replay` closure, so no
-TypeScript test run is a prerequisite for Go's completion. Negative harness
-tests challenge those boundaries.
-
-The Go implementation was developed from the models and contracts with
-TypeScript source review; it is not a clean-room implementation. Race detection
-and sampled histories provide evidence for exercised executions, not exhaustive
-concurrency verification or an external Redis durability guarantee.
-
-For complete artifact regeneration, driver requirements and the reusable
-language-neutral completion report, see [PORTING.md](../formal/guides/PORTING.md).
+Run the checks from the repository root: `make check-go` runs the native tests with race detection,
+`make formal-go` replays the generated corpus, and `make integration-go`
+runs the real-server checks. [Validation and evidence](../formal/guides/VALIDATION.md) lists the
+prerequisites and the other lanes.

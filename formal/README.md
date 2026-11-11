@@ -228,6 +228,11 @@ current, [GO-PARITY.md](./guides/GO-PARITY.md),
 
 ## What is and is not claimed
 
+The Go implementation was developed from the models and contracts with
+TypeScript source review; it is not a clean-room implementation. Race detection
+and sampled histories cover exercised executions, not exhaustive concurrency
+verification or an external Redis durability guarantee.
+
 The suite combines model properties, generated histories, independently computed
 wire vectors, fixed examples and native integration tests. The fixed corpora,
 [protocol-vectors.json](./catalogs/protocol-vectors.json),
@@ -308,6 +313,8 @@ to read the reports.
 | [generated/](./generated/) | Smoke traces, the fixtures lock, generated vectors and the generated read views ([PROFILES.md](./generated/PROFILES.md), the [CHALLENGES.md](./generated/CHALLENGES.md) and [MUTANTS.md](./generated/MUTANTS.md) indexes); regenerated, never edited | [generated/README.md](./generated/README.md) |
 
 ## Run it
+
+Run these commands from the repository root.
 
 ```sh
 make help          # Targets and prerequisites.

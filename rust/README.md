@@ -10,18 +10,11 @@ deterministic rollout, sparse runtime policy, request and process coalescing,
 tracked invalidation, source and read deadlines, stale recovery, dark and
 served-hit shadow validation, compression, and failure-isolated observability.
 
-The [Quint models](https://github.com/lan17/DialCache/blob/main/formal/README.md) are the behavioral source of truth.
-The Rust conformance harness replays the same sampled histories and named
-public-action regressions as the other ports, plus the fixed scenarios and
-Quint-derived protocol vectors, through the shared Node replay coordinator.
-These are finite checks of the documented contract, not proof of every
-possible input or schedule.
-
 ## Use
 
 The core crate requires Rust 1.85 or later; the `redis` feature requires Rust
-1.88 with the currently locked Redis dependency. CI pins 1.98.1 through
-`rust/rust-toolchain.toml`, which rustup honors when cargo runs inside `rust/`.
+1.88 with the currently locked Redis dependency. The crate has no Node.js
+dependency.
 Applications own their Redis connection and its timeout, retry and
 resource budgets. The default runtime is the tokio runtime that is current
 while the cache is built.
@@ -127,10 +120,9 @@ sharing entries.
 `Policy::from_json` accepts the TypeScript JSON-shaped configuration.
 `Policy::enabled(ttl)` and `Policy::disabled()` are the two static helpers.
 A `policy_provider` returns a sparse `RuntimePolicy` overlay once per enabled
-invocation; `Ok(None)` inherits, present leaves replace operation leaves, and
-invalid leaves have the narrower consequences defined in Quint (an invalid TTL
-or ramp disables only that layer; an invalid flag or read deadline bypasses
-caching for the call).
+invocation; `Ok(None)` inherits and present leaves replace operation leaves.
+An invalid TTL or ramp disables only that layer; an invalid flag or read
+deadline bypasses caching for the call.
 
 Convert a typed policy with `RuntimePolicy::from(policy)` or `policy.into()`.
 Omitted leaves remain absent, including `request_local` and `coalesce`, so a
@@ -173,14 +165,10 @@ selects a runtime explicitly. The runtime needs its time driver.
 time sources. The `test-util` feature ships `testing::TestExecutor`, a
 deterministic single-threaded executor with a virtual clock that runs the
 cache's detached work to quiescence on demand and delivers timers only when a
-test advances time; the conformance harness is built on it, and its
-local-clock replay builds `SystemClock` over the virtual clock.
+test advances time.
 
-Detached work is registered RAII-style: if a runtime drops a leader task
-before it settles (the cache outlived a shut-down runtime), its flight is
-unregistered and its followers receive an error instead of waiting forever.
-Local storage hands removed entries back to the cache so a value's destructor
-never runs while a cache lock is held.
+If the runtime shuts down before shared work finishes, waiting callers
+receive an error rather than waiting forever.
 
 ## Values, codecs and observability
 
@@ -190,10 +178,9 @@ sentinel decodes as JSON `null`, so `Option<T>` destinations read it as
 `None`. Compression defaults to a 4,096-byte threshold and zstd level 3;
 `disable_compression` stores payloads raw while reads still accept compressed
 entries. The wire contract requires interoperable decompression, not identical
-compressed bytes. The async engine dispatches payload compression at 64 KiB or
-larger (and compression at levels 10–22 once the configured threshold is met)
-and every zstd decompression through `Runtime::spawn_blocking`. Small raw
-payloads remain inline; synchronous protocol helpers remain synchronous.
+compressed bytes. Custom runtimes must support `Runtime::spawn_blocking`
+for compression and decompression. Synchronous protocol helpers remain
+synchronous.
 
 The default CPU executor is shared across cache instances: two worker threads
 and two queued jobs. Admission never waits for queue space. Saturation or worker
@@ -261,52 +248,8 @@ or distribution and a namespace.
 
 `RedisAdapter` (feature `redis`) implements `Remote` over the `redis` crate
 for `ConnectionManager`, `MultiplexedConnection` and cluster connections,
-routing tracked reads to slot primaries and sharing the invalidation script
-and frame codec with the other ports. The `redis_integration` test replays
-every invalidation vector against real Redis, Valkey and Cluster servers,
-and reads/writes shared entries with the production TypeScript adapter in both
-directions. Both ports construct keys independently, including numeric rounding
-boundaries; the payload tests cover JSON, binary escaping, compression and
-invalidation by either language. The tests are `#[ignore]`d, and
-`make integration-rust` runs them where Docker is available.
-
-## Validation and reproducing a trace
-
-Use the repository [Make targets](https://github.com/lan17/DialCache/blob/main/Makefile) from its root. CI pins Rust
-1.98.1, Go 1.27.1, Node 24 and pnpm 10.33.0. Rust conformance tests use the
-shared Node replay coordinator for command mappings and assertions; the crate
-itself has no Node dependency.
-
-```sh
-make check-rust        # fmt, clippy, unit tests, protocol vectors, fixed scenarios and committed smoke histories
-make integration-rust  # Real Redis, Valkey and Cluster servers through Docker, plus every invalidation vector
-make formal            # Quint model checks, full corpus, then TypeScript, Go and Rust replay
-make formal-rust       # Complete prepared Rust replay of the generated corpus
-make mutations-rust    # Measure the Rust fault catalog (formal/catalogs/rust-mutations.json) against the replay
-```
-
-`make mutations-rust` applies each catalogued single-site fault to an isolated
-copy of the crate and requires the conformance harness to detect it
-(`DIALCACHE_RUST_SUITE=generated` for the Quint-generated evidence,
-`DIALCACHE_RUST_SUITE=fixed` for the fixed scenarios); see
-[SEMANTIC-COVERAGE.md](https://github.com/lan17/DialCache/blob/main/formal/guides/SEMANTIC-COVERAGE.md).
-
-Without overrides, `cargo test --all-features --test conformance` replays the
-committed smoke histories, every fixed scenario and every protocol vector.
-The same `DIALCACHE_*_TRACE_DIR` / `_TRACE_FILE` selectors as Go replay a
-directory or one history; `DIALCACHE_WITNESS_EVIDENCE_DIR` binds the shared
-witness evidence and `DIALCACHE_RUST_REPORT` names the JSONL assertion report
-the completion checker consumes. Reports and traces are kept in
-`.formal-traces/`.
-
-```sh
-DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/regressions/shadow/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest.itf.json" \
-  cargo test --manifest-path rust/Cargo.toml --all-features --test conformance
-```
-
-`tests/settlement_control.rs` is the no-settle control required of every
-port: a driver that reports observations before the settlement drain fails
-every behavior-driver-backed smoke history.
+routing tracked reads to slot primaries. Redis entries and invalidation are
+interoperable with the other ports.
 
 ## Adaptations
 
@@ -319,9 +262,10 @@ every behavior-driver-backed smoke history.
   than a clock fault.
 - Prometheus collectors are shared by cloning the observer rather than by
   registering the same names twice.
-- The behavior driver checks source/write causality after every command.
-  Its test runtime carries driver-owned invocation identities across detached
-  tasks, independently attributing each write to its actual source callback.
-- The core replay, the exporters and the Redis adapter follow their Go
-  counterparts; real-server integration is a separate lane, as in the other
-  ports, and not part of the completion claim (see `formal/catalogs/profiles.json`).
+
+## Development
+
+Run the checks from the repository root: `make check-rust` runs formatting, clippy and the native tests,
+`make formal-rust` replays the generated corpus, and `make integration-rust`
+runs the real-server checks. [Validation and evidence](https://github.com/lan17/DialCache/blob/main/formal/guides/VALIDATION.md) lists the
+prerequisites and the other lanes.

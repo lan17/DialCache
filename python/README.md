@@ -20,6 +20,7 @@ python3 -m pip install './python[redis]'
 For local-only caching, omit the `redis` extra. Zstandard is included for the
 portable Redis payload format. The application owns the asyncio event loop and
 any Redis client connections.
+The library has no Node.js runtime dependency.
 
 ## A cached function
 
@@ -112,7 +113,7 @@ cache = DialCache(policy_provider=policy_provider)
 Runtime replies are sparse: an omitted field inherits the operation default.
 A whole reply of `None` inherits the complete operation policy. An explicit
 `None` leaf is malformed and cannot silently inherit a valid setting. Python
-snake_case names and the shared corpus's camelCase mapping names are accepted.
+snake_case names and the shared camelCase mapping names are accepted.
 Policy objects snapshot their input maps so later mutation cannot alter an
 already admitted invocation.
 
@@ -215,8 +216,6 @@ The Python API takes inspiration from [Galileo gcache](https://github.com/rungal
 decorated functions, argument-based identity, explicit context managers, and
 pluggable serializers. DialCache follows its own portable
 specification for behavior and wire compatibility.
-The [API design notes](https://github.com/lan17/DialCache/blob/main/python/API-DESIGN.md) record the source-reviewed gcache revision
-and the native API choices made for this port.
 
 This binding exposes awaitable operations. It does not introduce a global
 singleton, implicitly run synchronous I/O in a thread pool, serialize with
@@ -225,21 +224,9 @@ randomly. Direct `put`, `delete`, and `flush` cache APIs from gcache are outside
 DialCache's portable contract; writes come from successful source loads and
 entity-level invalidation is explicit.
 
-## Development and conformance
+## Development
 
-From the repository root:
-
-```sh
-python3 -m venv python/.venv
-python/.venv/bin/python -m pip install -e './python[test,redis]'
-python/.venv/bin/python -m pytest python/tests
-```
-
-The native tests cover Python API behavior, policy validation, scope lifetime,
-local expiry, cancellation, and wire boundaries. Shared replay runs the real
-Python API through the repository's Node coordinator. Its inputs and expected
-observations come from the same Quint-generated histories used by the other
-ports; Node is a development dependency, not a runtime dependency of the
-Python library. See [the porting guide](https://github.com/lan17/DialCache/blob/main/formal/guides/PORTING.md) for the completion
-and settlement requirements and [the feature map](https://github.com/lan17/DialCache/blob/main/formal/guides/FEATURE-COVERAGE.md)
-for portable behavior versus native adapter obligations.
+Run the checks from the repository root: `make check-python` runs the native tests,
+`make formal-python` replays the generated corpus, and `make integration-python`
+runs the real-server checks. [Validation and evidence](https://github.com/lan17/DialCache/blob/main/formal/guides/VALIDATION.md) lists the
+prerequisites and the other lanes.

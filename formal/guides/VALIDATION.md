@@ -41,6 +41,30 @@ made, are in [HISTORY.md](./HISTORY.md).
 
 ## Choosing a run
 
+For a single port, `make check-go` includes race detection, fixed scenarios,
+protocol vectors and committed smoke histories. `make check-rust` includes
+formatting, clippy and the same categories of native replay. `make check-python`
+runs the native tests (API behavior, policy validation, scope lifetime, local
+expiry, cancellation and wire boundaries), the shared wire vectors, fixed
+scenarios, committed histories and the settlement control. Set up its
+environment from the repository root:
+
+```sh
+python3 -m venv python/.venv
+python/.venv/bin/python -m pip install -e './python[test,redis]'
+python/.venv/bin/python -m pytest python/tests
+```
+
+`make integration-go`, `make integration-rust` and `make integration-python` run
+real Redis, Valkey and Cluster checks through Docker, including every
+invalidation vector; the Go and Rust lanes also check bidirectional TypeScript
+interoperability. Rust's `redis_integration` tests are ignored by default; the
+integration target runs them. The interoperability checks cover independently
+constructed keys, numeric rounding, JSON, binary escaping, compression and
+invalidation by either language. `make integration-wire` is the separate
+four-language client suite; it needs the pinned Go and Rust toolchains as well.
+Integration is separate from portable replay completion.
+
 | Task | Command | Evidence |
 | --- | --- | --- |
 | Routine implementation checks | `make check` | Native tests, coverage, package, docs and source audits |
@@ -148,6 +172,23 @@ and environmental assumptions are defined once in
 
 ## Reproducing one history
 
+Without trace overrides, Go's conformance tests and Rust's
+`cargo test --all-features --test conformance` (from `rust/`) run fixed
+scenarios, protocol vectors and committed smoke histories. Both accept
+`DIALCACHE_*_TRACE_DIR` for directory replay and `_TRACE_FILE` for a single
+history. Full replay rejects empty or incompatible corpora and requires matching
+witness, corpus and definition hashes. `DIALCACHE_WITNESS_EVIDENCE_DIR` selects
+the shared witness input; `DIALCACHE_RUST_REPORT` names Rust's JSONL assertion
+report.
+
+Rust's conformance harness uses `testing::TestExecutor`; local-clock replay
+builds `SystemClock` over its virtual clock. Its driver checks source/write
+causality after every command, carrying invocation identities across detached
+tasks to attribute writes independently. `rust/tests/settlement_control.rs`
+checks that reporting before the settlement drain fails every
+behavior-driver-backed smoke history. Go's negative harness tests likewise
+challenge the replay trust boundary.
+
 Replay one failing feature history in TypeScript or Go:
 
 ```sh
@@ -168,6 +209,10 @@ history replayed in TypeScript, Go and Rust, including Rust's feature-history
 selectors.
 
 ## Mutation evidence
+
+`make mutations-rust` applies each single-site fault to an isolated crate copy.
+`DIALCACHE_RUST_SUITE=generated` selects Quint-generated evidence;
+`DIALCACHE_RUST_SUITE=fixed` selects fixed scenarios.
 
 Each TypeScript or Go mutation report includes a `boundary` entry for every mapped
 challenge. A separate coordinator replay continues after observation mismatches

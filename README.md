@@ -10,8 +10,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
 Read the [shared behavior guides](https://lan17.github.io/DialCache/) with a
-language selector for TypeScript, Go, Rust and Python. Native examples in those guides
-are imported from source files that CI executes.
+language selector and native examples for TypeScript, Go, Rust and Python.
 
 **TypeScript is the reference implementation. Go, Rust, and Python are experimental.**
 The [Python asyncio guide](python/README.md) covers its native decorator API,
@@ -42,9 +41,8 @@ behavioral contracts and documentation.
 | Rust | [`rust/`](rust/) — experimental | [Rust guide](rust/README.md) · [crates.io](https://crates.io/crates/dialcache) |
 | Python | [`python/`](python/) — experimental | [Python guide](python/README.md) · [PyPI](https://pypi.org/project/dialcache/) |
 
-Shared contracts and portable test histories live in [`formal/`](formal/).
-Run repository validation from the root; see the
-[maintainer guide](https://lan17.github.io/DialCache/maintainers.html).
+One [Quint specification](formal/README.md) defines the behavior, and every
+implementation is checked against the same histories generated from it.
 
 ## Install TypeScript
 
@@ -158,12 +156,6 @@ for sampling and comparison behavior.
 | Shared execution and deadlines | [Coalescing and liveness](https://lan17.github.io/DialCache/coalescing.html) |
 | Methods, options, and exports | [API reference](https://lan17.github.io/DialCache/api.html) |
 | Native implementations and shared behavior contracts | [TypeScript guide](typescript/README.md) · [Go guide](go/README.md) · [Rust guide](rust/README.md) · [Python guide](python/README.md) · [Quint specification](formal/README.md) · [Worked walkthrough](formal/guides/WALKTHROUGH.md) |
-
-The Go, Rust, and Python ports and the TypeScript library replay the same
-Quint-generated histories. Whether those histories reach every required boundary is decided by
-one language-neutral evaluator, `node formal/tools/witnesses.mjs evaluate`, that any
-port runs over the same corpus; no port depends on another port's test suite
-for its completion evidence.
 
 The [documentation index](https://lan17.github.io/DialCache/) also links to client
 setup, observability, upgrades, and the maintainer guide. Everything is

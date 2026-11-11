@@ -1,10 +1,9 @@
 # DialCache
 
 Read the [shared behavior guides](https://lan17.github.io/DialCache/) with a
-language selector for TypeScript, Go and Rust. Native examples in those guides
-are imported from source files that CI executes.
+language selector and native examples for TypeScript, Go, Rust and Python.
 
-**TypeScript is the reference implementation. Go and Rust are experimental.**
+**TypeScript is the reference implementation. Go, Rust, and Python are experimental.**
 
 [![npm version](https://img.shields.io/npm/v/dialcache.svg)](https://www.npmjs.com/package/dialcache)
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
@@ -140,14 +139,15 @@ for sampling and comparison behavior.
 | Methods, options, and exports | [API reference](https://lan17.github.io/DialCache/api.html) |
 | Go and Rust implementations and shared behavior contracts | [Go guide](https://github.com/lan17/DialCache/blob/main/go/README.md) · [Rust guide](https://github.com/lan17/DialCache/blob/main/rust/README.md) · [Quint specification](https://github.com/lan17/DialCache/blob/main/formal/README.md) · [Worked walkthrough](https://github.com/lan17/DialCache/blob/main/formal/guides/WALKTHROUGH.md) |
 
-The Go port, the Rust port and the TypeScript library replay the same
-Quint-generated histories. Whether those histories reach every required boundary is decided by
-one language-neutral evaluator, `node formal/tools/witnesses.mjs evaluate`, that any
-port runs over the same corpus; no port depends on another port's test suite
-for its completion evidence.
-
 The [documentation index](https://lan17.github.io/DialCache/) also links to client
 setup, observability, upgrades, and the maintainer guide. Everything is
 [readable as Markdown on GitHub](https://github.com/lan17/DialCache/tree/main/docs).
 
 MIT licensed. See [LICENSE](https://github.com/lan17/DialCache/blob/main/LICENSE).
+
+## Development
+
+Run the checks from the repository root: `make check-ts` runs the unit, build and package checks,
+`make formal-ts` replays the generated corpus, and `make integration-ts`
+runs the real-server checks. [Validation and evidence](https://github.com/lan17/DialCache/blob/main/formal/guides/VALIDATION.md) lists the
+prerequisites and the other lanes.
