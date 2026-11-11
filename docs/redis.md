@@ -123,14 +123,9 @@ go get github.com/lan17/DialCache/go@latest
 Create a `redis.UniversalClient` with `dialcache.NewRedisClient`, which takes
 standard `redis.UniversalOptions` and fills zero budget fields, or build one
 yourself. Then pass `dialcache.NewRedisAdapter(client)` to `dialcache.WithRemote`.
-For a direct
-`*redis.ClusterClient`, a tracked read wraps its `MGET` in `MULTI` and `EXEC`,
-still in one round trip. go-redis sends that transaction to the slot primary even
-when replica reads are enabled, follows `MOVED` and `ASK` for it, and runs the
-cluster client's hooks. Allow `MULTI` and `EXEC` in Redis ACLs and proxies; when
-they are rejected, tracked reads fail open to the source. Standalone and Sentinel
-`*redis.Client` handles must already target
-the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false. Reading a replica
+For a direct `*redis.ClusterClient`, tracked reads select the primary even when
+replica reads are enabled. Standalone and Sentinel `*redis.Client` handles must
+already target the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false. Reading a replica
 can hide an invalidation watermark. `NewRedisClient` rejects Sentinel `ReadOnly`;
 the adapter cannot see that option on a client built elsewhere. Set
 connection, read/write and retry budgets on the native client
@@ -588,7 +583,7 @@ their own compatibility checks. See [Upgrading](upgrading.md).
 | Untracked | `GET valueKey` | Decode one frame; ordinary client read routing applies |
 | Tracked | `MGET valueKey watermarkKey` | Decode one authoritative value/watermark snapshot from the primary |
 
-Each semantic read sends one `GET` or `MGET` in one round trip. The payload
+Each semantic read is one top-level command and one round trip. The payload
 travels to the application before frame validation, watermark fencing, age checks, and
 deserialization. An invalidated large value therefore still consumes transfer
 bandwidth until it expires or is replaced.
@@ -677,12 +672,10 @@ performed by an application or client.
 The integration suite covers Redis 6.2, Valkey 8, and Redis Cluster. The bundled
 operations require `GET`, `MGET`, and `SET`, plus `EVALSHA` and `EVAL` for
 invalidation. If commands called inside scripts are checked separately, allow
-`GET`, `SET`, and `PTTL` for the invalidation script. A port that needs more
-commands for Cluster routing lists them in its note under
-[Install a client](#install-a-client).
+`GET`, `SET`, and `PTTL` for the invalidation script.
 
-DialCache does not issue `TIME`, `WATCH`, `UNLINK`, or `SCRIPT LOAD`. Tracked
-invalidation also requires the
+DialCache does not issue `TIME`, `MULTI`, `EXEC`, `WATCH`, `UNLINK`, or
+`SCRIPT LOAD`. Tracked invalidation also requires the
 [clock and watermark durability contract](invalidation.md#application-clock-contract).
 
 ## Custom-client contract

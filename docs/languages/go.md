@@ -80,7 +80,7 @@ insertion order. These binding details do not change sorted cache-key arguments.
 Cluster client; supply it with `WithRemote`. `NewRedisClient` builds that client
 from standard `redis.UniversalOptions` with
 [Redis client budgets](#redis-client-budgets). Tracked reads override replica routing
-for direct `*redis.ClusterClient` clients and follow `MOVED` and `ASK`.
+for direct `*redis.ClusterClient` clients.
 Standalone/Sentinel clients must target the primary; keep Sentinel's
 `FailoverOptions.ReplicaOnly` false. `NewRedisClient` rejects Sentinel `ReadOnly`,
 which go-redis turns into `ReplicaOnly`.
