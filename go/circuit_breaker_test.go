@@ -347,15 +347,17 @@ func TestCircuitBreakerIsolatesOnStateChange(t *testing.T) {
 	var reentered sync.Once
 	var self dialcache.Remote
 	reentrant := make(chan error, 1)
+	probeHook, releaseProbe := make(chan struct{}), make(chan struct{})
 	failing := &scriptedRemote{readErr: always(errRemoteDown)}
 	self = newBreaker(t, failing, dialcache.CircuitBreakerOptions{
 		OpenFor: 10 * time.Millisecond,
 		OnStateChange: func(_ string, _, to dialcache.CircuitState) {
-			if to == dialcache.CircuitOpen {
+			switch to {
+			case dialcache.CircuitOpen:
 				reentered.Do(func() { reentrant <- read(self) })
-			}
-			if to == dialcache.CircuitHalfOpen {
-				time.Sleep(200 * time.Millisecond)
+			case dialcache.CircuitHalfOpen:
+				close(probeHook)
+				<-releaseProbe
 			}
 		},
 	})
@@ -375,12 +377,12 @@ func TestCircuitBreakerIsolatesOnStateChange(t *testing.T) {
 		t.Fatalf("read from inside the hook = %v, want ErrCircuitOpen", err)
 	}
 	time.Sleep(20 * time.Millisecond)
-	go func() { _ = read(self) }() // the probe; its half-open hook sleeps
-	for failing.reads.Load() != 101 {
-		time.Sleep(time.Millisecond)
-	}
+	go func() { _ = read(self) }() // the probe; its half-open hook waits
+	<-probeHook
 	start := time.Now()
-	if err := read(self); !errors.Is(err, dialcache.ErrCircuitOpen) || time.Since(start) > 100*time.Millisecond {
+	err := read(self)
+	close(releaseProbe)
+	if !errors.Is(err, dialcache.ErrCircuitOpen) || time.Since(start) > 100*time.Millisecond {
 		t.Fatalf("read while the probe's hook runs = %v after %v, want ErrCircuitOpen at once", err, time.Since(start))
 	}
 }

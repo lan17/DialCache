@@ -141,9 +141,8 @@ type circuit struct {
 	operation string
 	options   CircuitBreakerOptions
 
-	mu      sync.Mutex
-	changes [][2]CircuitState // transitions to report once mu is released
-	state   CircuitState
+	mu    sync.Mutex
+	state CircuitState
 	// generation advances on every transition, so an outcome from a call
 	// admitted in an earlier state is ignored.
 	generation uint64
@@ -155,58 +154,64 @@ type circuit struct {
 	failures   int
 }
 
-func (c *circuit) allow() (uint64, bool) {
+// allow and record make at most one transition each. They report it after
+// releasing the lock, so a slow or panicking OnStateChange cannot hold the
+// circuit or crash the caller.
+
+func (c *circuit) allow() (generation uint64, ok bool) {
 	c.mu.Lock()
-	defer c.unlock()
+	from := c.state
 	if c.state == CircuitOpen && time.Since(c.openedAt) >= c.options.OpenFor {
 		c.transition(CircuitHalfOpen)
 	}
-	switch c.state {
-	case CircuitClosed:
-		return c.generation, true
-	case CircuitHalfOpen:
-		if !c.probing {
-			c.probing = true
-			return c.generation, true
-		}
+	switch {
+	case c.state == CircuitClosed:
+		generation, ok = c.generation, true
+	case c.state == CircuitHalfOpen && !c.probing:
+		c.probing = true
+		generation, ok = c.generation, true
 	}
-	return 0, false
+	to := c.state
+	c.mu.Unlock()
+	c.notify(from, to)
+	return generation, ok
 }
 
 func (c *circuit) record(generation uint64, failed bool) {
 	c.mu.Lock()
-	defer c.unlock()
-	if generation != c.generation {
-		return
-	}
-	switch c.state {
-	case CircuitHalfOpen:
-		if failed {
-			c.transition(CircuitOpen)
-		} else {
-			c.transition(CircuitClosed)
-		}
-	case CircuitClosed:
-		if c.filled == circuitWindow {
-			if c.outcomes[c.next] {
-				c.failures--
+	from := c.state
+	if generation == c.generation {
+		switch c.state {
+		case CircuitHalfOpen:
+			if failed {
+				c.transition(CircuitOpen)
+			} else {
+				c.transition(CircuitClosed)
 			}
-		} else {
-			c.filled++
-		}
-		c.outcomes[c.next] = failed
-		if failed {
-			c.failures++
-		}
-		c.next = (c.next + 1) % circuitWindow
-		if c.filled == circuitWindow && 2*c.failures >= circuitWindow {
-			c.transition(CircuitOpen)
+		case CircuitClosed:
+			if c.filled == circuitWindow {
+				if c.outcomes[c.next] {
+					c.failures--
+				}
+			} else {
+				c.filled++
+			}
+			c.outcomes[c.next] = failed
+			if failed {
+				c.failures++
+			}
+			c.next = (c.next + 1) % circuitWindow
+			if c.filled == circuitWindow && 2*c.failures >= circuitWindow {
+				c.transition(CircuitOpen)
+			}
 		}
 	}
+	to := c.state
+	c.mu.Unlock()
+	c.notify(from, to)
 }
 
 func (c *circuit) transition(to CircuitState) {
-	c.changes = append(c.changes, [2]CircuitState{c.state, to})
 	c.state = to
 	c.generation++
 	c.probing = false
@@ -218,21 +223,11 @@ func (c *circuit) transition(to CircuitState) {
 	}
 }
 
-// unlock releases the circuit, then reports its transitions, so a slow or
-// panicking OnStateChange cannot hold the lock or crash the caller. A record
+// notify runs OnStateChange for a transition, ignoring its panics: a record
 // from the read-deadline callback runs on its own goroutine, outside the
 // cache's panic recovery.
-func (c *circuit) unlock() {
-	changes := c.changes
-	c.changes = nil
-	c.mu.Unlock()
-	for _, change := range changes {
-		c.notify(change[0], change[1])
-	}
-}
-
 func (c *circuit) notify(from, to CircuitState) {
-	if c.options.OnStateChange == nil {
+	if from == to || c.options.OnStateChange == nil {
 		return
 	}
 	defer func() { _ = recover() }()
