@@ -267,6 +267,79 @@ func waitFor(t *testing.T, events <-chan dialcache.CircuitState, want dialcache.
 	}
 }
 
+// gateRemote hands each read to the test, which decides when and how it
+// returns.
+type gateRemote struct {
+	scriptedRemote
+	calls chan chan error
+}
+
+func (r *gateRemote) Read(context.Context, string, string) (dialcache.ReadResult, error) {
+	reply := make(chan error)
+	r.calls <- reply
+	if err := <-reply; err != nil {
+		return dialcache.ReadResult{}, err
+	}
+	return dialcache.ReadResult{Kind: "miss", Reason: "value_absent"}, nil
+}
+
+func TestCircuitBreakerIgnoresOutcomesFromAnEarlierState(t *testing.T) {
+	remote := &gateRemote{calls: make(chan chan error)}
+	breaker := newBreaker(t, remote, dialcache.CircuitBreakerOptions{OpenFor: 10 * time.Millisecond})
+	// rejected reports whether a read returned ErrCircuitOpen without reaching
+	// the remote; a read that reaches it succeeds.
+	rejected := func() bool {
+		done := make(chan error, 1)
+		go func() { done <- read(breaker) }()
+		select {
+		case err := <-done:
+			return errors.Is(err, dialcache.ErrCircuitOpen)
+		case reply := <-remote.calls:
+			reply <- nil
+			<-done
+			return false
+		}
+	}
+
+	staleDone := make(chan struct{})
+	go func() {
+		_ = read(breaker)
+		close(staleDone)
+	}()
+	stale := <-remote.calls // admitted while the circuit is closed
+	var failures sync.WaitGroup
+	for range 100 {
+		failures.Add(1)
+		go func() {
+			defer failures.Done()
+			_ = read(breaker)
+		}()
+		(<-remote.calls) <- errRemoteDown
+	}
+	failures.Wait()
+	if !rejected() {
+		t.Fatal("100 failures did not open the circuit")
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	probeDone := make(chan struct{})
+	go func() {
+		_ = read(breaker)
+		close(probeDone)
+	}()
+	probe := <-remote.calls
+	stale <- nil
+	<-staleDone
+	if !rejected() {
+		t.Fatal("a success admitted before the circuit opened ended the probe")
+	}
+	probe <- errRemoteDown
+	<-probeDone
+	if !rejected() {
+		t.Fatal("a failed probe did not reopen the circuit")
+	}
+}
+
 // A read the cache abandons at its deadline counts as failed at that moment,
 // even though the dispatched command never returns.
 func TestCircuitBreakerCountsAReadAtItsDeadline(t *testing.T) {

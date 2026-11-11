@@ -147,7 +147,6 @@ type circuit struct {
 	// admitted in an earlier state is ignored.
 	generation uint64
 	openedAt   time.Time
-	probing    bool
 	outcomes   [circuitWindow]bool // true marks a failure
 	next       int
 	filled     int
@@ -161,14 +160,12 @@ type circuit struct {
 func (c *circuit) allow() (generation uint64, ok bool) {
 	c.mu.Lock()
 	from := c.state
-	if c.state == CircuitOpen && time.Since(c.openedAt) >= c.options.OpenFor {
-		c.transition(CircuitHalfOpen)
-	}
 	switch {
 	case c.state == CircuitClosed:
 		generation, ok = c.generation, true
-	case c.state == CircuitHalfOpen && !c.probing:
-		c.probing = true
+	case c.state == CircuitOpen && time.Since(c.openedAt) >= c.options.OpenFor:
+		// This call is the probe; half-open rejects all others.
+		c.transition(CircuitHalfOpen)
 		generation, ok = c.generation, true
 	}
 	to := c.state
@@ -214,7 +211,6 @@ func (c *circuit) record(generation uint64, failed bool) {
 func (c *circuit) transition(to CircuitState) {
 	c.state = to
 	c.generation++
-	c.probing = false
 	switch to {
 	case CircuitOpen:
 		c.openedAt = time.Now()
