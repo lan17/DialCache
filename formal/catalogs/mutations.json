@@ -452,7 +452,7 @@
           {
             "path": "go/engine.go",
             "before": "\t\treturn callSafely(func() (T, error) { return load(ctx) })",
-            "after": "\t\treturn awaitDeadline(c.settings.clock, startPending(func() (T, error) { return load(ctx) }), elapsedNow(c.settings.clock), x.budget(), func() error { return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(x.budget()) * time.Millisecond} }, nil)"
+            "after": "\t\treturn awaitDeadline(ctx, c.settings.clock, startPending(func() (T, error) { return load(ctx) }), elapsedNow(c.settings.clock), x.budget(), func() error { return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(x.budget()) * time.Millisecond} }, nil)"
           }
         ],
         "requiredDetections": [
@@ -664,7 +664,7 @@
           {
             "path": "go/engine.go",
             "before": "\tif p.Local.Enabled {\n\t\tif p.Coalesce {",
-            "after": "\tif p.Local.Enabled {\n\t\tif early, _ := callSafely(func() (localResult[T], error) {\n\t\t\traw, found := c.local.Get(x.key)\n\t\t\tif !found {\n\t\t\t\treturn localResult[T]{}, nil\n\t\t\t}\n\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil\n\t\t}); early.found {\n\t\t\treturn run()\n\t\t}\n\t\tif p.Coalesce {"
+            "after": "\tif p.Local.Enabled {\n\t\tif early, _ := callSafely(func() (localResult[T], error) {\n\t\t\traw, found := c.local.Get(x.key)\n\t\t\tif !found {\n\t\t\t\treturn localResult[T]{}, nil\n\t\t\t}\n\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil\n\t\t}); early.found {\n\t\t\treturn x.traverse()\n\t\t}\n\t\tif p.Coalesce {"
           }
         ],
         "requiredDetections": [
