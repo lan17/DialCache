@@ -90,7 +90,7 @@
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "e711bf3bc5c3da0a3a41dec104b658302539bb25fdcfd7ee05a2c36099501176",
+      "sha256": "cc25114e5a5512d2dd48cf8b6c7466a395a0b449cf818946fd4d8b0c5acdd64e",
       "entries": [
         {"title":"Configuration and rollout","contracts":["C16"]},
         {"title":"What belongs where","contracts":["C16","B01"]},

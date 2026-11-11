@@ -204,9 +204,7 @@ for every enabled invocation, before cache lookup or joining a flight. Each
 invocation gets one policy snapshot. Keep the provider cheap; cache external
 configuration reads inside it and give asynchronous work a finite deadline.
 
-Provider errors run the loader uncached; the only effect on the caller is the
-uncached value. Every port logs a warning and records a `config_resolution`
-error and a `config_error` skip on the `noop` layer. Provider errors do not
+Provider errors run the loader uncached and record `config_error`; they do not
 activate defaults. Invalid runtime fields fail open at the affected boundary:
 for example, an invalid local TTL disables that layer while valid layers can
 continue. The [native API reference](api.md) specifies validation and error types.
