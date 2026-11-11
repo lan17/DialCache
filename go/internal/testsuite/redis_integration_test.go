@@ -270,6 +270,9 @@ func TestRedisIntegration(t *testing.T) {
 			t.Run("invalidation-vectors", func(t *testing.T) { testInvalidationVectors(t, environment) })
 			t.Run("mixed-typescript-go", func(t *testing.T) { testMixedLanguage(t, environment) })
 			t.Run("complete-frame-and-primary-read", func(t *testing.T) { testPrimaryRead(t, environment) })
+			if !environment.cluster {
+				t.Run("circuit-breaker", func(t *testing.T) { testCircuitBreaker(t, environment) })
+			}
 		})
 	}
 }

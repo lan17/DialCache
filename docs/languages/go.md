@@ -82,6 +82,21 @@ for direct `*redis.ClusterClient` clients. Standalone/Sentinel clients must targ
 the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false.
 See [Redis and Valkey](../redis.md) and [invalidation](../invalidation.md).
 
+`NewCircuitBreaker` wraps a `Remote`, usually the Redis adapter, with separate
+read and write circuits. A circuit opens when at least half of its last 100
+completed calls failed, and never before 100 calls, so a short burst of errors
+does not open it. While a circuit is open, its calls return `ErrCircuitOpen` at
+once: reads reach the source without waiting for the read deadline, and the
+Redis fill is skipped. After `OpenFor` (5 seconds by default) one probe call
+closes the circuit on success or keeps it open. A read counts as failed when the
+cache cancels it at the read deadline, even if the command is still running.
+Payload and protocol errors and writes whose caller went away do not count.
+`Invalidate` always reaches the wrapped `Remote` and returns its error. The
+breaker does not bound the commands it lets through, so keep finite client
+read, write and dial budgets and disable retries (`MaxRetries: -1`). Each
+rejected read still logs a warning and records a `cache_read` error, so filter
+`ErrCircuitOpen` in the logger and report state with `OnStateChange`.
+
 `WithObserver` receives typed diagnostic events and `WithMetrics` connects
 `NewPrometheusMetrics` or `NewDatadogMetrics`. Shadow admission additionally
 requires `WithShadowOutcomes`; if an exporter already receives every event,
