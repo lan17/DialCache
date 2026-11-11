@@ -89,19 +89,49 @@ func TestCircuitBreakerOpensOnlyAtHalfOfTheLastHundredCalls(t *testing.T) {
 		t.Fatalf("remote reads = %d, want 100", got)
 	}
 
-	var calls int64
-	remote = &scriptedRemote{readErr: func() error {
-		calls++
-		if calls%2 == 0 && calls%100 != 0 { // 49 failures in every 100 calls
-			return errRemoteDown
+	pattern := func(fail func(call int) bool) *scriptedRemote {
+		call := 0
+		return &scriptedRemote{readErr: func() error {
+			call++
+			if fail(call) {
+				return errRemoteDown
+			}
+			return nil
+		}}
+	}
+	// Exactly 50 failures in 100 calls, with successes between them.
+	remote = pattern(func(call int) bool { return call%2 == 0 })
+	breaker = newBreaker(t, remote, dialcache.CircuitBreakerOptions{})
+	for range 100 {
+		if errors.Is(read(breaker), dialcache.ErrCircuitOpen) {
+			t.Fatal("the circuit opened before its 100th call")
 		}
-		return nil
-	}}
+	}
+	if err := read(breaker); !errors.Is(err, dialcache.ErrCircuitOpen) {
+		t.Fatalf("read after 50 failures in 100 calls = %v, want ErrCircuitOpen", err)
+	}
+
+	// 49 failures in every 100 calls never open it.
+	remote = pattern(func(call int) bool { return call%2 == 0 && call%100 != 0 })
 	breaker = newBreaker(t, remote, dialcache.CircuitBreakerOptions{})
 	for range 1000 {
 		if errors.Is(read(breaker), dialcache.ErrCircuitOpen) {
 			t.Fatal("a 49% failure rate opened the circuit")
 		}
+	}
+
+	// Only the last 100 calls count: after 100 successes, the 50th failure
+	// opens it although failures are a third of all calls.
+	remote = pattern(func(call int) bool { return call > 100 })
+	breaker = newBreaker(t, remote, dialcache.CircuitBreakerOptions{})
+	for range 149 {
+		_ = read(breaker)
+	}
+	if err := read(breaker); !errors.Is(err, errRemoteDown) {
+		t.Fatalf("read after 49 recent failures = %v, want the remote error", err)
+	}
+	if err := read(breaker); !errors.Is(err, dialcache.ErrCircuitOpen) {
+		t.Fatalf("read after 50 recent failures = %v, want ErrCircuitOpen", err)
 	}
 }
 
@@ -199,50 +229,159 @@ func TestCircuitBreakerProbesOnceAfterOpenFor(t *testing.T) {
 	}
 }
 
-// A read the cache abandons at its deadline counts as failed at that moment,
-// even though the dispatched command never returns.
-func TestCircuitBreakerCountsAReadAtItsDeadline(t *testing.T) {
-	remote := &scriptedRemote{readBlock: make(chan struct{})}
-	defer close(remote.readBlock)
-	opened := make(chan struct{})
-	breaker := newBreaker(t, remote, dialcache.CircuitBreakerOptions{
-		OnStateChange: func(_ string, _, to dialcache.CircuitState) {
-			if to == dialcache.CircuitOpen {
-				close(opened)
-			}
-		},
-	})
+// cacheLoader returns a function that loads one new key through a cache that
+// uses breaker as its remote, with a 1 ms read deadline.
+func cacheLoader(t *testing.T, breaker dialcache.Remote) func() string {
+	t.Helper()
 	cache, err := dialcache.New(dialcache.WithRemote(breaker), dialcache.WithLocalCapacity(0), dialcache.WithRemoteReadTimeout(time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, done := cache.Enable(context.Background())
-	defer done()
-	load := func(id string) (string, time.Duration) {
-		start := time.Now()
+	t.Cleanup(done)
+	var id atomic.Int64
+	return func() string {
+		key := string(rune('A' + id.Add(1)))
 		value, err := dialcache.GetOrLoad(ctx, cache, dialcache.Operation[string]{
-			Identity: dialcache.Identity{KeyType: "user", UseCase: "breaker", ID: id},
+			Identity: dialcache.Identity{KeyType: "user", UseCase: "breaker", ID: key},
 			Policy:   dialcache.Policy{RemoteTTL: time.Minute},
-		}, func(context.Context) (string, error) { return "source " + id, nil })
+		}, func(context.Context) (string, error) { return "source " + key, nil })
 		if err != nil {
 			t.Fatal(err)
 		}
-		return value, time.Since(start)
+		return value
 	}
-	for i := range 100 {
-		load(string(rune('A' + i)))
+}
+
+func waitFor(t *testing.T, events <-chan dialcache.CircuitState, want dialcache.CircuitState) {
+	t.Helper()
+	for {
+		select {
+		case got := <-events:
+			if got == want {
+				return
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("no transition to %v", want)
+		}
 	}
+}
+
+// A read the cache abandons at its deadline counts as failed at that moment,
+// even though the dispatched command never returns.
+func TestCircuitBreakerCountsAReadAtItsDeadline(t *testing.T) {
+	remote := &scriptedRemote{readBlock: make(chan struct{})}
+	defer close(remote.readBlock)
+	events := make(chan dialcache.CircuitState, 8)
+	breaker := newBreaker(t, remote, dialcache.CircuitBreakerOptions{
+		OnStateChange: func(_ string, _, to dialcache.CircuitState) { events <- to },
+	})
+	load := cacheLoader(t, breaker)
+	for range 100 {
+		load()
+	}
+	waitFor(t, events, dialcache.CircuitOpen)
+	start := time.Now()
+	if value := load(); value == "" || remote.reads.Load() != 100 {
+		t.Fatalf("value=%q reads=%d, want the source value without a remote read", value, remote.reads.Load())
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("call with an open circuit took %v", took)
+	}
+}
+
+// lateRemote answers every read with a miss, but only after its context ends.
+type lateRemote struct{ scriptedRemote }
+
+func (r *lateRemote) Read(ctx context.Context, _, _ string) (dialcache.ReadResult, error) {
+	r.reads.Add(1)
+	<-ctx.Done()
+	return dialcache.ReadResult{Kind: "miss", Reason: "value_absent"}, nil
+}
+
+// A read that succeeds after the cache cancelled it at the deadline is a
+// failure, also when it is the half-open probe.
+func TestCircuitBreakerCountsALateSuccessAsAFailure(t *testing.T) {
+	remote := &lateRemote{}
+	events := make(chan dialcache.CircuitState, 8)
+	breaker := newBreaker(t, remote, dialcache.CircuitBreakerOptions{
+		OpenFor:       10 * time.Millisecond,
+		OnStateChange: func(_ string, _, to dialcache.CircuitState) { events <- to },
+	})
+	load := cacheLoader(t, breaker)
+	for range 100 {
+		load()
+	}
+	waitFor(t, events, dialcache.CircuitOpen)
+	time.Sleep(20 * time.Millisecond)
+	load()
+	waitFor(t, events, dialcache.CircuitHalfOpen)
+	waitFor(t, events, dialcache.CircuitOpen)
+}
+
+// OnStateChange runs outside the circuit's lock and its panics are ignored,
+// including on the read-deadline callback's own goroutine.
+func TestCircuitBreakerIsolatesOnStateChange(t *testing.T) {
+	remote := &scriptedRemote{readBlock: make(chan struct{})}
+	defer close(remote.readBlock)
+	breaker := newBreaker(t, remote, dialcache.CircuitBreakerOptions{
+		OnStateChange: func(string, dialcache.CircuitState, dialcache.CircuitState) { panic("telemetry failed") },
+	})
+	load := cacheLoader(t, breaker)
+	for range 100 {
+		load()
+	}
+	// The process survived the panic; the circuit still opened.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		before := remote.reads.Load()
+		load()
+		if remote.reads.Load() == before {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the read circuit did not open")
+		}
+	}
+
+	var reentered sync.Once
+	var self dialcache.Remote
+	reentrant := make(chan error, 1)
+	failing := &scriptedRemote{readErr: always(errRemoteDown)}
+	self = newBreaker(t, failing, dialcache.CircuitBreakerOptions{
+		OpenFor: 10 * time.Millisecond,
+		OnStateChange: func(_ string, _, to dialcache.CircuitState) {
+			if to == dialcache.CircuitOpen {
+				reentered.Do(func() { reentrant <- read(self) })
+			}
+			if to == dialcache.CircuitHalfOpen {
+				time.Sleep(200 * time.Millisecond)
+			}
+		},
+	})
+	opened := make(chan struct{})
+	go func() {
+		for range 100 {
+			_ = read(self)
+		}
+		close(opened)
+	}()
 	select {
 	case <-opened:
 	case <-time.After(5 * time.Second):
-		t.Fatal("the read circuit did not open while the abandoned reads were still running")
+		t.Fatal("a hook that calls the breaker blocked the call that opened the circuit")
 	}
-	value, took := load("after")
-	if value != "source after" || remote.reads.Load() != 100 {
-		t.Fatalf("value=%q reads=%d, want the source value without a remote read", value, remote.reads.Load())
+	if err := <-reentrant; !errors.Is(err, dialcache.ErrCircuitOpen) {
+		t.Fatalf("read from inside the hook = %v, want ErrCircuitOpen", err)
 	}
-	if took > time.Second {
-		t.Fatalf("call with an open circuit took %v", took)
+	time.Sleep(20 * time.Millisecond)
+	go func() { _ = read(self) }() // the probe; its half-open hook sleeps
+	for failing.reads.Load() != 101 {
+		time.Sleep(time.Millisecond)
+	}
+	start := time.Now()
+	if err := read(self); !errors.Is(err, dialcache.ErrCircuitOpen) || time.Since(start) > 100*time.Millisecond {
+		t.Fatalf("read while the probe's hook runs = %v after %v, want ErrCircuitOpen at once", err, time.Since(start))
 	}
 }
 

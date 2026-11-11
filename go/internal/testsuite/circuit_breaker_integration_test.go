@@ -159,19 +159,21 @@ func testCircuitBreaker(t *testing.T, environment redisEnvironment) {
 		}
 		return time.Since(start)
 	}
-	await := func(want string) {
+	// await waits for a transition, calling poke every 50 ms while it waits.
+	await := func(want string, poke func()) {
 		t.Helper()
-		deadline := time.After(10 * time.Second)
-		for {
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
 			select {
 			case got := <-transitions:
 				if got == want {
 					return
 				}
-			case <-deadline:
-				t.Fatalf("no %q transition", want)
+			case <-time.After(50 * time.Millisecond):
+				poke()
 			}
 		}
+		t.Fatalf("no %q transition", want)
 	}
 	servedFromRedis := func(id string) {
 		t.Helper()
@@ -195,7 +197,7 @@ func testCircuitBreaker(t *testing.T, environment redisEnvironment) {
 			}()
 		}
 		wg.Wait()
-		await("read open")
+		await("read open", func() {})
 
 		reads := adapter.reads.Load()
 		for i := range 20 {
@@ -208,20 +210,11 @@ func testCircuitBreaker(t *testing.T, environment redisEnvironment) {
 		}
 
 		proxy.set("pass")
-		closed := make(chan struct{})
-		go func() {
-			await("read closed")
-			close(closed)
-		}()
-	probe:
-		for i := 0; ; i++ {
-			select {
-			case <-closed:
-				break probe
-			case <-time.After(50 * time.Millisecond):
-				load(fault + "-probe-" + strconv.Itoa(i))
-			}
-		}
+		probes := 0
+		await("read closed", func() {
+			probes++
+			load(fault + "-probe-" + strconv.Itoa(probes))
+		})
 		servedFromRedis("after-" + fault)
 	}
 }

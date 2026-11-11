@@ -90,7 +90,8 @@ once: reads reach the source without waiting for the read deadline, and the
 Redis fill is skipped. After `OpenFor` (5 seconds by default) one probe call
 closes the circuit on success or keeps it open. A read counts as failed when the
 cache cancels it at the read deadline, even if the command is still running.
-Payload and protocol errors and writes whose caller went away do not count.
+`RedisPayloadError`, `RedisProtocolError` and writes whose caller went away do
+not count; every other error does, including an undecodable stored frame.
 `Invalidate` always reaches the wrapped `Remote` and returns its error. The
 breaker does not bound the commands it lets through, so keep finite client
 read, write and dial budgets and disable retries (`MaxRetries: -1`). Each

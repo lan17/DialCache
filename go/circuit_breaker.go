@@ -42,8 +42,10 @@ type CircuitBreakerOptions struct {
 	// may pass. Zero means 5 seconds.
 	OpenFor time.Duration
 	// OnStateChange receives "read" or "write" and each transition of that
-	// circuit. It runs while the circuit is locked, so it must return quickly
-	// and must not call the breaker.
+	// circuit. It runs after the transition, outside the circuit's lock, on the
+	// goroutine of the call that caused it, and its panics are ignored. Calls
+	// from different goroutines may arrive out of order. It should return
+	// promptly: the call that caused the transition waits for it.
 	OnStateChange func(operation string, from, to CircuitState)
 }
 
@@ -65,10 +67,11 @@ const (
 //
 // A read counts as failed when its context ends before it returns, which the
 // cache does at the read deadline, so a hung Redis opens the read circuit
-// without waiting for the client's own timeout. Payload and protocol errors
-// count as successes: Redis answered. A write whose caller context ended is
-// not counted as failed. Invalidate always reaches remote and returns its
-// error unchanged.
+// without waiting for the client's own timeout. *RedisPayloadError and
+// *RedisProtocolError count as successes because Redis answered; every other
+// error counts as a failure, including an undecodable stored frame. A write
+// whose caller context ended is not counted as failed. Invalidate always
+// reaches remote and returns its error unchanged.
 func NewCircuitBreaker(remote Remote, options CircuitBreakerOptions) (Remote, error) {
 	if remote == nil {
 		return nil, fmt.Errorf("%w: circuit breaker requires a remote", ErrInvalidOption)
@@ -107,7 +110,8 @@ func (b *circuitBreaker) Read(ctx context.Context, valueKey, watermarkKey string
 		report(failed)
 	}()
 	result, err := b.remote.Read(ctx, valueKey, watermarkKey)
-	failed = remoteFailed(err)
+	// A read that returns after the deadline may beat the callback above.
+	failed = remoteFailed(err) || ctx.Err() != nil
 	return result, err
 }
 
@@ -137,8 +141,9 @@ type circuit struct {
 	operation string
 	options   CircuitBreakerOptions
 
-	mu    sync.Mutex
-	state CircuitState
+	mu      sync.Mutex
+	changes [][2]CircuitState // transitions to report once mu is released
+	state   CircuitState
 	// generation advances on every transition, so an outcome from a call
 	// admitted in an earlier state is ignored.
 	generation uint64
@@ -152,7 +157,7 @@ type circuit struct {
 
 func (c *circuit) allow() (uint64, bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.unlock()
 	if c.state == CircuitOpen && time.Since(c.openedAt) >= c.options.OpenFor {
 		c.transition(CircuitHalfOpen)
 	}
@@ -170,7 +175,7 @@ func (c *circuit) allow() (uint64, bool) {
 
 func (c *circuit) record(generation uint64, failed bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	defer c.unlock()
 	if generation != c.generation {
 		return
 	}
@@ -201,7 +206,7 @@ func (c *circuit) record(generation uint64, failed bool) {
 }
 
 func (c *circuit) transition(to CircuitState) {
-	from := c.state
+	c.changes = append(c.changes, [2]CircuitState{c.state, to})
 	c.state = to
 	c.generation++
 	c.probing = false
@@ -211,7 +216,25 @@ func (c *circuit) transition(to CircuitState) {
 	case CircuitClosed:
 		c.outcomes, c.next, c.filled, c.failures = [circuitWindow]bool{}, 0, 0, 0
 	}
-	if c.options.OnStateChange != nil {
-		c.options.OnStateChange(c.operation, from, to)
+}
+
+// unlock releases the circuit, then reports its transitions, so a slow or
+// panicking OnStateChange cannot hold the lock or crash the caller. A record
+// from the read-deadline callback runs on its own goroutine, outside the
+// cache's panic recovery.
+func (c *circuit) unlock() {
+	changes := c.changes
+	c.changes = nil
+	c.mu.Unlock()
+	for _, change := range changes {
+		c.notify(change[0], change[1])
 	}
+}
+
+func (c *circuit) notify(from, to CircuitState) {
+	if c.options.OnStateChange == nil {
+		return
+	}
+	defer func() { _ = recover() }()
+	c.options.OnStateChange(c.operation, from, to)
 }
