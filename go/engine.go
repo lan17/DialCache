@@ -444,7 +444,12 @@ func (x *execution[T]) readServing() remoteValue[T] {
 func (x *execution[T]) decode(frame Frame, layer string) (T, error) {
 	payload := Payload{Bytes: frame.Payload, Binary: frame.Binary}
 	decompressStarted := elapsedNow(x.cache.settings.clock)
-	expanded := DecompressPayload(payload)
+	expanded, err := callSafely(func() (CompressionReadResult, error) { return DecompressPayload(payload), nil })
+	if err != nil {
+		x.errorEvent(layer, "serialization_load", false)
+		var zero T
+		return zero, err
+	}
 	if expanded.Outcome != "passthrough" {
 		x.event("compression", layer, map[string]any{"outcome": expanded.Outcome})
 		x.duration("compressionDuration", layer, decompressStarted, map[string]any{"operation": "decompress"})
@@ -493,7 +498,7 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	x.event("size", layer, map[string]any{"bytes": int64(len(payload.Bytes))})
 	if compression := x.cache.settings.compression; compression != nil {
 		compressStarted := elapsedNow(clock)
-		compressed, compressionErr := CompressPayload(payload, *compression)
+		compressed, compressionErr := callSafely(func() (CompressionWriteResult, error) { return CompressPayload(payload, *compression) })
 		if compressionErr != nil {
 			x.errorEvent(layer, "compression", false)
 			return false, compressionErr
