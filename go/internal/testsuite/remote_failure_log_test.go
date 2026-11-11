@@ -3,7 +3,9 @@ package dialcache_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -170,7 +172,6 @@ func TestRoutineRemoteFailuresAreMetricOnly(t *testing.T) {
 		"redis down":          {remote: down, failure: "cache_read"},
 		"redis down on write": {remote: missingRemote{down}, failure: "cache_write"},
 		"read deadline":       {remote: blockingRemote{}, options: []Option{WithRemoteReadTimeout(10 * time.Millisecond)}, failure: "cache_read_timeout"},
-		"breaker open":        {remote: failingRemote{errors.New("circuit breaker is open")}, failure: "cache_read"},
 		"failover reply":      {remote: failingRemote{replyError("LOADING Redis is loading the dataset in memory")}, failure: "cache_read"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -193,6 +194,8 @@ func TestUnusualRemoteFailuresStayLogged(t *testing.T) {
 		"script error":   failingRemote{replyError("ERR Error running script")},
 		"protocol reply": failingRemote{&RedisProtocolError{Message: "invalid Redis invalidation reply; expected integer 1"}},
 		"adapter panic":  panickingRemote{},
+		"unknown error":  failingRemote{errors.New("circuit breaker is open")},
+		"varying text":   &countingRemote{},
 	} {
 		t.Run(name, func(t *testing.T) {
 			run := newFailureRun(remote)
@@ -206,6 +209,49 @@ func TestUnusualRemoteFailuresStayLogged(t *testing.T) {
 				t.Fatalf("error events = %v", run.errors)
 			}
 		})
+	}
+}
+
+// countingRemote fails with a new message each call, all of one type.
+type countingRemote struct{ calls atomic.Int64 }
+
+func (r *countingRemote) Read(context.Context, string, string) (ReadResult, error) {
+	return ReadResult{}, fmt.Errorf("decode failed at byte %d", r.calls.Add(1))
+}
+func (r *countingRemote) Write(context.Context, string, Frame, time.Duration) error {
+	return fmt.Errorf("write failed at byte %d", r.calls.Add(1))
+}
+func (r *countingRemote) Invalidate(context.Context, string, int64, int64) error {
+	return fmt.Errorf("invalidate failed at byte %d", r.calls.Add(1))
+}
+
+// switchingRemote fails reads with whatever failure the test sets.
+type switchingRemote struct {
+	corruptFrameRemote
+	err error
+}
+
+func (r *switchingRemote) Read(ctx context.Context, valueKey, watermarkKey string) (ReadResult, error) {
+	if r.err != nil {
+		return ReadResult{}, r.err
+	}
+	return r.corruptFrameRemote.Read(ctx, valueKey, watermarkKey)
+}
+
+// A new kind of unusual failure logs even while an earlier one is throttled.
+func TestDistinctUnusualFailuresLogSeparately(t *testing.T) {
+	remote := &switchingRemote{}
+	run := newFailureRun(remote)
+	run.read(t, 2)
+	remote.err = replyError("NOPERM User has no permissions to run the 'mget' command")
+	run.read(t, 2)
+	remote.err = nil
+	run.read(t, 1)
+	if len(run.log.messages) != 2 || !strings.HasPrefix(fmt.Sprint(run.log.details[1]), "NOPERM") {
+		t.Fatalf("logs = %v %v; want the corrupt frame and the NOPERM reply", run.log.messages, run.log.details)
+	}
+	if run.errors["cache_read"] != 5 {
+		t.Fatalf("error events = %v; want 5 cache_read", run.errors)
 	}
 }
 

@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -32,24 +34,31 @@ type RedisProtocolError struct{ Message string }
 
 func (e *RedisProtocolError) Error() string { return e.Message }
 
-// routineRemoteFailure reports a Remote failure without a usable answer from
-// Redis: a timeout, cancellation, connection or pool failure, a wrapper's own
-// rejection such as an open circuit breaker, or a failover reply. Error metrics
-// count these; a log line for each would flood the logs while Redis is slow or
-// down. Panics, malformed payloads or replies, and other Redis error replies
-// are unusual.
+// routineRemoteFailure reports a Remote failure that recognizably means Redis
+// is slow or unreachable: a timeout, cancellation, network or connection pool
+// failure, or a failover reply. Error metrics count these; a log line for each
+// would flood the logs while Redis is slow or down. Every other failure is
+// unusual, including an error type DialCache does not know from a custom Remote.
 func routineRemoteFailure(err error) bool {
-	var panicked *CallbackPanicError
-	var payload *RedisPayloadError
-	var protocol *RedisProtocolError
 	var reply redis.Error
-	switch {
-	case errors.As(err, &panicked), errors.As(err, &payload), errors.As(err, &protocol):
-		return false
-	case errors.As(err, &reply):
+	if errors.As(err, &reply) {
 		return redis.IsLoadingError(err) || redis.IsClusterDownError(err) || redis.IsTryAgainError(err) || redis.IsMasterDownError(err)
 	}
-	return true
+	var timeout *RemoteReadTimeoutError
+	var network net.Error
+	return errors.As(err, &timeout) || errors.As(err, &network) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, redis.ErrPoolTimeout) || errors.Is(err, redis.ErrPoolExhausted) || errors.Is(err, redis.ErrClosed)
+}
+
+// failureKind names a failure's cause with a bounded value: a Redis reply's
+// error code, or else the error's type.
+func failureKind(err error) string {
+	var reply redis.Error
+	if errors.As(err, &reply) {
+		code, _, _ := strings.Cut(reply.Error(), " ")
+		return code
+	}
+	return fmt.Sprintf("%T", err)
 }
 
 func (adapter *RedisAdapter) Read(ctx context.Context, valueKey, watermarkKey string) (ReadResult, error) {

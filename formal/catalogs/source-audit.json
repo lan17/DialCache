@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "d51dfa1297386e4c381a0468e25142a0e2ccf21228036ea33198af0ec04630b3",
+      "sha256": "35039715ffb58ec6d051414d62b785bfbcf268dcb8b044fcc63e393cc8216a5d",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -1507,7 +1507,7 @@
     },
     {
       "path": "formal/guides/GO-PARITY.md",
-      "sha256": "d2cbb0e18dd04878e94c6ad8f432de064e24aaca1fb8a026ae4f2460078ad0c5",
+      "sha256": "401133903e85cef37e9a8130bd08e40e9306898a13b6b8890deb79d1db629eb8",
       "entries": [
         {"title":"Go parity acceptance"},
         {"title":"Required evidence"},
@@ -1800,7 +1800,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "368afd8f27a589b7e1207eebf7499296fb155538a5eb29ca697471fc5bbd4e49",
+      "sha256": "86f70ebcd91289b9f82ff9ceee7df23784d66faf5ccd6397ed8cd4eb47695e5e",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},

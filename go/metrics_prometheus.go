@@ -87,23 +87,20 @@ func NewPrometheusMetrics(registry *prometheus.Registry, prefix string) (*Promet
 	return NewPrometheusMetricsWithBindings(registry, prefix, nil)
 }
 
-// collectorDescriptions repanics a Describe panic on the caller's goroutine,
-// where the constructor's recover turns it into an error.
+// collectorDescriptions calls Describe on the caller's goroutine, so the
+// constructor's recover turns a panicking collector into an error.
 func collectorDescriptions(collector prometheus.Collector) []string {
 	ch := make(chan *prometheus.Desc)
-	failure := make(chan any, 1)
+	result := make(chan []string, 1)
 	go func() {
-		defer func() { failure <- recover(); close(ch) }()
-		collector.Describe(ch)
+		var descriptions []string
+		for desc := range ch {
+			descriptions = append(descriptions, desc.String())
+		}
+		result <- descriptions
 	}()
-	var descriptions []string
-	for desc := range ch {
-		descriptions = append(descriptions, desc.String())
-	}
-	if panicked := <-failure; panicked != nil {
-		panic(panicked)
-	}
-	return descriptions
+	func() { defer close(ch); collector.Describe(ch) }()
+	return <-result
 }
 
 // NewPrometheusMetricsWithBindings validates every supplied binding before

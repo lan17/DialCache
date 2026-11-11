@@ -223,10 +223,11 @@ metric names, units, labels, bucket boundaries, and counter increments. Logical
 cache keys never become metric labels.
 
 Plumbing warnings are a Go binding adaptation. TypeScript logs every remote
-failure; Go emits only the `error` event when Redis gave no usable answer (a
-timeout, cancellation, connection or pool failure, a wrapper's own rejection,
-or a failover reply), and logs each other plumbing warning message at most
-once a minute. Error events and every cache outcome are unchanged.
+failure; Go emits only the `error` event when a remote failure means Redis is
+slow or unreachable (a timeout, cancellation, network or connection pool
+failure, or a failover reply), and logs every other plumbing warning at most
+once a minute per message and kind of cause. Error events and every cache
+outcome are unchanged.
 
 The Go Prometheus binding accepts an explicit native registry. Reconstructing
 this adapter with the same registry and prefix reuses its collectors and

@@ -40,7 +40,8 @@ type Cache struct {
 	flights    map[string]*flight
 	shadows    map[string]*shadowFlight
 	registered map[string]bool
-	// failureLogs holds, per warning message, when it may next be logged.
+	// failureLogs holds, per warning message and kind of cause, when it may next
+	// be logged.
 	failureLogs map[string]time.Duration
 }
 
@@ -161,14 +162,14 @@ type remoteFailure struct{ err error }
 
 func (f remoteFailure) Error() string { return f.err.Error() }
 
-// failureLogInterval spaces repeated warnings with the same message.
+// failureLogInterval spaces repeated warnings with the same message and cause.
 const failureLogInterval = time.Minute
 
 // warnFailure logs a cache plumbing failure unless it is a routine remote
 // failure, which only its error event records. An unusual failure can still
 // repeat on every call: a corrupt hot key fails each read until its TTL ends,
-// because a failed read never refills. So each message logs at most once per
-// interval, while the error event counts every occurrence.
+// because a failed read never refills. So each message and kind of cause logs
+// at most once per interval, while the error event counts every occurrence.
 func (c *Cache) warnFailure(message string, err error) {
 	if remote, ok := err.(remoteFailure); ok {
 		if routineRemoteFailure(remote.err) {
@@ -176,14 +177,15 @@ func (c *Cache) warnFailure(message string, err error) {
 		}
 		err = remote.err
 	}
+	key := message + ": " + failureKind(err)
 	now := elapsedNow(c.settings.clock)
 	c.mu.Lock()
-	next, logged := c.failureLogs[message]
+	next, logged := c.failureLogs[key]
 	if logged && now < next {
 		c.mu.Unlock()
 		return
 	}
-	c.failureLogs[message] = now + failureLogInterval
+	c.failureLogs[key] = now + failureLogInterval
 	c.mu.Unlock()
 	c.settings.logger.Warn(message, err)
 }
