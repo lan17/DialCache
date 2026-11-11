@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	. "github.com/lan17/DialCache/go"
 	"net"
@@ -270,6 +271,9 @@ func TestRedisIntegration(t *testing.T) {
 			t.Run("invalidation-vectors", func(t *testing.T) { testInvalidationVectors(t, environment) })
 			t.Run("mixed-typescript-go", func(t *testing.T) { testMixedLanguage(t, environment) })
 			t.Run("complete-frame-and-primary-read", func(t *testing.T) { testPrimaryRead(t, environment) })
+			if !environment.cluster {
+				t.Run("client-budgets-bound-a-paused-server", func(t *testing.T) { testClientBudgets(t, environment) })
+			}
 		})
 	}
 }
@@ -617,5 +621,57 @@ func testPrimaryRead(t *testing.T, environment redisEnvironment) {
 	}
 	if err := adapter.Invalidate(context.Background(), watermark, 3000, 0); err != nil {
 		t.Fatal("NOSCRIPT recovery failed", err)
+	}
+}
+
+// With NewRedisClient defaults, a paused server must fail a write at about the
+// 250 ms read timeout with no retries, and a shorter caller deadline must bound
+// an invalidation, so a Redis stall cannot hold a caller for seconds.
+func testClientBudgets(t *testing.T, environment redisEnvironment) {
+	ctx := context.Background()
+	client, err := NewRedisClient(&redis.UniversalOptions{Addrs: []string{environment.endpoint}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	admin := redis.NewClient(&redis.Options{Addr: environment.endpoint, DialTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, WriteTimeout: 2 * time.Second, MaxRetries: -1})
+	t.Cleanup(func() { _ = admin.Close() })
+	key, watermark := "{budget-go}:value", "{budget-go}:watermark"
+	t.Cleanup(func() { _ = admin.Del(ctx, key, watermark).Err() })
+	adapter := NewRedisAdapter(client)
+	paused := func(run func() error) (time.Duration, error) {
+		t.Helper()
+		if err := client.Ping(ctx).Err(); err != nil {
+			t.Fatal(err)
+		}
+		if err := admin.Do(ctx, "CLIENT", "PAUSE", 500, "ALL").Err(); err != nil {
+			t.Fatal(err)
+		}
+		start := time.Now()
+		runErr := run()
+		elapsed := time.Since(start)
+		// PING waits until the pause ends.
+		if err := admin.Ping(ctx).Err(); err != nil {
+			t.Fatal(err)
+		}
+		return elapsed, runErr
+	}
+	timedOut := func(err error) bool {
+		var netErr net.Error
+		return errors.Is(err, context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout()
+	}
+	elapsed, err := paused(func() error {
+		return adapter.Write(ctx, key, Frame{CreatedAtMS: 1, Payload: []byte("1")}, time.Minute)
+	})
+	if !timedOut(err) || elapsed > time.Second {
+		t.Fatalf("paused write: %v after %v", err, elapsed)
+	}
+	elapsed, err = paused(func() error {
+		deadline, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+		return adapter.Invalidate(deadline, watermark, 2000, 0)
+	})
+	if !timedOut(err) || elapsed >= 250*time.Millisecond {
+		t.Fatalf("paused invalidation: %v after %v", err, elapsed)
 	}
 }

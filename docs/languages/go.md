@@ -77,9 +77,13 @@ insertion order. These binding details do not change sorted cache-key arguments.
 ## Integrations
 
 `NewRedisAdapter` wraps an application-owned go-redis standalone, Sentinel or
-Cluster client; supply it with `WithRemote`. Tracked reads override replica routing
-for direct `*redis.ClusterClient` clients. Standalone/Sentinel clients must target
-the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false.
+Cluster client; supply it with `WithRemote`. `NewRedisClient` builds that client
+from standard `redis.UniversalOptions` with
+[Redis client budgets](#redis-client-budgets). Tracked reads override replica routing
+for direct `*redis.ClusterClient` clients.
+Standalone/Sentinel clients must target the primary; keep Sentinel's
+`FailoverOptions.ReplicaOnly` false. `NewRedisClient` rejects Sentinel `ReadOnly`,
+which go-redis turns into `ReplicaOnly`.
 See [Redis and Valkey](../redis.md) and [invalidation](../invalidation.md).
 
 `WithObserver` receives typed diagnostic events and `WithMetrics` connects
@@ -93,6 +97,74 @@ can implement application equality and return an error. Its `MismatchDiff`
 replaces the built-in difference computation of confirmed-mismatch warnings; a
 `MismatchEntry` side set to `Absent` is omitted. See
 [comparison semantics](../shadow-validation.md#comparison-semantics).
+
+
+### Redis client budgets
+
+DialCache bounds only its own wait for a remote read. The read context has no
+deadline: DialCache cancels it when the read budget expires, and `ReadBudget(ctx)`
+reports that budget. A command already on the socket runs until the client's
+`ReadTimeout`. `Invalidate` receives the caller's context. A value write
+receives the caller's context when coalescing is off; in a coalesced flight it
+receives the leader's context without its cancellation or deadline. DialCache
+adds no deadline to either, so the client's budgets bound them; go-redis applies
+a context deadline to the socket only when `ContextTimeoutEnabled` is set. The go-redis defaults do not fit the default 50 ms read budget. The pool holds 10
+connections per `GOMAXPROCS`, reads and writes may wait 5 seconds, a failed
+command is retried 3 times, and a connect is attempted 5 times. On a container
+limited to one or two CPUs, a Redis slowdown of a few tens of milliseconds at a
+few hundred reads per second fills that pool, so most reads miss the budget and
+call the source. One stalled miss-path write or invalidation can block its
+caller for many seconds. Size the pool as reads per second times the read
+budget, plus room for writes, and keep every wait short. Use a client that
+serves only DialCache, so a cache stall does not take connections from other
+Redis work.
+
+`NewRedisClient` takes standard go-redis options, and `redis.NewUniversalClient`
+picks the client: Sentinel when `MasterName` is set, Cluster for more than one
+address or `IsClusterMode`, otherwise standalone. Redis and Valkey work the same
+way. The caller owns the returned client and closes it after draining cache work
+(excerpt):
+
+```go
+client, err := dialcache.NewRedisClient(&redis.UniversalOptions{
+	Addrs: []string{"redis:6379"},
+})
+if err != nil {
+	return err
+}
+defer client.Close()
+cache, err := dialcache.New(dialcache.WithRemote(dialcache.NewRedisAdapter(client)))
+```
+
+A zero field gets the value below. It is a starting point for up to about 1,000
+reads per second at normal Redis latency; measure pool waits and source
+fallbacks under load before you rely on it. A field you set keeps your value.
+`ContextTimeoutEnabled` is always set.
+
+| Option | Value | go-redis default |
+| --- | --- | --- |
+| `PoolSize` | 64 | 10 per `GOMAXPROCS` |
+| `MinIdleConns` | 8 | 0 |
+| `PoolTimeout` | 100 ms | `ReadTimeout` + 1 s |
+| `DialTimeout` | 500 ms | 5 s |
+| `DialerRetries` | 1 | 5 |
+| `ReadTimeout`, `WriteTimeout` | 250 ms | 5 s |
+| `MaxRetries` | -1 (no retries) | 3 |
+| `ConnMaxIdleTime` | 3 min | 30 min |
+| `Protocol` | 2 (RESP3 also works) | 3 |
+
+A read that DialCache stopped waiting for keeps its connection until Redis
+replies or `ReadTimeout` ends. In a slowdown longer than the read budget, the
+pool fills: other commands wait `PoolTimeout`, then reads call the source and
+cache writes fail.
+
+`PoolSize` and `MinIdleConns` apply to each Redis node. `MinIdleConns` opens its
+connections in the background when the client starts; set it to -1 for none.
+Build one client per process and reuse it.
+
+Give `Invalidate` a context deadline. Do not derive a socket deadline from
+`ReadBudget`: a deadline that cuts a slow command closes its connection, and the
+reconnects add load while Redis is slow.
 
 ## Conformance
 

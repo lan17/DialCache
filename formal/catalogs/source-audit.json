@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "514e3c9ab39e25d572b98dba915190ec2c368069f3d88a557657ffaeaffbf3c3",
+      "sha256": "ec2c671e9305fcb5e5ea2210613f037351cdd9a0947a6c17567d93cf68f08cde",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -173,6 +173,7 @@
         {"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
         {"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
         {"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
+        {"title":"Redis client budgets","contracts":["E01","C23","C56"]},
         {"title":"Conformance","contracts":["B01"]}
       ]
     },
@@ -1800,7 +1801,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "0d77c6caf885d508febae846a4a06dc33cd63e0d2b18faccdfc4ac8781d271fb",
+      "sha256": "afcdde22fe023e3f7677ff55926c3d233d467434b2b104ef8ad40d0a703c2cc0",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},

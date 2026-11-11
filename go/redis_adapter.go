@@ -16,10 +16,48 @@ import (
 // or Cluster client. It never connects/closes the client or changes its options.
 // Set finite client dial/read/write/retry budgets. Cancellation after dispatch
 // cannot prove a mutation did not execute; the cache bounds its own wait.
+// A Sentinel client must keep FailoverOptions.ReplicaOnly false: a replica read
+// can hide an invalidation. NewRedisClient rejects it; the adapter cannot see it
+// on a client built elsewhere.
 type RedisAdapter struct{ client redis.UniversalClient }
 
 func NewRedisAdapter(client redis.UniversalClient) *RedisAdapter {
 	return &RedisAdapter{client: client}
+}
+
+// NewRedisClient builds a go-redis client for NewRedisAdapter from standard
+// go-redis options; redis.NewUniversalClient picks a standalone, Cluster or
+// Sentinel client. Zero budget fields get values that fit the default 50 ms read
+// budget, and ContextTimeoutEnabled is always set. The caller owns the client
+// and closes it after draining cache work.
+func NewRedisClient(options *redis.UniversalOptions) (redis.UniversalClient, error) {
+	if options == nil {
+		return nil, errors.New("dialcache: Redis options are required")
+	}
+	// go-redis turns ReadOnly on a plain Sentinel client into ReplicaOnly.
+	if options.MasterName != "" && options.ReadOnly && !options.RouteByLatency && !options.RouteRandomly && !options.IsClusterMode {
+		return nil, errors.New("dialcache: Sentinel ReadOnly reads replicas, which can hide an invalidation")
+	}
+	budgeted := *options
+	defaultTo(&budgeted.Protocol, 2)
+	defaultTo(&budgeted.PoolSize, 64)
+	defaultTo(&budgeted.MinIdleConns, 8)
+	defaultTo(&budgeted.PoolTimeout, 100*time.Millisecond)
+	defaultTo(&budgeted.DialTimeout, 500*time.Millisecond)
+	defaultTo(&budgeted.DialerRetries, 1)
+	defaultTo(&budgeted.ReadTimeout, 250*time.Millisecond)
+	defaultTo(&budgeted.WriteTimeout, 250*time.Millisecond)
+	defaultTo(&budgeted.MaxRetries, -1)
+	defaultTo(&budgeted.ConnMaxIdleTime, 3*time.Minute)
+	budgeted.ContextTimeoutEnabled = true
+	return redis.NewUniversalClient(&budgeted), nil
+}
+
+func defaultTo[T comparable](field *T, value T) {
+	var zero T
+	if *field == zero {
+		*field = value
+	}
 }
 
 var _ Remote = (*RedisAdapter)(nil)
