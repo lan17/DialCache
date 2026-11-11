@@ -236,7 +236,7 @@ jobs:
           fi
           release_parent="$(git rev-parse "${GITHUB_SHA}^")"
           python3 scripts/release.py verify "$release_version" "$release_parent" "$GITHUB_SHA"
-          python3 scripts/release.py formal "$GITHUB_REPOSITORY" "$release_parent"
+          python3 scripts/release.py formal "$GITHUB_REPOSITORY" "$release_parent" "$GITHUB_SHA"
           if git rev-parse --verify --quiet "refs/tags/v$release_version" >/dev/null; then
             echo "Release tag v$release_version already exists" >&2
             exit 1

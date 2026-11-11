@@ -109,7 +109,8 @@ Set `Operation.Identity.Tracked` and call
 is a `time.Duration` in whole milliseconds. Missing remote configuration returns
 `ErrNoRemote`. With `RedisAdapter`, a failed Redis command returns an error
 that matches `ErrRemoteUnavailable` with `errors.Is` and wraps the client's
-error; handle mutation errors as failed maintenance.
+error, so compare it with `errors.Is` rather than `==`; handle mutation errors
+as failed maintenance.
 
 </LanguageContent>
 

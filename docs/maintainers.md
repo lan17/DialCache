@@ -234,7 +234,10 @@ work sizes with `DIALCACHE_BENCH_STALE_ITERATIONS`,
 Publishing starts by manually running the `Release` workflow from current
 `main`. It refuses to start unless a `Full formal verification` run in
 `mutations` or `full` mode passed on that commit; dispatch one with
-`gh workflow run formal-full.yaml --ref main -f mode=mutations` first.
+`gh workflow run formal-full.yaml --ref main -f mode=mutations` first. If the
+`release:` pull request merges onto a newer `main`, the publish job finds no
+run for the new parent and stops before publishing; dispatch the same run on
+`main`, which now ends at the release commit, and re-run the failed job.
 
 After the package checks pass, Semantic Release selects the next version from
 Conventional Commits since the highest stable `vX.Y.Z` tag:
@@ -270,7 +273,7 @@ it normally through the protected branch.
 The merge triggers the publish job. Before any release side effect, it verifies:
 
 - current `main`;
-- a passed formal Mutations or Full run on the release commit's parent;
+- a passed formal Mutations or Full run on the release commit or its parent;
 - the release commit subject;
 - the exact version-only changes in all four version files;
 - the matching npm, Cargo manifest, Cargo lockfile and Python versions;

@@ -141,13 +141,16 @@ def formal_run_passed(runs, sha):
     )
 
 
-def require_formal_run(repository, sha):
-    runs = json.loads(subprocess.check_output([
-        "gh", "api", f"repos/{repository}/actions/workflows/formal-full.yaml/runs?head_sha={sha}&status=success",
-        "--jq", ".workflow_runs",
-    ]))
-    if not formal_run_passed(runs, sha):
-        raise ValueError(f"No passed formal Mutations or Full run on main at {sha}; dispatch formal-full.yaml first")
+def require_formal_run(repository, shas):
+    """Pass when any of the given commits has a passed formal Mutations or Full run."""
+    for sha in shas:
+        pages = json.loads(subprocess.check_output([
+            "gh", "api", "--paginate", "--slurp",
+            f"repos/{repository}/actions/workflows/formal-full.yaml/runs?head_sha={sha}&status=success",
+        ]))
+        if formal_run_passed([run for page in pages for run in page["workflow_runs"]], sha):
+            return
+    raise ValueError(f"No passed formal Mutations or Full run on main at {' or '.join(shas)}; dispatch formal-full.yaml first")
 
 
 def published_crate_matches(index, version, archive):
@@ -191,7 +194,7 @@ def main():
     verify.add_argument("head")
     formal = commands.add_parser("formal")
     formal.add_argument("repository")
-    formal.add_argument("sha")
+    formal.add_argument("shas", nargs="+")
     published = commands.add_parser("published")
     published.add_argument("version")
     published.add_argument("archive", type=Path)
@@ -201,7 +204,7 @@ def main():
     elif args.command == "verify":
         verify_version_commit(args.root, args.version, args.base, args.head)
     elif args.command == "formal":
-        require_formal_run(args.repository, args.sha)
+        require_formal_run(args.repository, args.shas)
     else:
         print(f"published={str(check_published(args.version, args.archive)).lower()}")
 

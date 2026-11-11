@@ -448,6 +448,21 @@ class FormalRunTests(unittest.TestCase):
         self.assertFalse(release.formal_run_passed(runs, self.SHA))
         self.assertFalse(release.formal_run_passed([], self.SHA))
 
+    def test_require_reads_every_page_and_accepts_any_listed_commit(self):
+        other = "b" * 40
+        pages = {
+            self.SHA: [{"workflow_runs": [self.run_for("Formal replay on main")]}],
+            other: [
+                {"workflow_runs": [self.run_for("Formal replay on main", sha=other)]},
+                {"workflow_runs": [self.run_for("Formal mutations on main", sha=other)]},
+            ],
+        }
+        fetch = lambda args: json.dumps(pages[args[-1].split("head_sha=")[1].split("&")[0]]).encode()
+        with patch.object(release.subprocess, "check_output", side_effect=fetch):
+            release.require_formal_run("owner/repo", [self.SHA, other])
+            with self.assertRaises(ValueError):
+                release.require_formal_run("owner/repo", [self.SHA])
+
 
 if __name__ == "__main__":
     unittest.main()
