@@ -1,6 +1,7 @@
 package dialcache
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -51,12 +52,18 @@ func after(clock Clock, delay time.Duration, f func()) Timer {
 	return time.AfterFunc(delay, f)
 }
 
-// awaitDeadline accepts only results observed strictly before the deadline.
+// awaitDeadline accepts only results observed strictly before the deadline,
+// and stops waiting with ctx.Err() when the waiter's ctx ends first.
 // Raw work keeps ownership of its resources after the caller stops waiting.
-func awaitDeadline[T any](clock Clock, p *pending[T], started time.Duration, budget int64, timeout func() error, onTimeout func()) (T, error) {
+func awaitDeadline[T any](ctx context.Context, clock Clock, p *pending[T], started time.Duration, budget int64, timeout func() error, onTimeout func()) (T, error) {
+	var zero T
 	if budget < 0 {
-		<-p.done
-		return p.result.value, p.result.err
+		select {
+		case <-p.done:
+			return p.result.value, p.result.err
+		case <-ctx.Done():
+			return zero, ctx.Err()
+		}
 	}
 	duration := time.Duration(budget) * time.Millisecond
 	for {
@@ -75,13 +82,15 @@ func awaitDeadline[T any](clock Clock, p *pending[T], started time.Duration, bud
 			if elapsedNow(clock)-started < duration {
 				continue
 			}
+		case <-ctx.Done():
+			timer.Stop()
+			return zero, ctx.Err()
 		}
 		break
 	}
 	if onTimeout != nil {
 		onTimeout()
 	}
-	var zero T
 	return zero, timeout()
 }
 

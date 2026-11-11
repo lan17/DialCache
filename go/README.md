@@ -124,12 +124,16 @@ and affects shared remote authority; other processes' local entries and
 already acquired snapshots retain the documented lifetime rules.
 
 Source errors retain their identity. A source deadline returns
-`FallbackTimeoutError` and does not cancel raw source work. A read deadline
-returns `RemoteReadTimeoutError` to cache plumbing and requests cancellation
-through the adapter context; it cannot prove a dispatched command stopped.
-Source/codec/provider/comparator panics become `CallbackPanicError`; telemetry
-panics are ignored. Cache plumbing fails open while explicit maintenance errors
-are returned. Applications still own cancellation of the source context.
+`FallbackTimeoutError` and cancels the source context; a source that ignores
+its context keeps running. A caller whose context ends stops waiting with that
+context's error and no stale recovery, while a coalesced flight continues for
+its other callers on a context that no single caller's cancellation ends. A
+read deadline returns `RemoteReadTimeoutError` to cache plumbing and requests
+cancellation through the adapter context; it cannot prove a dispatched command
+stopped. Shadow work runs on a context detached from the caller that ends with
+the shadow job. Source/codec/provider/comparator panics become
+`CallbackPanicError`; telemetry panics are ignored. Cache plumbing fails open
+while explicit maintenance errors are returned.
 
 `WithClock` separates wall time from elapsed time. The default clock preserves
 fractional milliseconds through `PreciseClock.ElapsedTime`. Custom clocks can

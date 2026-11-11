@@ -2,6 +2,7 @@ package dialcache
 
 import (
 	"bytes"
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -135,6 +136,11 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 	if budget < 0 {
 		budget = ms(DefaultSourceTimeout)
 	}
+	// Shadow work outlives the caller, so it runs on a context that only the job
+	// ending or reaching its deadline cancels.
+	jobCtx, cancel := context.WithCancel(context.WithoutCancel(x.ctx))
+	defer cancel()
+	sx := x.detached(jobCtx)
 	expired := func() bool {
 		if elapsedNow(clock)-started >= time.Duration(budget)*time.Millisecond {
 			f.abandon()
@@ -224,7 +230,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 				<-done
 			}
 		} else {
-			ctx := x.cache.Disable(x.ctx)
+			ctx := x.cache.Disable(jobCtx)
 			value, err = callSafely(func() (T, error) { return x.load(ctx) })
 		}
 		if err != nil {
@@ -237,7 +243,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 			return out("timeout")
 		}
 		if fill {
-			filled, writeErr := x.putRemote(value, fence, "remote_shadow", func() bool { return !expired() })
+			filled, writeErr := sx.putRemote(value, fence, "remote_shadow", func() bool { return !expired() })
 			if expired() {
 				return out("timeout")
 			}
@@ -253,7 +259,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 		if frame == nil {
 			return out("timeout")
 		}
-		cached, err := x.decode(*frame, "remote_shadow")
+		cached, err := sx.decode(*frame, "remote_shadow")
 		if err != nil {
 			return out("deserialization_error")
 		}
@@ -289,11 +295,16 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 		age = clock.WallMS() - int64(frame.CreatedAtMS)
 		return shadowVerdict[T]{outcome: "mismatch", age: &age, cached: cached, source: value}, nil
 	})
-	verdict, err := awaitDeadline(clock, validation, started, budget, func() error {
+	verdict, err := awaitDeadline(context.Background(), clock, validation, started, budget, func() error {
 		return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(budget) * time.Millisecond}
 	}, f.abandon)
 	if err != nil {
 		verdict = shadowVerdict[T]{outcome: "timeout"}
 	}
 	x.shadowEvent(verdict)
+}
+
+// detached copies x onto ctx for work that continues after the caller returns.
+func (x *execution[T]) detached(ctx context.Context) *execution[T] {
+	return &execution[T]{cache: x.cache, ctx: ctx, op: x.op, key: x.key, remoteKey: x.remoteKey, watermark: x.watermark, policy: x.policy, load: x.load}
 }

@@ -31,8 +31,8 @@ inline operation without registration.
 readers for that request and call `done` at the boundary, usually with `defer`.
 `WithEnabled` provides a callback form. `Disable(ctx)` derives an uncached context.
 Closing the scope prevents future caching through retained contexts and late
-publication to its memo. Application cancellation of the source context remains
-application-owned.
+publication to its memo. Each caller waits only as long as its own context
+allows, and a source deadline cancels the source context.
 
 ## Policy and errors
 

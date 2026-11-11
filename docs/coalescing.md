@@ -302,9 +302,11 @@ promises before shutdown.
 
 <LanguageContent language="go">
 
-Go's timer delivery does not cancel a source goroutine. Give source I/O a
-context deadline appropriate to the application. Closing the request memo and
-canceling source work are separate responsibilities.
+Go's timer delivery does not stop a source goroutine. The source deadline
+cancels the source context, so pass that context to source I/O; a source that
+ignores it keeps running. Each caller stops waiting when its own context ends,
+and a coalesced flight continues for its other callers. Closing the request
+memo and canceling source work are separate responsibilities.
 
 </LanguageContent>
 
@@ -340,9 +342,9 @@ value or proceed to ordinary serialization, Redis writes, or local publication.
 Recovery may deserialize retained bytes and memoize its result request-locally;
 it never publishes a new shared value.
 
-The underlying loader is not canceled and may continue its own I/O or side
-effects. Give the source operation a native timeout or cancellation mechanism whenever
-possible.
+The underlying loader is not forcibly stopped and may continue its own I/O or
+side effects. Give the source operation a native timeout or cancellation mechanism whenever
+possible; the Go port cancels the source context at the deadline.
 
 An explicit unbounded source budget disables the guard and makes finite fallback
 settlement entirely application-owned. Use that escape hatch only after

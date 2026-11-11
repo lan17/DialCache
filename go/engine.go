@@ -192,25 +192,43 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 		c.mu.Unlock()
 		return run()
 	}
+	ctx := x.ctx
 	if f := flights[x.key]; f != nil {
 		f.followers++
 		c.mu.Unlock()
 		x.event("coalesced", "", map[string]any{"scope": label})
-		<-f.done
-		return followerResult[T](f)
+		select {
+		case <-f.done:
+			return followerResult[T](f)
+		case <-ctx.Done():
+			c.mu.Lock()
+			f.followers--
+			c.mu.Unlock()
+			var zero T
+			return zero, ctx.Err()
+		}
 	}
 	f := &flight{done: make(chan struct{}), started: started}
 	flights[x.key] = f
 	c.mu.Unlock()
-	value, err := callSafely(run)
-	f.value, f.err = value, err
-	c.mu.Lock()
-	if flights[x.key] == f {
-		delete(flights, x.key)
+	// Followers share this work, so the leader's cancellation ends only its own wait.
+	x.ctx = context.WithoutCancel(ctx)
+	go func() {
+		f.value, f.err = callSafely(run)
+		c.mu.Lock()
+		if flights[x.key] == f {
+			delete(flights, x.key)
+		}
+		close(f.done)
+		c.mu.Unlock()
+	}()
+	select {
+	case <-f.done:
+		return followerResult[T](f)
+	case <-ctx.Done():
+		var zero T
+		return zero, ctx.Err()
 	}
-	close(f.done)
-	c.mu.Unlock()
-	return value, err
 }
 
 // followerResult hands a leader's settled result to a follower. A leader of
@@ -300,7 +318,8 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 		}
 		v, err := x.source("remote")
 		if err != nil {
-			if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAge > 0 && x.canRecover(err) {
+			// A caller that stopped waiting gets its own context error, not a recovery.
+			if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAge > 0 && x.ctx.Err() == nil && x.canRecover(err) {
 				if value, ok := x.recover(remote.frame); ok {
 					return value, nil
 				}
@@ -362,8 +381,14 @@ func (x *execution[T]) source(layer string) (T, error) {
 	clock := x.cache.settings.clock
 	start := elapsedNow(clock)
 	budget := x.budget()
-	p := startPending(func() (T, error) { return x.load(x.ctx) })
-	v, err := awaitDeadline(clock, p, start, budget, func() error {
+	// The source deadline and the waiter leaving both cancel the source context.
+	ctx, cancel := context.WithCancel(x.ctx)
+	if budget >= 0 {
+		ctx, cancel = context.WithTimeout(x.ctx, time.Duration(budget)*time.Millisecond)
+	}
+	defer cancel()
+	p := startPending(func() (T, error) { return x.load(ctx) })
+	v, err := awaitDeadline(x.ctx, clock, p, start, budget, func() error {
 		return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(budget) * time.Millisecond}
 	}, func() { x.timedOut.Store(true) })
 	if err != nil {
@@ -387,7 +412,7 @@ func (x *execution[T]) rawRead() (*pending[ReadResult], *pending[ReadResult]) {
 	start := elapsedNow(clock)
 	raw := startPending(func() (ReadResult, error) { return x.cache.settings.remote.Read(ctx, x.remoteKey, x.watermark) })
 	bounded := startPending(func() (ReadResult, error) {
-		r, e := awaitDeadline(clock, raw, start, ms(timeout), func() error { return &RemoteReadTimeoutError{Timeout: timeout} }, cancel)
+		r, e := awaitDeadline(context.Background(), clock, raw, start, ms(timeout), func() error { return &RemoteReadTimeoutError{Timeout: timeout} }, cancel)
 		if e != nil {
 			return r, e
 		}

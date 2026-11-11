@@ -631,8 +631,8 @@
           },
           {
             "path": "go/engine.go",
-            "before": "\tstarted := elapsedNow(c.settings.clock)\n\tc.mu.Lock()\n\tif owner != nil && !owner.live {\n\t\tc.mu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tc.mu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tc.mu.Unlock()\n\tvalue, err := callSafely(run)\n\tf.value, f.err = value, err\n\tc.mu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tc.mu.Unlock()\n\treturn value, err\n}",
-            "after": "\tstarted := elapsedNow(c.settings.clock)\n\t// Fault injection: process flights live in one registry shared by every\n\t// instance, guarded by one lock so the shared map itself stays race-free.\n\tmu := &c.mu\n\tif owner == nil {\n\t\tmu = &sharedProcessFlightsMu\n\t}\n\tmu.Lock()\n\tif owner != nil && !owner.live {\n\t\tmu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tmu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tmu.Unlock()\n\tvalue, err := callSafely(run)\n\tf.value, f.err = value, err\n\tmu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tmu.Unlock()\n\treturn value, err\n}"
+            "before": "\tstarted := elapsedNow(c.settings.clock)\n\tc.mu.Lock()\n\tif owner != nil && !owner.live {\n\t\tc.mu.Unlock()\n\t\treturn run()\n\t}\n\tctx := x.ctx\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tc.mu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\tselect {\n\t\tcase <-f.done:\n\t\t\treturn followerResult[T](f)\n\t\tcase <-ctx.Done():\n\t\t\tc.mu.Lock()\n\t\t\tf.followers--\n\t\t\tc.mu.Unlock()\n\t\t\tvar zero T\n\t\t\treturn zero, ctx.Err()\n\t\t}\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tc.mu.Unlock()\n\t// Followers share this work, so the leader's cancellation ends only its own wait.\n\tx.ctx = context.WithoutCancel(ctx)\n\tgo func() {\n\t\tf.value, f.err = callSafely(run)\n\t\tc.mu.Lock()\n\t\tif flights[x.key] == f {\n\t\t\tdelete(flights, x.key)\n\t\t}\n\t\tclose(f.done)\n\t\tc.mu.Unlock()\n\t}()\n\tselect {\n\tcase <-f.done:\n\t\treturn followerResult[T](f)\n\tcase <-ctx.Done():\n\t\tvar zero T\n\t\treturn zero, ctx.Err()\n\t}\n}",
+            "after": "\tstarted := elapsedNow(c.settings.clock)\n\t// Fault injection: process flights live in one registry shared by every\n\t// instance, guarded by one lock so the shared map itself stays race-free.\n\tmu := &c.mu\n\tif owner == nil {\n\t\tmu = &sharedProcessFlightsMu\n\t}\n\tmu.Lock()\n\tif owner != nil && !owner.live {\n\t\tmu.Unlock()\n\t\treturn run()\n\t}\n\tctx := x.ctx\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tmu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\tselect {\n\t\tcase <-f.done:\n\t\t\treturn followerResult[T](f)\n\t\tcase <-ctx.Done():\n\t\t\tmu.Lock()\n\t\t\tf.followers--\n\t\t\tmu.Unlock()\n\t\t\tvar zero T\n\t\t\treturn zero, ctx.Err()\n\t\t}\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tmu.Unlock()\n\t// Followers share this work, so the leader's cancellation ends only its own wait.\n\tx.ctx = context.WithoutCancel(ctx)\n\tgo func() {\n\t\tf.value, f.err = callSafely(run)\n\t\tmu.Lock()\n\t\tif flights[x.key] == f {\n\t\t\tdelete(flights, x.key)\n\t\t}\n\t\tclose(f.done)\n\t\tmu.Unlock()\n\t}()\n\tselect {\n\tcase <-f.done:\n\t\treturn followerResult[T](f)\n\tcase <-ctx.Done():\n\t\tvar zero T\n\t\treturn zero, ctx.Err()\n\t}\n}"
           }
         ],
         "requiredDetections": [
@@ -939,8 +939,8 @@
         "edits": [
           {
             "path": "go/shadow.go",
-            "before": "if fill {\n\t\t\tfilled, writeErr := x.putRemote(value, fence, \"remote_shadow\", func() bool { return !expired() })",
-            "after": "if fill {\n\t\t\tif provider := x.cache.settings.policyProvider; provider != nil {\n\t\t\t\tif overlay, err := callSafely(func() (RuntimePolicy, error) { return provider(x.ctx, x.op.Identity) }); err == nil {\n\t\t\t\t\tif current, err := ResolvePolicy(x.op.Policy, overlay, x.op.Identity, PolicyDefaults{RemoteReadTimeout: x.cache.settings.remoteReadTimeout}); err == nil {\n\t\t\t\t\t\tx.policy.Remote.TTL, x.policy.StaleOnErrorMaxAge = current.Remote.TTL, current.StaleOnErrorMaxAge\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tfilled, writeErr := x.putRemote(value, fence, \"remote_shadow\", func() bool { return !expired() })"
+            "before": "if fill {\n\t\t\tfilled, writeErr := sx.putRemote(value, fence, \"remote_shadow\", func() bool { return !expired() })",
+            "after": "if fill {\n\t\t\tif provider := x.cache.settings.policyProvider; provider != nil {\n\t\t\t\tif overlay, err := callSafely(func() (RuntimePolicy, error) { return provider(sx.ctx, x.op.Identity) }); err == nil {\n\t\t\t\t\tif current, err := ResolvePolicy(x.op.Policy, overlay, x.op.Identity, PolicyDefaults{RemoteReadTimeout: x.cache.settings.remoteReadTimeout}); err == nil {\n\t\t\t\t\t\tsx.policy.Remote.TTL, sx.policy.StaleOnErrorMaxAge = current.Remote.TTL, current.StaleOnErrorMaxAge\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tfilled, writeErr := sx.putRemote(value, fence, \"remote_shadow\", func() bool { return !expired() })"
           }
         ],
         "requiredDetections": [
@@ -1104,8 +1104,8 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "<-f.done\n\t\treturn followerResult[T](f)",
-            "after": "<-f.done\n\t\tvar zero T\n\t\treturn zero, f.err"
+            "before": "\t\tcase <-f.done:\n\t\t\treturn followerResult[T](f)\n\t\tcase <-ctx.Done():\n\t\t\tc.mu.Lock()",
+            "after": "\t\tcase <-f.done:\n\t\t\tvar zero T\n\t\t\treturn zero, f.err\n\t\tcase <-ctx.Done():\n\t\t\tc.mu.Lock()"
           }
         ],
         "requiredDetections": [

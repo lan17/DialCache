@@ -49,7 +49,7 @@
     },
     {
       "path": "docs/coalescing.md",
-      "sha256": "cc3c776553de55a2c384c747f7804556e3d0196b3fde53a18cd628cec968556e",
+      "sha256": "0ffa571c6613234311ee88114cba2784f45f20449355180e34a0d1818a39f671",
       "entries": [
         {"title":"Coalescing and liveness","contracts":["C11"]},
         {"title":"Request coalescing","contracts":["C11"]},
@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "514e3c9ab39e25d572b98dba915190ec2c368069f3d88a557657ffaeaffbf3c3",
+      "sha256": "f66e4a3949ff1fac2e0de62a045095541fc87836b3ef5aeb56f1f53889c25495",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -1800,7 +1800,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "0d77c6caf885d508febae846a4a06dc33cd63e0d2b18faccdfc4ac8781d271fb",
+      "sha256": "12b85493aa2d1e30f7b8038128c016c6b0001bcb1aae97f3fd67014004eea020",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},
