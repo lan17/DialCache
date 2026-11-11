@@ -166,13 +166,14 @@ func (f remoteFailure) Error() string { return f.err.Error() }
 const failureLogInterval = time.Minute
 
 // warnFailure logs a cache plumbing failure unless it is a routine remote
-// failure, which only its error event records. An unusual failure can still
-// repeat on every call: a corrupt hot key fails each read until its TTL ends,
-// because a failed read never refills. So each message and kind of cause logs
-// at most once per interval, while the error event counts every occurrence.
+// failure, which only its error event records. Without an observer nothing
+// records that event, so a routine failure logs too. A failure can repeat on
+// every call: a corrupt hot key fails each read until its TTL ends, because a
+// failed read never refills. So each message and kind of cause logs at most
+// once per interval, while the error event counts every occurrence.
 func (c *Cache) warnFailure(message string, err error) {
 	if remote, ok := err.(remoteFailure); ok {
-		if routineRemoteFailure(remote.err) {
+		if routineRemoteFailure(remote.err) && len(c.settings.observers) > 0 {
 			return
 		}
 		err = remote.err

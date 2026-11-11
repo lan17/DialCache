@@ -182,10 +182,11 @@ one of those paths to avoid double-counting it.
 DogStatsD adapters preserve metric names, labels, units and buckets; logical
 keys never become labels. `WithLogger` replaces the standard logger, which
 writes each entry on one line with control characters escaped; either is
-failure-isolated. A remote failure that means Redis is slow or unreachable,
-such as a timeout or a refused connection, emits only its `error` event; other
-plumbing failures log at most once a minute per message and kind of cause.
-Mismatch logging is opt-in, confirmed, and bounded.
+failure-isolated. With a metrics adapter or observer, a remote failure that
+means Redis is slow or unreachable, such as a timeout or a refused connection,
+emits only its `error` event; other plumbing failures, and routine ones on a
+cache with no observer, log at most once a minute per message and kind of
+cause. Mismatch logging is opt-in, confirmed, and bounded.
 
 Prometheus adapters reuse collectors created by an earlier adapter with the
 same registry and prefix. To reuse externally registered collectors, supply

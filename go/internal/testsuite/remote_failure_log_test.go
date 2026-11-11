@@ -117,6 +117,29 @@ func unreachableRedis(t *testing.T) redis.UniversalClient {
 	return client
 }
 
+// droppingRedis accepts each connection and closes it at once, as a Redis
+// restart does to established connections.
+func droppingRedis(t *testing.T) redis.UniversalClient {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+		}
+	}()
+	client := redis.NewClient(&redis.Options{Addr: listener.Addr().String(), MaxRetries: -1, DialerRetries: 1, DialerRetryTimeout: time.Millisecond})
+	t.Cleanup(func() { client.Close() })
+	return client
+}
+
 type failureRun struct {
 	cache    *Cache
 	identity Identity
@@ -173,6 +196,9 @@ func TestRoutineRemoteFailuresAreMetricOnly(t *testing.T) {
 		"redis down on write": {remote: missingRemote{down}, failure: "cache_write"},
 		"read deadline":       {remote: blockingRemote{}, options: []Option{WithRemoteReadTimeout(10 * time.Millisecond)}, failure: "cache_read_timeout"},
 		"failover reply":      {remote: failingRemote{replyError("LOADING Redis is loading the dataset in memory")}, failure: "cache_read"},
+		"read-only replica":   {remote: failingRemote{replyError("READONLY You can't write against a read only replica.")}, failure: "cache_read"},
+		"connection limit":    {remote: failingRemote{replyError("ERR max number of clients reached")}, failure: "cache_read"},
+		"connection dropped":  {remote: NewRedisAdapter(droppingRedis(t)), failure: "cache_read"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			run := newFailureRun(test.remote, test.options...)
@@ -209,6 +235,25 @@ func TestUnusualRemoteFailuresStayLogged(t *testing.T) {
 				t.Fatalf("error events = %v", run.errors)
 			}
 		})
+	}
+}
+
+// Without an observer nothing records the error events, so a routine failure
+// still logs, at the same bounded rate.
+func TestRoutineFailureLogsWithoutObserver(t *testing.T) {
+	var log failureLog
+	cache := MustNew(WithRemote(NewRedisAdapter(unreachableRedis(t))), WithLogger(&log))
+	operation := Operation[string]{Identity: failureIdentity, Policy: Policy{RemoteTTL: time.Minute}}
+	for range 20 {
+		ctx, done := cache.Enable(context.Background())
+		value, err := GetOrLoad(ctx, cache, operation, func(context.Context) (string, error) { return "source", nil })
+		done()
+		if value != "source" || err != nil {
+			t.Fatalf("remote failure changed the source result: %q %v", value, err)
+		}
+	}
+	if len(log.messages) != 1 || log.messages[0] != "Error getting value from Redis cache" {
+		t.Fatalf("logs = %v; want one read warning", log.messages)
 	}
 }
 

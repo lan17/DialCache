@@ -760,14 +760,17 @@ whose `Outcome` is `logged`, `hook_error`, `render_error`, or `logger_error`.
 Use the [generated Go API](api.md) for event and adapter types. Preserve the
 bounded metric names, labels and units in the catalogue above.
 
-A remote failure that means Redis is slow or unreachable emits only its
-`error` event: a timeout, cancellation, network or connection pool failure, or
-a `LOADING`, `CLUSTERDOWN`, `TRYAGAIN` or `MASTERDOWN` reply. Other
-cache-plumbing failures reach the logger at most once a minute per message and
-kind of cause, such as a malformed frame or reply, another Redis error reply,
-an adapter panic, or an error type DialCache does not recognize from a custom
-`Remote`, for example a circuit breaker's rejection. Their `error` events count
-every occurrence.
+When the cache has a metrics adapter or observer, a remote failure that means
+Redis is slow, overloaded or unreachable emits only its `error` event: a
+timeout, cancellation, network or connection pool failure, a dropped
+connection, or a `LOADING`, `READONLY`, `CLUSTERDOWN`, `TRYAGAIN`, `MASTERDOWN`
+or maximum-clients reply. Other cache-plumbing failures, and routine ones on a
+cache with no observer, reach the logger at most once a minute per message and
+kind of cause. These include a malformed frame or reply, another Redis error
+reply, an adapter panic, and an error type DialCache does not recognize from a
+custom `Remote`, for example a circuit breaker's rejection. Their `error`
+events count every occurrence. A custom `Remote` reports a malformed payload as
+`RedisPayloadError` and an unexpected reply as `RedisProtocolError`.
 
 </LanguageContent>
 

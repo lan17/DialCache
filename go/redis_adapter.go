@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -35,18 +36,23 @@ type RedisProtocolError struct{ Message string }
 func (e *RedisProtocolError) Error() string { return e.Message }
 
 // routineRemoteFailure reports a Remote failure that recognizably means Redis
-// is slow or unreachable: a timeout, cancellation, network or connection pool
-// failure, or a failover reply. Error metrics count these; a log line for each
-// would flood the logs while Redis is slow or down. Every other failure is
-// unusual, including an error type DialCache does not know from a custom Remote.
+// is slow, overloaded or unreachable: a timeout, cancellation, network or
+// connection pool failure, a dropped connection, or a reply go-redis retries
+// as transient. Error metrics count these; a log line for each would flood the
+// logs while Redis is slow or down. Every other failure is unusual, including
+// an error type DialCache does not know from a custom Remote. A dropped
+// connection surfaces as io.EOF or io.ErrUnexpectedEOF, so a custom Remote
+// reports a malformed payload as RedisPayloadError instead.
 func routineRemoteFailure(err error) bool {
 	var reply redis.Error
 	if errors.As(err, &reply) {
-		return redis.IsLoadingError(err) || redis.IsClusterDownError(err) || redis.IsTryAgainError(err) || redis.IsMasterDownError(err)
+		return redis.IsLoadingError(err) || redis.IsReadOnlyError(err) || redis.IsClusterDownError(err) || redis.IsTryAgainError(err) ||
+			redis.IsMasterDownError(err) || redis.IsMaxClientsError(err)
 	}
 	var timeout *RemoteReadTimeoutError
 	var network net.Error
 	return errors.As(err, &timeout) || errors.As(err, &network) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, redis.ErrPoolTimeout) || errors.Is(err, redis.ErrPoolExhausted) || errors.Is(err, redis.ErrClosed)
 }
 
