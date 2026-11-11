@@ -16,6 +16,8 @@ import (
 // or Cluster client. It never connects/closes the client or changes its options.
 // Set finite client dial/read/write/retry budgets. Cancellation after dispatch
 // cannot prove a mutation did not execute; the cache bounds its own wait.
+// A Sentinel client must keep FailoverOptions.ReplicaOnly false: a replica read
+// can hide an invalidation, and the adapter cannot see that option.
 type RedisAdapter struct{ client redis.UniversalClient }
 
 func NewRedisAdapter(client redis.UniversalClient) *RedisAdapter {
@@ -41,18 +43,19 @@ func (adapter *RedisAdapter) Read(ctx context.Context, valueKey, watermarkKey st
 			raw = nil
 			err = nil
 		}
-	} else {
-		// Caller options may enable replica reads. Selecting the slot master is
-		// explicit here because a stale replica could hide an invalidation fence.
-		var commands redis.Cmdable = adapter.client
-		if cluster, ok := adapter.client.(*redis.ClusterClient); ok {
-			primary, selectErr := cluster.MasterForKey(ctx, valueKey)
-			if selectErr != nil {
-				return ReadResult{}, selectErr
-			}
-			commands = primary
+	} else if cluster, ok := adapter.client.(*redis.ClusterClient); ok {
+		// Caller options may enable replica reads, and a stale replica could hide
+		// an invalidation fence. go-redis runs a transaction on the slot primary,
+		// follows MOVED and ASK for it and calls the cluster client's hooks.
+		var mget *redis.SliceCmd
+		if _, err = cluster.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			mget = pipe.MGet(ctx, valueKey, watermarkKey)
+			return nil
+		}); err == nil {
+			raw, err = mget.Result()
 		}
-		raw, err = commands.MGet(ctx, valueKey, watermarkKey).Result()
+	} else {
+		raw, err = adapter.client.MGet(ctx, valueKey, watermarkKey).Result()
 	}
 	if err != nil {
 		return ReadResult{}, err

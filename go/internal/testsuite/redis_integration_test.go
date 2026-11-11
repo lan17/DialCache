@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -270,6 +271,9 @@ func TestRedisIntegration(t *testing.T) {
 			t.Run("invalidation-vectors", func(t *testing.T) { testInvalidationVectors(t, environment) })
 			t.Run("mixed-typescript-go", func(t *testing.T) { testMixedLanguage(t, environment) })
 			t.Run("complete-frame-and-primary-read", func(t *testing.T) { testPrimaryRead(t, environment) })
+			if environment.cluster {
+				t.Run("tracked-read-after-slot-move", func(t *testing.T) { testTrackedReadAfterSlotMove(t, environment) })
+			}
 		})
 	}
 }
@@ -561,7 +565,14 @@ func (h redisRouteHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 	}
 }
 func (h redisRouteHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
-	return next
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		for _, cmd := range cmds {
+			if cmd.Name() == "mget" {
+				h.reads.Add(1)
+			}
+		}
+		return next(ctx, cmds)
+	}
 }
 
 func testPrimaryRead(t *testing.T, environment redisEnvironment) {
@@ -617,5 +628,85 @@ func testPrimaryRead(t *testing.T, environment redisEnvironment) {
 	}
 	if err := adapter.Invalidate(context.Background(), watermark, 3000, 0); err != nil {
 		t.Fatal("NOSCRIPT recovery failed", err)
+	}
+}
+
+// A tracked read must follow MOVED after its slot moves, before the client's
+// periodic slot-map reload, and must pass through the cluster client's hooks.
+func testTrackedReadAfterSlotMove(t *testing.T, environment redisEnvironment) {
+	ctx := context.Background()
+	cluster := environment.client.(*redis.ClusterClient)
+	key, watermark := "{moved-go}:value", "{moved-go}:watermark"
+	adapter := NewRedisAdapter(cluster)
+	if err := adapter.Invalidate(ctx, watermark, 2000, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Write(ctx, key, Frame{CreatedAtMS: 3000, Payload: []byte("moved")}, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := adapter.Read(ctx, key, watermark); err != nil || got.Kind != "hit" {
+		t.Fatal("tracked read before the move", got, err)
+	}
+	source, err := cluster.MasterForKey(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var masters []*redis.Client
+	var mu sync.Mutex
+	if err := cluster.ForEachMaster(ctx, func(_ context.Context, client *redis.Client) error {
+		mu.Lock()
+		defer mu.Unlock()
+		masters = append(masters, client)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var target *redis.Client
+	for _, master := range masters {
+		if master.Options().Addr != source.Options().Addr {
+			target = master
+			break
+		}
+	}
+	slot, err := source.ClusterKeySlot(ctx, key).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceID, err := source.ClusterMyID(ctx).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetID, err := target.ClusterMyID(ctx).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, port, err := net.SplitHostPort(target.Options().Addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []struct {
+		client *redis.Client
+		args   []any
+	}{
+		{target, []any{"CLUSTER", "SETSLOT", slot, "IMPORTING", sourceID}},
+		{source, []any{"CLUSTER", "SETSLOT", slot, "MIGRATING", targetID}},
+		{source, []any{"MIGRATE", host, port, "", 0, 5000, "KEYS", key, watermark}},
+	} {
+		if err := step.client.Do(ctx, step.args...).Err(); err != nil {
+			t.Fatal(step.args, err)
+		}
+	}
+	for _, master := range masters {
+		if err := master.Do(ctx, "CLUSTER", "SETSLOT", slot, "NODE", targetID).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var clusterReads atomic.Int64
+	cluster.AddHook(redisRouteHook{&clusterReads})
+	if got, err := adapter.Read(ctx, key, watermark); err != nil || got.Kind != "hit" {
+		t.Fatal("tracked read after the move", got, err)
+	}
+	if clusterReads.Load() != 1 {
+		t.Fatalf("cluster hooks saw %d tracked reads, want 1", clusterReads.Load())
 	}
 }

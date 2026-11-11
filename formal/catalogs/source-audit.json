@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "514e3c9ab39e25d572b98dba915190ec2c368069f3d88a557657ffaeaffbf3c3",
+      "sha256": "21c532f2acb2805004d1a81cd1841b2d803e8ebc2b425c9e44a8499a4a818e47",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -260,7 +260,7 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "754d156cff4d53d65ea33aef458839a8459aacfeac0d59303a292113d667545d",
+      "sha256": "e75133d7dc4fa2bd94e4f1a12fdfe597ff821701af224817ea5d26806979c0c7",
       "entries": [
         {"title":"Redis and Valkey","contracts":["E01"]},
         {"title":"Install a client","contracts":["B01","E01"]},
@@ -1800,7 +1800,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "0d77c6caf885d508febae846a4a06dc33cd63e0d2b18faccdfc4ac8781d271fb",
+      "sha256": "42e53589d17b765c8337a75f61b9ca6f7f17155faaf113b21036d913c4a71677",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},
