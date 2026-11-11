@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "f1390cb8a17e1af1b4990db4c2068f36824206bb8b75500ef23732905fdbe85b",
+      "sha256": "902316a684e893921d0ee95f9e7ed9184cf4a13c2d0aa4446f57402ec3bddc95",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -261,7 +261,7 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "f56c06b3575d80733f7e7e0512b4e71f77c0db2e51632152b135c0c355079553",
+      "sha256": "754d156cff4d53d65ea33aef458839a8459aacfeac0d59303a292113d667545d",
       "entries": [
         {"title":"Redis and Valkey","contracts":["E01"]},
         {"title":"Install a client","contracts":["B01","E01"]},

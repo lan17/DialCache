@@ -101,10 +101,13 @@ replaces the built-in difference computation of confirmed-mismatch warnings; a
 
 ### Redis client budgets
 
-DialCache bounds only its own wait for a remote read. `Write` and `Invalidate`
-wait for the client
-([remote-read deadlines](../redis.md#remote-read-deadlines-and-async-liveness)).
-The go-redis defaults do not fit the default 50 ms read budget. The pool holds 10
+DialCache bounds only its own wait for a remote read. The read context has no
+deadline: DialCache cancels it when the read budget expires, and `ReadBudget(ctx)`
+reports that budget. A command already on the socket runs until the client's
+`ReadTimeout`. `Write` and `Invalidate` receive the caller's context without a
+DialCache deadline, so only the client's budgets and a caller deadline bound them;
+go-redis applies a context deadline to the socket only when
+`ContextTimeoutEnabled` is set. The go-redis defaults do not fit the default 50 ms read budget. The pool holds 10
 connections per `GOMAXPROCS`, reads and writes may wait 5 seconds, a failed
 command is retried 3 times, and a connect is attempted 5 times. On a container
 limited to one or two CPUs, a Redis slowdown of a few tens of milliseconds at a

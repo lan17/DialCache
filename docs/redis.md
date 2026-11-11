@@ -120,17 +120,13 @@ clients. Install the module; go-redis is part of its dependency graph:
 go get github.com/lan17/DialCache/go@latest
 ```
 
-Create a `redis.UniversalClient` with `dialcache.NewRedisClient`, which takes
-standard `redis.UniversalOptions` and fills zero budget fields, or build one
-yourself. Then pass `dialcache.NewRedisAdapter(client)` to `dialcache.WithRemote`.
-For a direct `*redis.ClusterClient`, tracked reads select the primary even when
-replica reads are enabled. Standalone and Sentinel `*redis.Client` handles must
-already target the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false. Reading a replica
-can hide an invalidation watermark. `NewRedisClient` rejects Sentinel `ReadOnly`;
-the adapter cannot see that option on a client built elsewhere. Set
-connection, read/write and retry budgets on the native client
-([Redis client budgets](languages/go.md#redis-client-budgets)); close it only
-after application work is drained. The
+Create the appropriate `redis.UniversalClient` in your application, then pass
+`dialcache.NewRedisAdapter(client)` to `dialcache.WithRemote`. For a direct
+`*redis.ClusterClient`, tracked reads select the primary even when replica reads
+are enabled. Standalone and Sentinel `*redis.Client` handles must already target
+the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false. Reading a replica
+can hide an invalidation watermark. Set connection, read/write and retry budgets
+on the native client; close it only after application work is drained. The
 [executed invalidation example](invalidation.md#configure-a-tracked-use-case)
 links to complete connection setup.
 
@@ -214,19 +210,9 @@ supported; GLIDE uses its configured native request budget. Read timeouts log
 
 <LanguageContent language="go">
 
-The read context has no deadline. DialCache cancels it when the read budget
-expires, and `ReadBudget(ctx)` reports that budget. go-redis stops waiting for a
-pool connection when the context is canceled, but a command already on the
-socket runs until the client's `ReadTimeout`, and its connection stays busy
-until then. `Write` and `Invalidate` receive the caller's context, and DialCache
-adds no deadline to either, so only the client's budgets and a caller deadline
-bound them. go-redis applies a context deadline to the socket only when
-`ContextTimeoutEnabled` is set. `RemoteReadTimeoutError` does not prove that a
-dispatched command stopped.
-
-The go-redis defaults do not fit the read budget.
-[Redis client budgets](languages/go.md#redis-client-budgets) gives a client
-configuration and the reasons for it.
+The adapter receives a bounded `context.Context`; native reads can observe
+cancellation. The cache's `RemoteReadTimeoutError` does not prove a dispatched
+Redis command stopped or free the application from bounding retries and queues.
 
 </LanguageContent>
 
