@@ -515,8 +515,8 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "\t\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil",
-            "after": "\t\t\t\t_, ok := assertValue[T](raw)\n\t\t\t\treturn localResult[T]{found: ok, mismatch: !ok}, nil"
+            "before": "\t\t\tvalue, ok := assertValue[T](raw)\n\t\t\treturn localResult[T]{value: value, found: ok, mismatch: !ok}, nil",
+            "after": "\t\t\t_, ok := assertValue[T](raw)\n\t\t\treturn localResult[T]{found: ok, mismatch: !ok}, nil"
           }
         ],
         "requiredDetections": [
@@ -631,8 +631,8 @@
           },
           {
             "path": "go/engine.go",
-            "before": "\tstarted := elapsedNow(c.settings.clock)\n\tc.mu.Lock()\n\tif owner != nil && !owner.live {\n\t\tc.mu.Unlock()\n\t\treturn run()\n\t}\n\tctx := x.ctx\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tc.mu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\tselect {\n\t\tcase <-f.done:\n\t\tcase <-ctx.Done():\n\t\t}\n\t\tif err := ctx.Err(); err != nil {\n\t\t\tc.mu.Lock()\n\t\t\tf.followers--\n\t\t\tc.mu.Unlock()\n\t\t\tvar zero T\n\t\t\treturn zero, err\n\t\t}\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tc.mu.Unlock()\n\t// Followers share this work, so the leader's cancellation ends only its own wait.\n\tx.ctx = context.WithoutCancel(ctx)\n\tgo func() {\n\t\tf.value, f.err = callSafely(run)\n\t\tc.mu.Lock()\n\t\tif flights[x.key] == f {\n\t\t\tdelete(flights, x.key)\n\t\t}\n\t\tclose(f.done)\n\t\tc.mu.Unlock()\n\t}()\n\tselect {\n\tcase <-f.done:\n\tcase <-ctx.Done():\n\t}\n\tif err := ctx.Err(); err != nil {\n\t\tvar zero T\n\t\treturn zero, err\n\t}\n\treturn followerResult[T](f)\n}",
-            "after": "\tstarted := elapsedNow(c.settings.clock)\n\t// Fault injection: process flights live in one registry shared by every\n\t// instance, guarded by one lock so the shared map itself stays race-free.\n\tmu := &c.mu\n\tif owner == nil {\n\t\tmu = &sharedProcessFlightsMu\n\t}\n\tmu.Lock()\n\tif owner != nil && !owner.live {\n\t\tmu.Unlock()\n\t\treturn run()\n\t}\n\tctx := x.ctx\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tmu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\tselect {\n\t\tcase <-f.done:\n\t\tcase <-ctx.Done():\n\t\t}\n\t\tif err := ctx.Err(); err != nil {\n\t\t\tmu.Lock()\n\t\t\tf.followers--\n\t\t\tmu.Unlock()\n\t\t\tvar zero T\n\t\t\treturn zero, err\n\t\t}\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tmu.Unlock()\n\t// Followers share this work, so the leader's cancellation ends only its own wait.\n\tx.ctx = context.WithoutCancel(ctx)\n\tgo func() {\n\t\tf.value, f.err = callSafely(run)\n\t\tmu.Lock()\n\t\tif flights[x.key] == f {\n\t\t\tdelete(flights, x.key)\n\t\t}\n\t\tclose(f.done)\n\t\tmu.Unlock()\n\t}()\n\tselect {\n\tcase <-f.done:\n\tcase <-ctx.Done():\n\t}\n\tif err := ctx.Err(); err != nil {\n\t\tvar zero T\n\t\treturn zero, err\n\t}\n\treturn followerResult[T](f)\n}"
+            "before": "\tstarted := elapsedNow(c.settings.clock)\n\tc.mu.Lock()\n\tif owner != nil && !owner.live {\n\t\tc.mu.Unlock()\n\t\treturn x.work(owner)\n\t}\n\tctx := x.ctx\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tc.mu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\tselect {\n\t\tcase <-f.done:\n\t\tcase <-ctx.Done():\n\t\t}\n\t\tif err := ctx.Err(); err != nil {\n\t\t\tc.mu.Lock()\n\t\t\tf.followers--\n\t\t\tc.mu.Unlock()\n\t\t\tvar zero T\n\t\t\treturn zero, err\n\t\t}\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tc.mu.Unlock()\n\t// Followers share this work, so the leader's cancellation ends only its own wait.\n\tx.ctx = context.WithoutCancel(ctx)\n\tgo func() {\n\t\tf.value, f.err = callSafely(func() (T, error) { return x.work(owner) })\n\t\tc.mu.Lock()\n\t\tif flights[x.key] == f {\n\t\t\tdelete(flights, x.key)\n\t\t}\n\t\tclose(f.done)\n\t\tc.mu.Unlock()\n\t}()\n\tselect {\n\tcase <-f.done:\n\tcase <-ctx.Done():\n\t}\n\tif err := ctx.Err(); err != nil {\n\t\tvar zero T\n\t\treturn zero, err\n\t}\n\treturn followerResult[T](f)\n}",
+            "after": "\tstarted := elapsedNow(c.settings.clock)\n\t// Fault injection: process flights live in one registry shared by every\n\t// instance, guarded by one lock so the shared map itself stays race-free.\n\tmu := &c.mu\n\tif owner == nil {\n\t\tmu = &sharedProcessFlightsMu\n\t}\n\tmu.Lock()\n\tif owner != nil && !owner.live {\n\t\tmu.Unlock()\n\t\treturn x.work(owner)\n\t}\n\tctx := x.ctx\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tmu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\tselect {\n\t\tcase <-f.done:\n\t\tcase <-ctx.Done():\n\t\t}\n\t\tif err := ctx.Err(); err != nil {\n\t\t\tmu.Lock()\n\t\t\tf.followers--\n\t\t\tmu.Unlock()\n\t\t\tvar zero T\n\t\t\treturn zero, err\n\t\t}\n\t\treturn followerResult[T](f)\n\t}\n\tf := &flight{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tmu.Unlock()\n\t// Followers share this work, so the leader's cancellation ends only its own wait.\n\tx.ctx = context.WithoutCancel(ctx)\n\tgo func() {\n\t\tf.value, f.err = callSafely(func() (T, error) { return x.work(owner) })\n\t\tmu.Lock()\n\t\tif flights[x.key] == f {\n\t\t\tdelete(flights, x.key)\n\t\t}\n\t\tclose(f.done)\n\t\tmu.Unlock()\n\t}()\n\tselect {\n\tcase <-f.done:\n\tcase <-ctx.Done():\n\t}\n\tif err := ctx.Err(); err != nil {\n\t\tvar zero T\n\t\treturn zero, err\n\t}\n\treturn followerResult[T](f)\n}"
           }
         ],
         "requiredDetections": [
@@ -695,8 +695,8 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "\t\tif p.Coalesce {\n\t\t\treturn x.singleFlight(c.flights, nil, \"process\", run)\n\t\t}\n\t\treturn run()\n\t}",
-            "after": "\t\tc.mu.Lock()\n\t\tpending := c.flights[x.key] != nil\n\t\tc.mu.Unlock()\n\t\tif p.Coalesce || pending {\n\t\t\treturn x.singleFlight(c.flights, nil, \"process\", run)\n\t\t}\n\t\treturn run()\n\t}"
+            "before": "\t\tif p.Coalesce {\n\t\t\treturn x.singleFlight(c.flights, nil, \"process\")\n\t\t}\n\t\treturn x.traverse()\n\t}",
+            "after": "\t\tc.mu.Lock()\n\t\tpending := c.flights[x.key] != nil\n\t\tc.mu.Unlock()\n\t\tif p.Coalesce || pending {\n\t\t\treturn x.singleFlight(c.flights, nil, \"process\")\n\t\t}\n\t\treturn x.traverse()\n\t}"
           }
         ],
         "requiredDetections": [
@@ -759,18 +759,18 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, e\n\t\t}",
-            "after": "\t\tif c.settings.remote == nil {\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.local.Remove(x.key)\n\t\t\t}\n\t\t\treturn v, e\n\t\t}"
+            "before": "\tif c.settings.remote == nil {\n\t\tv, e := x.source(fallbackLayer)\n\t\tif e == nil && localMiss {\n\t\t\tx.putLocal(v)\n\t\t}\n\t\treturn v, e\n\t}",
+            "after": "\tif c.settings.remote == nil {\n\t\tv, e := x.source(fallbackLayer)\n\t\tif e == nil && localMiss {\n\t\t\tx.putLocal(v)\n\t\t} else if e != nil {\n\t\t\tc.local.Remove(x.key)\n\t\t}\n\t\treturn v, e\n\t}"
           },
           {
             "path": "go/engine.go",
-            "before": "\t\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t\t}\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, e",
-            "after": "\t\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t\t}\n\t\t\tv, e := x.source(fallbackLayer)\n\t\t\tif e == nil && localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t} else if e != nil {\n\t\t\t\tc.local.Remove(x.key)\n\t\t\t}\n\t\t\treturn v, e"
+            "before": "\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t}\n\t\tv, e := x.source(fallbackLayer)\n\t\tif e == nil && localMiss {\n\t\t\tx.putLocal(v)\n\t\t}\n\t\treturn v, e",
+            "after": "\t\t\treturn x.darkSource(fallbackLayer, localMiss)\n\t\t}\n\t\tv, e := x.source(fallbackLayer)\n\t\tif e == nil && localMiss {\n\t\t\tx.putLocal(v)\n\t\t} else if e != nil {\n\t\t\tc.local.Remove(x.key)\n\t\t}\n\t\treturn v, e"
           },
           {
             "path": "go/engine.go",
-            "before": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n",
-            "after": "\t\tv, err := x.source(\"remote\")\n\t\tif err != nil {\n\t\t\tc.local.Remove(x.key)\n"
+            "before": "\tv, err := x.source(\"remote\")\n\tif err != nil {\n",
+            "after": "\tv, err := x.source(\"remote\")\n\tif err != nil {\n\t\tc.local.Remove(x.key)\n"
           },
           {
             "path": "go/internal/localcache/cache.go",
@@ -1200,8 +1200,8 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "\t\t\treturn v, err\n\t\t}\n\t\tif remote.kind != \"error\" {",
-            "after": "\t\t\tif localMiss {\n\t\t\t\tx.putLocal(v)\n\t\t\t}\n\t\t\treturn v, err\n\t\t}\n\t\tif remote.kind != \"error\" {"
+            "before": "\t\treturn v, err\n\t}\n\tif remote.kind != \"error\" {",
+            "after": "\t\tif localMiss {\n\t\t\tx.putLocal(v)\n\t\t}\n\t\treturn v, err\n\t}\n\tif remote.kind != \"error\" {"
           }
         ],
         "requiredDetections": [
@@ -1360,8 +1360,8 @@
         "edits": [
           {
             "path": "go/engine.go",
-            "before": "if value, ok := x.recover(remote.frame); ok {\n\t\t\t\t\treturn value, nil",
-            "after": "if value, ok := x.recover(remote.frame); ok {\n\t\t\t\t\tif localMiss {\n\t\t\t\t\t\tx.putLocal(value)\n\t\t\t\t\t}\n\t\t\t\t\treturn value, nil"
+            "before": "if value, ok := x.recover(remote.frame); ok {\n\t\t\t\treturn value, nil",
+            "after": "if value, ok := x.recover(remote.frame); ok {\n\t\t\t\tif localMiss {\n\t\t\t\t\tx.putLocal(value)\n\t\t\t\t}\n\t\t\t\treturn value, nil"
           }
         ],
         "requiredDetections": [

@@ -127,8 +127,9 @@ Source errors retain their identity. A source deadline returns
 `FallbackTimeoutError` and cancels the source context; a source that ignores
 its context keeps running. A caller whose context ends stops waiting with that
 context's error and no stale recovery, while a coalesced flight continues for
-its other callers on a context that no single caller's cancellation ends. A
-read deadline returns `RemoteReadTimeoutError` to cache plumbing and requests
+its other callers on a context that no single caller's cancellation ends; under
+`NoTimeout` that flight runs until the source returns, even after every caller
+has left. A read deadline returns `RemoteReadTimeoutError` to cache plumbing and requests
 cancellation through the adapter context; it cannot prove a dispatched command
 stopped. Shadow work runs on a context detached from the caller that ends with
 the shadow job. Source/codec/provider/comparator panics become

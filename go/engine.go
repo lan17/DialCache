@@ -144,44 +144,48 @@ func getOrLoad[T any](ctx context.Context, c *Cache, op Operation[T], load func(
 		return x.source("noop")
 	}
 	if !x.policy.RequestLocal {
-		return x.shared("local")
-	}
-	state, _ := ctx.Value(c).(scopeState)
-	run := func() (T, error) {
-		start := elapsedNow(c.settings.clock)
-		c.mu.Lock()
-		raw, found := state.owner.memo[key]
-		live := state.owner.live
-		c.mu.Unlock()
-		x.event("request", "request_local", nil)
-		x.duration("get", "request_local", start, nil)
-		if live && found {
-			if v, ok := assertValue[T](raw); ok {
-				return v, nil
-			}
-			// A memo shared with another value type is a programming error;
-			// treat it as a miss with no decisive cause and refill it.
-			x.event("miss", "request_local", map[string]any{"reason": "unclassified"})
-		} else {
-			x.event("miss", "request_local", map[string]any{"reason": "value_absent"})
-		}
-		v, err := x.shared("request_local")
-		if err == nil {
-			c.mu.Lock()
-			if state.owner.live {
-				state.owner.memo[key] = v
-			}
-			c.mu.Unlock()
-		}
-		return v, err
+		return x.shared()
 	}
 	if !x.policy.Coalesce {
-		return run()
+		return x.requestLocal()
 	}
-	return x.singleFlight(state.owner.flights, state.owner, "request_local", run)
+	state, _ := ctx.Value(c).(scopeState)
+	return x.singleFlight(state.owner.flights, state.owner, "request_local")
 }
 
-func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, label string, run func() (T, error)) (T, error) {
+// requestLocal serves the enabled scope's memo and fills it after a miss.
+func (x *execution[T]) requestLocal() (T, error) {
+	c := x.cache
+	state, _ := x.ctx.Value(c).(scopeState)
+	start := elapsedNow(c.settings.clock)
+	c.mu.Lock()
+	raw, found := state.owner.memo[x.key]
+	live := state.owner.live
+	c.mu.Unlock()
+	x.event("request", "request_local", nil)
+	x.duration("get", "request_local", start, nil)
+	if live && found {
+		if v, ok := assertValue[T](raw); ok {
+			return v, nil
+		}
+		// A memo shared with another value type is a programming error;
+		// treat it as a miss with no decisive cause and refill it.
+		x.event("miss", "request_local", map[string]any{"reason": "unclassified"})
+	} else {
+		x.event("miss", "request_local", map[string]any{"reason": "value_absent"})
+	}
+	v, err := x.shared()
+	if err == nil {
+		c.mu.Lock()
+		if state.owner.live {
+			state.owner.memo[x.key] = v
+		}
+		c.mu.Unlock()
+	}
+	return v, err
+}
+
+func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, label string) (T, error) {
 	c := x.cache
 	// Read the clock before taking the lock. The caller-supplied clock is the
 	// only external code on this path; a panic from it must not leave c.mu
@@ -190,7 +194,7 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	c.mu.Lock()
 	if owner != nil && !owner.live {
 		c.mu.Unlock()
-		return run()
+		return x.work(owner)
 	}
 	ctx := x.ctx
 	if f := flights[x.key]; f != nil {
@@ -216,7 +220,7 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	// Followers share this work, so the leader's cancellation ends only its own wait.
 	x.ctx = context.WithoutCancel(ctx)
 	go func() {
-		f.value, f.err = callSafely(run)
+		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
 		c.mu.Lock()
 		if flights[x.key] == f {
 			delete(flights, x.key)
@@ -233,6 +237,15 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 		return zero, err
 	}
 	return followerResult[T](f)
+}
+
+// work is a flight's shared work. It is chosen here, not passed in as a
+// closure, because the leader's goroutine would make every caller allocate it.
+func (x *execution[T]) work(owner *scope) (T, error) {
+	if owner != nil {
+		return x.requestLocal()
+	}
+	return x.traverse()
 }
 
 // followerResult hands a leader's settled result to a follower. A leader of
@@ -256,105 +269,113 @@ func (x *execution[T]) layer(layer string, r ResolvedLayer) {
 		}
 	}
 }
-func (x *execution[T]) shared(fallbackLayer string) (T, error) {
+func (x *execution[T]) shared() (T, error) {
 	c := x.cache
 	p := x.policy
 	x.layer("local", p.Local)
-	run := func() (T, error) {
-		localMiss := false
-		if p.Local.Enabled {
-			start := elapsedNow(c.settings.clock)
-			item, readErr := callSafely(func() (localResult[T], error) {
-				raw, found := c.local.Get(x.key)
-				if !found {
-					return localResult[T]{}, nil
-				}
-				value, ok := assertValue[T](raw)
-				return localResult[T]{value: value, found: ok, mismatch: !ok}, nil
-			})
-			if readErr != nil {
-				c.settings.logger.Error("Error getting value from local cache", readErr)
-				x.errorEvent("local", "cache_read", false)
-				x.event("disabled", "local", map[string]any{"reason": "config_error"})
-			} else {
-				x.event("request", "local", nil)
-				x.duration("get", "local", start, nil)
-				if item.found {
-					return item.value, nil
-				}
-				localMiss = true
-				reason := "value_absent"
-				if item.mismatch {
-					reason = "unclassified"
-				}
-				x.event("miss", "local", map[string]any{"reason": reason})
-			}
-			fallbackLayer = "local"
-		}
-		if c.settings.remote == nil {
-			v, e := x.source(fallbackLayer)
-			if e == nil && localMiss {
-				x.putLocal(v)
-			}
-			return v, e
-		}
-		if p.StaleOnErrorConfigError {
-			x.errorEvent("remote", "config_resolution", false)
-		}
-		x.layer("remote", p.Remote)
-		if !p.Remote.Enabled {
-			if p.Remote.Reason == "ramped_down" {
-				return x.darkSource(fallbackLayer, localMiss)
-			}
-			v, e := x.source(fallbackLayer)
-			if e == nil && localMiss {
-				x.putLocal(v)
-			}
-			return v, e
-		}
-		remote := x.readServing()
-		if err := x.ctx.Err(); err != nil {
-			var zero T
-			return zero, err
-		}
-		if remote.kind == "hit" {
-			if localMiss {
-				x.putLocal(remote.value)
-			}
-			x.scheduleShadow(remote.frame, nil, 0)
-			return remote.value, nil
-		}
-		v, err := x.source("remote")
-		if err != nil {
-			// A caller that stopped waiting gets its own context error, not a recovery.
-			if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAge > 0 && x.ctx.Err() == nil && x.canRecover(err) {
-				if value, ok := x.recover(remote.frame); ok {
-					return value, nil
-				}
-			}
-			return v, err
-		}
-		if remote.kind != "error" {
-			if _, writeErr := x.putRemote(v, remote.fence, "remote", nil); writeErr != nil {
-				c.settings.logger.Warn("Error putting value in Redis cache", writeErr)
-			}
-		}
-		if localMiss && !x.op.Identity.Tracked {
-			x.putLocal(v)
-		}
-		return v, nil
-	}
 	if p.Local.Enabled {
 		if p.Coalesce {
-			return x.singleFlight(c.flights, nil, "process", run)
+			return x.singleFlight(c.flights, nil, "process")
 		}
-		return run()
+		return x.traverse()
 	}
 	// Remote admission is decided before joining, while traversal belongs to the leader.
 	if p.Remote.Enabled && c.settings.remote != nil && p.Coalesce {
-		return x.singleFlight(c.flights, nil, "process", run)
+		return x.singleFlight(c.flights, nil, "process")
 	}
-	return run()
+	return x.traverse()
+}
+
+// traverse reads the local and remote layers and falls back to the source.
+func (x *execution[T]) traverse() (T, error) {
+	c := x.cache
+	p := x.policy
+	fallbackLayer := "local"
+	if p.RequestLocal {
+		fallbackLayer = "request_local"
+	}
+	localMiss := false
+	if p.Local.Enabled {
+		start := elapsedNow(c.settings.clock)
+		item, readErr := callSafely(func() (localResult[T], error) {
+			raw, found := c.local.Get(x.key)
+			if !found {
+				return localResult[T]{}, nil
+			}
+			value, ok := assertValue[T](raw)
+			return localResult[T]{value: value, found: ok, mismatch: !ok}, nil
+		})
+		if readErr != nil {
+			c.settings.logger.Error("Error getting value from local cache", readErr)
+			x.errorEvent("local", "cache_read", false)
+			x.event("disabled", "local", map[string]any{"reason": "config_error"})
+		} else {
+			x.event("request", "local", nil)
+			x.duration("get", "local", start, nil)
+			if item.found {
+				return item.value, nil
+			}
+			localMiss = true
+			reason := "value_absent"
+			if item.mismatch {
+				reason = "unclassified"
+			}
+			x.event("miss", "local", map[string]any{"reason": reason})
+		}
+		fallbackLayer = "local"
+	}
+	if c.settings.remote == nil {
+		v, e := x.source(fallbackLayer)
+		if e == nil && localMiss {
+			x.putLocal(v)
+		}
+		return v, e
+	}
+	if p.StaleOnErrorConfigError {
+		x.errorEvent("remote", "config_resolution", false)
+	}
+	x.layer("remote", p.Remote)
+	if !p.Remote.Enabled {
+		if p.Remote.Reason == "ramped_down" {
+			return x.darkSource(fallbackLayer, localMiss)
+		}
+		v, e := x.source(fallbackLayer)
+		if e == nil && localMiss {
+			x.putLocal(v)
+		}
+		return v, e
+	}
+	remote := x.readServing()
+	if err := x.ctx.Err(); err != nil {
+		var zero T
+		return zero, err
+	}
+	if remote.kind == "hit" {
+		if localMiss {
+			x.putLocal(remote.value)
+		}
+		x.scheduleShadow(remote.frame, nil, 0)
+		return remote.value, nil
+	}
+	v, err := x.source("remote")
+	if err != nil {
+		// A caller that stopped waiting gets its own context error, not a recovery.
+		if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAge > 0 && x.ctx.Err() == nil && x.canRecover(err) {
+			if value, ok := x.recover(remote.frame); ok {
+				return value, nil
+			}
+		}
+		return v, err
+	}
+	if remote.kind != "error" {
+		if _, writeErr := x.putRemote(v, remote.fence, "remote", nil); writeErr != nil {
+			c.settings.logger.Warn("Error putting value in Redis cache", writeErr)
+		}
+	}
+	if localMiss && !x.op.Identity.Tracked {
+		x.putLocal(v)
+	}
+	return v, nil
 }
 
 type localResult[T any] struct {

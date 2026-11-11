@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "d700dab403fe1aebfd769b25cce9f2a4f9abc6d8bf903a7ac1503edc9e3cbbdf",
+      "sha256": "a2d02b3270fcb4475c3afbcda696bfd5fe3d252ce6cb271b639fcdb58b352704",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -1801,7 +1801,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "12b85493aa2d1e30f7b8038128c016c6b0001bcb1aae97f3fd67014004eea020",
+      "sha256": "74c9cee40eee4cc6945f806fbf09be3c7506bdfd63f969fde8de749bc1c2c084",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},
