@@ -631,8 +631,9 @@ func testPrimaryRead(t *testing.T, environment redisEnvironment) {
 	}
 }
 
-// A tracked read must follow MOVED after its slot moves, before the client's
-// periodic slot-map reload, and must pass through the cluster client's hooks.
+// A tracked read must follow ASK while its slot migrates and MOVED after the
+// slot moves, before the client's periodic slot-map reload, and must pass
+// through the cluster client's hooks.
 func testTrackedReadAfterSlotMove(t *testing.T, environment redisEnvironment) {
 	ctx := context.Background()
 	cluster := environment.client.(*redis.ClusterClient)
@@ -695,6 +696,9 @@ func testTrackedReadAfterSlotMove(t *testing.T, environment redisEnvironment) {
 		if err := step.client.Do(ctx, step.args...).Err(); err != nil {
 			t.Fatal(step.args, err)
 		}
+	}
+	if got, err := adapter.Read(ctx, key, watermark); err != nil || got.Kind != "hit" {
+		t.Fatal("tracked read during the migration", got, err)
 	}
 	for _, master := range masters {
 		if err := master.Do(ctx, "CLUSTER", "SETSLOT", slot, "NODE", targetID).Err(); err != nil {
