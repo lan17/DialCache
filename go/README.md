@@ -131,7 +131,8 @@ already acquired snapshots retain the documented lifetime rules.
 
 Source errors retain their identity. A source deadline returns
 `FallbackTimeoutError` and cancels the source context; a source that ignores
-its context keeps running. A caller whose context ends stops waiting with that
+its context keeps running. The source context ends when the source returns, so
+work the loader starts that must outlive the call needs its own context. A caller whose context ends stops waiting with that
 context's error and no stale recovery, while a coalesced flight continues for
 its other callers on a context that no single caller's cancellation ends; under
 `NoTimeout` that flight runs until the source returns, even after every caller

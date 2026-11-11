@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "a2d02b3270fcb4475c3afbcda696bfd5fe3d252ce6cb271b639fcdb58b352704",
+      "sha256": "f35d61a95ac2f9ad9dcc5d1f86c5b151b1260f7e7679f75a161777cbe39e8e84",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -328,7 +328,6 @@
         {"title":"Stale retention and downgrades","contracts":["E05","C37"]},
         {"title":"Compression and value schemas","contracts":["E05","W06","W08"]},
         {"title":"Shadow mismatch warnings","contracts":["C60","X01"]},
-        {"title":"Go source and caller contexts","contracts":["C24","C25","B02"]},
         {"title":"Metric migrations","contracts":["X01"]}
       ]
     },
@@ -1801,7 +1800,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "f783c01a386d5131d34eb5fd47c3296554b3cb105800415cc3f6d3f66f14a657",
+      "sha256": "12f18badf00dde76f3fce16074c67dddbd1f273e61dfa5002a4d44449c50bd45",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},

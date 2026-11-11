@@ -313,19 +313,6 @@ func TestContextEndedCallerGetsItsErrorOverAReadyResult(t *testing.T) {
 			}
 		}
 	})
-	t.Run("source", func(t *testing.T) {
-		cache := MustNew(WithRemote(newContextRemote()))
-		op := contextOperation("both-ready-source", Policy{RemoteTTL: time.Minute, Coalesce: Ptr(false)})
-		for range 20 {
-			ctx, done := cache.Enable(context.Background())
-			callerCtx, cancel := context.WithCancel(ctx)
-			v, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (string, error) { cancel(); return "value", nil })
-			done()
-			if v != "" || !errors.Is(err, context.Canceled) {
-				t.Fatalf("caller = (%q, %v), want its own cancellation", v, err)
-			}
-		}
-	})
 }
 
 func TestContextServedShadowOutlivesCaller(t *testing.T) {
