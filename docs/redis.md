@@ -196,7 +196,9 @@ Redis refill or stale recovery. An active untracked local layer may store the
 successful source result; a tracked path suppresses that publication.
 
 The deadline covers the semantic read, not configuration, deserialization,
-source work, writes, or invalidation. Coalesced followers share the leader's
+source work, writes, or invalidation. It is the only Redis deadline DialCache
+sets: writes and invalidation run under the client's own timeouts and the
+budget the application gives them. Coalesced followers share the leader's
 remaining budget. The source deadline begins separately when fallback starts.
 Recovery reuses the initial snapshot and creates no second read budget.
 

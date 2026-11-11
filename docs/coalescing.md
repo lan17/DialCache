@@ -268,8 +268,9 @@ The timer starts only when the fallback begins:
 
 ### Application-owned budgets
 
-The source deadline is not a total-call timeout. Each operation has its own
-settlement boundary:
+The source deadline is not a total-call timeout. DialCache sets only the
+deadlines it has settings for: the remote read, the source and shadow work.
+Each other operation has an application-owned settlement boundary:
 
 | Stage | Settlement budget |
 | --- | --- |

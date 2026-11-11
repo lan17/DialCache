@@ -49,7 +49,7 @@
     },
     {
       "path": "docs/coalescing.md",
-      "sha256": "0ffa571c6613234311ee88114cba2784f45f20449355180e34a0d1818a39f671",
+      "sha256": "982ca8bf2cd671e6d22360b6de25f3b044d1c6b1e32dde4d968969ee736d15c7",
       "entries": [
         {"title":"Coalescing and liveness","contracts":["C11"]},
         {"title":"Request coalescing","contracts":["C11"]},
@@ -90,7 +90,7 @@
     },
     {
       "path": "docs/configuration.md",
-      "sha256": "cc25114e5a5512d2dd48cf8b6c7466a395a0b449cf818946fd4d8b0c5acdd64e",
+      "sha256": "e711bf3bc5c3da0a3a41dec104b658302539bb25fdcfd7ee05a2c36099501176",
       "entries": [
         {"title":"Configuration and rollout","contracts":["C16"]},
         {"title":"What belongs where","contracts":["C16","B01"]},
@@ -260,7 +260,7 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "754d156cff4d53d65ea33aef458839a8459aacfeac0d59303a292113d667545d",
+      "sha256": "a7a3060a6dcb20585662d9305d86721640cbab787832f14c33c4e0462adb7561",
       "entries": [
         {"title":"Redis and Valkey","contracts":["E01"]},
         {"title":"Install a client","contracts":["B01","E01"]},
@@ -1801,7 +1801,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "74c9cee40eee4cc6945f806fbf09be3c7506bdfd63f969fde8de749bc1c2c084",
+      "sha256": "f783c01a386d5131d34eb5fd47c3296554b3cb105800415cc3f6d3f66f14a657",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},

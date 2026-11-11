@@ -1,10 +1,10 @@
 # Go Redis-write and policy-provider budgets
 
-- **Status:** Proposed
+- **Status:** Implemented
 - **Issue:** none
-- **Pull requests:** none
+- **Pull requests:** #255
 - **Baseline:** `main` at `a75623ed01596ded5ec96f3c1b3c2ef6ab323e3a`, the commit the record was written against
-- **Supersedes:** none while Open; approving library-owned budgets would replace the corresponding liveness-boundary decision in [#69](https://github.com/lan17/DialCache/pull/69)
+- **Supersedes:** none; both decisions keep the liveness boundary in [#69](https://github.com/lan17/DialCache/pull/69)
 
 ## Context
 
@@ -25,11 +25,10 @@ own budgets.
 
 ## Proposal
 
-Author's proposal: retain application-owned mutation and provider budgets,
-document their practical configuration, and leave both requested contract
-changes unimplemented unless separately approved. No new TypeScript or Go
-option is proposed for immediate implementation. D1 and D2 below preserve
-the alternatives for an explicit maintainer decision.
+Accepted: retain application-owned mutation and provider budgets, document
+them, and leave both requested contract changes unimplemented. No new
+TypeScript or Go option is added. D1 and D2 below record the maintainer's
+choices and the alternatives that lost.
 
 ## Out of scope
 
@@ -68,13 +67,19 @@ test exclusion.
 
 ### D1. D-A: Who owns Redis value-write and invalidation deadlines?
 
-- **Choice:** Option 1, retain application ownership (author's proposal).
-- **Status:** Open
+- **Choice:** Option 1, retain application ownership.
+- **Status:** Confirmed 2026-11-11 by the maintainer in session: “Application
+  owns Redis deadlines. We should make that clear in the docs if its not
+  already. Some features support optional deadlines but thats it. Exception is
+  remote read timeout option you can provide in config. If we want more
+  deadlines in future we will add this to the cache key config/dialcache
+  instance config, but lets not do this now.”
 - **Rejected:**
-  - Option 2 is not recommended: a Go-only deadline reverses C26/#69 and
-    creates a parity exception without bounding underlying socket work.
-  - Option 3 is deferred, not ruled out: portable mutation budgets need an
-    approved outcome/late-write contract and cross-port implementation.
+  - Option 2: a Go-only deadline reverses C26/#69 and creates a parity
+    exception without bounding underlying socket work.
+  - Option 3 is deferred, not ruled out: a future Redis deadline goes into the
+    per-operation policy or the instance configuration, and needs an approved
+    outcome/late-write contract and cross-port implementation.
 
 **Context.** C26 explicitly says “config, decoding, accepted
 serialization/write have application-owned budgets”
@@ -127,12 +132,19 @@ adding that socket deadline, not all connection churn or resource lifetime.
 ### D2. D-B: Should provider failure or timeout use static caching policy?
 
 - **Choice:** Option 1, retain the contract and document an application
-  wrapper (author's proposal).
-- **Status:** Open
+  wrapper.
+- **Status:** Confirmed 2026-11-11 by the maintainer in session: “yes
+  provider failures should fail open to teh caller. The only side-effect to
+  caller is that non-cached value is returned. We do need to make sure we
+  instrument such failures consitently tho”. Every port logs a warning and
+  records a `config_resolution` error and a `config_error` skip on the `noop`
+  layer before running the source uncached (`typescript/src/dialcache.ts`,
+  `python/dialcache/cache.py`, `rust/src/execution.rs`, `go/engine.go`).
+  #255 adds a Go regression for those signals. The shared scenario checks
+  only calls and loaders, so cross-port event parity is a follow-up.
 - **Rejected:**
-  - Option 2 is deferred pending explicit approval of the changed failure
-    policy; static caching during a provider outage may defeat a rollout or
-    emergency disable.
+  - Option 2: static caching during a provider outage may defeat a rollout
+    or emergency disable, and the caller should see only an uncached value.
   - Option 3 is not recommended: a Go-only fallback breaks portable behavior
     and existing provider-failure replay expectations.
 
@@ -190,12 +202,10 @@ generated witnesses; regenerate rather than hand-edit generated output.
 
 ## Plan
 
-1. The pull request that carries the Go source-context fix carries this
-   record with D1 and D2 Open; it implements neither requested behavior.
-2. After acceptance, deliver the chosen documentation in that pull request, or
-   the TypeScript-first contract and model change and then every affected
-   port. Portable behavior requires Full validation; documentation-only work
-   follows PR CI.
+1. The pull request that carries the Go source-context fix (#255) carries
+   this record; it implements neither requested behavior.
+2. #255 delivers the documentation: `go/README.md`, `docs/redis.md`,
+   `docs/coalescing.md` and `docs/configuration.md`.
 3. Coordinate edits with open #206, which rewrites the Go README, and #254,
    which changes Go remote-failure logging in `go/engine.go`.
 

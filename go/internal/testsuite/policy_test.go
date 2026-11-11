@@ -1,8 +1,11 @@
 package dialcache_test
 
 import (
+	"context"
+	"errors"
 	. "github.com/lan17/DialCache/go"
 	"math"
+	"sync"
 	"testing"
 	"time"
 )
@@ -359,5 +362,56 @@ func TestResolvePolicyReportsConfigurationErrorsBeforeKeyErrors(t *testing.T) {
 		if want == nil || got == nil || got.Error() != want.Error() {
 			t.Fatalf("%s: got %v with an invalid identity, want %v", name, got, want)
 		}
+	}
+}
+
+// A provider failure fails open: the caller gets the uncached value, and the
+// failure is recorded the same way in every port.
+func TestPolicyProviderFailureFailsOpenWithItsSignals(t *testing.T) {
+	remote := newContextRemote()
+	var mu sync.Mutex
+	var events []Event
+	cache := MustNew(WithRemote(remote),
+		WithObserver(func(e Event) { mu.Lock(); events = append(events, e); mu.Unlock() }),
+		WithPolicyProvider(func(context.Context, Identity) (RuntimePolicy, error) { return nil, errors.New("provider down") }))
+	op := Operation[uint64]{
+		Identity: Identity{Namespace: "policy", KeyType: "org", ID: "7", UseCase: "home_cell", Tracked: true},
+		Policy:   Policy{RemoteTTL: time.Minute, Coalesce: Ptr(false)},
+	}
+	ctx, done := cache.Enable(context.Background())
+	defer done()
+
+	loads := 0
+	for range 2 {
+		v, err := GetOrLoad(ctx, cache, op, func(context.Context) (uint64, error) { loads++; return 42, nil })
+		if v != 42 || err != nil {
+			t.Fatalf("GetOrLoad = (%d, %v), want the uncached value", v, err)
+		}
+	}
+	if loads != 2 {
+		t.Fatalf("loads = %d, want 2: a provider failure must not cache", loads)
+	}
+	remote.mu.Lock()
+	written := len(remote.values)
+	remote.mu.Unlock()
+	if written != 0 {
+		t.Fatalf("remote has %d values, want none", written)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	var errorEvents, skips int
+	for _, e := range events {
+		switch {
+		case e.Kind == "error" && e.Data["layer"] == "noop" && e.Data["error"] == "config_resolution" && e.Data["inFallback"] == false:
+			errorEvents++
+		case e.Kind == "disabled" && e.Data["layer"] == "noop" && e.Data["reason"] == "config_error":
+			skips++
+		case e.Kind == "request" || e.Kind == "miss" || e.Kind == "hit":
+			t.Fatalf("cache layer was used after a provider failure: %+v", e)
+		}
+	}
+	if errorEvents != 2 || skips != 2 {
+		t.Fatalf("config_resolution errors = %d, config_error skips = %d, want 2 each; events: %+v", errorEvents, skips, events)
 	}
 }

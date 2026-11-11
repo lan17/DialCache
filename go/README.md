@@ -109,6 +109,12 @@ disables the deadline), compression on, and shadow capacity one. Invalid
 operation configuration returns an error wrapping `ErrInvalidPolicy` or
 `ErrInvalidOperation` before execution.
 
+The remote-read deadline is the only Redis deadline the cache sets. Redis
+writes, `Invalidate` and the policy provider have no library deadline: set
+go-redis `ReadTimeout` and `WriteTimeout` (a `SET` waits for its reply), pass
+`Invalidate` a context with the budget you want, and give the provider its own
+deadline. A provider error or panic runs the loader uncached.
+
 `WithRemote` requires atomic primary snapshots, complete client-stamped frame
 writes, and surfaced invalidation errors. The bundled `RedisAdapter` uses
 go-redis with standalone, Sentinel or Cluster clients. For a direct
