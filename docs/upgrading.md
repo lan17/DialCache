@@ -361,6 +361,12 @@ observer instead of registering the same names a second time. The future-offset 
 buckets; an incompatible same-name collector fails adapter construction before
 partial registration. Use a separate registry or prefix where needed.
 
+Prometheus timer histograms add 30 and 60 second buckets, so source calls up
+to the default 60 second timeout no longer all land in `+Inf`. A same-name timer
+collector registered with the earlier buckets is incompatible in the same way;
+recreate it with the current buckets or use a separate registry or prefix.
+Bucket-based quantiles shift for durations above 10 seconds.
+
 During a mixed-fleet rollout, aggregate away `reason` when comparing total misses
 with total requests. For example:
 

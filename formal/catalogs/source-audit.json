@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "ed88c26971eae18b957c0852c02d5ea35fdb814458827d79c7807a7c42c0db19",
+      "sha256": "c0903b2ed130a31cc98902f27937dcd15e2b329d33cd46464f5620e5fc0e7320",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "f35d61a95ac2f9ad9dcc5d1f86c5b151b1260f7e7679f75a161777cbe39e8e84",
+      "sha256": "7b77970be27985fff6791ad7264e8a47479b6e6fb7533591509f7969ca91bb6d",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -977,7 +977,7 @@
     },
     {
       "path": "typescript/test/prometheus.test.ts",
-      "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296",
+      "sha256": "d94cd048da5e657c57f8c0b504b0f4087633f813f90ce43e055ad23ceb4f20a7",
       "entries": [
         {"title":"keeps default DialCache construction detached from Prometheus","contracts":["X01"]},
         {"title":"registers collectors only in the caller-owned registry","contracts":["X01"]},

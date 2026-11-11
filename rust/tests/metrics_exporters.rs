@@ -413,7 +413,7 @@ mod prometheus_exporter {
     }
 
     const TIMER: &[f64] = &[
-        0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+        0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0,
     ];
     const SIZE: &[f64] = &[100.0, 1000.0, 10000.0, 100000.0, 1000000.0, 10000000.0];
     const AGE: &[f64] = &[
@@ -676,7 +676,7 @@ mod prometheus_exporter {
                     let histogram = family.get_metric()[0].get_histogram();
                     assert_eq!(histogram.sample_count(), 1);
                     assert_eq!(histogram.sample_sum(), 0.25);
-                    assert_eq!(histogram.get_bucket().len(), 12);
+                    assert_eq!(histogram.get_bucket().len(), 14);
                 }
                 _ => {}
             }
