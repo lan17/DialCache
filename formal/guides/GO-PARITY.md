@@ -222,6 +222,12 @@ render failure outranks it. The Prometheus and DogStatsD adapters preserve
 metric names, units, labels, bucket boundaries, and counter increments. Logical
 cache keys never become metric labels.
 
+Plumbing warnings are a Go binding adaptation. TypeScript logs every remote
+failure; Go emits only the `error` event when Redis gave no usable answer (a
+timeout, cancellation, connection or pool failure, a wrapper's own rejection,
+or a failover reply), and logs each other plumbing warning message at most
+once a minute. Error events and every cache outcome are unchanged.
+
 The Go Prometheus binding accepts an explicit native registry. Reconstructing
 this adapter with the same registry and prefix reuses its collectors and
 observations. `NewPrometheusMetricsWithBindings` additionally reuses externally

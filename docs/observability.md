@@ -138,7 +138,7 @@ Bucket boundaries are fixed; the adapter has no bucket customization option:
 
 | Metric family | Unit | Finite bucket boundaries |
 | --- | --- | --- |
-| All timers | Seconds | `0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10` |
+| All timers | Seconds | `0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60` |
 | Serialized and stored sizes | Bytes | `100, 1000, 10000, 100000, 1000000, 10000000` |
 | Compression ratio | Ratio | `0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1` |
 | Shadow and recovery value ages | Seconds | `1, 5, 15, 60, 300, 900, 3600, 10800, 43200, 86400, 259200, 604800` |
@@ -759,6 +759,14 @@ A confirmed-mismatch warning attempt emits a `shadowMismatchLogging` event
 whose `Outcome` is `logged`, `hook_error`, `render_error`, or `logger_error`.
 Use the [generated Go API](api.md) for event and adapter types. Preserve the
 bounded metric names, labels and units in the catalogue above.
+
+A Redis failure without a usable answer from Redis emits only its `error`
+event: a timeout, cancellation, connection or pool failure, a `Remote`
+wrapper's own rejection such as an open circuit breaker, or a `LOADING`,
+`CLUSTERDOWN`, `TRYAGAIN` or `MASTERDOWN` reply. Other cache-plumbing failures,
+such as a malformed frame or reply, another Redis error reply or an adapter
+panic, reach the logger at most once a minute per message; their `error`
+events count every occurrence.
 
 </LanguageContent>
 

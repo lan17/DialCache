@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	. "github.com/lan17/DialCache/go"
 	"net"
@@ -270,6 +271,7 @@ func TestRedisIntegration(t *testing.T) {
 			t.Run("invalidation-vectors", func(t *testing.T) { testInvalidationVectors(t, environment) })
 			t.Run("mixed-typescript-go", func(t *testing.T) { testMixedLanguage(t, environment) })
 			t.Run("complete-frame-and-primary-read", func(t *testing.T) { testPrimaryRead(t, environment) })
+			t.Run("unusual-failure-logging", func(t *testing.T) { testUnusualFailureLogging(t, environment) })
 		})
 	}
 }
@@ -617,5 +619,49 @@ func testPrimaryRead(t *testing.T, environment redisEnvironment) {
 	}
 	if err := adapter.Invalidate(context.Background(), watermark, 3000, 0); err != nil {
 		t.Fatal("NOSCRIPT recovery failed", err)
+	}
+}
+
+// A corrupt frame and a wrong-type key are unusual failures: each logs once
+// and counts a cache_read error on every call.
+func testUnusualFailureLogging(t *testing.T, environment redisEnvironment) {
+	ctx := context.Background()
+	_, key, _, err := failureIdentity.Keys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands := primaryCommands(t, environment, key)
+	defer commands.Del(ctx, key)
+	raw, err := EncodeFrame(Frame{CreatedAtMS: uint64(time.Now().UnixMilli()), Payload: []byte(`"cached"`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[9] = 2
+	if err := commands.Set(ctx, key, raw, time.Minute).Err(); err != nil {
+		t.Fatal(err)
+	}
+	corrupt := newFailureRun(NewRedisAdapter(environment.client))
+	corrupt.read(t, 3)
+	var payload *RedisPayloadError
+	if len(corrupt.log.messages) != 1 || !errors.As(corrupt.log.details[0].(error), &payload) || corrupt.errors["cache_read"] != 3 {
+		t.Fatalf("corrupt frame: logs = %v %v, error events = %v", corrupt.log.messages, corrupt.log.details, corrupt.errors)
+	}
+
+	// A tracked read's MGET returns nil for a key of another type, so only an
+	// untracked GET reports WRONGTYPE.
+	wrongType := newFailureRun(NewRedisAdapter(environment.client))
+	wrongType.identity.Tracked = false
+	_, untrackedKey, _, err := wrongType.identity.Keys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	listCommands := primaryCommands(t, environment, untrackedKey)
+	defer listCommands.Del(ctx, untrackedKey)
+	if err := listCommands.LPush(ctx, untrackedKey, "not a frame").Err(); err != nil {
+		t.Fatal(err)
+	}
+	wrongType.read(t, 3)
+	if len(wrongType.log.messages) != 1 || !strings.HasPrefix(fmt.Sprint(wrongType.log.details[0]), "WRONGTYPE") || wrongType.errors["cache_read"] != 3 {
+		t.Fatalf("wrong type: logs = %v %v, error events = %v", wrongType.log.messages, wrongType.log.details, wrongType.errors)
 	}
 }

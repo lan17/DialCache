@@ -245,7 +245,7 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 				return out("filled")
 			}
 			if writeErr != nil {
-				x.cache.settings.logger.Warn("Error populating Redis from DialCache shadow work", writeErr)
+				x.cache.warnFailure("Error populating Redis from DialCache shadow work", writeErr)
 				return out("fill_error")
 			}
 			return out("fill_fenced")

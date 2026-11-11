@@ -39,7 +39,7 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 
 const GET_TIMER_HELP = "DialCache cache get latency in seconds.";
 const GET_TIMER_LABELS = ["cache_namespace", "use_case", "key_type", "layer"] as const;
-const CONFIGURED_TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+const CONFIGURED_TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60];
 const METRIC_ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   key_construction: true,
   config_resolution: true,
@@ -956,7 +956,7 @@ describe("Prometheus metrics adapter", () => {
   });
 });
 
-const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, "+Inf"];
+const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, "+Inf"];
 const FUTURE_TIMESTAMP_OFFSET_BUCKETS = [
   0.001,
   0.005,

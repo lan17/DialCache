@@ -399,5 +399,5 @@ func (r ReadResult) Error() error {
 	if r.Kind == "hit" || r.Kind == "miss" {
 		return nil
 	}
-	return fmt.Errorf("remote result: %s", r.Kind)
+	return &RedisPayloadError{"remote result: " + r.Kind}
 }

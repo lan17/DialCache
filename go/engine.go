@@ -309,7 +309,7 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 		}
 		if remote.kind != "error" {
 			if _, writeErr := x.putRemote(v, remote.fence, "remote", nil); writeErr != nil {
-				c.settings.logger.Warn("Error putting value in Redis cache", writeErr)
+				c.warnFailure("Error putting value in Redis cache", writeErr)
 			}
 		}
 		if localMiss && !x.op.Identity.Tracked {
@@ -415,7 +415,7 @@ func (x *execution[T]) readServing() remoteValue[T] {
 	<-p.done
 	r, err := p.result.value, p.result.err
 	if err != nil {
-		x.cache.settings.logger.Warn("Error getting value from Redis cache", err)
+		x.cache.warnFailure("Error getting value from Redis cache", remoteFailure{err})
 		kind := "cache_read"
 		var timeout *RemoteReadTimeoutError
 		if errors.As(err, &timeout) {
@@ -550,7 +550,7 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	})
 	if err != nil {
 		x.errorEvent(layer, "cache_write", false)
-		return false, err
+		return false, remoteFailure{err}
 	}
 	return true, nil
 }

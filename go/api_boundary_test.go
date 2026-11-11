@@ -237,7 +237,9 @@ func (logger *boundaryLogger) Error(string, any) {
 func TestLoggerFailuresPreserveSourceAndMaintenanceResults(t *testing.T) {
 	t.Run("invalidation", func(t *testing.T) {
 		logger := &boundaryLogger{panicOnCall: true}
-		problem := errors.New("original invalidation failure")
+		// A routine remote failure only counts in metrics, so the remote fails
+		// with an unusual one to reach the logger.
+		problem := &RedisProtocolError{Message: "original invalidation failure"}
 		cache := MustNew(WithRemote(boundaryRemote{invalidate: func() error { return problem }}), WithLogger(logger), WithObserver(func(Event) { panic("observer failure") }))
 		if err := cache.Invalidate(context.Background(), Identity{Namespace: "boundary", KeyType: "id", ID: "maintenance"}, 0); err != problem {
 			t.Fatalf("maintenance rejection changed: %v", err)
@@ -249,7 +251,7 @@ func TestLoggerFailuresPreserveSourceAndMaintenanceResults(t *testing.T) {
 	for _, stage := range []string{"key", "policy", "read", "write"} {
 		t.Run(stage, func(t *testing.T) {
 			logger := &boundaryLogger{panicOnCall: true}
-			problem := errors.New("controlled plumbing failure")
+			problem := &RedisProtocolError{Message: "controlled plumbing failure"}
 			remote := boundaryRemote{read: func(context.Context) (ReadResult, error) {
 				if stage == "read" {
 					return ReadResult{}, problem

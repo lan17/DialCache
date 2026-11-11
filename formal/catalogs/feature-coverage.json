@@ -653,7 +653,7 @@
           "test": "TestInlineFallbackDeadlineSnapshot",
           "path": "go/api_boundary_test.go",
           "scope": "Per-invocation fallback deadline remains captured while the policy provider or initial remote read is pending.",
-          "sha256": "89b23524111ef2a2519c6bde19f015fe19565658fcd78774d7a9b4f5594e349f"
+          "sha256": "58d44597ebba854a4ce095b092c201ef2587e0b6e901b5f26555e114e4716ce8"
         },
         {
           "path": "go/feature_boundary_test.go",
@@ -894,7 +894,7 @@
           "test": "TestInstanceCapacitySafeIntegerBounds",
           "path": "go/api_boundary_test.go",
           "scope": "On 64-bit Go, WithLocalCapacity and WithShadowCapacity above the safe-integer maximum return ErrInvalidOption from New, and the exact maximum constructs without eager allocation.",
-          "sha256": "89b23524111ef2a2519c6bde19f015fe19565658fcd78774d7a9b4f5594e349f"
+          "sha256": "58d44597ebba854a4ce095b092c201ef2587e0b6e901b5f26555e114e4716ce8"
         },
         {
           "path": "go/feature_boundary_test.go",
@@ -1027,13 +1027,13 @@
           "test": "TestLoggerFailuresPreserveSourceAndMaintenanceResults",
           "path": "go/api_boundary_test.go",
           "scope": "Failing native loggers preserve original source values/errors and explicit invalidation errors.",
-          "sha256": "89b23524111ef2a2519c6bde19f015fe19565658fcd78774d7a9b4f5594e349f"
+          "sha256": "58d44597ebba854a4ce095b092c201ef2587e0b6e901b5f26555e114e4716ce8"
         },
         {
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
           "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "ef7897ec7b349eefe21e95906a34c6ccbbdae57d420dc7038fbc652ae5fc87cc"
         }
       ],
       "adaptation": "Observability must remain diagnostic even when both the primary operation and logger fail.",
@@ -1338,13 +1338,13 @@
           "test": "preserves the public collector schema",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding preserves the public collector schema.",
-          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
+          "sha256": "d94cd048da5e657c57f8c0b504b0f4087633f813f90ce43e055ad23ceb4f20a7"
         },
         {
           "test": "exports every bounded error category without rewriting labels",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding exports every bounded error category without rewriting labels.",
-          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
+          "sha256": "d94cd048da5e657c57f8c0b504b0f4087633f813f90ce43e055ad23ceb4f20a7"
         }
       ],
       "go": [
@@ -1352,7 +1352,7 @@
           "test": "TestPrometheusWireSchemaMatchesTypeScriptBinding",
           "path": "go/metrics_test.go",
           "scope": "All twenty Go collector names, help text, label order, kinds and bucket boundaries are checked against the TS binding schema.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "ef7897ec7b349eefe21e95906a34c6ccbbdae57d420dc7038fbc652ae5fc87cc"
         }
       ],
       "adaptation": "Exporter schema changes break dashboards even when portable event semantics still pass; current Go schema check derives its expectation from TS source, not Quint.",
@@ -1372,19 +1372,19 @@
           "test": "keeps default DialCache construction detached from Prometheus",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding keeps default DialCache construction detached from Prometheus.",
-          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
+          "sha256": "d94cd048da5e657c57f8c0b504b0f4087633f813f90ce43e055ad23ceb4f20a7"
         },
         {
           "test": "registers collectors only in the caller-owned registry",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding registers collectors only in the caller-owned registry.",
-          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
+          "sha256": "d94cd048da5e657c57f8c0b504b0f4087633f813f90ce43e055ad23ceb4f20a7"
         },
         {
           "test": "reuses existing collectors when multiple adapters share a registry",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding reuses existing collectors when multiple adapters share a registry.",
-          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
+          "sha256": "d94cd048da5e657c57f8c0b504b0f4087633f813f90ce43e055ad23ceb4f20a7"
         }
       ],
       "go": [
@@ -1392,7 +1392,7 @@
           "test": "TestPrometheusReuseAndConflictIsolation",
           "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "ef7897ec7b349eefe21e95906a34c6ccbbdae57d420dc7038fbc652ae5fc87cc"
         }
       ],
       "adaptation": "Registry ownership and collector reuse avoid global pollution and duplicate collectors in multi-instance deployments.",
@@ -1412,19 +1412,19 @@
           "test": "rejects a pre-registered legacy miss collector before registering anything",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding rejects a pre-registered legacy miss collector before registering anything.",
-          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
+          "sha256": "d94cd048da5e657c57f8c0b504b0f4087633f813f90ce43e055ad23ceb4f20a7"
         },
         {
           "test": "rejects exemplar-enabled collectors before registering anything",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding rejects exemplar-enabled collectors before registering anything.",
-          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
+          "sha256": "d94cd048da5e657c57f8c0b504b0f4087633f813f90ce43e055ad23ceb4f20a7"
         },
         {
           "test": "reuses a pre-registered current-schema miss collector",
           "path": "typescript/test/prometheus.test.ts",
           "scope": "Asserts that the TypeScript binding reuses a pre-registered current-schema miss collector.",
-          "sha256": "b459867a7646b3096985a9e42318af7eaf1d4a6a84c64b6e7145837558100296"
+          "sha256": "d94cd048da5e657c57f8c0b504b0f4087633f813f90ce43e055ad23ceb4f20a7"
         }
       ],
       "go": [
@@ -1432,19 +1432,19 @@
           "test": "TestPrometheusReuseAndConflictIsolation",
           "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "ef7897ec7b349eefe21e95906a34c6ccbbdae57d420dc7038fbc652ae5fc87cc"
         },
         {
           "test": "TestPrometheusExplicitBindingsPreserveExistingObservations",
           "path": "go/metrics_test.go",
           "scope": "Explicit compatible externally created collectors preserve pre-existing counter and histogram observations when bound by an adapter.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "ef7897ec7b349eefe21e95906a34c6ccbbdae57d420dc7038fbc652ae5fc87cc"
         },
         {
           "test": "TestPrometheusBindingsRejectIncompatibleOrUnregisteredCollectors",
           "path": "go/metrics_test.go",
           "scope": "Explicit collector bindings reject malformed schema, conflicting registry state or unregistered collector identities.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "ef7897ec7b349eefe21e95906a34c6ccbbdae57d420dc7038fbc652ae5fc87cc"
         }
       ],
       "adaptation": "Go requires explicit collector bindings/schema because client_golang cannot expose empty histogram bucket schema; no destructive compatibility probing is permitted.",
@@ -1486,7 +1486,7 @@
           "test": "TestDatadogMetricNamesUnitsAndLabels",
           "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "ef7897ec7b349eefe21e95906a34c6ccbbdae57d420dc7038fbc652ae5fc87cc"
         }
       ],
       "adaptation": "Different observation modes have different backend semantics and require a namespace migration; current schema source remains native integration code.",
@@ -1527,7 +1527,7 @@
           "test": "TestDatadogMetricNamesUnitsAndLabels",
           "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "ef7897ec7b349eefe21e95906a34c6ccbbdae57d420dc7038fbc652ae5fc87cc"
         }
       ],
       "adaptation": "Typed Go methods replace TS duck-typed method validation, but namespace and cardinality constraints remain observable integration contracts.",
@@ -1567,7 +1567,7 @@
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
           "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "ef7897ec7b349eefe21e95906a34c6ccbbdae57d420dc7038fbc652ae5fc87cc"
         }
       ],
       "adaptation": "C60 covers whether a warning happens; bounded formatting and native JSON failures are separate observability behavior.",
@@ -1885,7 +1885,7 @@
           "test": "TestRedisIntegration",
           "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "69098d9e0cef31d38c94320d3bfd5a728cc175fc70a0d9c0c58542a0ac5cba5f"
+          "sha256": "e6dfa24a0f26da37650a9870960d45ffbf2f9529bda8924a459e2b2439813814"
         },
         {
           "test": "TestRedisAdapterReadsAndBoundaries",
@@ -2032,7 +2032,7 @@
           "test": "TestRedisIntegration",
           "path": "go/internal/testsuite/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "69098d9e0cef31d38c94320d3bfd5a728cc175fc70a0d9c0c58542a0ac5cba5f"
+          "sha256": "e6dfa24a0f26da37650a9870960d45ffbf2f9529bda8924a459e2b2439813814"
         }
       ],
       "adaptation": "Real-server dispatch, Lua semantics, topology and mixed-language data are outside an in-memory conformance driver.",

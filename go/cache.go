@@ -40,6 +40,8 @@ type Cache struct {
 	flights    map[string]*flight
 	shadows    map[string]*shadowFlight
 	registered map[string]bool
+	// failureLogs holds, per warning message, when it may next be logged.
+	failureLogs map[string]time.Duration
 }
 
 // New constructs a cache. Options are applied in order; an invalid option
@@ -67,7 +69,7 @@ func New(opts ...Option) (*Cache, error) {
 		}
 	}
 	s.logger = FailureIsolatedLogger(s.logger)
-	c := &Cache{settings: s, flights: make(map[string]*flight), shadows: make(map[string]*shadowFlight), registered: make(map[string]bool)}
+	c := &Cache{settings: s, flights: make(map[string]*flight), shadows: make(map[string]*shadowFlight), registered: make(map[string]bool), failureLogs: make(map[string]time.Duration)}
 	if s.localCapacity > 0 {
 		local, err := localcache.New(s.localCapacity, s.clock.ElapsedMS)
 		if err != nil {
@@ -153,6 +155,39 @@ func (c *Cache) emit(event Event) {
 	}
 }
 
+// remoteFailure marks an error the Remote adapter returned, so warnFailure can
+// tell it from a local codec, compression or clock failure on the same path.
+type remoteFailure struct{ err error }
+
+func (f remoteFailure) Error() string { return f.err.Error() }
+
+// failureLogInterval spaces repeated warnings with the same message.
+const failureLogInterval = time.Minute
+
+// warnFailure logs a cache plumbing failure unless it is a routine remote
+// failure, which only its error event records. An unusual failure can still
+// repeat on every call: a corrupt hot key fails each read until its TTL ends,
+// because a failed read never refills. So each message logs at most once per
+// interval, while the error event counts every occurrence.
+func (c *Cache) warnFailure(message string, err error) {
+	if remote, ok := err.(remoteFailure); ok {
+		if routineRemoteFailure(remote.err) {
+			return
+		}
+		err = remote.err
+	}
+	now := elapsedNow(c.settings.clock)
+	c.mu.Lock()
+	next, logged := c.failureLogs[message]
+	if logged && now < next {
+		c.mu.Unlock()
+		return
+	}
+	c.failureLogs[message] = now + failureLogInterval
+	c.mu.Unlock()
+	c.settings.logger.Warn(message, err)
+}
+
 // Invalidate raises the remote watermark for every tracked value of the
 // entity named by identity's KeyType and ID, so frames stamped at or before
 // the invalidation plus futureBuffer are no longer served. It requires a
@@ -165,9 +200,14 @@ func (c *Cache) Invalidate(ctx context.Context, identity Identity, futureBuffer 
 		identity.Namespace = c.settings.namespace
 	}
 	c.emit(Event{Kind: "invalidation", Data: map[string]any{"cacheNamespace": identity.Namespace, "keyType": identity.KeyType, "layer": "remote"}})
+	remote := false
 	defer func() {
 		if err != nil {
-			c.settings.logger.Warn("Error writing DialCache invalidation watermark", err)
+			failure := err
+			if remote {
+				failure = remoteFailure{err}
+			}
+			c.warnFailure("Error writing DialCache invalidation watermark", failure)
 			c.emit(Event{Kind: "error", Data: map[string]any{"cacheNamespace": identity.Namespace, "keyType": identity.KeyType, "useCase": "watermark", "layer": "remote", "error": "invalidation", "inFallback": false}})
 		}
 	}()
@@ -184,6 +224,7 @@ func (c *Cache) Invalidate(ctx context.Context, identity Identity, futureBuffer 
 	if now < 0 || uint64(now) > MaxSafeInteger-uint64(bufferMS) {
 		return fmt.Errorf("%w: invalid invalidation timestamp", ErrInvalidOperation)
 	}
+	remote = true
 	_, err = callSafely(func() (struct{}, error) {
 		return struct{}{}, c.settings.remote.Invalidate(ctx, watermark, now, bufferMS)
 	})

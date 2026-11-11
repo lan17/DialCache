@@ -32,6 +32,26 @@ type RedisProtocolError struct{ Message string }
 
 func (e *RedisProtocolError) Error() string { return e.Message }
 
+// routineRemoteFailure reports a Remote failure without a usable answer from
+// Redis: a timeout, cancellation, connection or pool failure, a wrapper's own
+// rejection such as an open circuit breaker, or a failover reply. Error metrics
+// count these; a log line for each would flood the logs while Redis is slow or
+// down. Panics, malformed payloads or replies, and other Redis error replies
+// are unusual.
+func routineRemoteFailure(err error) bool {
+	var panicked *CallbackPanicError
+	var payload *RedisPayloadError
+	var protocol *RedisProtocolError
+	var reply redis.Error
+	switch {
+	case errors.As(err, &panicked), errors.As(err, &payload), errors.As(err, &protocol):
+		return false
+	case errors.As(err, &reply):
+		return redis.IsLoadingError(err) || redis.IsClusterDownError(err) || redis.IsTryAgainError(err) || redis.IsMasterDownError(err)
+	}
+	return true
+}
+
 func (adapter *RedisAdapter) Read(ctx context.Context, valueKey, watermarkKey string) (ReadResult, error) {
 	var raw any
 	var err error
