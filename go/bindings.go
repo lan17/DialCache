@@ -59,6 +59,7 @@ func Cached[T, Arg any](cache *Cache, op Operation[T], selectKey func(Arg) (Iden
 		return nil, err
 	}
 	op.Policy = SnapshotPolicy(op.Policy)
+	static := staticPolicyMap(op.Policy)
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	if cache.registered[op.Identity.UseCase] {
@@ -75,7 +76,7 @@ func Cached[T, Arg any](cache *Cache, op Operation[T], selectKey func(Arg) (Iden
 			key.Namespace = op.Identity.Namespace
 			return key, err
 		}
-		return GetOrLoad(ctx, cache, invocation, func(ctx context.Context) (T, error) { return source(ctx, arg) })
+		return getOrLoad(ctx, cache, invocation, func(ctx context.Context) (T, error) { return source(ctx, arg) }, static)
 	}, nil
 }
 

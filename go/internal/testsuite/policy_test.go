@@ -335,3 +335,29 @@ func TestMismatchLoggingResolvesEachLayerExpandedFirst(t *testing.T) {
 		t.Fatalf("ran %d combinations, %d typed", combinations, typedCombinations)
 	}
 }
+
+// Configuration errors win over an identity error: the identity error appears
+// only when the configuration resolves.
+func TestResolvePolicyReportsConfigurationErrorsBeforeKeyErrors(t *testing.T) {
+	badIdentity := policyTestIdentity()
+	badIdentity.ID = "\xff"
+	if _, err := ResolvePolicy(Policy{RemoteTTL: time.Hour}, nil, badIdentity, PolicyDefaults{}); err == nil {
+		t.Fatal("an invalid identity resolved")
+	}
+	for name, tc := range map[string]struct {
+		base     Policy
+		overlay  RuntimePolicy
+		defaults PolicyDefaults
+	}{
+		"read deadline":     {Policy{RemoteTTL: time.Hour}, nil, PolicyDefaults{RemoteReadTimeout: -time.Millisecond}},
+		"static policy":     {Policy{RemoteTTL: 1500 * time.Millisecond}, nil, PolicyDefaults{}},
+		"runtime container": {Policy{RemoteTTL: time.Hour}, RawPolicy("ttl"), PolicyDefaults{}},
+		"runtime leaf":      {Policy{RemoteTTL: time.Hour}, JSONPolicy{"coalesce": "yes"}, PolicyDefaults{}},
+	} {
+		_, want := ResolvePolicy(tc.base, tc.overlay, policyTestIdentity(), tc.defaults)
+		_, got := ResolvePolicy(tc.base, tc.overlay, badIdentity, tc.defaults)
+		if want == nil || got == nil || got.Error() != want.Error() {
+			t.Fatalf("%s: got %v with an invalid identity, want %v", name, got, want)
+		}
+	}
+}
