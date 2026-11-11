@@ -12,6 +12,7 @@ import (
 	"time"
 
 	. "github.com/lan17/DialCache/go"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -322,5 +323,84 @@ func TestCorruptFrameLogsOncePerMinute(t *testing.T) {
 	run.read(t, 1)
 	if len(run.log.messages) != 2 || run.errors["cache_read"] != 12 {
 		t.Fatalf("logs = %v, error events = %v; want a second warning after a minute", run.log.messages, run.errors)
+	}
+}
+
+// The outage reaches an exporter as error counts, with no warning.
+func TestRedisOutageIsCountedByPrometheus(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	metrics, err := NewPrometheusMetrics(registry, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := newFailureRun(NewRedisAdapter(unreachableRedis(t)), WithMetrics(metrics))
+	run.read(t, 20)
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0.0
+	for _, family := range families {
+		if family.GetName() != "dialcache_error_counter" {
+			continue
+		}
+		for _, metric := range family.Metric {
+			for _, label := range metric.Label {
+				if label.GetName() == "error" && label.GetValue() == "cache_read" {
+					count += metric.Counter.GetValue()
+				}
+			}
+		}
+	}
+	if count != 20 || len(run.log.messages) != 0 {
+		t.Fatalf("cache_read errors = %v, logs = %v; want 20 and none", count, run.log.messages)
+	}
+}
+
+// A dark shadow fill that cannot reach Redis reports fill_error and its
+// cache_write event, with no warning.
+func TestShadowFillOutageIsMetricOnly(t *testing.T) {
+	outcomes := make(chan Event, 1)
+	run := newFailureRun(missingRemote{NewRedisAdapter(unreachableRedis(t))}, WithShadowOutcomes(func(event Event) { outcomes <- event }))
+	zero, full := float64(0), float64(100)
+	operation := Operation[string]{Identity: failureIdentity, Policy: Policy{RemoteTTL: time.Minute, RemoteRamp: &zero, Shadow: &ShadowPolicy{Ramp: &full}}}
+	ctx, done := run.cache.Enable(context.Background())
+	value, err := GetOrLoad(ctx, run.cache, operation, func(context.Context) (string, error) { return "source", nil })
+	done()
+	if value != "source" || err != nil {
+		t.Fatalf("shadow failure changed the source result: %q %v", value, err)
+	}
+	select {
+	case event := <-outcomes:
+		if event.Outcome != "fill_error" {
+			t.Fatalf("outcome = %q; want fill_error", event.Outcome)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("missing shadow outcome")
+	}
+	run.mu.Lock()
+	defer run.mu.Unlock()
+	if run.errors["cache_write"] != 1 || len(run.log.messages) != 0 {
+		t.Fatalf("error events = %v, logs = %v; want one cache_write and no warning", run.errors, run.log.messages)
+	}
+}
+
+// codeRemote fails each read with a Redis reply whose error code is new.
+type codeRemote struct{ calls atomic.Int64 }
+
+func (r *codeRemote) Read(context.Context, string, string) (ReadResult, error) {
+	return ReadResult{}, replyError(fmt.Sprintf("CODE%d unexpected", r.calls.Add(1)))
+}
+func (*codeRemote) Write(context.Context, string, Frame, time.Duration) error { return nil }
+func (*codeRemote) Invalidate(context.Context, string, int64, int64) error    { return nil }
+
+// Ever-new error codes cannot make every call log.
+func TestNewErrorCodesStayBounded(t *testing.T) {
+	run := newFailureRun(&codeRemote{})
+	run.read(t, 200)
+	logged := len(run.log.messages)
+	run.read(t, 100)
+	if logged >= 200 || len(run.log.messages) != logged || run.errors["cache_read"] != 300 {
+		t.Fatalf("warnings = %d then %d, error events = %v; want a bounded count", logged, len(run.log.messages), run.errors)
 	}
 }

@@ -165,6 +165,11 @@ func (f remoteFailure) Error() string { return f.err.Error() }
 // failureLogInterval spaces repeated warnings with the same message and cause.
 const failureLogInterval = time.Minute
 
+// maxFailureLogKeys bounds failureLogs. A remote's error codes or types are
+// normally few; past the bound, a new kind shares one slot per message, so a
+// stream of ever-new codes can neither grow the map nor log on every call.
+const maxFailureLogKeys = 64
+
 // warnFailure logs a cache plumbing failure unless it is a routine remote
 // failure, which only its error event records. Without an observer nothing
 // records that event, so a routine failure logs too. A failure can repeat on
@@ -181,6 +186,9 @@ func (c *Cache) warnFailure(message string, err error) {
 	key := message + ": " + failureKind(err)
 	now := elapsedNow(c.settings.clock)
 	c.mu.Lock()
+	if _, seen := c.failureLogs[key]; !seen && len(c.failureLogs) >= maxFailureLogKeys {
+		key = message
+	}
 	next, logged := c.failureLogs[key]
 	if logged && now < next {
 		c.mu.Unlock()
