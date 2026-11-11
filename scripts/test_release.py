@@ -457,7 +457,11 @@ class FormalRunTests(unittest.TestCase):
                 {"workflow_runs": [self.run_for("Formal mutations on main", sha=other)]},
             ],
         }
-        fetch = lambda args: json.dumps(pages[args[-1].split("head_sha=")[1].split("&")[0]]).encode()
+        def fetch(args):
+            self.assertIn("--paginate", args)
+            self.assertIn("--slurp", args)
+            return json.dumps(pages[args[-1].split("head_sha=")[1].split("&")[0]]).encode()
+
         with patch.object(release.subprocess, "check_output", side_effect=fetch):
             release.require_formal_run("owner/repo", [self.SHA, other])
             with self.assertRaises(ValueError):

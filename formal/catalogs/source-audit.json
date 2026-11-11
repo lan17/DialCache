@@ -217,7 +217,7 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "197932becb77091a9cde0cf0c6f9416481ed919d59b7735946fb4c126e817c34",
+      "sha256": "9b13a1146fafcfa63b85d3d0cf6cbc0d6daa9ff9652ab251cb67fef730d62c4b",
       "entries": [
         {"title":"Maintainer guide","contracts":["B01"]},
         {"title":"Validation","contracts":["B01"]},

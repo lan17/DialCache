@@ -237,7 +237,9 @@ Publishing starts by manually running the `Release` workflow from current
 `gh workflow run formal-full.yaml --ref main -f mode=mutations` first. If the
 `release:` pull request merges onto a newer `main`, the publish job finds no
 run for the new parent and stops before publishing; dispatch the same run on
-`main`, which now ends at the release commit, and re-run the failed job.
+`main`, which now ends at the release commit, and re-run the failed job. Merge
+nothing else until that job passes, because the job publishes only current
+`main`.
 
 After the package checks pass, Semantic Release selects the next version from
 Conventional Commits since the highest stable `vX.Y.Z` tag:
