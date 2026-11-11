@@ -3,6 +3,9 @@ package dialcache_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -426,4 +429,64 @@ func TestContextRequestLocalLeaderLeavesWhileOtherScopesWait(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
+}
+
+func TestContextCallerThatLeftIsNotAProviderOrSourceFailure(t *testing.T) {
+	var mu sync.Mutex
+	var failures []string
+	observe := func(e Event) {
+		if e.Kind == "error" || e.Kind == "disabled" {
+			detail := e.Data["error"]
+			if detail == nil {
+				detail = e.Data["reason"]
+			}
+			mu.Lock()
+			failures = append(failures, fmt.Sprintf("%s:%v:%v", e.Kind, e.Data["layer"], detail))
+			mu.Unlock()
+		}
+	}
+	recorded := func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), failures...) }
+
+	t.Run("provider", func(t *testing.T) {
+		failures = nil
+		cache := MustNew(WithRemote(newContextRemote()), WithObserver(observe),
+			WithPolicyProvider(func(ctx context.Context, _ Identity) (RuntimePolicy, error) { return nil, ctx.Err() }))
+		op := contextOperation("left-before-provider", Policy{RemoteTTL: time.Minute, Coalesce: Ptr(false)})
+		ctx, done := cache.Enable(context.Background())
+		defer done()
+		callerCtx, cancel := context.WithCancel(ctx)
+		cancel()
+		loads := 0
+		v, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (string, error) { loads++; return "value", nil })
+		if v != "" || !errors.Is(err, context.Canceled) || loads != 0 {
+			t.Fatalf("GetOrLoad = (%q, %v) with %d loads, want the caller's own error and no load", v, err, loads)
+		}
+		if got := recorded(); len(got) != 0 {
+			t.Fatalf("recorded %v for a caller that left", got)
+		}
+	})
+	t.Run("source", func(t *testing.T) {
+		failures = nil
+		cache := MustNew(WithRemote(newContextRemote()), WithObserver(observe))
+		op := contextOperation("left-during-source", Policy{RemoteTTL: time.Minute, Coalesce: Ptr(false)})
+		ctx, done := cache.Enable(context.Background())
+		defer done()
+		callerCtx, cancel := context.WithTimeout(ctx, 30*time.Millisecond)
+		defer cancel()
+		if _, err := GetOrLoad(callerCtx, cache, op, func(c context.Context) (string, error) { <-c.Done(); return "", c.Err() }); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v, want the caller's own deadline", err)
+		}
+		for _, f := range recorded() {
+			if strings.Contains(f, "fallback") {
+				t.Fatalf("recorded %q for a caller that left", f)
+			}
+		}
+		// A real source failure from a live caller is still recorded.
+		if _, err := GetOrLoad(ctx, cache, op, func(context.Context) (string, error) { return "", errors.New("down") }); err == nil {
+			t.Fatal("source error was lost")
+		}
+		if got := recorded(); !slices.Contains(got, "error:remote:fallback") {
+			t.Fatalf("recorded %v, want the live caller's fallback error", got)
+		}
+	})
 }

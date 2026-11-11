@@ -134,6 +134,11 @@ func getOrLoad[T any](ctx context.Context, c *Cache, op Operation[T], load func(
 		x.policy, err = resolvePolicy(op.Policy, static, overlay, key, nil, PolicyDefaults{RemoteReadTimeout: c.settings.remoteReadTimeout})
 	}
 	if err != nil {
+		// A caller that already left gets its own error; that is not a provider failure.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			var zero T
+			return zero, ctxErr
+		}
 		c.settings.logger.Warn("Could not resolve DialCache key config", err)
 		x.errorEvent("noop", "config_resolution", false)
 		x.event("disabled", "noop", map[string]any{"reason": "config_error"})
@@ -425,7 +430,8 @@ func (x *execution[T]) source(layer string) (T, error) {
 	// Once the wait ends the result is settled; cancel before observers run so a
 	// slow observer cannot keep a timed-out or abandoned source going.
 	cancel()
-	if err != nil {
+	// A caller that stopped waiting is not a source failure.
+	if err != nil && x.ctx.Err() == nil {
 		x.errorEvent(layer, "fallback", true)
 	}
 	x.duration("fallback", layer, start, nil)
