@@ -128,9 +128,9 @@ the one the ruleset requires.
 4. Replay the regression in every port
    ([Run it](formal/README.md#run-it)) and fix
    each port that fails it.
-5. Change no page in `docs/` and no README, since the fix restores behavior they already describe.
-   If the fix removes a limitation they state, delete that note. Describe the user-visible effect
-   in the PR description.
+5. Change no page in `docs/` and no README for the restored behavior, because the contract they
+   describe stays the same. If the fix removes a limitation they state, delete that note. Describe
+   the user-visible effect in the PR description.
 
 #### Public API
 

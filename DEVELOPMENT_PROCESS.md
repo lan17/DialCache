@@ -45,9 +45,9 @@ flowchart LR
   is edited just to make the other pass, and a settlement that would change contract text waits for
   the maintainer.
 - **User docs** in `docs/` and the READMEs tell people using the library what it does, how to call
-  it and what they will observe, without implementation details. A bug fix that restores
-  documented behavior changes none of them. **Design records** explain why a change took its
-  shape. Neither defines behavior.
+  it and what they will observe, without implementation details. A bug fix needs no change to them
+  for the behavior it restores. **Design records** explain why a change took its shape. Neither
+  defines behavior.
 
 ## The life of a change
 
