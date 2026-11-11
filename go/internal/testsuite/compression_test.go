@@ -3,8 +3,11 @@ package dialcache_test
 import (
 	"bytes"
 	"context"
+	"math/rand/v2"
 	"slices"
+	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	. "github.com/lan17/DialCache/go"
@@ -65,6 +68,53 @@ func TestCorruptCompressedFrameFailsOpen(t *testing.T) {
 		done()
 		if value != "source" || err != nil || remote.writes != 1 || !slices.Equal(errors, []any{"serialization_load"}) {
 			t.Fatalf("coalesce=%v: value=%q err=%v writes=%d errors=%v", coalesce, value, err, remote.writes, errors)
+		}
+	}
+}
+
+// Pooled zstd encoders are shared across goroutines, so they must hold no
+// channel: using a channel made inside a testing/synctest bubble from outside
+// that bubble is a fatal error.
+func TestCompressPayloadAcrossSynctestBubbles(t *testing.T) {
+	value := Payload{Bytes: []byte(strings.Repeat("dialcache ", 1000))}
+	roundTrip := func(t *testing.T) {
+		compressed, err := CompressPayload(value, CompressionConfig{ThresholdBytes: 1, Level: 3})
+		if err != nil || compressed.Outcome != "compressed" {
+			t.Fatal(compressed.Outcome, err)
+		}
+		if decoded := DecompressPayload(compressed.Payload); decoded.Outcome != "decompressed" || !bytes.Equal(decoded.Payload.Bytes, value.Bytes) {
+			t.Fatal(decoded.Outcome)
+		}
+	}
+	synctest.Test(t, roundTrip)
+	roundTrip(t)
+	synctest.Test(t, roundTrip)
+}
+
+// Values at and above the zstd block size (64 KiB at levels 1-2, 128 KiB
+// otherwise) take the encoder's multi-block path, and every write after the
+// first reuses a pooled encoder.
+func TestCompressPayloadRoundTripsAcrossBlockSizes(t *testing.T) {
+	random := make([]byte, 3<<17+1)
+	_, _ = rand.NewChaCha8([32]byte{1}).Read(random)
+	text := []byte(strings.Repeat(`{"id":"item-17","group":"north","state":"active"},`, len(random)/48+1))
+	for _, level := range []int{1, 3} {
+		for _, size := range []int{1<<16 - 1, 1 << 16, 1<<16 + 1, 1<<17 - 1, 1 << 17, 1<<17 + 1, 3<<17 + 1} {
+			for _, input := range []struct {
+				name, outcome string
+				bytes         []byte
+			}{{"mixed", "compressed", append(text[:size/2:size/2], random[:size-size/2]...)}, {"random", "not_smaller", random[:size]}} {
+				for range 2 {
+					written, err := CompressPayload(Payload{Binary: true, Bytes: input.bytes}, CompressionConfig{ThresholdBytes: 1, Level: level})
+					if err != nil || written.Outcome != input.outcome {
+						t.Fatalf("level %d, %s %d bytes: outcome %q, error %v", level, input.name, size, written.Outcome, err)
+					}
+					read := DecompressPayload(written.Payload)
+					if !read.Payload.Binary || !bytes.Equal(read.Payload.Bytes, input.bytes) {
+						t.Fatalf("level %d, %s %d bytes: read %q did not return the written value", level, input.name, size, read.Outcome)
+					}
+				}
+			}
 		}
 	}
 }
