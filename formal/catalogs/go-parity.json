@@ -11,7 +11,7 @@
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
     "sourceAuditDispositionsSha256": "c95ce03c30df574246e5943e2d69e084ed809b5d3e2a3d0f0abf5a2123bc8aaa",
-    "featureCoverageSha256": "c96d4c5aa3879cfc50a12fc210e4011d0e4605d2da7c79c50d74caa09d63f1f1",
+    "featureCoverageSha256": "0688f8dea2e8635aa38e98ca3319528f0ae876ce083cc04305332599246c126b",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -3511,7 +3511,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The warning's leaves come from the invocation's ResolvedShadow, Operation.MismatchDiff replaces the built-in walk, and warnShadowMismatch emits one shadowMismatchLogging event; a Warn panic is the Go logger_error.",
+        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The warning's leaves come from the invocation's ResolvedShadow, Operation.MismatchDiff replaces the built-in walk, and warnShadowMismatch emits one shadowMismatchLogging event; a Warn panic is the Go logger_error. Each caller waits on its own context: a leader runs the shared flight on a context its own cancellation does not end, followers stop waiting when their own context ends, the source context carries the source deadline, and detached shadow work runs on a context that ends with its job.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -3551,7 +3551,7 @@
               "putRemote",
               "recover"
             ],
-            "sha256": "6da078c90da77b07607fc75f857957f4557efd1e5823b7e5eef7db057617135d"
+            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
           },
           {
             "path": "go/deadline.go",
@@ -3559,7 +3559,7 @@
               "awaitDeadline",
               "callSafely"
             ],
-            "sha256": "4c96942152e994adc4171e4d30de2de8be83ab6b3a33ed62793cc86819ce2b97"
+            "sha256": "1ed105fdd7c547af2dfa45ddfb87e279518b2b255b39a9ae7dc0663e33e4e649"
           },
           {
             "path": "go/shadow.go",
@@ -3569,7 +3569,7 @@
               "runShadow",
               "warnShadowMismatch"
             ],
-            "sha256": "8d29f1a6fdd546e31e08a67056696a4c9c6689479b93a2269f1c74b7cba8050a"
+            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
           },
           {
             "path": "go/api.go",
@@ -3722,7 +3722,7 @@
               "remoteValue",
               "localResult"
             ],
-            "sha256": "6da078c90da77b07607fc75f857957f4557efd1e5823b7e5eef7db057617135d"
+            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
           }
         ]
       }
@@ -3765,7 +3765,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Go pending results use channels and optional TimerClock hooks. awaitDeadline subtracts precise monotonic instants before comparing its full duration budget and applies the exclusive settlement boundary even if timer delivery is delayed. Early timer delivery is rechecked against elapsed time. Legacy Clock implementations retain integer-millisecond resolution; optional PreciseClock and the default clock preserve fractional milliseconds. Abandonment stops publication but does not pretend that a goroutine or dispatched command was cancelled.",
+        "rationale": "Go pending results use channels and optional TimerClock hooks. awaitDeadline subtracts precise monotonic instants before comparing its full duration budget and applies the exclusive settlement boundary even if timer delivery is delayed. Early timer delivery is rechecked against elapsed time. Legacy Clock implementations retain integer-millisecond resolution; optional PreciseClock and the default clock preserve fractional milliseconds. Abandonment stops publication but does not pretend that a goroutine or dispatched command was cancelled. A waiter whose context ends stops waiting with that context's error, and the source context is cancelled at the source deadline; only a cooperating source observes that request.",
         "nativeAdaptations": [
           "B02"
         ],
@@ -3780,7 +3780,7 @@
               "awaitDeadline",
               "deferWork"
             ],
-            "sha256": "4c96942152e994adc4171e4d30de2de8be83ab6b3a33ed62793cc86819ce2b97"
+            "sha256": "1ed105fdd7c547af2dfa45ddfb87e279518b2b255b39a9ae7dc0663e33e4e649"
           },
           {
             "path": "go/api.go",
@@ -3874,7 +3874,7 @@
               "putLocal",
               "shared"
             ],
-            "sha256": "6da078c90da77b07607fc75f857957f4557efd1e5823b7e5eef7db057617135d"
+            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
           },
           {
             "path": "go/api.go",
@@ -3944,14 +3944,14 @@
               "canRecover",
               "recover"
             ],
-            "sha256": "6da078c90da77b07607fc75f857957f4557efd1e5823b7e5eef7db057617135d"
+            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "runShadow"
             ],
-            "sha256": "8d29f1a6fdd546e31e08a67056696a4c9c6689479b93a2269f1c74b7cba8050a"
+            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
           },
           {
             "path": "go/codec.go",
@@ -4174,7 +4174,7 @@
             "symbols": [
               "callSafely"
             ],
-            "sha256": "4c96942152e994adc4171e4d30de2de8be83ab6b3a33ed62793cc86819ce2b97"
+            "sha256": "1ed105fdd7c547af2dfa45ddfb87e279518b2b255b39a9ae7dc0663e33e4e649"
           },
           {
             "path": "go/metrics.go",
@@ -4260,14 +4260,14 @@
               "errorEvent",
               "duration"
             ],
-            "sha256": "6da078c90da77b07607fc75f857957f4557efd1e5823b7e5eef7db057617135d"
+            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "shadowEvent"
             ],
-            "sha256": "8d29f1a6fdd546e31e08a67056696a4c9c6689479b93a2269f1c74b7cba8050a"
+            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
           }
         ]
       }

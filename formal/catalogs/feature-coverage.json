@@ -780,13 +780,13 @@
           "test": "TestPolicyStaticValidation",
           "path": "go/internal/testsuite/policy_test.go",
           "scope": "Malformed option types and combinations reject; the maximum supported remote TTL/read budget is accepted and fractional-second static TTL is rejected.",
-          "sha256": "e11a551f4255f2a92fbef96e91ea9eafec4565d470f457d200e06641626f9ac3"
+          "sha256": "b86c7878ef5858246404d1e3f48182635a7cb935d18aab785d1ceb243f8e0e0d"
         },
         {
           "test": "TestRuntimePolicyFailureScopes",
           "path": "go/internal/testsuite/policy_test.go",
           "scope": "Malformed invocation-wide leaves fail resolution; invalid layer/recovery leaves retain the other active layers and their failure categories.",
-          "sha256": "e11a551f4255f2a92fbef96e91ea9eafec4565d470f457d200e06641626f9ac3"
+          "sha256": "b86c7878ef5858246404d1e3f48182635a7cb935d18aab785d1ceb243f8e0e0d"
         }
       ],
       "adaptation": "Native number and optional-value encodings differ; each binding must distinguish absent, explicitly disabled, malformed, and boundary values.",
@@ -840,7 +840,7 @@
           "test": "TestPolicySparseResolutionAndSnapshots",
           "path": "go/internal/testsuite/policy_test.go",
           "scope": "Nested runtime leaves merge independently, omitted leaves inherit, and captured nested pointer-valued defaults survive caller mutation.",
-          "sha256": "e11a551f4255f2a92fbef96e91ea9eafec4565d470f457d200e06641626f9ac3"
+          "sha256": "b86c7878ef5858246404d1e3f48182635a7cb935d18aab785d1ceb243f8e0e0d"
         }
       ],
       "adaptation": "Eager defaulting can erase inherited leaves even when ordinary effective-policy examples pass.",
