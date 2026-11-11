@@ -620,6 +620,14 @@ func resolveDiffLeaf(leaf any) (MismatchDiffLevel, bool) {
 // read deadline is an invocation-wide error; TTL/ramp errors disable only that
 // layer, while an invalid recovery option preserves valid remote serving.
 func ResolvePolicy(base Policy, overlay RuntimePolicy, identity Identity, defaults PolicyDefaults) (ResolvedPolicy, error) {
+	logical, _, _, keyErr := identity.Keys()
+	return resolvePolicy(base, nil, overlay, logical, keyErr, defaults)
+}
+
+// resolvePolicy takes the logical key, or the error from computing it, so a
+// call that already built its keys does not build them again. static is the
+// read-only staticPolicyMap(base) that Cached builds at registration, or nil.
+func resolvePolicy(base Policy, static map[string]any, overlay RuntimePolicy, logical string, keyErr error, defaults PolicyDefaults) (ResolvedPolicy, error) {
 	resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeout: defaults.RemoteReadTimeout}
 	if resolved.RemoteReadTimeout == 0 {
 		resolved.RemoteReadTimeout = DefaultRemoteReadTimeout
@@ -630,10 +638,6 @@ func ResolvePolicy(base Policy, overlay RuntimePolicy, identity Identity, defaul
 	if err := ValidatePolicy(base); err != nil {
 		return resolved, err
 	}
-	merged := staticPolicyMap(base)
-	staticShadow, _ := merged["shadow"].(map[string]any)
-	// The static group is written from typed fields, so it always expands.
-	logging, _ := expandMismatchLogging(staticShadow)
 	var raw any
 	if overlay != nil {
 		var err error
@@ -641,7 +645,16 @@ func ResolvePolicy(base Policy, overlay RuntimePolicy, identity Identity, defaul
 			return resolved, err
 		}
 	}
-	if raw != nil && !IsAbsent(raw) {
+	runtime := raw != nil && !IsAbsent(raw)
+	merged := static
+	// The runtime merge below writes into merged and its nested maps.
+	if merged == nil || runtime {
+		merged = staticPolicyMap(base)
+	}
+	staticShadow, _ := merged["shadow"].(map[string]any)
+	// The static group is written from typed fields, so it always expands.
+	logging, _ := expandMismatchLogging(staticShadow)
+	if runtime {
 		m, err := policyMap(raw, "runtime config")
 		if err != nil {
 			return resolved, err
@@ -703,9 +716,8 @@ func ResolvePolicy(base Policy, overlay RuntimePolicy, identity Identity, defaul
 		}
 		resolved.RemoteReadTimeout = time.Duration(n) * time.Millisecond
 	}
-	logical, _, _, err := identity.Keys()
-	if err != nil {
-		return resolved, err
+	if keyErr != nil {
+		return resolved, keyErr
 	}
 	ttls, ramps := merged["ttlSec"].(map[string]any), merged["ramp"].(map[string]any)
 	resolveLayer := func(layer string) ResolvedLayer {

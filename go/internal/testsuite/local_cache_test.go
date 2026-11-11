@@ -218,3 +218,39 @@ func BenchmarkLocalMissAtCapacity(b *testing.B) {
 		b.Fatal(err)
 	}
 }
+
+// Cached shares the static policy map it builds at registration. A runtime
+// overlay must not write into that map, or later calls without an overlay
+// would inherit it.
+func TestCachedRuntimeOverlayDoesNotLeakIntoLaterCalls(t *testing.T) {
+	zero, overlay := 0.0, true
+	cache := MustNew(WithPolicyProvider(func(context.Context, Identity) (RuntimePolicy, error) {
+		if overlay {
+			return &PolicyOverlay{LocalRamp: &zero}, nil
+		}
+		return nil, nil
+	}))
+	sources := 0
+	get, err := Cached(cache, Operation[string]{
+		Identity: Identity{KeyType: "entity", UseCase: "overlay"},
+		Policy:   Policy{LocalTTL: time.Minute},
+	}, func(id string) (Identity, error) { return Identity{ID: id}, nil },
+		func(context.Context, string) (string, error) { sources++; return "value", nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, done := cache.Enable(context.Background())
+	defer done()
+	call := func() {
+		if value, err := get(ctx, "1"); value != "value" || err != nil {
+			t.Fatal(value, err)
+		}
+	}
+	call() // the overlay ramps the local layer down: source, nothing stored
+	overlay = false
+	call() // static policy: source, then a local write
+	call() // local hit
+	if sources != 2 {
+		t.Fatalf("source calls = %d, want 2", sources)
+	}
+}

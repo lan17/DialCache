@@ -29,6 +29,9 @@ func (x *execution[T]) labels(layer string) map[string]any {
 	return d
 }
 func (x *execution[T]) event(kind, layer string, extra map[string]any) {
+	if len(x.cache.settings.observers) == 0 {
+		return
+	}
 	d := x.labels(layer)
 	for k, v := range extra {
 		d[k] = v
@@ -59,6 +62,9 @@ func (x *execution[T]) elapsed(start time.Duration) float64 {
 	return n.Seconds()
 }
 func (x *execution[T]) duration(kind, layer string, start time.Duration, extra map[string]any) {
+	if len(x.cache.settings.observers) == 0 {
+		return
+	}
 	if extra == nil {
 		extra = map[string]any{}
 	}
@@ -70,6 +76,12 @@ func (x *execution[T]) duration(kind, layer string, start time.Duration, extra m
 // registering its use case. Outside an enabled scope it calls load directly.
 // Returned in-memory values are shared and must be treated as immutable.
 func GetOrLoad[T any](ctx context.Context, c *Cache, op Operation[T], load func(context.Context) (T, error)) (T, error) {
+	return getOrLoad(ctx, c, op, load, nil)
+}
+
+// getOrLoad takes the static policy map that Cached builds once at
+// registration, or nil to build it during resolution.
+func getOrLoad[T any](ctx context.Context, c *Cache, op Operation[T], load func(context.Context) (T, error), static map[string]any) (T, error) {
 	var zero T
 	if c == nil || load == nil {
 		return zero, fmt.Errorf("%w: GetOrLoad requires a cache and a source", ErrInvalidOperation)
@@ -119,7 +131,7 @@ func GetOrLoad[T any](ctx context.Context, c *Cache, op Operation[T], load func(
 		overlay, err = callSafely(func() (RuntimePolicy, error) { return c.settings.policyProvider(ctx, op.Identity) })
 	}
 	if err == nil {
-		x.policy, err = ResolvePolicy(op.Policy, overlay, op.Identity, PolicyDefaults{RemoteReadTimeout: c.settings.remoteReadTimeout})
+		x.policy, err = resolvePolicy(op.Policy, static, overlay, key, nil, PolicyDefaults{RemoteReadTimeout: c.settings.remoteReadTimeout})
 	}
 	if err != nil {
 		c.settings.logger.Warn("Could not resolve DialCache key config", err)
