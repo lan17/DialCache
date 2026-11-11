@@ -3,6 +3,7 @@ package dialcache_test
 import (
 	"bytes"
 	"context"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"testing"
@@ -88,4 +89,32 @@ func TestCompressPayloadAcrossSynctestBubbles(t *testing.T) {
 	synctest.Test(t, roundTrip)
 	roundTrip(t)
 	synctest.Test(t, roundTrip)
+}
+
+// Values at and above the zstd block size (64 KiB at levels 1-2, 128 KiB
+// otherwise) take the encoder's multi-block path, and every write after the
+// first reuses a pooled encoder.
+func TestCompressPayloadRoundTripsAcrossBlockSizes(t *testing.T) {
+	random := make([]byte, 3<<17+1)
+	_, _ = rand.NewChaCha8([32]byte{1}).Read(random)
+	text := []byte(strings.Repeat(`{"id":"item-17","group":"north","state":"active"},`, len(random)/48+1))
+	for _, level := range []int{1, 3} {
+		for _, size := range []int{1<<16 - 1, 1 << 16, 1<<16 + 1, 1<<17 - 1, 1 << 17, 1<<17 + 1, 3<<17 + 1} {
+			for _, input := range []struct {
+				name, outcome string
+				bytes         []byte
+			}{{"mixed", "compressed", append(text[:size/2:size/2], random[:size-size/2]...)}, {"random", "not_smaller", random[:size]}} {
+				for range 2 {
+					written, err := CompressPayload(Payload{Binary: true, Bytes: input.bytes}, CompressionConfig{ThresholdBytes: 1, Level: level})
+					if err != nil || written.Outcome != input.outcome {
+						t.Fatalf("level %d, %s %d bytes: outcome %q, error %v", level, input.name, size, written.Outcome, err)
+					}
+					read := DecompressPayload(written.Payload)
+					if !read.Payload.Binary || !bytes.Equal(read.Payload.Bytes, input.bytes) {
+						t.Fatalf("level %d, %s %d bytes: read %q did not return the written value", level, input.name, size, read.Outcome)
+					}
+				}
+			}
+		}
+	}
 }

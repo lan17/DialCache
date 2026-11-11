@@ -608,6 +608,8 @@ func CompressPayload(payload Payload, config CompressionConfig, limit ...int) (C
 	if err != nil {
 		return result, err
 	}
+	// Close keeps the writer, so an idle pooled encoder would hold the output.
+	writer.Reset(nil)
 	zstdEncoders[level].Put(writer)
 	compressed := output.Bytes()
 	result.Outcome = "not_smaller"
