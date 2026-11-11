@@ -125,7 +125,8 @@ already acquired snapshots retain the documented lifetime rules.
 `InvalidateMany` applies the same transition to several entities with one
 timestamp. `RedisAdapter` pipelines it and retries each failed `EVALSHA` with
 `EVAL`; a remote without `InvalidateMany` gets one `Invalidate` per entity.
-The batch can partially complete; retrying all of it is safe.
+The batch can partially complete; retrying all of it is safe. One batch is
+one pipeline, so its replies must arrive within the client's read timeout.
 
 Source errors retain their identity. A source deadline returns
 `FallbackTimeoutError` and does not cancel raw source work. A read deadline

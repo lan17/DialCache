@@ -1800,7 +1800,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "9dfbb903c3bae28c45d74c130b32d262a8f2dfe6cb7a5f71e43d1cba3d01995a",
+      "sha256": "f9acafaa051f4010ca3e4a6d5daabb401f23971be323c6a6ea31e825ea6fba48",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -42,6 +43,12 @@ func (r *batchInvalidator) InvalidateMany(_ context.Context, keys []string, now,
 	return nil
 }
 
+// steppingClock advances on every read, so a test sees a second clock sample.
+type steppingClock struct{ wall atomic.Int64 }
+
+func (c *steppingClock) WallMS() int64    { return c.wall.Add(1) }
+func (c *steppingClock) ElapsedMS() int64 { return 0 }
+
 type recordedEvents struct{ invalidations, errors []map[string]any }
 
 func (e *recordedEvents) observe(event Event) {
@@ -64,8 +71,8 @@ func TestInvalidateMany(t *testing.T) {
 	}
 	keys := []string{"{app:repl:a}#watermark", "{other:repl:a}#watermark", "{app:repl:b}#watermark", "{app:org:c}#watermark"}
 	newCache := func(remote Remote, events *recordedEvents, logger *boundaryLogger) *Cache {
-		clock := &boundaryClock{}
-		clock.wall.Store(wall)
+		clock := &steppingClock{}
+		clock.wall.Store(wall - 1)
 		options := []Option{WithNamespace("app"), WithClock(clock), WithObserver(events.observe), WithLogger(logger)}
 		if remote != nil {
 			options = append(options, WithRemote(remote))
