@@ -160,22 +160,21 @@ C0 present → compare S
 ### Clean-miss fill
 
 A semantic `C0` miss can be filled from `S`. For a tracked miss carrying a valid
-`observedWatermarkMs`, DialCache checks the application timestamp before serialization
-and again immediately before dispatch. A timestamp at or below that observation
-skips the fill and emits `fill_fenced`. Preflight suppression also avoids
-serialization, compression, and frame allocation.
+`observedWatermarkMs`, DialCache checks the application timestamp before
+serialization and again immediately before dispatch. A timestamp at or below that
+observation skips the fill and emits `fill_fenced`; the first check skips it
+before any payload is prepared. An admitted fill carries the timestamp that passed
+the fence check. Without an observed fence, it uses the normal dispatch-time
+timestamp.
 
-An admitted fill uses the final timestamp exactly and sends one complete-frame
-`SET`. Without an observed fence, the adapter samples its normal dispatch-time
-timestamp. The physical TTL follows ordinary write policy, including `M` when
-stale recovery is active and the separate one-hour tracked cap.
+Fill retention follows ordinary write policy, including the maximum recovery
+age when stale recovery is active and the separate one-hour tracked cap.
 
 A semantic miss includes absent, unsupported, logically expired, future-dated,
 and watermark-fenced frames. It does not include a present payload that fails
 `load`: that is `deserialization_error`, with no repair. Miss reason and observed
-fence are independent. Core classifies logical expiry after the adapter decodes
-the wire frame, before the application codec decoder runs. That `expired`
-miss does not carry a watermark fence; it follows normal refill behavior.
+fence are independent. A logically expired value follows normal refill behavior
+and does not supply an observed watermark fence.
 
 `filled` means the client accepted the write before the deadline. `fill_error`
 means payload preparation or writing failed. Neither proves what remains in
@@ -195,8 +194,8 @@ Confirmation failure or read timeout produces `confirmation_error`.
 Confirmation bypasses logical age solely for supersession comparison. A
 future-dated `C1` records its offset but can be retained for comparing bytes; it
 cannot serve the caller. DialCache does not deserialize `C1`, compare it with `S`, or
-chase another version. Payloads compare by their exact stored bytes; TypeScript string payloads use
-their UTF-8 representation when compared with binary payloads.
+chase another version. Payloads compare by their exact stored bytes; TypeScript
+string payloads use their UTF-8 representation when compared with binary payloads.
 
 Any non-null `C0` is observation-only. Shadow validation never repairs a mismatch
 or overwrites an undecodable present value.
@@ -275,12 +274,10 @@ A sampled served hit runs the codec decoder again in detached work. It
 must be repeatable, non-mutating, and return independently usable values.
 Returned Redis payload bytes must remain stable after the adapter read settles.
 
-DialCache retains source arguments or the inline loader closure. It cannot generically clone source-selection state. Keep arguments,
-captured state, and accepted source values immutable, or snapshot before the
-invocation, so detached work still refers to the key that was selected.
+Keep arguments, captured state, and accepted source values immutable, or snapshot
+before the invocation, so detached work still refers to the key that was selected.
 
-The caller's decoded hit object is not reused for comparison. No shadow copy,
-hash, or deep comparison is added to the served-hit request path.
+Comparison does not reuse the caller's decoded hit object.
 
 ## Capacity, deadlines, and detachment
 
@@ -313,23 +310,18 @@ mismatch-warning rendering and `shadowMismatchDiff`.
 
 Shadow work runs independently of the caller. Native callbacks still consume
 CPU and can outlive the cache's bounded wait. Give dependency calls finite
-context deadlines and bound application concurrency. A job holds its capacity
-until its verdict is reported, on the shadow job's goroutine: while the
-`WithShadowOutcomes` hook, observers and metrics adapters receive its
-`shadowValidation` and `shadowAge` events, and while its mismatch warning is
-built and logged, the built-in walk and `Operation.MismatchDiff` included. A
-slow callback there therefore shows up as `dropped` jobs beyond capacity.
+context deadlines and bound application concurrency. Outcome hooks, observers,
+metrics adapters, and mismatch-warning rendering and logging retain shadow
+capacity until they finish. This includes `Operation.MismatchDiff`; slow
+callbacks cause excess jobs to report `dropped`.
 
 </LanguageContent>
 
 <LanguageContent language="rust">
 
-The captured runtime runs detached shadow tasks. Admitted CPU work can retain
-capacity even after an async runtime shutdown. Mismatch-warning content runs
-through the bounded CPU executor too: JSON rendering, the built-in walk,
-`preview` and the `mismatch_diff` hook can run on worker threads and hold the
-job's capacity until they finish. Application codecs control their own
-scheduling.
+CPU work can retain shadow capacity after runtime shutdown. Mismatch-warning
+rendering, `preview`, and `mismatch_diff` may run on worker threads and retain
+capacity until completion. Application codecs control their own scheduling.
 
 </LanguageContent>
 
@@ -628,20 +620,9 @@ the computation parses and walks both renderings in full, so its CPU time and
 memory grow with the rendered size of the values and with the number of members
 and elements they hold.
 
-Each smaller pair below shows one rule:
-
-| Cached | Source | `mismatchPaths` | Why |
-| --- | --- | --- | --- |
-| `{"plan":"free"}` | `{"plan":"pro"}` | `["/plan"]` | A changed field |
-| `{"tags":["a","b"]}` | `{"tags":["a","c"]}` | `["/tags/1"]` | Same length, so elements are compared by index |
-| `{"tags":["a","b"]}` | `{"tags":["a","x","b"]}` | `["/tags"]` | Different length: the whole array, once |
-| `{"name":"Ana"}` | `{"name":"Ana","nickname":"A"}` | `["/nickname"]` | Only the source has it, so its `diffJson` entry carries `source` alone |
-| `{"name":"Ana","nickname":"A"}` | `{"name":"Ana"}` | `["/nickname"]` | Only the cache has it, as after the source stops returning a field; its `diffJson` entry carries `cached` alone |
-| `{"count":1}` | `{"count":"1"}` | `["/count"]` | A number against a string |
-| `{"address":{"city":"Paris"}}` | `{"address":null}` | `["/address"]` | An object against `null` is reported whole |
-| `{"a/b":1,"m~n":1}` | `{"a/b":2,"m~n":2}` | `["/a~1b","/m~0n"]` | RFC 6901 escapes `/` as `~1` and `~` as `~0` |
-| `["a","b"]` | `{"items":["a","b"]}` | `[""]` | Roots of different kinds, at the root pointer |
-| Absent | `{"plan":"pro"}` | `[""]` | A cached negative-cache entry is an absent value, not a failure: the source is reported whole at the root, and `cachedValueJson` is `null` |
+Pointers escape `/` as `~1` and `~` as `~0`, following RFC 6901. When an absent
+negative-cache entry differs from a source value, the diff reports the source
+at the root pointer `""`, and `cachedValueJson` is `null`.
 
 A use case can replace the computation with a diff hook, set beside its shadow
 comparator. The hook receives the compared values, an absent one included as
@@ -693,9 +674,7 @@ const getUser = dialcache.cached(fetchUser, {
 ```
 
 Rendering, the walk, and the hook run on the event loop after the job releases
-its capacity slot. On one Apple-silicon Mac, a 6.3 MB object of 150,000 members
-took about 0.12 seconds per warning at `diff: "paths"`, against 0.06 seconds for
-the value fields alone.
+its capacity slot.
 
 </LanguageContent>
 
@@ -718,17 +697,14 @@ to `Absent` is omitted and nil is JSON `null`, so an entry that only names a
 location sets both sides to `Absent`; a nil slice is an empty list. A side
 renders like a compared value, except that the side or any value inside it that
 implements `json.Marshaler`, such as `json.RawMessage` or a redacting type,
-renders through its `MarshalJSON`, whose output is parsed back rather than
-copied. A `MarshalJSON` that fails, panics, or writes invalid JSON or a number
-outside double range leaves the side with no rendering, and a `*big.Int` side
-still has none. The hook fails by returning an error or panicking.
+renders through its `MarshalJSON`. A `MarshalJSON` that fails, panics, or writes
+invalid JSON or a number outside double range leaves the side unavailable;
+`*big.Int` sides are also unavailable. The hook fails by returning an error or
+panicking.
 
-Rendering, the walk, and the hook run on the shadow job's goroutine after the
-verdict and hold the job's shadow capacity until they finish, so while a slow
-hook runs, jobs beyond capacity report `dropped`. On one Apple-silicon Mac, a
-6.3 MB map of 150,000 members took about 0.6 seconds per warning at
-`MismatchDiffPaths`, most of it rendering: the value fields alone took about
-0.5 seconds.
+Rendering and diff hooks retain shadow capacity until completion, so slow hooks
+cause excess jobs to report `dropped`. Logging CPU and memory costs grow with
+value size, even when the logged fields are capped.
 
 </LanguageContent>
 
@@ -761,10 +737,7 @@ Rendering, the walk, `preview`, and the hook run through the bounded CPU
 executor after confirmation and hold the job's shadow capacity until they
 finish; they can run on a worker thread. When the executor rejects the work,
 or the work panics or is dropped, the warning keeps its metadata, both field
-groups are `None`, and it carries `render_error`. On one Apple-silicon Mac, a
-6.3 MB map of 150,000 entries took about 0.09 seconds per warning at
-`MismatchDiff::Paths` in a release build, against 0.006 seconds for the value
-fields alone.
+groups are `None`, and it carries `render_error`.
 
 By default the executor is one process-wide pool of two worker threads and two
 queued jobs, which every cache instance also uses for zstd decompression and
@@ -790,16 +763,13 @@ A top-level `UNDEFINED` is the absent value, and `None` is JSON `null`.
 `shadow_mismatch_diff=`, set beside `shadow_comparator` on `cached()` or
 `get_or_load()`, sets the hook. It returns a list of mappings, each with a str
 `"path"` and optional `"cached"` and `"source"` sides; a missing key or
-`UNDEFINED` omits a side. A hook that raises, returns an awaitable (a coroutine
-is closed without running), returns something other than a list, or returns one
-of the first 64 entries without a `"path"` key fails. Other entries are logged
+`UNDEFINED` omits a side. A hook that raises, returns an awaitable or a non-list,
+or omits `"path"` from any of the first 64 entries fails. Entries are logged
 as returned, with `str()` of each path. A non-callable value raises
 `ConfigError`.
 
 Rendering, the walk, and the hook run on the event loop after the job releases
-its capacity slot. On one Apple-silicon Mac, a 6.3 MB dict of 150,000 members
-took about 0.18 seconds per warning at `"paths"`, against 0.04 seconds for the
-value fields alone.
+its capacity slot.
 
 </LanguageContent>
 

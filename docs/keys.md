@@ -242,8 +242,8 @@ prefix), `urn` (complete logical key), `defaultConfig`, `serializer`, and
 <LanguageContent language="go">
 
 The provider receives `context.Context` and a normalized `Identity`.
-`Identity` carries namespace, entity kind/id, use case, ordered args and tracking;
-the operation's baseline is already known to the cache during policy resolution.
+`Identity` carries namespace, entity kind/id, use case, ordered args and tracking.
+Return a sparse policy overlay without repeating the operation's baseline.
 
 </LanguageContent>
 
