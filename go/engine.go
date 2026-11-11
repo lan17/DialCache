@@ -199,14 +199,16 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 		x.event("coalesced", "", map[string]any{"scope": label})
 		select {
 		case <-f.done:
-			return followerResult[T](f)
 		case <-ctx.Done():
+		}
+		if err := ctx.Err(); err != nil {
 			c.mu.Lock()
 			f.followers--
 			c.mu.Unlock()
 			var zero T
-			return zero, ctx.Err()
+			return zero, err
 		}
+		return followerResult[T](f)
 	}
 	f := &flight{done: make(chan struct{}), started: started}
 	flights[x.key] = f
@@ -224,11 +226,13 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	}()
 	select {
 	case <-f.done:
-		return followerResult[T](f)
 	case <-ctx.Done():
-		var zero T
-		return zero, ctx.Err()
 	}
+	if err := ctx.Err(); err != nil {
+		var zero T
+		return zero, err
+	}
+	return followerResult[T](f)
 }
 
 // followerResult hands a leader's settled result to a follower. A leader of
@@ -309,6 +313,10 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 			return v, e
 		}
 		remote := x.readServing()
+		if err := x.ctx.Err(); err != nil {
+			var zero T
+			return zero, err
+		}
 		if remote.kind == "hit" {
 			if localMiss {
 				x.putLocal(remote.value)
@@ -381,9 +389,11 @@ func (x *execution[T]) source(layer string) (T, error) {
 	clock := x.cache.settings.clock
 	start := elapsedNow(clock)
 	budget := x.budget()
-	// The source deadline and the waiter leaving both cancel the source context.
-	ctx, cancel := context.WithCancel(x.ctx)
-	if budget >= 0 {
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if budget < 0 {
+		ctx, cancel = context.WithCancel(x.ctx)
+	} else {
 		ctx, cancel = context.WithTimeout(x.ctx, time.Duration(budget)*time.Millisecond)
 	}
 	defer cancel()
@@ -391,6 +401,9 @@ func (x *execution[T]) source(layer string) (T, error) {
 	v, err := awaitDeadline(x.ctx, clock, p, start, budget, func() error {
 		return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(budget) * time.Millisecond}
 	}, func() { x.timedOut.Store(true) })
+	// Once the wait ends the result is settled; cancel before observers run so a
+	// slow observer cannot keep a timed-out or abandoned source going.
+	cancel()
 	if err != nil {
 		x.errorEvent(layer, "fallback", true)
 	}
@@ -437,7 +450,12 @@ func (x *execution[T]) readServing() remoteValue[T] {
 	x.event("request", "remote", nil)
 	defer x.duration("get", "remote", start, nil)
 	p, _ := x.rawRead()
-	<-p.done
+	select {
+	case <-p.done:
+	case <-x.ctx.Done():
+		// The caller stopped waiting; the read keeps its own budget and owner.
+		return remoteValue[T]{kind: "cancelled"}
+	}
 	r, err := p.result.value, p.result.err
 	if err != nil {
 		x.cache.settings.logger.Warn("Error getting value from Redis cache", err)

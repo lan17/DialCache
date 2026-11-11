@@ -60,10 +60,12 @@ func awaitDeadline[T any](ctx context.Context, clock Clock, p *pending[T], start
 	if budget < 0 {
 		select {
 		case <-p.done:
-			return p.result.value, p.result.err
 		case <-ctx.Done():
-			return zero, ctx.Err()
 		}
+		if err := ctx.Err(); err != nil {
+			return zero, err
+		}
+		return p.result.value, p.result.err
 	}
 	duration := time.Duration(budget) * time.Millisecond
 	for {
@@ -74,6 +76,10 @@ func awaitDeadline[T any](ctx context.Context, clock Clock, p *pending[T], start
 		case <-p.done:
 			timer.Stop()
 			if elapsedNow(clock)-started < duration {
+				// A waiter whose ctx already ended gets its own error, not the result.
+				if err := ctx.Err(); err != nil {
+					return zero, err
+				}
 				return p.result.value, p.result.err
 			}
 		case <-expired:

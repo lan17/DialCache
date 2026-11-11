@@ -298,6 +298,8 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 	verdict, err := awaitDeadline(context.Background(), clock, validation, started, budget, func() error {
 		return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(budget) * time.Millisecond}
 	}, f.abandon)
+	// Cancel before the outcome hooks run, so a slow hook cannot keep timed-out work going.
+	cancel()
 	if err != nil {
 		verdict = shadowVerdict[T]{outcome: "timeout"}
 	}

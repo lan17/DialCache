@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
-    "sourceAuditDispositionsSha256": "c95ce03c30df574246e5943e2d69e084ed809b5d3e2a3d0f0abf5a2123bc8aaa",
+    "sourceAuditDispositionsSha256": "3409d9b21b902114e094aa858c968b864d8dfa3907a2412e4bbadb3a6046c3e5",
     "featureCoverageSha256": "c96d4c5aa3879cfc50a12fc210e4011d0e4605d2da7c79c50d74caa09d63f1f1",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
@@ -3551,7 +3551,7 @@
               "putRemote",
               "recover"
             ],
-            "sha256": "6758b27abd5049114885699644631e89e4a6991628f0cae74e7957b3846a1c3a"
+            "sha256": "c12fac2e9a32bdef3cf423b8f803f56b56eb77a2fcc574a4e2d720e4ed81c7c1"
           },
           {
             "path": "go/deadline.go",
@@ -3559,7 +3559,7 @@
               "awaitDeadline",
               "callSafely"
             ],
-            "sha256": "93dfb2fa43310982d14f7e0bb8f89704d2aa71cff7676ca71481035cd601fdfc"
+            "sha256": "8cd5faddb7a02718a7612de9855f438a91f1f68d5ab8eb43ebd53d398baea8da"
           },
           {
             "path": "go/shadow.go",
@@ -3569,7 +3569,7 @@
               "runShadow",
               "warnShadowMismatch"
             ],
-            "sha256": "c2c307d0042ed82664c4b57e6eaf64f7731cfd4995c365f580bda4d1cfa41437"
+            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
           },
           {
             "path": "go/api.go",
@@ -3722,7 +3722,7 @@
               "remoteValue",
               "localResult"
             ],
-            "sha256": "6758b27abd5049114885699644631e89e4a6991628f0cae74e7957b3846a1c3a"
+            "sha256": "c12fac2e9a32bdef3cf423b8f803f56b56eb77a2fcc574a4e2d720e4ed81c7c1"
           }
         ]
       }
@@ -3780,7 +3780,7 @@
               "awaitDeadline",
               "deferWork"
             ],
-            "sha256": "93dfb2fa43310982d14f7e0bb8f89704d2aa71cff7676ca71481035cd601fdfc"
+            "sha256": "8cd5faddb7a02718a7612de9855f438a91f1f68d5ab8eb43ebd53d398baea8da"
           },
           {
             "path": "go/api.go",
@@ -3874,7 +3874,7 @@
               "putLocal",
               "shared"
             ],
-            "sha256": "6758b27abd5049114885699644631e89e4a6991628f0cae74e7957b3846a1c3a"
+            "sha256": "c12fac2e9a32bdef3cf423b8f803f56b56eb77a2fcc574a4e2d720e4ed81c7c1"
           },
           {
             "path": "go/api.go",
@@ -3944,14 +3944,14 @@
               "canRecover",
               "recover"
             ],
-            "sha256": "6758b27abd5049114885699644631e89e4a6991628f0cae74e7957b3846a1c3a"
+            "sha256": "c12fac2e9a32bdef3cf423b8f803f56b56eb77a2fcc574a4e2d720e4ed81c7c1"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "runShadow"
             ],
-            "sha256": "c2c307d0042ed82664c4b57e6eaf64f7731cfd4995c365f580bda4d1cfa41437"
+            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
           },
           {
             "path": "go/codec.go",
@@ -4174,7 +4174,7 @@
             "symbols": [
               "callSafely"
             ],
-            "sha256": "93dfb2fa43310982d14f7e0bb8f89704d2aa71cff7676ca71481035cd601fdfc"
+            "sha256": "8cd5faddb7a02718a7612de9855f438a91f1f68d5ab8eb43ebd53d398baea8da"
           },
           {
             "path": "go/metrics.go",
@@ -4260,14 +4260,14 @@
               "errorEvent",
               "duration"
             ],
-            "sha256": "6758b27abd5049114885699644631e89e4a6991628f0cae74e7957b3846a1c3a"
+            "sha256": "c12fac2e9a32bdef3cf423b8f803f56b56eb77a2fcc574a4e2d720e4ed81c7c1"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "shadowEvent"
             ],
-            "sha256": "c2c307d0042ed82664c4b57e6eaf64f7731cfd4995c365f580bda4d1cfa41437"
+            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
           }
         ]
       }
@@ -4794,14 +4794,16 @@
           "go/internal/testsuite/bindings_test.go",
           "go/api_boundary_test.go",
           "go/policy.go",
-          "go/protocol.go"
+          "go/protocol.go",
+          "go/engine.go",
+          "go/deadline.go"
         ],
         "nativeAdaptations": [
           "B01",
           "B02",
           "B03"
         ],
-        "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings."
+        "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings. The Go source and caller contexts section describes execution in engine.go and deadline.go: source context cancellation, per-caller waits and detached flights."
       },
       {
         "path": "typescript/README.md",

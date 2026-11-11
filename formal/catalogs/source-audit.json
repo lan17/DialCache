@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "f35d61a95ac2f9ad9dcc5d1f86c5b151b1260f7e7679f75a161777cbe39e8e84",
+      "sha256": "b0721360c93a16004fd74ca5f92417f2ba3a99165fe4801ca45324eec8c6713d",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -328,6 +328,7 @@
         {"title":"Stale retention and downgrades","contracts":["E05","C37"]},
         {"title":"Compression and value schemas","contracts":["E05","W06","W08"]},
         {"title":"Shadow mismatch warnings","contracts":["C60","X01"]},
+        {"title":"Go source and caller contexts","contracts":["C24","C25","B02"]},
         {"title":"Metric migrations","contracts":["X01"]}
       ]
     },

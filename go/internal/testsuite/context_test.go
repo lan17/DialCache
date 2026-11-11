@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,10 @@ func newContextRemote() *contextRemote {
 
 func (r *contextRemote) Read(ctx context.Context, key, watermark string) (ReadResult, error) {
 	if r.holdRead {
+		if _, ok := ctx.Deadline(); ok {
+			r.readDone <- errors.New("read context has a deadline")
+			return ReadResult{}, nil
+		}
 		<-ctx.Done()
 		r.readDone <- ctx.Err()
 		return ReadResult{}, ctx.Err()
@@ -247,6 +252,80 @@ func TestContextTimedOutReadReleasesItsWait(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("a timed-out read kept waiting")
 	}
+}
+
+func TestContextUncoalescedCallerStopsWaitingForRead(t *testing.T) {
+	remote := newContextRemote()
+	remote.holdRead = true
+	cache := MustNew(WithRemote(remote), WithRemoteReadTimeout(5*time.Second))
+	op := contextOperation("uncoalesced-read", Policy{RemoteTTL: time.Minute, Coalesce: Ptr(false)})
+	ctx, done := cache.Enable(context.Background())
+	defer done()
+	callerCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+
+	var called atomic.Bool
+	results := make(chan contextResult, 1)
+	go func() {
+		v, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (string, error) { called.Store(true); return "value", nil })
+		results <- contextResult{v, err}
+	}()
+	if r := receive(t, results); r.value != "" || !errors.Is(r.err, context.DeadlineExceeded) {
+		t.Fatalf("caller = %+v, want its own deadline during the read", r)
+	}
+	if called.Load() {
+		t.Fatal("source ran for a caller that had stopped waiting")
+	}
+}
+
+func TestContextEndedCallerGetsItsErrorOverAReadyResult(t *testing.T) {
+	t.Run("follower", func(t *testing.T) {
+		for range 20 {
+			release := make(chan struct{})
+			leader := make(chan contextResult, 1)
+			followerCtx, cancelFollower := context.WithCancel(context.Background())
+			defer cancelFollower()
+			observe := func(e Event) {
+				if e.Kind != "coalesced" {
+					return
+				}
+				// Make both the flight result and the follower's cancellation
+				// ready before the follower starts waiting.
+				cancelFollower()
+				close(release)
+				<-leader
+				leader <- contextResult{}
+			}
+			cache := MustNew(WithRemote(newContextRemote()), WithObserver(observe))
+			op := contextOperation("both-ready-follower", Policy{RemoteTTL: time.Minute})
+			load := func(context.Context) (string, error) { <-release; return "value", nil }
+			ctx, done := cache.Enable(context.Background())
+			go func() { v, err := GetOrLoad(ctx, cache, op, load); leader <- contextResult{v, err} }()
+			for cache.GetCoalescingState().Process.ActiveLeaders != 1 {
+				time.Sleep(time.Millisecond)
+			}
+			followerCtx, closeFollower := cache.Enable(followerCtx)
+			v, err := GetOrLoad(followerCtx, cache, op, load)
+			closeFollower()
+			done()
+			if v != "" || !errors.Is(err, context.Canceled) {
+				t.Fatalf("follower = (%q, %v), want its own cancellation", v, err)
+			}
+		}
+	})
+	t.Run("source", func(t *testing.T) {
+		cache := MustNew(WithRemote(newContextRemote()))
+		op := contextOperation("both-ready-source", Policy{RemoteTTL: time.Minute, Coalesce: Ptr(false)})
+		for range 20 {
+			ctx, done := cache.Enable(context.Background())
+			callerCtx, cancel := context.WithCancel(ctx)
+			v, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (string, error) { cancel(); return "value", nil })
+			done()
+			if v != "" || !errors.Is(err, context.Canceled) {
+				t.Fatalf("caller = (%q, %v), want its own cancellation", v, err)
+			}
+		}
+	})
 }
 
 func TestContextServedShadowOutlivesCaller(t *testing.T) {
