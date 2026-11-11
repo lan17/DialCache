@@ -5,37 +5,13 @@ idioms in [TypeScript](languages/typescript.md), [Go](languages/go.md),
 [Rust](languages/rust.md), and [Python](languages/python.md). The language selector changes examples, binding notes,
 and API links while preserving the shared explanation and feature URL.
 
-## What belongs in the docs
-
-The user pages under `docs/` and the READMEs are a reference for people who use
-DialCache: what it does, how to call and configure it, and what a caller
-observes. This page and [maintainers](maintainers.md) are for contributors.
-Before adding text, ask whether a user would change their code, configuration,
-or operations because of it. If not, leave it out.
-
-- Describe what the caller sees, not how the code produces it. Leave out
-  internal types, contexts, goroutines, tasks, closures, locks, coalescing
-  internals, source paths and lines, and contract, catalog, or test IDs.
-- Add a native note only where users of that language must write or configure
-  something differently. A port that matches the shared guide needs no note.
-- Keep sections short and easy to scan. Prefer one concrete example and plain
-  words to a complete list of edge cases.
-
-Put implementation notes where their readers look: the reason for surprising
-code in a comment beside it, a change's user-visible effect in its pull request
-description, a decision in a
-[design record](https://github.com/lan17/DialCache/blob/main/design/README.md),
-and conformance and validation detail in the
-[formal guides](https://github.com/lan17/DialCache/blob/main/formal/README.md).
-
 ## Change a feature guide
 
 1. Read the relevant contract and TypeScript reference behavior. For a new
    portable behavior, follow [formal authoring](https://github.com/lan17/DialCache/blob/main/formal/guides/AUTHORING.md)
    and record a distinguishing regression before documenting it as supported.
-2. Explain once what the caller does and observes, including any limitation
-   that changes how they use the feature. Keep concrete API names in small
-   native notes where they help a reader act.
+2. Explain the rule, observable outcome, and limitations once. Keep concrete
+   API names in small native notes where they help a reader act.
 3. Implement the same teaching scenario through every port's public API. Put
    assertions around the demonstrated outcome, such as source-call counts or
    a cached value followed by a consequential invalidation.
@@ -154,7 +130,6 @@ remains necessary. Do not relabel API differences or missing behavior as parity.
 Add its native guide and executable scenarios, register it in `docs/ports.json`,
 then add its native reference command to `scripts/generate-docs.mjs` and execute
 its example tests in the language's CI job. Add a matching language section for
-every shared scenario; the source check identifies omissions. Keep native notes
-for lifecycle, ownership, codec, error and integration behavior that users of
-that language must handle differently. No copy of the shared feature tree is
-required.
+every shared scenario; the source check identifies omissions. Keep language
+specific lifecycle, ownership, codec, error and integration behavior visible in
+native notes. No copy of the shared feature tree is required.

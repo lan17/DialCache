@@ -129,8 +129,7 @@ the one the ruleset requires.
    ([Run it](formal/README.md#run-it)) and fix
    each port that fails it.
 5. Change no page in `docs/` and no README for the restored behavior, because the contract they
-   describe stays the same. If the fix removes a limitation they state, delete that note. Describe
-   the user-visible effect in the PR description.
+   describe stays the same. Delete a limitation note that the fix removes.
 
 #### Public API
 
@@ -149,10 +148,17 @@ the one the ruleset requires.
 
 #### Docs
 
-1. Write only what users need to call, configure and operate the library, never how it works
-   inside ([What belongs in the docs](docs/authoring.md#what-belongs-in-the-docs)). Follow the rest
-   of [docs/authoring.md](docs/authoring.md), checking claims and defaults against source. Never
-   cite a design record as the source of a guarantee.
+`docs/` and the READMEs are a reference for people who use the library, not notes for agents or
+maintainers. Write what a user needs to call, configure and operate it, and add a detail only when
+a user would change their code, configuration or operations because of it. Leave out how it works
+inside: internal types, contexts, goroutines, closures, locks, coalescing internals, source paths
+and contract or catalog IDs. A port note belongs only where users of that port must act
+differently. Keep sections short, with one concrete example. The reason for surprising code goes
+in a comment beside it, a change's effect in the PR description, a decision in a design record and
+validation detail in `formal/`.
+
+1. Follow [docs/authoring.md](docs/authoring.md), checking claims and defaults against source.
+   Never cite a design record as the source of a guarantee.
 2. Confirm that every public name the text mentions is exported from `typescript/src/index.ts` or
    an entry point, the `go/` root package, `rust/src/lib.rs` or `python/dialcache/__init__.py`.
 3. Keep the root README on evaluation and `typescript/README.md` on npm consumers. Change text
