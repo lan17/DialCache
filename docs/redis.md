@@ -122,11 +122,15 @@ go get github.com/lan17/DialCache/go@latest
 
 Create the appropriate `redis.UniversalClient` in your application, then pass
 `dialcache.NewRedisAdapter(client)` to `dialcache.WithRemote`. For a direct
-`*redis.ClusterClient`, tracked reads select the primary even when replica reads
-are enabled. Standalone and Sentinel `*redis.Client` handles must already target
+`*redis.ClusterClient`, a tracked read runs as a one-command transaction, which
+go-redis sends to the slot primary even when replica reads are enabled. It
+follows `MOVED` and `ASK` for that transaction and runs the cluster client's
+hooks. Standalone and Sentinel `*redis.Client` handles must already target
 the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false. Reading a replica
-can hide an invalidation watermark. Set connection, read/write and retry budgets
-on the native client; close it only after application work is drained. The
+can hide an invalidation watermark, and the adapter cannot see that option. Set
+connection, read/write and retry budgets on the native client
+([client budgets](#remote-read-deadlines-and-async-liveness)); close it only
+after application work is drained. The
 [executed invalidation example](invalidation.md#configure-a-tracked-use-case)
 links to complete connection setup.
 
@@ -210,9 +214,47 @@ supported; GLIDE uses its configured native request budget. Read timeouts log
 
 <LanguageContent language="go">
 
-The adapter receives a bounded `context.Context`; native reads can observe
-cancellation. The cache's `RemoteReadTimeoutError` does not prove a dispatched
-Redis command stopped or free the application from bounding retries and queues.
+The read context has no deadline. DialCache cancels it when the read budget
+expires, and `ReadBudget(ctx)` reports that budget. go-redis stops waiting for a
+pool connection when the context is canceled, but a command already on the
+socket runs until the client's `ReadTimeout`, and its connection stays busy
+until then. `Write` and `Invalidate` receive the caller's context, and DialCache
+adds no deadline to either, so only the client's budgets and a caller deadline
+bound them. go-redis applies a context deadline to the socket only when
+`ContextTimeoutEnabled` is set. `RemoteReadTimeoutError` does not prove that a
+dispatched command stopped.
+
+The go-redis defaults do not fit a 50 ms read budget. The pool holds 10
+connections per `GOMAXPROCS`, reads and writes may wait 5 seconds, a failed
+command is retried 3 times, and a connect is attempted 5 times. On a container
+limited to one or two CPUs, a Redis slowdown of a few tens of milliseconds at a
+few hundred reads per second fills that pool, so most reads miss the budget and
+call the source. One stalled miss-path write or invalidation can block its
+caller for many seconds. Size the pool as reads per second times the read
+budget, plus room for writes, and keep every wait short. Use a client that
+serves only DialCache, so a cache stall does not take connections from other
+Redis work. A starting point for up to about 1,000 reads per second (excerpt):
+
+```go
+client := redis.NewClient(&redis.Options{
+	Addr:                  addr,
+	Protocol:              2, // RESP3 also works
+	PoolSize:              64,
+	MinIdleConns:          8,
+	PoolTimeout:           100 * time.Millisecond,
+	DialTimeout:           500 * time.Millisecond,
+	DialerRetries:         1, // 0 means 5 attempts
+	ReadTimeout:           250 * time.Millisecond,
+	WriteTimeout:          250 * time.Millisecond,
+	MaxRetries:            -1, // 0 means 3 retries
+	ConnMaxIdleTime:       3 * time.Minute,
+	ContextTimeoutEnabled: true,
+})
+```
+
+Give `Invalidate` a context deadline. Do not derive a socket deadline from
+`ReadBudget`: a deadline that cuts a slow command closes its connection, and the
+reconnects add load while Redis is slow.
 
 </LanguageContent>
 
@@ -569,7 +611,9 @@ their own compatibility checks. See [Upgrading](upgrading.md).
 | Untracked | `GET valueKey` | Decode one frame; ordinary client read routing applies |
 | Tracked | `MGET valueKey watermarkKey` | Decode one authoritative value/watermark snapshot from the primary |
 
-Each semantic read is one top-level command and one round trip. The payload
+Each semantic read is one top-level command and one round trip. In Go, a
+tracked read on a Cluster client wraps its `MGET` in `MULTI` and `EXEC`, still in
+one round trip, so that go-redis routes it to the slot primary. The payload
 travels to the application before frame validation, watermark fencing, age checks, and
 deserialization. An invalidated large value therefore still consumes transfer
 bandwidth until it expires or is replaced.
@@ -657,11 +701,13 @@ performed by an application or client.
 
 The integration suite covers Redis 6.2, Valkey 8, and Redis Cluster. The bundled
 operations require `GET`, `MGET`, and `SET`, plus `EVALSHA` and `EVAL` for
-invalidation. If commands called inside scripts are checked separately, allow
+invalidation. The Go adapter's tracked Cluster reads also require `MULTI` and
+`EXEC`. If commands called inside scripts are checked separately, allow
 `GET`, `SET`, and `PTTL` for the invalidation script.
 
-DialCache does not issue `TIME`, `MULTI`, `EXEC`, `WATCH`, `UNLINK`, or
-`SCRIPT LOAD`. Tracked invalidation also requires the
+DialCache does not issue `TIME`, `WATCH`, `UNLINK`, or `SCRIPT LOAD`, and only
+the Go adapter's tracked Cluster reads issue `MULTI` and `EXEC`. Tracked
+invalidation also requires the
 [clock and watermark durability contract](invalidation.md#application-clock-contract).
 
 ## Custom-client contract

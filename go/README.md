@@ -112,10 +112,15 @@ operation configuration returns an error wrapping `ErrInvalidPolicy` or
 `WithRemote` requires atomic primary snapshots, complete client-stamped frame
 writes, and surfaced invalidation errors. The bundled `RedisAdapter` uses
 go-redis with standalone, Sentinel or Cluster clients. For a direct
-`*redis.ClusterClient`, tracked reads select the slot primary even when replica
-reads are enabled. Standalone and Sentinel `*redis.Client` handles must already
-target the primary; keep Sentinel's `FailoverOptions.ReplicaOnly` false so replica
-lag cannot hide an invalidation watermark. Writes use one native `SET`.
+`*redis.ClusterClient`, a tracked read runs as a one-command transaction on the
+slot primary, even when replica reads are enabled; go-redis follows `MOVED` and
+`ASK` for it and runs the cluster client's hooks. Standalone and Sentinel
+`*redis.Client` handles must already target the primary; keep Sentinel's
+`FailoverOptions.ReplicaOnly` false so replica lag cannot hide an invalidation
+watermark, since the adapter cannot see that option. Writes and invalidation wait
+for the native client, so size its pool and timeouts for the cache
+([client budgets](https://lan17.github.io/DialCache/redis#remote-read-deadlines-and-async-liveness)).
+Writes use one native `SET`.
 Invalidation first dispatches `EVALSHA`; any command rejection
 triggers one retry with `EVAL` using identical logical arguments. A successful
 command with an invalid reply does not trigger a retry. No value write creates
