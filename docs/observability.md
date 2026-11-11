@@ -594,10 +594,10 @@ Observers and metrics adapters receive an `Event` whose `Kind` is
 `WithShadowOutcomes` hook does not receive it. `hook_error` means
 `Operation.MismatchDiff` returned an error or panicked, or the built-in
 computation could not parse back a map, slice or `JSONObject` nested more than
-10,000 levels deep. A struct whose `MarshalJSON` writes a number outside double
-range, or whose JSON nests that deep, has no rendering and reports
-`render_error` instead. A Go logger returns nothing, so a `Warn` panic is its
-only `logger_error`.
+10,000 levels deep. An integer that a JSON number cannot carry exactly, or a
+struct whose `MarshalJSON` writes a number outside double range or whose JSON
+nests that deep, has no rendering and reports `render_error` instead. A Go
+logger returns nothing, so a `Warn` panic is its only `logger_error`.
 
 </LanguageContent>
 

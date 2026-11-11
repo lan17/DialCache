@@ -68,6 +68,8 @@ Go assignment does not deep-copy maps, slices or pointers. Treat reused values
 as immutable. `JSONCodec[T]` is the default; `Codec[T]` replaces it per operation
 and `ContextCodec[T]` optionally accepts a context. Native struct fields and
 numeric ranges constrain typed decoding; use `any` for the broader JSON domain.
+An integer that a JSON number cannot carry exactly is an encoding error.
+`ProtoCodec[T]` and the `ProtoEqual` comparator handle protobuf messages.
 `Absent` represents TypeScript undefined, while nil is JSON null. Unpaired
 UTF-16 surrogate escapes are rejected rather than silently changed.
 

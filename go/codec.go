@@ -2,6 +2,7 @@ package dialcache
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"math"
 	"math/big"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -90,6 +92,12 @@ func (JSONCodec[T]) Decode(payload Payload) (T, error) {
 	}
 	// Typed destinations additionally use their Go field/tag and numeric range
 	// rules. JSONCodec[any] above retains the supported scalar-string JSON domain.
+	if holdsBuffer(reflect.TypeFor[T]()) {
+		var err error
+		if raw, err = json.Marshal(base64Buffers(parsed, reflect.TypeFor[T]())); err != nil {
+			return zero, err
+		}
+	}
 	var value T
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return zero, err
@@ -221,6 +229,66 @@ func quoteJSON(dst []byte, value string) []byte {
 	return append(dst, '"')
 }
 
+// holdsBuffer reports whether appendJSON writes a []byte in t as Buffer JSON,
+// which encoding/json cannot decode. Struct fields use encoding/json's base64
+// instead. Each kind followed has one element type, so the walk is a chain,
+// and a recursive type ends it at the first repeat.
+func holdsBuffer(t reflect.Type) bool {
+	var seen []reflect.Type
+	for !slices.Contains(seen, t) {
+		if t == reflect.TypeFor[[]byte]() {
+			return true
+		}
+		switch t.Kind() {
+		case reflect.Slice, reflect.Array, reflect.Map, reflect.Pointer:
+			seen = append(seen, t)
+			t = t.Elem()
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// base64Buffers rewrites each Buffer JSON object at a []byte position of t in
+// the parsed value as the base64 text that encoding/json decodes into []byte.
+// Anything else stays as parsed, so typed decoding reports it. A nil []byte
+// was written as an empty Buffer, so it decodes as an empty one.
+func base64Buffers(value any, t reflect.Type) any {
+	// holdsBuffer has walked this chain, so it reaches []byte and every type
+	// before it has an element type.
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t == reflect.TypeFor[[]byte]() {
+		buffer, _ := value.(map[string]any)
+		data, _ := buffer["data"].([]any)
+		if len(buffer) != 2 || buffer["type"] != "Buffer" || data == nil {
+			return value
+		}
+		decoded := make([]byte, len(data))
+		for i, item := range data {
+			number, ok := item.(float64)
+			if !ok || number != math.Trunc(number) || number < 0 || number > 255 {
+				return value
+			}
+			decoded[i] = byte(number)
+		}
+		return base64.StdEncoding.EncodeToString(decoded)
+	}
+	switch value := value.(type) {
+	case []any:
+		for i, item := range value {
+			value[i] = base64Buffers(item, t.Elem())
+		}
+	case map[string]any:
+		for key, item := range value {
+			value[key] = base64Buffers(item, t.Elem())
+		}
+	}
+	return value
+}
+
 // appendJSON writes value in the portable JSON encoding. With marshalers set, a
 // value at any depth that implements json.Marshaler renders as its MarshalJSON
 // output parsed back, while Absent and big integers keep their own rules.
@@ -280,7 +348,18 @@ func appendJSON(dst []byte, value reflect.Value, seen map[visit]bool, marshalers
 		if math.IsNaN(number) || math.IsInf(number, 0) {
 			return append(dst, "null"...), nil
 		}
-		return append(dst, numberString(number)...), nil
+		text := numberString(number)
+		switch value.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			if err := exactInteger(text, strconv.FormatInt(value.Int(), 10)); err != nil {
+				return nil, err
+			}
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			if err := exactInteger(text, strconv.FormatUint(value.Uint(), 10)); err != nil {
+				return nil, err
+			}
+		}
+		return append(dst, text...), nil
 	}
 	switch value.Kind() {
 	case reflect.String:
@@ -334,9 +413,10 @@ func appendJSON(dst []byte, value reflect.Value, seen map[visit]bool, marshalers
 	case reflect.Struct:
 		// Native structs opt into Go's public JSON field/tag conventions, then the
 		// resulting JSON domain uses the same portable number/string encoding.
-		// A hook side marshals an addressable struct through its pointer, so a
-		// field's pointer-receiver MarshalJSON runs as encoding/json runs it.
-		if marshalers && value.CanAddr() {
+		// An addressable struct, such as one reached through a pointer, marshals
+		// through its pointer, so a pointer-receiver MarshalJSON runs as
+		// encoding/json runs it, matching the UnmarshalJSON that decoding calls.
+		if value.CanAddr() {
 			return appendReparsed(dst, value.Addr().Interface(), seen)
 		}
 		return appendReparsed(dst, value.Interface(), seen)
@@ -367,11 +447,64 @@ func appendReparsed(dst []byte, value any, seen map[visit]bool) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
 	var parsed any
-	if err = json.Unmarshal(raw, &parsed); err != nil {
+	if err = decoder.Decode(&parsed); err != nil {
+		return nil, err
+	}
+	if parsed, err = exactNumbers(parsed); err != nil {
 		return nil, err
 	}
 	return appendJSON(dst, reflect.ValueOf(parsed), seen, false)
+}
+
+// exactNumbers converts parsed numbers to doubles. A number outside double range
+// is an error, as is an integer literal that its double renders differently.
+func exactNumbers(value any) (any, error) {
+	switch value := value.(type) {
+	case json.Number:
+		number, err := strconv.ParseFloat(string(value), 64)
+		if err != nil {
+			return nil, err
+		}
+		if !strings.ContainsAny(string(value), ".eE") {
+			if err := exactInteger(numberString(number), string(value)); err != nil {
+				return nil, err
+			}
+		}
+		return number, nil
+	case []any:
+		for i, item := range value {
+			number, err := exactNumbers(item)
+			if err != nil {
+				return nil, err
+			}
+			value[i] = number
+		}
+		return value, nil
+	case map[string]any:
+		for key, item := range value {
+			number, err := exactNumbers(item)
+			if err != nil {
+				return nil, err
+			}
+			value[key] = number
+		}
+		return value, nil
+	default:
+		return value, nil
+	}
+}
+
+// exactInteger rejects an integer whose JSON number, the shortest rendering of
+// its double, would decode as a different integer, so cache plumbing fails open
+// instead of returning a changed value.
+func exactInteger(text, decimal string) error {
+	if text != decimal {
+		return fmt.Errorf("JSON cannot encode integer %s exactly", decimal)
+	}
+	return nil
 }
 func arrayIndex(name string) (uint64, bool) {
 	n, e := strconv.ParseUint(name, 10, 32)

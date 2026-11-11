@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "514e3c9ab39e25d572b98dba915190ec2c368069f3d88a557657ffaeaffbf3c3",
+      "sha256": "f5ca0962a2c06b9b58e1dde4d5fead23b7773c654e46930e58e5d184039bc097",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -236,7 +236,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "ed88c26971eae18b957c0852c02d5ea35fdb814458827d79c7807a7c42c0db19",
+      "sha256": "f791b5bbb484217460dd398f0bb309d7fce021dce2b40f69820f1a536dfc73ef",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -283,7 +283,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "e318acf6936ad4c9126363eff2c803d00a20596f92a00c543e645cb6ca765c34",
+      "sha256": "efe80450d637d60d3da9c428df6f3119078760bba96db416d15aa10c6f9d191e",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -1800,7 +1800,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "0d77c6caf885d508febae846a4a06dc33cd63e0d2b18faccdfc4ac8781d271fb",
+      "sha256": "35a66253e892e7ebee61404b851c45cb90e75b7937c3186d9aad9df1c4da508d",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},

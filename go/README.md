@@ -157,14 +157,19 @@ surrogate escape is rejected so a cached TypeScript value outside this domain
 fails open instead of being silently changed. A custom codec is needed to
 preserve such non-scalar code units.
 
-Use `JSONObject` to preserve insertion order when JSON byte identity matters.
-Go maps have no insertion order and use deterministic UTF-16 order. Argument
-maps always follow their prescribed sorted order. The JSON codec follows
-JavaScript nonfinite/absence behavior, rejects cycles and big integers, and
-encodes byte slices using the Buffer JSON convention. A custom `Codec[T]`, with
+Use `JSONObject` to preserve insertion order when JSON byte identity matters. Go
+maps have no insertion order and use deterministic UTF-16 order. Argument maps
+always follow their prescribed sorted order. The JSON codec follows JavaScript
+nonfinite/absence behavior, rejects cycles, big integers and integers that a
+JSON number cannot carry exactly, and encodes byte slices using the Buffer JSON
+convention, which it also decodes into byte slices; a nil byte slice decodes as
+an empty one. A struct reached through a pointer marshals through it, so its
+pointer-receiver `MarshalJSON` pairs with the `UnmarshalJSON` that decoding
+calls. For protobuf messages, use `ProtoCodec[T]`, because JSON cannot decode
+oneof fields, and the `ProtoEqual` shadow comparator. A custom `Codec[T]`, with
 optional `ContextCodec[T]`, replaces the default through `Operation.Codec`.
-Decoders must return independent values, and callers must treat reused
-in-memory values as immutable.
+Decoders must return independent values, and callers must treat reused in-memory
+values as immutable.
 
 Compression defaults to a 4,096-byte threshold and zstd level 3;
 `WithCompression` tunes both. `WithoutCompression` disables compressed writes;

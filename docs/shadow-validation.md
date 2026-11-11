@@ -701,16 +701,16 @@ the value fields alone.
 
 <LanguageContent language="go">
 
-Each side is rendered with the JSON writer `JSONCodec` uses, not the
-operation's `Codec`. It writes maps, slices, `JSONObject` values and scalars by
-their kind, without calling their `MarshalJSON`, and renders a struct, with
-everything inside it, through `encoding/json`, parsing the output back, so a
-struct's `MarshalJSON` runs once. A cycle, a `*big.Int`, a channel, a function,
-or a struct whose `MarshalJSON` fails, panics or writes a number outside double
-range, or whose JSON nests more than 10,000 levels, has no rendering, and
-`Absent` is the absent value. A map, slice or `JSONObject` nested that deep does
-render, but the built-in computation cannot parse the rendering back and fails
-with `hook_error`.
+Each side is rendered with the JSON writer `JSONCodec` uses, not the operation's
+`Codec`. It writes maps, slices, `JSONObject` values and scalars by their kind,
+without calling their `MarshalJSON`, and renders a struct, with everything
+inside it, through `encoding/json`, parsing the output back, so a struct's
+`MarshalJSON` runs once. A cycle, a `*big.Int`, an integer that a JSON number
+cannot carry exactly, a channel, a function, or a struct whose `MarshalJSON`
+fails, panics or writes a number outside double range, or whose JSON nests more
+than 10,000 levels, has no rendering, and `Absent` is the absent value. A map,
+slice or `JSONObject` nested that deep does render, but the built-in computation
+cannot parse the rendering back and fails with `hook_error`.
 
 `Operation.MismatchDiff`, beside `Comparator`, sets the hook:
 `func(cached, source T) ([]MismatchEntry, error)`. A `MismatchEntry` side set

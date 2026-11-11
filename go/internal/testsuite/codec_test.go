@@ -2,9 +2,14 @@ package dialcache_test
 
 import (
 	"bytes"
+	"encoding/json"
 	. "github.com/lan17/DialCache/go"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"math"
 	"math/big"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -189,6 +194,123 @@ func TestZstdFirstFrameAndMalformedBodies(t *testing.T) {
 		got := DecompressPayload(Payload{Bytes: marked, Binary: true})
 		if got.Outcome != "fallback_raw" || !bytes.Equal(got.Payload.Bytes, marked) {
 			t.Fatal("malformed stream not retained", got)
+		}
+	}
+}
+
+type shout struct{ text string }
+
+func (s *shout) MarshalJSON() ([]byte, error)   { return json.Marshal(strings.ToUpper(s.text)) }
+func (s *shout) UnmarshalJSON(raw []byte) error { return json.Unmarshal(raw, &s.text) }
+
+func TestJSONCodecMarshalsWhereDecodingUnmarshals(t *testing.T) {
+	payload, err := (JSONCodec[*shout]{}).Encode(&shout{"hi"})
+	if err != nil || string(payload.Bytes) != `"HI"` {
+		t.Fatalf("got %q err=%v", payload.Bytes, err)
+	}
+	decoded, err := (JSONCodec[*shout]{}).Decode(payload)
+	if err != nil || decoded.text != "HI" {
+		t.Fatal(decoded, err)
+	}
+	message := structpb.NewStringValue("text")
+	payload, err = (JSONCodec[*structpb.Value]{}).Encode(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded, err := (JSONCodec[*structpb.Value]{}).Decode(payload); err != nil || !proto.Equal(decoded, message) {
+		t.Fatalf("%s decoded as %v, err %v", payload.Bytes, decoded, err)
+	}
+}
+
+func TestJSONCodecRejectsIntegersJSONCannotCarry(t *testing.T) {
+	for _, value := range []any{int64(1<<53 + 1), int64(1 << 60), int64(math.MaxInt64), uint64(math.MaxUint64), []any{int64(-1<<53 - 1)}, struct{ N int64 }{1<<53 + 1}} {
+		if payload, err := (JSONCodec[any]{}).Encode(value); err == nil {
+			t.Fatalf("%#v encoded as %s", value, payload.Bytes)
+		}
+	}
+	for _, value := range []int64{1 << 53, -1 << 53, 9007199254740991, 1e18} {
+		payload, err := (JSONCodec[int64]{}).Encode(value)
+		if err != nil {
+			t.Fatal(value, err)
+		}
+		if decoded, err := (JSONCodec[int64]{}).Decode(payload); err != nil || decoded != value {
+			t.Fatalf("%d decoded as %d, err %v", value, decoded, err)
+		}
+	}
+}
+
+func TestProtoCodecAndProtoEqual(t *testing.T) {
+	codec := ProtoCodec[*structpb.Value]{}
+	message := structpb.NewStringValue("oneof")
+	payload, err := codec.Encode(message)
+	if err != nil || !payload.Binary {
+		t.Fatal(payload, err)
+	}
+	decoded, err := codec.Decode(payload)
+	if err != nil || decoded == message || !proto.Equal(decoded, message) {
+		t.Fatal(decoded, err)
+	}
+	// These JSON bytes are also valid protobuf wire data.
+	if _, err := codec.Decode(Payload{Bytes: []byte(`123456789`), Binary: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := codec.Decode(Payload{Bytes: []byte(`123456789`)}); err == nil {
+		t.Fatal("text payload accepted")
+	}
+	if _, err := codec.Decode(Payload{Bytes: []byte{0xff}, Binary: true}); err == nil {
+		t.Fatal("malformed message accepted")
+	}
+	large := wrapperspb.Int64(1<<53 + 1)
+	payload, err = (ProtoCodec[*wrapperspb.Int64Value]{}).Encode(large)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded, err := (ProtoCodec[*wrapperspb.Int64Value]{}).Decode(payload); err != nil || decoded.GetValue() != large.GetValue() {
+		t.Fatal(decoded, err)
+	}
+	_ = proto.Size(decoded)
+	if equal, err := ProtoEqual(decoded, message); err != nil || !equal {
+		t.Fatal("equal messages compared unequal", err)
+	}
+	if equal, _ := ProtoEqual(decoded, structpb.NewStringValue("other")); equal {
+		t.Fatal("different messages compared equal")
+	}
+}
+
+// tree is a recursive value type, whose type walk must end.
+type tree []tree
+
+func TestJSONCodecByteSliceRoundTrips(t *testing.T) {
+	blob := []byte{0, 1, 255}
+	roundTrip := func(value any, decode func(Payload) (any, error)) {
+		t.Helper()
+		payload, err := (JSONCodec[any]{}).Encode(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := decode(payload)
+		if err != nil || !reflect.DeepEqual(decoded, value) {
+			t.Fatalf("%s decoded as %#v, err %v", payload.Bytes, decoded, err)
+		}
+	}
+	roundTrip(blob, func(p Payload) (any, error) { return (JSONCodec[[]byte]{}).Decode(p) })
+	roundTrip(&blob, func(p Payload) (any, error) { return (JSONCodec[*[]byte]{}).Decode(p) })
+	roundTrip(map[string][]byte{"a": blob, "b": {}}, func(p Payload) (any, error) { return (JSONCodec[map[string][]byte]{}).Decode(p) })
+	roundTrip([]map[string]*[]byte{{"a": &blob}}, func(p Payload) (any, error) { return (JSONCodec[[]map[string]*[]byte]{}).Decode(p) })
+	roundTrip(tree{{}, nil}, func(p Payload) (any, error) { return (JSONCodec[tree]{}).Decode(p) })
+	// The Buffer JSON has no nil, as in TypeScript.
+	if payload, err := (JSONCodec[[]byte]{}).Encode(nil); err != nil {
+		t.Fatal(err)
+	} else if decoded, err := (JSONCodec[[]byte]{}).Decode(payload); err != nil || decoded == nil || len(decoded) != 0 {
+		t.Fatalf("nil decoded as %#v, err %v", decoded, err)
+	}
+	// TypeScript writes a Buffer with the same JSON.
+	if decoded, err := (JSONCodec[[]byte]{}).Decode(Payload{Bytes: []byte(`{"type":"Buffer","data":[0,1,255]}`)}); err != nil || !bytes.Equal(decoded, blob) {
+		t.Fatal(decoded, err)
+	}
+	for _, malformed := range []string{`{"type":"Buffer","data":[256]}`, `{"type":"Buffer","data":[1.5]}`, `{"type":"Buffer","data":["1"]}`, `{"type":"Buffer","data":[null]}`, `{"type":"Buffer","data":[true]}`, `{"type":"Buffer","data":[[]]}`, `{"type":"Buffer"}`, `{"type":"Other","data":[1]}`} {
+		if decoded, err := (JSONCodec[[]byte]{}).Decode(Payload{Bytes: []byte(malformed)}); err == nil {
+			t.Fatalf("%s decoded as %v", malformed, decoded)
 		}
 	}
 }

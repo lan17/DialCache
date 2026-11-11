@@ -139,7 +139,8 @@ type Operation[T any] struct {
 // MarshalJSON output parsed back, so a type that redacts itself stays redacted
 // in diffJson. As in encoding/json, a pointer's MarshalJSON runs only for an
 // addressable value, such as a slice element. A side with no rendering (a
-// cycle, a *big.Int, a function, or a MarshalJSON that fails, panics or
+// cycle, a *big.Int, an integer that a JSON number cannot carry exactly, a
+// function, or a MarshalJSON that fails, panics or
 // returns output that is not JSON or holds a number outside double range)
 // logs a null diffJson with render_error and keeps the paths.
 type MismatchEntry struct {

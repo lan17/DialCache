@@ -11,7 +11,7 @@
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
     "sourceAuditDispositionsSha256": "c95ce03c30df574246e5943e2d69e084ed809b5d3e2a3d0f0abf5a2123bc8aaa",
-    "featureCoverageSha256": "c96d4c5aa3879cfc50a12fc210e4011d0e4605d2da7c79c50d74caa09d63f1f1",
+    "featureCoverageSha256": "d91a7c7529d1fa46859c16589af52b61e133f4e480f3b607c6b7d865b22a32af",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -3425,7 +3425,7 @@
               "RecoveryPredicate",
               "MismatchEntry"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "c2e6cc2cf7bac675c76e4257a6b0e9a190e7cef26c01ca380601d91380781824"
           }
         ]
       }
@@ -3578,7 +3578,7 @@
               "Operation",
               "Event"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "c2e6cc2cf7bac675c76e4257a6b0e9a190e7cef26c01ca380601d91380781824"
           },
           {
             "path": "go/internal/logging/logging.go",
@@ -3613,7 +3613,7 @@
               "CallbackPanicError",
               "ErrNoRemote"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "c2e6cc2cf7bac675c76e4257a6b0e9a190e7cef26c01ca380601d91380781824"
           },
           {
             "path": "go/redis_adapter.go",
@@ -3652,7 +3652,7 @@
               "Codec",
               "Remote"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "c2e6cc2cf7bac675c76e4257a6b0e9a190e7cef26c01ca380601d91380781824"
           },
           {
             "path": "go/bindings.go",
@@ -3687,7 +3687,7 @@
             "symbols": [
               "JSONCodec"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "d01a40d11c2940e696bbc3bd959a555d1158838c176d9ba82d84d7be4fe70908"
           }
         ]
       }
@@ -3751,7 +3751,7 @@
               "EscapeRawPayload",
               "firstZstdFrame"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "d01a40d11c2940e696bbc3bd959a555d1158838c176d9ba82d84d7be4fe70908"
           }
         ]
       }
@@ -3790,7 +3790,7 @@
               "TimerClock",
               "DeferredExecutor"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "c2e6cc2cf7bac675c76e4257a6b0e9a190e7cef26c01ca380601d91380781824"
           }
         ]
       }
@@ -3878,7 +3878,7 @@
           },
           {
             "path": "go/api.go",
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d",
+            "sha256": "c2e6cc2cf7bac675c76e4257a6b0e9a190e7cef26c01ca380601d91380781824",
             "symbols": [
               "systemClock",
               "newSystemClock"
@@ -3959,7 +3959,7 @@
               "CompressPayload",
               "DecompressPayload"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "d01a40d11c2940e696bbc3bd959a555d1158838c176d9ba82d84d7be4fe70908"
           },
           {
             "path": "go/redis_adapter.go",
@@ -4143,7 +4143,7 @@
             "symbols": [
               "appendJSON"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "d01a40d11c2940e696bbc3bd959a555d1158838c176d9ba82d84d7be4fe70908"
           },
           {
             "path": "go/shadow_log.go",
@@ -4241,7 +4241,7 @@
               "Option",
               "Logger"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "c2e6cc2cf7bac675c76e4257a6b0e9a190e7cef26c01ca380601d91380781824"
           },
           {
             "path": "go/metrics.go",
@@ -4352,7 +4352,7 @@
               "Remote",
               "ReadBudget"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "c2e6cc2cf7bac675c76e4257a6b0e9a190e7cef26c01ca380601d91380781824"
           },
           {
             "path": "go/protocol.go",
@@ -4428,7 +4428,7 @@
               "Codec",
               "ContextCodec"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "c2e6cc2cf7bac675c76e4257a6b0e9a190e7cef26c01ca380601d91380781824"
           },
           {
             "path": "go/codec.go",
@@ -4440,7 +4440,7 @@
               "SemanticEqual",
               "validateJSONScalarStrings"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "d01a40d11c2940e696bbc3bd959a555d1158838c176d9ba82d84d7be4fe70908"
           }
         ]
       }

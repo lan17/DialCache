@@ -1213,7 +1213,7 @@
           "test": "TestJSONCodecNativeSemantics",
           "path": "go/internal/testsuite/codec_test.go",
           "scope": "Default codec asserts explicit absent/null/sentinel, native JSON lossy values and ordering, invalid/cyclic values, and typed-destination representation boundaries.",
-          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
+          "sha256": "746cb0dbd57f0b3d8e70dd31496c6e766d8fd50b2942b0b33aed62ba2604e912"
         }
       ],
       "adaptation": "Default codec absence is a binding convention beyond the abstract cache presence bit.",
@@ -1248,7 +1248,7 @@
           "test": "TestJSONCodecNativeSemantics",
           "path": "go/internal/testsuite/codec_test.go",
           "scope": "Default codec asserts explicit absent/null/sentinel, native JSON lossy values and ordering, invalid/cyclic values, and typed-destination representation boundaries.",
-          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
+          "sha256": "746cb0dbd57f0b3d8e70dd31496c6e766d8fd50b2942b0b33aed62ba2604e912"
         }
       ],
       "adaptation": "NaN, infinities, absent array/object members, byte-buffer conversion and unsupported types must have a declared cross-language domain.",
@@ -1282,7 +1282,7 @@
           "test": "TestJSONCodecUnicodeScalarDomain",
           "path": "go/internal/testsuite/codec_test.go",
           "scope": "Valid JSON surrogate pairs and literal escapes decode; lone escaped surrogates in values or keys reject for generic and typed Go destinations.",
-          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
+          "sha256": "746cb0dbd57f0b3d8e70dd31496c6e766d8fd50b2942b0b33aed62ba2604e912"
         }
       ],
       "adaptation": "Direct frame text replacement is a wire rule; JSON escaped lone-surrogate support differs by language and is explicitly outside the shared value domain.",
@@ -1310,7 +1310,7 @@
           "test": "TestSemanticEqualPortableDomain",
           "path": "go/internal/testsuite/codec_test.go",
           "scope": "Direct native comparator table distinguishes absent/null, signed zero, NaN, nested maps, missing fields and binary/array values.",
-          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
+          "sha256": "746cb0dbd57f0b3d8e70dd31496c6e766d8fd50b2942b0b33aed62ba2604e912"
         },
         {
           "path": "go/feature_boundary_test.go",
@@ -1653,7 +1653,7 @@
           "test": "TestCompressionLimitsAndIndependentLoads",
           "path": "go/internal/testsuite/codec_test.go",
           "scope": "Controllable expansion limits retain raw input and report over-limit outcomes; repeated decompression/escape loads do not mutate retained input; threshold and level reject invalid settings.",
-          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
+          "sha256": "746cb0dbd57f0b3d8e70dd31496c6e766d8fd50b2942b0b33aed62ba2604e912"
         }
       ],
       "adaptation": "Resource-limit outcomes are tested with controllable caps; this is not a performance or arbitrary decompression-bomb proof.",
@@ -1706,7 +1706,7 @@
           "test": "TestCompressionLimitsAndIndependentLoads",
           "path": "go/internal/testsuite/codec_test.go",
           "scope": "Controllable expansion limits retain raw input and report over-limit outcomes; repeated decompression/escape loads do not mutate retained input; threshold and level reject invalid settings.",
-          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
+          "sha256": "746cb0dbd57f0b3d8e70dd31496c6e766d8fd50b2942b0b33aed62ba2604e912"
         },
         {
           "path": "go/feature_boundary_test.go",
@@ -1754,7 +1754,7 @@
           "test": "TestZstdFirstFrameAndMalformedBodies",
           "path": "go/internal/testsuite/codec_test.go",
           "scope": "The tested CRC! trailer and concatenated copy preserve the first decoded frame. The tested empty bodies for both markers and truncated compressed body return fallback_raw with unchanged bytes.",
-          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
+          "sha256": "746cb0dbd57f0b3d8e70dd31496c6e766d8fd50b2942b0b33aed62ba2604e912"
         }
       ],
       "adaptation": "Legacy marker collisions can be indistinguishable from envelopes. Native codecs can differ in whether empty or truncated input is accepted; rejection preserves the marked bytes, while acceptance follows the decoder result and envelope type. Shared Quint envelope cases 135-170 cover rejected ff, 28b5 and 28b52ffd bodies under both markers, with native runners verifying the codec inputs before checking wrapper fallback. Selected first-frame and trailing-byte behaviors remain native adaptation evidence.",
@@ -1793,7 +1793,7 @@
           "test": "TestCompressionLimitsAndIndependentLoads",
           "path": "go/internal/testsuite/codec_test.go",
           "scope": "Controllable expansion limits retain raw input and report over-limit outcomes; repeated decompression/escape loads do not mutate retained input; threshold and level reject invalid settings.",
-          "sha256": "49a456e39810b966933c3efb1f5c5268f421a3c038c50fece7a229bb78d9e5c4"
+          "sha256": "746cb0dbd57f0b3d8e70dd31496c6e766d8fd50b2942b0b33aed62ba2604e912"
         },
         {
           "test": "TestBinaryCodecRemoteRoundTripPreservesBytesAndTag",
