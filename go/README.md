@@ -119,7 +119,7 @@ slot primary, even when replica reads are enabled; go-redis follows `MOVED` and
 `FailoverOptions.ReplicaOnly` false so replica lag cannot hide an invalidation
 watermark, since the adapter cannot see that option. Writes and invalidation wait
 for the native client, so size its pool and timeouts for the cache
-([client budgets](https://lan17.github.io/DialCache/redis#remote-read-deadlines-and-async-liveness)).
+([Redis client budgets](https://lan17.github.io/DialCache/languages/go#redis-client-budgets)).
 Writes use one native `SET`.
 Invalidation first dispatches `EVALSHA`; any command rejection
 triggers one retry with `EVAL` using identical logical arguments. A successful
