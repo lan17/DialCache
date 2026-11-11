@@ -128,6 +128,9 @@ the one the ruleset requires.
 4. Replay the regression in every port
    ([Run it](formal/README.md#run-it)) and fix
    each port that fails it.
+5. Change no page in `docs/` and no README, since the fix restores behavior they already describe.
+   If the fix removes a limitation they state, delete that note. Describe the user-visible effect
+   in the PR description.
 
 #### Public API
 
@@ -146,8 +149,10 @@ the one the ruleset requires.
 
 #### Docs
 
-1. Follow [docs/authoring.md](docs/authoring.md), checking claims and defaults against source.
-   Never cite a design record as the source of a guarantee.
+1. Write only what users need to call, configure and operate the library, never how it works
+   inside ([What belongs in the docs](docs/authoring.md#what-belongs-in-the-docs)). Follow the rest
+   of [docs/authoring.md](docs/authoring.md), checking claims and defaults against source. Never
+   cite a design record as the source of a guarantee.
 2. Confirm that every public name the text mentions is exported from `typescript/src/index.ts` or
    an entry point, the `go/` root package, `rust/src/lib.rs` or `python/dialcache/__init__.py`.
 3. Keep the root README on evaluation and `typescript/README.md` on npm consumers. Change text

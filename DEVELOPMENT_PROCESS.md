@@ -44,8 +44,10 @@ flowchart LR
   tells them apart settles the case, with a comment recording the intended behavior. Neither side
   is edited just to make the other pass, and a settlement that would change contract text waits for
   the maintainer.
-- **User docs** explain the contracts to people using the library. **Design records** explain why a
-  change took its shape. Neither defines behavior.
+- **User docs** in `docs/` and the READMEs tell people using the library what it does, how to call
+  it and what they will observe, without implementation details. A bug fix that restores
+  documented behavior changes none of them. **Design records** explain why a change took its
+  shape. Neither defines behavior.
 
 ## The life of a change
 

@@ -37,9 +37,10 @@
     },
     {
       "path": "docs/authoring.md",
-      "sha256": "757251e7c72ecdd3306ba812583ca67b5be564b6d4775f4e816246780bd0d124",
+      "sha256": "a3dd4c318bf25fce96b8ff1640aeef3eb9b137e8d865deae195f21bad7865a80",
       "entries": [
         {"title":"Writing shared documentation","contracts":["B01"]},
+        {"title":"What belongs in the docs","contracts":["B01"]},
         {"title":"Change a feature guide","contracts":["B01"]},
         {"title":"Import tested examples","contracts":["B01"]},
         {"title":"Run the checks","contracts":["B01"]},
