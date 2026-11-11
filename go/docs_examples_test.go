@@ -117,11 +117,14 @@ func TestDocsTrackedInvalidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	options.DialTimeout = 2 * time.Second
-	options.ReadTimeout = time.Second
-	options.WriteTimeout = time.Second
-	options.MaxRetries = -1
-	client := redis.NewClient(options)
+	client, err := dialcache.NewRedisClient(&redis.UniversalOptions{
+		Addrs: []string{options.Addr}, Username: options.Username, Password: options.Password, DB: options.DB,
+		TLSConfig:   options.TLSConfig,
+		DialTimeout: 2 * time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { _ = client.Close() })
 	namespace := fmt.Sprintf("docs-go-%d", time.Now().UnixNano())
 	identity := dialcache.Identity{
@@ -138,7 +141,7 @@ func TestDocsTrackedInvalidation(t *testing.T) {
 	})
 
 	// #region tracked-invalidation
-	// client is a caller-owned go-redis client with finite connection/command budgets.
+	// client is a caller-owned go-redis client from dialcache.NewRedisClient.
 	cache := dialcache.MustNew(
 		dialcache.WithNamespace(namespace),
 		dialcache.WithRemote(dialcache.NewRedisAdapter(client)),

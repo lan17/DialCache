@@ -6,6 +6,7 @@ import (
 	"net"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -138,5 +139,41 @@ func TestNormalizeReadResultBoundary(t *testing.T) {
 		if (got.Kind == "hit") != test.hit || got.Reason != test.reason || !reflect.DeepEqual(got.ObservedWatermarkMS, test.fence) {
 			t.Fatalf("%#v: %#v", test.raw, got)
 		}
+	}
+}
+
+func TestNewRedisClient(t *testing.T) {
+	newClient := func(options *redis.UniversalOptions) redis.UniversalClient {
+		t.Helper()
+		client, err := NewRedisClient(options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = client.Close() })
+		return client
+	}
+	standalone := newClient(&redis.UniversalOptions{Addrs: []string{"127.0.0.1:1"}}).(*redis.Client).Options()
+	if standalone.Protocol != 2 || standalone.PoolSize != 64 || standalone.MinIdleConns != 8 ||
+		standalone.PoolTimeout != 100*time.Millisecond || standalone.DialTimeout != 500*time.Millisecond ||
+		standalone.DialerRetries != 1 || standalone.ReadTimeout != 250*time.Millisecond ||
+		standalone.WriteTimeout != 250*time.Millisecond || standalone.MaxRetries != 0 ||
+		standalone.ConnMaxIdleTime != 3*time.Minute || !standalone.ContextTimeoutEnabled {
+		t.Fatalf("standalone budgets: %+v", standalone)
+	}
+
+	options := &redis.UniversalOptions{Addrs: []string{"127.0.0.1:1"}, IsClusterMode: true, PoolSize: 7, ReadTimeout: time.Second, MaxRetries: 2}
+	cluster := newClient(options).(*redis.ClusterClient).Options()
+	if cluster.PoolSize != 7 || cluster.ReadTimeout != time.Second || cluster.MaxRetries != 2 || cluster.DialTimeout != 500*time.Millisecond {
+		t.Fatalf("cluster budgets: %+v", cluster)
+	}
+	if options.DialTimeout != 0 || options.ContextTimeoutEnabled {
+		t.Fatal("NewRedisClient changed the caller's options")
+	}
+
+	if _, err := NewRedisClient(&redis.UniversalOptions{Addrs: []string{"127.0.0.1:1"}, MasterName: "primary", ReadOnly: true}); err == nil {
+		t.Fatal("Sentinel ReadOnly accepted")
+	}
+	if _, err := NewRedisClient(nil); err == nil {
+		t.Fatal("nil options accepted")
 	}
 }
