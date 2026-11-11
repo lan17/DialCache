@@ -456,10 +456,10 @@ func TestContextCallerThatLeftIsNotAProviderOrSourceFailure(t *testing.T) {
 		defer done()
 		callerCtx, cancel := context.WithCancel(ctx)
 		cancel()
-		loads := 0
-		v, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (string, error) { loads++; return "value", nil })
-		if v != "" || !errors.Is(err, context.Canceled) || loads != 0 {
-			t.Fatalf("GetOrLoad = (%q, %v) with %d loads, want the caller's own error and no load", v, err, loads)
+		var loads atomic.Int32
+		v, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (string, error) { loads.Add(1); return "value", nil })
+		if v != "" || !errors.Is(err, context.Canceled) || loads.Load() != 0 {
+			t.Fatalf("GetOrLoad = (%q, %v) with %d loads, want the caller's own error and no load", v, err, loads.Load())
 		}
 		if got := recorded(); len(got) != 0 {
 			t.Fatalf("recorded %v for a caller that left", got)
@@ -471,10 +471,22 @@ func TestContextCallerThatLeftIsNotAProviderOrSourceFailure(t *testing.T) {
 		op := contextOperation("left-during-source", Policy{RemoteTTL: time.Minute, Coalesce: Ptr(false)})
 		ctx, done := cache.Enable(context.Background())
 		defer done()
-		callerCtx, cancel := context.WithTimeout(ctx, 30*time.Millisecond)
+		callerCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		if _, err := GetOrLoad(callerCtx, cache, op, func(c context.Context) (string, error) { <-c.Done(); return "", c.Err() }); !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("err = %v, want the caller's own deadline", err)
+		entered := make(chan struct{})
+		results := make(chan contextResult, 1)
+		go func() {
+			v, err := GetOrLoad(callerCtx, cache, op, func(c context.Context) (string, error) { close(entered); <-c.Done(); return "", c.Err() })
+			results <- contextResult{v, err}
+		}()
+		select {
+		case <-entered:
+		case <-time.After(2 * time.Second):
+			t.Fatal("loader did not start")
+		}
+		cancel()
+		if r := receive(t, results); !errors.Is(r.err, context.Canceled) {
+			t.Fatalf("caller = %+v, want its own cancellation", r)
 		}
 		for _, f := range recorded() {
 			if strings.Contains(f, "fallback") {
