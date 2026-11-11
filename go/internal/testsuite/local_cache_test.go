@@ -6,6 +6,7 @@ import (
 	"github.com/lan17/DialCache/go/internal/localcache"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -252,5 +253,51 @@ func TestCachedRuntimeOverlayDoesNotLeakIntoLaterCalls(t *testing.T) {
 	call() // local hit
 	if sources != 2 {
 		t.Fatalf("source calls = %d, want 2", sources)
+	}
+}
+
+// Concurrent calls of one Cached function share its registration-time policy
+// map; calls with a runtime overlay must not write into it.
+func TestCachedSharesStaticPolicyAcrossConcurrentCalls(t *testing.T) {
+	zero := 0.0
+	cache := MustNew(WithPolicyProvider(func(_ context.Context, id Identity) (RuntimePolicy, error) {
+		if id.ID == "overlay" {
+			return &PolicyOverlay{LocalRamp: &zero, RemoteTTL: policyTestPtr(time.Hour)}, nil
+		}
+		return nil, nil
+	}))
+	var sources sync.Map
+	get, err := Cached(cache, Operation[string]{
+		Identity: Identity{KeyType: "entity", UseCase: "concurrent"},
+		Policy:   Policy{LocalTTL: time.Minute},
+	}, func(id string) (Identity, error) { return Identity{ID: id}, nil },
+		func(_ context.Context, id string) (string, error) {
+			count, _ := sources.LoadOrStore(id, new(atomic.Int64))
+			count.(*atomic.Int64).Add(1)
+			return id, nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Go(func() {
+			ctx, done := cache.Enable(context.Background())
+			defer done()
+			for i := range 50 {
+				id := []string{"static", "overlay"}[(g+i)%2]
+				if value, err := get(ctx, id); value != id || err != nil {
+					t.Error(value, err)
+				}
+			}
+		})
+	}
+	wg.Wait()
+	ctx, done := cache.Enable(context.Background())
+	defer done()
+	count, _ := sources.Load("static")
+	before := count.(*atomic.Int64).Load()
+	if value, err := get(ctx, "static"); value != "static" || err != nil || count.(*atomic.Int64).Load() != before {
+		t.Fatalf("static call after concurrent overlays: value=%q err=%v source calls %d -> %d", value, err, before, count.(*atomic.Int64).Load())
 	}
 }
