@@ -7,9 +7,8 @@ operations while following the shared behavioral contract.
 
 ## Installation and runtime
 
-Rust releases use the same version as npm and Go through the
-[release workflow](../maintainers.md#releasing). After the first crates.io
-publication, install a released version with `cargo add dialcache`. Before that
+Rust releases use the same version number as the npm, Go and Python packages
+(see [Upgrading](../upgrading.md)). After the first crates.io publication, install a released version with `cargo add dialcache`. Before that
 first publication, or to use an unreleased checkout, use a path dependency:
 
 ```toml

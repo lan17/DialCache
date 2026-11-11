@@ -63,11 +63,12 @@ it changes no line. The TypeScript source and Go binding hashes in that ledger
 are re-pinned by hand with their mapping review ([GO-PARITY.md](./GO-PARITY.md)).
 `make audit` runs both checks.
 
-The `sources` inventory covers `README.md`, authored Markdown pages under `docs/`
-(including native language guides), and ordinary `typescript/test/*.test.ts` files,
-including real Redis/Cluster integration declarations. It excludes generated
-content under `docs/generated`, native API output under `docs/public`, and
-VitePress internals. The generated behavior catalogue takes its reviewed claims
+The `sources` inventory covers `README.md`, `MAINTAINERS.md`, `WRITING-DOCS.md`,
+authored Markdown pages under `docs/` (including native language guides), and
+ordinary `typescript/test/*.test.ts` files, including real Redis/Cluster
+integration declarations. It excludes the generated behavior catalogue under
+`formal/generated`, native API output under `docs/public`, and VitePress
+internals. The generated behavior catalogue takes its reviewed claims
 from the semantic inventory; it is not a second authored contract. The formal
 harness/corpora test themselves. Fixture helpers have no independent case
 declarations; their meaning is reviewed with the consuming tests. Packed-package

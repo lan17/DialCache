@@ -36,6 +36,8 @@ describe("reviewed documentation freshness", () => {
     directory = mkdtempSync(join(tmpdir(), "dialcache-source-audit-"));
     for (const path of ["docs", "typescript/test", "formal/guides", "formal/catalogs", "go"]) mkdirSync(join(directory, path), { recursive: true });
     put("README.md", "# Example library\n");
+    put("MAINTAINERS.md", "# Maintainer guide\n");
+    put("WRITING-DOCS.md", "# Writing shared documentation\n");
     put("typescript/README.md", "# TypeScript package\n");
     put("docs/usage.md", "# Public usage\n\nReviewed behavior.\n");
     put("typescript/test/cache.test.ts", 'it("returns the value", () => {});\n');
@@ -61,7 +63,13 @@ describe("reviewed documentation freshness", () => {
   afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
   it("checks guides separately from public behavior mappings and preserves historical results", () => {
-    expect(check()).toEqual({ sources: 4, tests: 1, sections: 3, reviewedGuides: 5, guideSections: 7 });
+    expect(check()).toEqual({ sources: 6, tests: 1, sections: 5, reviewedGuides: 5, guideSections: 7 });
+    put("MAINTAINERS.md", "# Maintainer guide\n\nChanged workflow.\n");
+    expect(() => check()).toThrow(/MAINTAINERS\.md: contents changed/);
+    put("MAINTAINERS.md", "# Maintainer guide\n");
+    put("WRITING-DOCS.md", "# Writing shared documentation\n\nChanged instructions.\n");
+    expect(() => check()).toThrow(/WRITING-DOCS\.md: contents changed/);
+    put("WRITING-DOCS.md", "# Writing shared documentation\n");
     guide().review = { kind: "coverage-guide", scope: "Describes finite evidence accounting without claiming all histories pass.", contracts: [] };
     put("formal/catalogs/source-audit.json", JSON.stringify(audit));
     expect(checkSourceAudit(undefined, { directory })).toMatchObject({ reviewedGuides: 5 });
@@ -95,7 +103,7 @@ describe("reviewed documentation freshness", () => {
       mkdirSync(join(directory, path), { recursive: true });
       put(`${path}/output.md`, "# Generated from reviewed sources\n");
     }
-    expect(check()).toMatchObject({ sources: 4 });
+    expect(check()).toMatchObject({ sources: 6 });
   });
 
   it("requires the guide collection and rejects duplicate or extra recorded files", () => {
@@ -202,7 +210,7 @@ describe("reviewed documentation freshness", () => {
     expect(entries).toEqual([{ title: "Public usage", contracts: ["C01"] }, { title: "Limits", contracts: [] }]);
     expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/docs\/usage.md "Limits": missing, duplicate or unknown contract disposition/);
     entries[1]!.contracts = ["B01"];
-    expect(checkSourceAudit(refreshed, { directory })).toMatchObject({ sections: 4 });
+    expect(checkSourceAudit(refreshed, { directory })).toMatchObject({ sections: 6 });
   });
 
   it("matches repeated titles by occurrence and reports a renamed title's dropped disposition", () => {
@@ -243,7 +251,7 @@ describe("reviewed documentation freshness", () => {
       { path: "docs/limits.md", action: "added", entries: 1, pending: ['"Limits"'], dropped: [], review: true },
       { path: "typescript/test/cache.test.ts", action: "removed" }]);
     expect(describeChange(changes[1]!)).toBe("typescript/test/cache.test.ts: removed, no longer in the inventory");
-    expect(refreshed.sources.map(source => source.path)).toEqual(["README.md", "docs/limits.md", "docs/usage.md", "typescript/README.md"]);
+    expect(refreshed.sources.map(source => source.path)).toEqual(["MAINTAINERS.md", "README.md", "WRITING-DOCS.md", "docs/limits.md", "docs/usage.md", "typescript/README.md"]);
     expect(() => checkSourceAudit(refreshed, { directory })).toThrow(/^docs\/limits.md "Limits": missing, duplicate or unknown contract disposition$/m);
   });
 

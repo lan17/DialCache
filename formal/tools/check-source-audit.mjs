@@ -63,7 +63,7 @@ export function sourceSnapshot(directory = root) {
     ['.vitepress', 'public', 'generated'].includes(entry.name) ? []
       : entry.isDirectory() ? documentation(`${path}/${entry.name}`)
         : entry.name.endsWith('.md') ? [`${path}/${entry.name}`] : []);
-  const paths = ['README.md', 'typescript/README.md', ...documentation('docs'),
+  const paths = ['README.md', 'MAINTAINERS.md', 'WRITING-DOCS.md', 'typescript/README.md', ...documentation('docs'),
     ...readdirSync(resolve(directory, 'typescript/test')).filter(p => p.endsWith('.test.ts') && !p.startsWith('formal-')).map(p => 'typescript/test/' + p)];
   return snapshot(paths, directory);
 }

@@ -157,7 +157,7 @@ short, with one concrete example. The reason for surprising code goes in a comme
 change's effect in the PR description, a decision in a design record and validation detail in
 `formal/`.
 
-1. Follow [docs/authoring.md](docs/authoring.md), checking claims and defaults against source.
+1. Follow [WRITING-DOCS.md](WRITING-DOCS.md), checking claims and defaults against source.
    Never cite a design record as the source of a guarantee.
 2. Confirm that every public name the text mentions is exported from `typescript/src/index.ts` or
    an entry point, the `go/` root package, `rust/src/lib.rs` or `python/dialcache/__init__.py`.
@@ -167,7 +167,7 @@ change's effect in the PR description, a decision in a design record and validat
 4. List a new page in `docs/index.md` and `docs/.vitepress/config.mts`. Use absolute URLs in the
    `typescript/`, `rust/` and `python/` READMEs, which also render on npm, crates.io and PyPI.
 5. Run changed native examples with assertions, Redis included
-   ([Run the checks](docs/authoring.md#run-the-checks)), then `make docs`.
+   ([Run the checks](WRITING-DOCS.md#run-the-checks)), then `make docs`.
 
 #### Refactor or move
 
@@ -199,12 +199,12 @@ change's effect in the PR description, a decision in a design record and validat
   `quint` job run `make fixtures-check` and start the four `differential` shards; wait for them.
 - **New port:** write a record, then follow
   [New port acceptance](formal/guides/PORTING.md#new-port-acceptance) and
-  [Add a port](docs/authoring.md#add-a-port). Update every list of ports in the guides and READMEs.
+  [Add a port](WRITING-DOCS.md#add-a-port). Update every list of ports in the guides and READMEs.
 - **Release:** Semantic Release computes the version from the PR-title types merged since the last
-  `vX.Y.Z` tag ([Releasing](docs/maintainers.md#releasing)), so agents never edit version files or
+  `vX.Y.Z` tag ([Releasing](MAINTAINERS.md#releasing)), so agents never edit version files or
   use the `release` title type. When asked for a release, report the version that
   `git log --format=%s <tag>..origin/main` implies, any mismatch with the version requested, and
-  whether current `main` has a green Full run ([Validation](docs/maintainers.md#validation)), then
+  whether current `main` has a green Full run ([Validation](MAINTAINERS.md#validation)), then
   stop. Dispatching `Release` and merging the `release:` PR it opens are separate irreversible
   actions.
 
@@ -217,8 +217,9 @@ review, only when asked.
 
 ### Refresh pinned ledgers
 
-Ledgers in `formal/catalogs/` hash reviewed files: every page under `docs/`, the root,
-`typescript/` and `go/` READMEs, the formal guides, and selected tests and sources. Editing a
+Ledgers in `formal/catalogs/` hash reviewed files: every page under `docs/`, `MAINTAINERS.md`,
+`WRITING-DOCS.md`, the root, `typescript/` and `go/` READMEs, the formal guides, and selected
+tests and sources. Editing a
 pinned file fails the required `test` check until its ledger is refreshed.
 [Refresh after an edit](formal/catalogs/README.md#refresh-after-an-edit) lists what each ledger
 pins and the order to refresh them; then run `make audit`. Review each changed paragraph or

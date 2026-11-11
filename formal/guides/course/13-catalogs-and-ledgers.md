@@ -34,8 +34,9 @@ citation is the reviewer's judgment, written down.
 a later edit fails the check until someone reviews again and re-keys it.
 
 [source-audit.json](../../catalogs/source-audit.json) covers two inventories.
-`sources` is the README, the `docs/` pages and the ordinary TypeScript tests,
-each heading or test title with its contract dispositions. `reviewedGuides` is
+`sources` is the READMEs, `MAINTAINERS.md`, `WRITING-DOCS.md`, the `docs/` pages
+and the ordinary TypeScript tests, each heading or test title with its contract
+dispositions. `reviewedGuides` is
 every guide under `formal/guides/`, plus `formal/README.md` and
 `go/README.md`, each with a content hash, its heading list, and a review
 record of kind and scope.
@@ -98,7 +99,7 @@ You will edit a tracked guide and undo it at the end.
    {
      sources: 50,
      tests: 633,
-     sections: 215,
+     sections: 216,
      reviewedGuides: 19,
      guideSections: 195
    }

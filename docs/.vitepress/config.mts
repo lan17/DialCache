@@ -54,15 +54,12 @@ export default defineConfig({
           { text: "API reference", link: "/api" },
           { text: "Redis and Valkey", link: "/redis" },
           { text: "Observability", link: "/observability" },
-          { text: "Behavior catalogue", link: "/generated/behavior" },
         ],
       },
       {
         text: "Maintenance",
         items: [
           { text: "Upgrading", link: "/upgrading" },
-          { text: "Maintainer guide", link: "/maintainers" },
-          { text: "Writing shared docs", link: "/authoring" },
         ],
       },
     ],

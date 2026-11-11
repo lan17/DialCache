@@ -66,7 +66,7 @@ const modelLink = ref => {
   const line = text.slice(0, offset).split('\n').length;
   return link(name, `${path}#L${line}`);
 };
-const pages = ['---', 'editLink: false', '---', '', '# Behavior catalogue', '',
+const pages = ['# Behavior catalogue', '',
   'Generated from the reviewed [semantic case inventory](' + source('formal/catalogs/semantic-cases.json') + '). ' + inventory.scope, '',
   'These links describe registered evidence and its scope. They are not a fresh test result or a claim of exhaustive coverage. ' +
   'See the [validation guide](' + source('formal/guides/VALIDATION.md') + ') for how a completed run is established.', '',
@@ -84,6 +84,8 @@ for (const item of inventory.cases) {
   const vectors = (item.vectors ?? []).map(ref => md(typeof ref === 'string' ? ref : JSON.stringify(ref)));
   pages.push(`| <a id="${item.id.toLowerCase()}"></a>${md(item.id)} | ${md(item.rule)} | ${models} | ${[...generated, ...replays, ...vectors].join('<br>')} |`);
 }
-mkdirSync(resolve(root, 'docs/generated'), { recursive: true });
-writeFileSync(resolve(root, 'docs/generated/behavior.md'), pages.join('\n') + '\n');
+// Earlier checkouts generated the catalogue into docs/, where VitePress would still publish it.
+rmSync(resolve(root, 'docs/generated'), { recursive: true, force: true });
+mkdirSync(resolve(root, 'formal/generated'), { recursive: true });
+writeFileSync(resolve(root, 'formal/generated/behavior.md'), pages.join('\n') + '\n');
 console.log(`Generated ${inventory.cases.length} documented behavioral cases at ${revision.slice(0, 7)}.`);

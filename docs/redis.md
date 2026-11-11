@@ -822,6 +822,10 @@ checks precede payload decoding, so even an unknown encoding can be hidden by
 one of these misses. An otherwise eligible frame with an unsupported encoding
 returns the native unsupported-encoding error.
 
+Text payloads, including decompressed text, are decoded as UTF-8 with
+replacement characters for malformed sequences and no BOM removal; binary
+payloads keep their exact bytes.
+
 The untracked decoder accepts a zero timestamp, but ordinary cache reads still
 apply safe-timestamp and logical-age checks before serving. Low-level decoding
 alone does not establish freshness or safe reuse.

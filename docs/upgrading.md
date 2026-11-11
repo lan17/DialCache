@@ -1,6 +1,6 @@
 # Upgrading
 
-[Documentation](index.md) · [Maintainer guide](maintainers.md)
+[Documentation](index.md)
 
 Check the installed version and the behavior being enabled before sharing a
 Redis namespace across releases. A compatible frame layout does not by itself
@@ -9,6 +9,12 @@ make two implementations safe to run together.
 This guide covers the transitions relevant to the implementation on `main`.
 Use the [release notes](https://github.com/lan17/DialCache/releases) and matching
 tagged source for the versions in your fleet.
+
+TypeScript, Go, Rust and Python releases use one selected version and source
+commit. The Go module is tagged `go/vX.Y.Z` for version `X.Y.Z`; npm releases
+from before the Go port have no matching Go tag. Publication is not atomic
+across npm, Go tags, crates.io and PyPI, so a version can appear for one port
+before another. A port's first registry release need not start at `0.1.0`.
 
 ## Tracked protocol cutover
 

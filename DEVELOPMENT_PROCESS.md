@@ -112,7 +112,8 @@ with a red check. The process does: a pull request stays in draft until the tier
 has passed on its head commit or on an earlier commit that covers it.
 
 **Ledgers** in `formal/catalogs/` record the hash at which each reviewed file was last read: every
-docs page, the formal guides, several READMEs and selected tests and sources. Editing a pinned file
+docs page, `MAINTAINERS.md`, `WRITING-DOCS.md`, the formal guides, several READMEs and selected
+tests and sources. Editing a pinned file
 fails the required `test` check until its ledger holds the new hash. The process requires rereading
 the changed text before refreshing the hash, so the check prompts a review but cannot prove one
 happened.
@@ -227,7 +228,7 @@ hand. The maintainer dispatches the `Release` workflow from the current `main` c
 run has passed on it; the workflow rejects any other commit but does not check the run. It
 opens a `release:` pull request. Merging that pull request publishes to npm, crates.io and PyPI,
 creates the GitHub release and tags the Go module. The steps are in
-[docs/maintainers.md](docs/maintainers.md#releasing).
+[MAINTAINERS.md](MAINTAINERS.md#releasing).
 
 ## Where to look
 
@@ -238,7 +239,7 @@ creates the GitHub release and tags the Go module. The steps are in
 | Understand the specification | [formal/README.md](formal/README.md) and [SPEC.md](formal/guides/SPEC.md) |
 | See where one contract is stated, tested, challenged and mapped | `node formal/tools/where.mjs C45` |
 | Change a contract or a Quint model | [AUTHORING.md](formal/guides/AUTHORING.md) |
-| Write user documentation | [docs/authoring.md](docs/authoring.md) |
+| Write user documentation | [WRITING-DOCS.md](WRITING-DOCS.md) |
 | Choose a validation run and read its report | [VALIDATION.md](formal/guides/VALIDATION.md) |
 | Refresh a ledger after an edit | [formal/catalogs/README.md](formal/catalogs/README.md#refresh-after-an-edit) |
-| Release a version | [docs/maintainers.md](docs/maintainers.md#releasing) |
+| Release a version | [MAINTAINERS.md](MAINTAINERS.md#releasing) |

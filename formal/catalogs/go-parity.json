@@ -10,7 +10,7 @@
   "inputs": {
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
-    "sourceAuditDispositionsSha256": "d07dcbc080d30c257eb9639ee860b3372f7a2c60bbed873d10c909148ef2d0ea",
+    "sourceAuditDispositionsSha256": "942eab018ae0d8fa189ff16c322f6d9b3301aadc7c46d00b311018728c62f34e",
     "featureCoverageSha256": "a49438a0fab8997518956565f391486a569aab304f2057a667d28c5d41bde834",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
@@ -4481,6 +4481,23 @@
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",
     "sources": [
       {
+        "path": "MAINTAINERS.md",
+        "goFiles": [
+          "go/api.go",
+          "go/bindings.go",
+          "go/internal/testsuite/bindings_test.go",
+          "go/api_boundary_test.go",
+          "go/policy.go",
+          "go/protocol.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "B03"
+        ],
+        "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings."
+      },
+      {
         "path": "README.md",
         "goFiles": [
           "go/api.go",
@@ -4498,6 +4515,19 @@
         "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings."
       },
       {
+        "path": "WRITING-DOCS.md",
+        "goFiles": [
+          "go/docs_examples_test.go",
+          "go/feature_replay_test.go"
+        ],
+        "nativeAdaptations": [
+          "B01",
+          "B02",
+          "B03"
+        ],
+        "rationale": "Shared documentation authoring, native example execution and generated reference workflows use the public Go API tests; the guide does not create new portable behavior or claim fresh conformance evidence."
+      },
+      {
         "path": "docs/api.md",
         "goFiles": [
           "go/api.go",
@@ -4513,19 +4543,6 @@
           "B03"
         ],
         "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings."
-      },
-      {
-        "path": "docs/authoring.md",
-        "goFiles": [
-          "go/docs_examples_test.go",
-          "go/feature_replay_test.go"
-        ],
-        "nativeAdaptations": [
-          "B01",
-          "B02",
-          "B03"
-        ],
-        "rationale": "Shared documentation authoring, native example execution and generated reference workflows use the public Go API tests; the guide does not create new portable behavior or claim fresh conformance evidence."
       },
       {
         "path": "docs/coalescing.md",
@@ -4704,23 +4721,6 @@
           "B03"
         ],
         "rationale": "The native setup and binding guide explains request lifetime, sparse policy, errors, codec domains and integrations relative to the same shared behavior. Go API and codec artifacts establish the relevant native distinctions; documentation itself is not execution evidence."
-      },
-      {
-        "path": "docs/maintainers.md",
-        "goFiles": [
-          "go/api.go",
-          "go/bindings.go",
-          "go/internal/testsuite/bindings_test.go",
-          "go/api_boundary_test.go",
-          "go/policy.go",
-          "go/protocol.go"
-        ],
-        "nativeAdaptations": [
-          "B01",
-          "B02",
-          "B03"
-        ],
-        "rationale": "The documented public behavior maps to the typed Go API and the corresponding shared behavioral/protocol obligations. Installation syntax, module/package shape, aliases, generics and native validation/errors are documented in go/README.md and covered by native binding tests, not inferred from documentation headings."
       },
       {
         "path": "docs/observability.md",

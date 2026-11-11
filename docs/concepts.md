@@ -120,7 +120,8 @@ A local or remote TTL does not enable request-local caching; opt into it explici
 
 One LRU holds entries across all use cases in an instance. Its capacity
 defaults to 10,000 and counts entries, not object bytes. Reads update LRU order
-without extending insertion TTLs.
+without extending insertion TTLs. TTLs count monotonic elapsed time, so
+wall-clock adjustments do not change when an entry expires.
 
 A capacity of zero disables storage. A valid local TTL and admitted ramp still
 activate that path: it misses and can coalesce concurrent calls. Use a zero
@@ -176,8 +177,10 @@ Leave recovery disabled when that behavior is unsuitable for the data.
 ## Fail-open and liveness
 
 Cache-key, configuration, and cache I/O failures generally fall through to the
-loader. Loader errors still reject unless an opted-in stale-recovery policy can
-serve a retained value. Explicit invalidation failures are surfaced to the caller.
+loader. A failed process-local read also skips the process-local write for that
+invocation; the value already retained there stays in place. Loader errors still
+reject unless an opted-in stale-recovery policy can serve a retained value.
+Explicit invalidation failures are surfaced to the caller.
 
 Source failures are not memoized. Once a
 failed flight settles, a later invocation can retry, including within the same

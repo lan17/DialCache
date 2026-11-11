@@ -37,7 +37,6 @@ examples and integration notes follow your selection.
 | [Redis and Valkey](redis.md) | Client setup, serialization, compression, adapter contracts, and wire protocol |
 | [Observability](observability.md) | Prometheus and Datadog setup, metric semantics, and custom adapters |
 | [Upgrading](upgrading.md) | Protocol cutovers, retention, serializers, and metric migrations |
-| [Maintainer guide](maintainers.md) | Validation, documentation, benchmarks, and releases |
 
 ## Language guides
 
@@ -47,10 +46,6 @@ examples and integration notes follow your selection.
 | [Go](languages/go.md) | Context propagation, generic operations, duration and overlay types |
 | [Rust](languages/rust.md) | Scope guards, `Arc<T>` values, runtime and feature flags |
 | [Python](languages/python.md) | Async decorators, `contextvars` scopes, native values and application-owned Redis clients |
-
-[Behavior catalogue](generated/behavior.md) summarizes behavior across languages.
-[Documentation authoring](authoring.md) covers shared guides, language-specific
-examples, and API references.
 
 ## Find an answer
 
