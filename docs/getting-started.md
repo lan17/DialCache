@@ -76,8 +76,7 @@ needed. This example proves three observable outcomes:
 2. Two same-key calls inside one enabled scope invoke the source once.
 3. A new request scope invokes the source again.
 
-The displayed region comes from a native test that CI executes. Its surrounding
-file supplies imports and test setup; the source link opens the complete file.
+The complete-example links include imports and setup.
 
 <LanguageContent language="typescript">
 
@@ -129,10 +128,10 @@ scope keeps caching enabled forever.
 
 <LanguageContent language="typescript">
 
-`dialcache.enable(async () => ...)` propagates scope through Node's
-`AsyncLocalStorage`. Use `dialcache.disable(() => ...)` for nested uncached work.
-The outer callback settling closes its request-local memo. Registered readers
-return promises and preserve their source parameters.
+Use `dialcache.enable(async () => ...)` for request reads and
+`dialcache.disable(() => ...)` for nested uncached work. Request-local caching
+ends when the outer callback settles. Registered readers return promises and
+preserve their source parameters.
 
 </LanguageContent>
 

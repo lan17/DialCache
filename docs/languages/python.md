@@ -4,8 +4,8 @@
 
 The experimental Python port uses awaitable operations and `contextvars` scopes
 while following the shared behavioral contract. It requires Python 3.11 or
-later. The shared guides import executed Python examples; the API reference is
-generated from this checkout with Python's standard `pydoc` tool.
+later. See the shared guides for Python examples and the
+[API reference](../api.md) for signatures.
 
 ## Installation and runtime
 
@@ -21,10 +21,11 @@ Until that release is published, install from the root of a repository checkout:
 python3 -m pip install './python[redis]'
 ```
 
-Omit the `redis` extra for local-only use. Run operations on one asyncio event
-loop per cache instance. The application owns that loop and Redis client
-connections. Synchronous loaders and serializers are accepted, but execute on
-the event loop; use asynchronous implementations for blocking I/O.
+The package has no Node.js runtime dependency. Omit the `redis` extra for
+local-only use. Run operations on one asyncio event loop per cache instance.
+The application owns that loop and Redis client connections. Synchronous loaders
+and serializers are accepted, but execute on the event loop; use asynchronous
+implementations for blocking I/O.
 
 ## Request scope and operations
 
@@ -37,11 +38,6 @@ Nested scopes share the live outer request memo. `cache.disable()` and
 `cache.enable(False)` temporarily bypass caching without clearing that memo.
 Tasks inherit the scope through `contextvars`, but calls made after its outer
 scope closes pass directly through. Instances have independent contexts.
-
-The [native binding tests](https://github.com/lan17/DialCache/blob/main/python/tests/test_cache.py)
-exercise both forms of identity, ordinary and canceled concurrent callers,
-deadline boundaries, sparse runtime policies, and argument adaptation through
-the public API.
 
 ## Identity and policy
 
@@ -138,34 +134,9 @@ applications connect it to their metrics backend.
 ## Sharing Redis with other languages
 
 Follow the shared [cross-language compatibility guide](../redis.md#sharing-entries-across-languages)
-for cache identity, supported values, compression and the full-client wire suite.
+for cache identity, supported values, and compression.
 Python `None` represents JSON null; its top-level `UNDEFINED` sentinel is
 distinct. The default `JsonSerializer` rejects nonfinite numbers (`NaN` and
 infinities), while TypeScript's `JSON.stringify` converts them to `null`.
 Choose an explicit `use_case` and align adapted arguments with other clients;
 Python's inferred module and qualified function name may differ from their names.
-
-## Validation
-
-Prepare a development environment from the repository root:
-
-```sh
-python3 -m venv python/.venv
-python/.venv/bin/python -m pip install -e './python[test,redis]'
-corepack pnpm install --frozen-lockfile
-make check-python
-make integration-python
-```
-
-`check-python` executes native tests, shared wire vectors, fixed scenarios,
-committed behavioral histories, and the settlement control. `integration-python`
-uses isolated Redis, Valkey, and Redis Cluster servers, including the invalidation
-vectors. It requires Docker. Run `make integration-wire` for the separate
-four-language client suite; it also requires the pinned Go and Rust toolchains.
-
-Generate the shared corpus with `make formal-generate`, then run
-`make formal-python` for complete prepared replay and completion checks. The
-[porting guide](https://github.com/lan17/DialCache/blob/main/formal/guides/PORTING.md)
-defines that evidence boundary. Passing committed smoke tests alone does not
-establish complete conformance. Node 24 is a test-tool dependency, not a Python
-package runtime dependency.

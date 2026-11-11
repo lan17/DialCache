@@ -48,9 +48,9 @@ examples and integration notes follow your selection.
 | [Rust](languages/rust.md) | Scope guards, `Arc<T>` values, runtime and feature flags |
 | [Python](languages/python.md) | Async decorators, `contextvars` scopes, native values and application-owned Redis clients |
 
-[Behavior catalogue](generated/behavior.md) connects shared contracts to the
-existing formal cases. [Documentation authoring](authoring.md) explains how to
-change shared prose, tested native examples and generated references together.
+[Behavior catalogue](generated/behavior.md) summarizes behavior across languages.
+[Documentation authoring](authoring.md) covers shared guides, language-specific
+examples, and API references.
 
 ## Find an answer
 

@@ -98,7 +98,7 @@ You will edit a tracked guide and undo it at the end.
    {
      sources: 50,
      tests: 633,
-     sections: 218,
+     sections: 215,
      reviewedGuides: 19,
      guideSections: 195
    }

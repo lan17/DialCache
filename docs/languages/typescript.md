@@ -2,9 +2,8 @@
 
 [Shared guides](../index.md) · [Getting started](../getting-started.md) · [API reference](../api.md)
 
-The TypeScript implementation is the executable reference for DialCache's
-portable behavior. The shared feature guides apply across ports; this page
-explains the Node.js binding.
+TypeScript is the reference implementation. The shared feature guides apply
+across ports; this page explains the Node.js binding.
 
 ## Installation and runtime
 
@@ -16,17 +15,20 @@ Supported Node.js versions are `>=22.15.0 <23.0.0 || >=23.8.0`. The package ship
 ESM and CommonJS entry points plus TypeScript declarations. Applications own
 Redis and telemetry clients; integrations are optional subpath imports.
 
-The [getting-started example](../getting-started.md#wrap-a-reader) is imported
-from an executed native example. For a standalone script, the package
+Start with the [getting-started example](../getting-started.md#wrap-a-reader).
+For a standalone script, the package
 [README](https://github.com/lan17/DialCache/blob/main/typescript/README.md) contains a complete example.
 
 ## Request scope and operations
 
 Create a long-lived `DialCache`, register readers with `cached`, and wrap read
-request handling in `enable(async () => ...)`. `AsyncLocalStorage` carries the
-enabled state through nested async calls. `disable` temporarily derives a
-pass-through region. When the outer callback settles, retained async context
-stops enabling new work and can no longer accept request-local publication.
+request handling in `enable(async () => ...)`. Node's `AsyncLocalStorage` carries
+the enabled state through nested async calls; `disable` temporarily bypasses
+caching. When the outer callback settles,
+request-local storage is cleared. Calls started after that run uncached unless a
+new `enable` scope wraps them. Work already admitted to the cache finishes and
+can still fill the process and Redis layers, but not the closed request-local
+storage. See [Scope lifetime](../concepts.md#enable-and-disable-scopes).
 
 `getOrLoad` runs an inline operation without registering its use case. Readers
 always return promises. Keep the source arguments and captured state immutable
