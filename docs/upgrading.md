@@ -359,8 +359,8 @@ stops waiting: at that deadline, when the caller's own context ends, or when
 the source returns. Work the loader starts that must outlive the call needs its
 own context.
 
-Each caller now returns its own context error when that context ends, without
-stale recovery. A coalesced flight runs on a context that no single caller's
+A caller whose context ends while it waits now returns that context's error,
+without stale recovery. A coalesced flight runs on a context that no single caller's
 cancellation ends, so a ctx-aware source no longer stops at the first caller's
 deadline; keep `SourceTimeout` below the callers' deadlines to bound shared
 work. Shadow work no longer uses the caller's context.

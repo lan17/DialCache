@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "b0721360c93a16004fd74ca5f92417f2ba3a99165fe4801ca45324eec8c6713d",
+      "sha256": "d700dab403fe1aebfd769b25cce9f2a4f9abc6d8bf903a7ac1503edc9e3cbbdf",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},

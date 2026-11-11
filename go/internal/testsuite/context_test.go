@@ -386,3 +386,57 @@ func TestContextDarkShadowFillOutlivesCaller(t *testing.T) {
 		t.Fatal("no shadow verdict")
 	}
 }
+
+func TestContextRequestLocalLeaderLeavesWhileOtherScopesWait(t *testing.T) {
+	cache := MustNew(WithRemote(newContextRemote()))
+	op := contextOperation("request-local", Policy{RemoteTTL: time.Minute, RequestLocal: true})
+	release := make(chan struct{})
+	sourceErr := make(chan error, 1)
+	load := func(ctx context.Context) (string, error) {
+		<-release
+		sourceErr <- ctx.Err()
+		return "value", nil
+	}
+
+	scopeA, closeA := cache.Enable(context.Background())
+	leaderCtx, cancelLeader := context.WithCancel(scopeA)
+	leader := make(chan contextResult, 1)
+	go func() { v, err := GetOrLoad(leaderCtx, cache, op, load); leader <- contextResult{v, err} }()
+	for cache.GetCoalescingState().Process.ActiveLeaders != 1 {
+		time.Sleep(time.Millisecond)
+	}
+
+	scopeB, closeB := cache.Enable(context.Background())
+	defer closeB()
+	follower := make(chan contextResult, 1)
+	go func() { v, err := GetOrLoad(scopeB, cache, op, load); follower <- contextResult{v, err} }()
+	waitForFollowers(t, cache, 1)
+	// A second caller in scope B joins that scope's request flight and leaves at its own deadline.
+	shortCtx, cancelShort := context.WithTimeout(scopeB, 50*time.Millisecond)
+	defer cancelShort()
+	short := make(chan contextResult, 1)
+	go func() { v, err := GetOrLoad(shortCtx, cache, op, load); short <- contextResult{v, err} }()
+	if r := receive(t, short); !errors.Is(r.err, context.DeadlineExceeded) {
+		t.Fatalf("request-local follower = %+v, want its own deadline", r)
+	}
+
+	cancelLeader()
+	closeA()
+	if r := receive(t, leader); !errors.Is(r.err, context.Canceled) {
+		t.Fatalf("leader = %+v, want its own cancellation", r)
+	}
+	close(release)
+	if err := <-sourceErr; err != nil {
+		t.Fatalf("the departed leader's cancellation reached the shared source: %v", err)
+	}
+	if r := receive(t, follower); r.value != "value" || r.err != nil {
+		t.Fatalf("scope B = %+v, want the shared value", r)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for cache.GetCoalescingState().Process.ActiveLeaders != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the shared flight was not cleared")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
