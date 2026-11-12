@@ -98,16 +98,13 @@ const dialcache = new DialCache({
 });
 ```
 
-The adapter uses `GlideClient` and `GlideClusterClient` identities, `Batch`, and
-`Decoder.Bytes` from that namespace. It does not import its own GLIDE runtime.
-It rejects ambiguous forwarding wrappers or clients from another module
-instance because their topology cannot be established safely.
+Pass the same GLIDE module namespace that created the client. Only direct
+standalone or Cluster clients are accepted; forwarding wrappers and clients
+from another module instance are rejected.
 
-In Cluster mode, tracked `MGET` uses an explicit primary route. In standalone
-mode, a one-command non-atomic batch selects the primary even when the client
-has a replica-read preference. `MGET` itself supplies the atomic snapshot;
-there is no transaction and caller-owned `WATCH` state is not consumed.
-`ClusterBatch` is not required.
+Tracked reads take one atomic value and watermark snapshot from the primary,
+even with a replica-read preference. There is no transaction, and caller-owned
+`WATCH` state is not consumed.
 
 </LanguageContent>
 
@@ -475,11 +472,12 @@ bounded for large values.
 
 <LanguageContent language="rust">
 
-The async engine offloads compression for payloads at least 64 KiB and levels
-10–22 once the threshold is met; every zstd decompression is offloaded. The
-default CPU executor shares two workers and two queue slots across instances.
-Saturation fails open: reads fall through to the source, failed compression skips
-the write. Custom codecs still choose their own scheduling.
+Compression of payloads of at least 64 KiB (or at levels 10–22 once the
+threshold is met) and every decompression run on a bounded CPU queue shared by
+all instances: two workers and two queued jobs by default. When that queue is
+full, the work is rejected and DialCache fails open: a read of a compressed
+value falls through to the source, and the write is skipped. Custom codecs
+manage their own CPU work.
 
 </LanguageContent>
 
@@ -545,20 +543,8 @@ must agree on both the stored text or bytes and their decoded meaning. Readers
 decode another port's compression envelope even when their own new-write
 compression is disabled.
 
-The [full-client wire suite](https://github.com/lan17/DialCache/blob/main/interop/test_wire_interop.py)
-exercises all twelve directed writer/reader pairs on Redis 6.2, Valkey 8 and
-Redis 7 Cluster. It covers tracked and untracked entries, raw and compressed
-JSON and binary payloads, and invalidation in every direction. Undefined cases
-assert the native mappings above. Readers must hit the other client's stored
-entry without calling their source; invalidation checks the entity fence across
-multiple key variants and preserves an unrelated entity.
-
-Run `make integration-wire` from the repository root with the pinned Node,
-Go and Rust toolchains, Python test dependencies, and Docker. The required wire
-CI job runs this suite separately from native language validation. This evidence
-covers the tested values and protocol in the same checkout. Use matching releases
-for this scope; arbitrary custom codecs and mixed release versions require
-their own compatibility checks. See [Upgrading](upgrading.md).
+Use matching releases when sharing entries across languages. Verify compatibility
+separately for custom codecs or mixed release versions. See [Upgrading](upgrading.md).
 
 ## Bundled Redis operations
 
@@ -607,8 +593,8 @@ A tracked miss can carry a valid observed watermark. DialCache skips a replaceme
 already known to be fenced, checking once before payload preparation and again
 immediately before dispatch. An admitted write uses the final timestamp exactly.
 Misses without that fence let the adapter sample its application epoch clock
-before dispatch.
-No path adds a fence-check command. See [Conditional refills](invalidation.md#conditional-refills).
+before dispatch. No path adds a fence-check command. See
+[Conditional refills](invalidation.md#conditional-refills).
 
 ### Invalidation retries and ambiguity
 
@@ -616,36 +602,14 @@ Invalidation is the only Lua operation. Bundled adapters dispatch `EVALSHA` and
 retry a rejected dispatch once using `EVAL` with the source and the same
 invalidation timestamp. The script only advances the watermark and widens its
 retention, so duplicate execution after an ambiguous response is harmless.
-Invalid reply-domain values are errors and are not retried.
+Invalid reply-domain values are errors and are not retried. If the retry also
+fails, the client's native error surfaces. A healed retry looks like success to
+DialCache metrics; server command statistics expose unexpected `EVAL` activity.
 
 <LanguageContent language="typescript">
 
-If the retry also fails, GLIDE attaches the original error as `cause` when
-possible. Node-redis surfaces the retry rejection unmodified because some
-client errors are shared objects. A healed retry looks like success to DialCache
-metrics; server command statistics expose unexpected `EVAL` activity.
-
-</LanguageContent>
-
-<LanguageContent language="go">
-
-A failed retry surfaces its native error. A healed retry is reported as success;
-server command statistics can reveal unexpected `EVAL` activity.
-
-</LanguageContent>
-
-<LanguageContent language="rust">
-
-A failed retry surfaces its native error. A healed retry is reported as success;
-server command statistics can reveal unexpected `EVAL` activity.
-
-</LanguageContent>
-
-<LanguageContent language="python">
-
-A failed retry raises its native error. A successful idempotent fallback
-retains the original invalidation timestamp. Track unexpected `EVAL` activity
-through server command statistics when operationally useful.
+GLIDE attaches the original error as `cause` when possible. Node-redis
+surfaces the retry rejection unmodified.
 
 </LanguageContent>
 

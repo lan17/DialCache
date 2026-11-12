@@ -238,12 +238,11 @@ writing a replacement already known to be fenced:
    below the observed watermark, skip payload preparation and the write.
 2. Otherwise serialize and compress, then sample again immediately before
    dispatch. If that final timestamp is at or below the watermark, skip `SET`.
-3. Otherwise send the complete frame using that exact final timestamp.
+3. Otherwise send the frame using that exact final timestamp.
 
-The final sample keeps serialization time out of the stored frame's logical
-TTL. The first check avoids expensive serialization and compression when a fill
-cannot yet clear the fence. Both checks reuse the original observation; neither
-adds a Redis command.
+Both checks compare against the original observation; neither adds a Redis
+command. The final sample keeps serialization and compression time out of the
+stored frame's logical TTL.
 
 The miss **reason** is independent from the observed fence. An absent value can
 carry a valid watermark and suppress a refill. A `watermark_fenced` miss can
@@ -254,8 +253,8 @@ A fenced refill is skipped immediately; the call does not wait for the watermark
 to pass. An admitted refill still awaits serialization and the Redis write
 before returning the fallback value, so those operations need
 [application-owned budgets](coalescing.md#application-owned-budgets).
-The checks do not establish a transaction with a later invalidation: the
-watermark can advance after the read and fence an admitted write.
+A refill is not a transaction with a later invalidation: the watermark can
+advance after the read and fence an admitted write.
 
 ### In-memory publication
 
