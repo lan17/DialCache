@@ -192,6 +192,13 @@ func (x *execution[T]) requestLocal() (T, error) {
 
 func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, label string) (T, error) {
 	c := x.cache
+	ctx := x.ctx
+	// A caller that already left starts and joins nothing. This also keeps a
+	// follower's retry below from spinning on leaders that are out of time.
+	if err := ctx.Err(); err != nil {
+		var zero T
+		return zero, err
+	}
 	// Read the clock before taking the lock. The caller-supplied clock is the
 	// only external code on this path; a panic from it must not leave c.mu
 	// held, or the scope cleanup in Enable would deadlock.
@@ -201,7 +208,6 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 		c.mu.Unlock()
 		return x.work(owner)
 	}
-	ctx := x.ctx
 	if f := flights[x.key]; f != nil {
 		f.followers++
 		f.waiters++
@@ -219,17 +225,31 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 			var zero T
 			return zero, err
 		}
+		// The work ran out of its leader's deadline. A follower with time left
+		// starts or joins fresh work instead of taking that deadline as its own.
+		if f.err != nil && f.expired {
+			return x.singleFlight(flights, owner, label)
+		}
 		return followerResult[T](f)
 	}
 	// Followers share this work, so the leader's cancellation ends only its own
-	// wait; the work ends when no caller waits for it.
-	shared, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	// wait. The leader's deadline still bounds the work, as when the leader ran it
+	// inline, so a hung source cannot hold a hot key past that deadline. The work
+	// also ends when no caller waits for it.
+	var shared context.Context
+	var cancel context.CancelFunc
+	if deadline, ok := ctx.Deadline(); ok {
+		shared, cancel = context.WithDeadline(context.WithoutCancel(ctx), deadline)
+	} else {
+		shared, cancel = context.WithCancel(context.WithoutCancel(ctx))
+	}
 	f := &flight{done: make(chan struct{}), started: started, waiters: 1, cancel: cancel}
 	flights[x.key] = f
 	c.mu.Unlock()
 	x.ctx = shared
 	go func() {
 		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
+		f.expired = shared.Err() == context.DeadlineExceeded
 		cancel()
 		c.mu.Lock()
 		if flights[x.key] == f {

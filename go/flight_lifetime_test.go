@@ -131,3 +131,153 @@ func TestAbandonedRequestFlightCancelsTheProcessFlightItWaitsFor(t *testing.T) {
 		}
 	})
 }
+
+// firstHangs returns a loader whose first call hangs until its context ends,
+// like a query on a stuck database, and whose later calls return 7.
+func (f *lifetimeFixture) firstHangs() func(context.Context) (int, error) {
+	return func(ctx context.Context) (int, error) {
+		if f.calls.Add(1) == 1 {
+			<-ctx.Done()
+			return 0, ctx.Err()
+		}
+		return 7, nil
+	}
+}
+
+func TestLeaderDeadlineEndsSharedWorkAndFollowersRetry(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newLifetimeFixture(Policy{})
+		ctx, done := f.cache.Enable(context.Background())
+		defer done()
+		load := f.firstHangs()
+		start := time.Now()
+		leaderCtx, cancelLeader := context.WithTimeout(ctx, 20*time.Millisecond)
+		defer cancelLeader()
+		followerCtx, cancelFollower := context.WithTimeout(ctx, time.Second)
+		defer cancelFollower()
+		leader := make(chan error, 1)
+		go func() { _, err := f.get(leaderCtx, load); leader <- err }()
+		synctest.Wait()
+		v, err := f.get(followerCtx, load)
+		if err := <-leader; !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("leader error = %v, want its own deadline", err)
+		}
+		if v != 7 || err != nil || f.calls.Load() != 2 || time.Since(start) != 20*time.Millisecond {
+			t.Fatalf("follower = (%d, %v) after %v and %d source calls; want (7, nil) from fresh work at the leader's 20ms deadline", v, err, time.Since(start), f.calls.Load())
+		}
+	})
+}
+
+func TestLoaderDeadlineErrorIsNotWorkExpiry(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newLifetimeFixture(Policy{})
+		ctx, done := f.cache.Enable(context.Background())
+		defer done()
+		gate := make(chan struct{})
+		// The loader's own client timed out; the callers still have time.
+		load := func(context.Context) (int, error) { f.calls.Add(1); <-gate; return 0, context.DeadlineExceeded }
+		callerCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		leader := make(chan error, 1)
+		go func() { _, err := f.get(callerCtx, load); leader <- err }()
+		synctest.Wait()
+		follower := make(chan error, 1)
+		go func() { _, err := f.get(callerCtx, load); follower <- err }()
+		synctest.Wait()
+		close(gate)
+		for name, got := range map[string]chan error{"leader": leader, "follower": follower} {
+			if err := <-got; !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("%s error = %v, want the loader's error", name, err)
+			}
+		}
+		if f.calls.Load() != 1 {
+			t.Fatalf("source calls = %d, want 1: a loader's deadline error must not start fresh work", f.calls.Load())
+		}
+	})
+}
+
+// stallingWriteRemote misses on read, and its writes wait for their context,
+// like a stalled Redis SET on a client that honors ctx.
+type stallingWriteRemote struct{ writes atomic.Int64 }
+
+func (r *stallingWriteRemote) Read(context.Context, string, string) (ReadResult, error) {
+	return ReadResult{Kind: "miss", Reason: "value_absent"}, nil
+}
+func (r *stallingWriteRemote) Write(ctx context.Context, _ string, _ Frame, _ time.Duration) error {
+	r.writes.Add(1)
+	<-ctx.Done()
+	return ctx.Err()
+}
+func (r *stallingWriteRemote) Invalidate(context.Context, string, int64, int64) error { return nil }
+
+func TestStalledWriteEndsAtTheLeaderDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		remote := &stallingWriteRemote{}
+		cache := MustNew(WithRemote(remote), WithoutCompression(), WithRemoteReadTimeout(time.Second))
+		op := Operation[int]{Identity: Identity{Namespace: "lifetime", KeyType: "id", ID: "hot", UseCase: "get"}, Policy: Policy{RemoteTTL: time.Minute}}
+		ctx, done := cache.Enable(context.Background())
+		defer done()
+		load := func(context.Context) (int, error) { return 7, nil }
+		start := time.Now()
+		leaderCtx, cancelLeader := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancelLeader()
+		followerCtx, cancelFollower := context.WithTimeout(ctx, time.Second)
+		defer cancelFollower()
+		leader := make(chan error, 1)
+		go func() { _, err := GetOrLoad(leaderCtx, cache, op, load); leader <- err }()
+		synctest.Wait()
+		v, err := GetOrLoad(followerCtx, cache, op, load)
+		if v != 7 || err != nil || time.Since(start) != 50*time.Millisecond {
+			t.Fatalf("follower = (%d, %v) after %v; want (7, nil) once the stalled write ends at the leader's 50ms deadline", v, err, time.Since(start))
+		}
+		if err := <-leader; err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("leader error = %v, want the value or its own deadline", err)
+		}
+		if remote.writes.Load() != 1 {
+			t.Fatalf("writes = %d, want 1", remote.writes.Load())
+		}
+	})
+}
+
+func TestCallerCancelledAtEntryStartsNoSharedWork(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newLifetimeFixture(Policy{})
+		ctx, done := f.cache.Enable(context.Background())
+		defer done()
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+		if _, err := f.get(cancelled, func(context.Context) (int, error) { f.calls.Add(1); return 7, nil }); !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want the caller's cancellation", err)
+		}
+		synctest.Wait()
+		if f.calls.Load() != 0 {
+			t.Fatalf("source calls = %d, want 0 for a caller that had already left", f.calls.Load())
+		}
+	})
+}
+
+func TestRequestFlightRetriesProcessWorkThatExpiredAtAnotherLeaderDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newLifetimeFixture(Policy{RequestLocal: true})
+		load := f.firstHangs()
+		// Two requests share one process flight; the first request leads it.
+		ctxB, doneB := f.cache.Enable(context.Background())
+		defer doneB()
+		ctxA, doneA := f.cache.Enable(context.Background())
+		defer doneA()
+		shortB, cancelB := context.WithTimeout(ctxB, 20*time.Millisecond)
+		defer cancelB()
+		longA, cancelA := context.WithTimeout(ctxA, time.Second)
+		defer cancelA()
+		leader := make(chan error, 1)
+		go func() { _, err := f.get(shortB, load); leader <- err }()
+		synctest.Wait()
+		v, err := f.get(longA, load)
+		if err := <-leader; !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("request B error = %v, want its own deadline", err)
+		}
+		if v != 7 || err != nil || f.calls.Load() != 2 {
+			t.Fatalf("request A = (%d, %v) after %d source calls; want (7, nil) from fresh process work", v, err, f.calls.Load())
+		}
+	})
+}

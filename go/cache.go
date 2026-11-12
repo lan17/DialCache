@@ -22,6 +22,8 @@ type flight struct {
 	// shared work once none is left.
 	waiters int
 	cancel  context.CancelFunc
+	// expired records that the shared work ran out of its leader's deadline.
+	expired bool
 }
 type scope struct {
 	live    bool
