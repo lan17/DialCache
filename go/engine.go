@@ -16,6 +16,8 @@ type execution[T any] struct {
 	policy                    ResolvedPolicy
 	load                      func(context.Context) (T, error)
 	timedOut                  atomic.Bool
+	// sharedWork marks a flight's shared work: its waiters leave on their own contexts.
+	sharedWork bool
 }
 
 // ms converts a whole-millisecond duration to the wire and clock unit.
@@ -193,22 +195,26 @@ func (x *execution[T]) requestLocal() (T, error) {
 func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, label string) (T, error) {
 	c := x.cache
 	ctx := x.ctx
-	// A caller that already left starts and joins nothing. This also keeps a
-	// follower's retry below from spinning on leaders that are out of time.
-	if err := ctx.Err(); err != nil {
-		var zero T
-		return zero, err
-	}
-	// Read the clock before taking the lock. The caller-supplied clock is the
-	// only external code on this path; a panic from it must not leave c.mu
-	// held, or the scope cleanup in Enable would deadlock.
-	started := elapsedNow(c.settings.clock)
-	c.mu.Lock()
-	if owner != nil && !owner.live {
-		c.mu.Unlock()
-		return x.work(owner)
-	}
-	if f := flights[x.key]; f != nil {
+	var started time.Duration
+	for {
+		// A caller that already left starts and joins nothing.
+		if err := ctx.Err(); err != nil {
+			var zero T
+			return zero, err
+		}
+		// Read the clock before taking the lock. The caller-supplied clock is the
+		// only external code on this path; a panic from it must not leave c.mu
+		// held, or the scope cleanup in Enable would deadlock.
+		started = elapsedNow(c.settings.clock)
+		c.mu.Lock()
+		if owner != nil && !owner.live {
+			c.mu.Unlock()
+			return x.work(owner)
+		}
+		f := flights[x.key]
+		if f == nil {
+			break
+		}
 		f.followers++
 		f.waiters++
 		c.mu.Unlock()
@@ -220,25 +226,27 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 		if err := ctx.Err(); err != nil {
 			c.mu.Lock()
 			f.followers--
-			leave(flights, x.key, f)
+			leave(f)
 			c.mu.Unlock()
 			var zero T
 			return zero, err
 		}
-		// The work ran out of its leader's deadline. A follower with time left
-		// starts or joins fresh work instead of taking that deadline as its own.
-		if f.err != nil && f.expired {
-			return x.singleFlight(flights, owner, label)
+		// The work failed after its context ended: no caller was waiting, or it ran
+		// out of its leader's deadline. A follower with time left starts or joins
+		// fresh work instead of taking that failure as its own.
+		if f.err != nil && f.cutShort {
+			continue
 		}
 		return followerResult[T](f)
 	}
 	// Followers share this work, so the leader's cancellation ends only its own
 	// wait. The leader's deadline still bounds the work, as when the leader ran it
 	// inline, so a hung source cannot hold a hot key past that deadline. The work
-	// also ends when no caller waits for it.
+	// is also cancelled when no caller waits for it.
+	deadline, hasDeadline := ctx.Deadline()
 	var shared context.Context
 	var cancel context.CancelFunc
-	if deadline, ok := ctx.Deadline(); ok {
+	if hasDeadline {
 		shared, cancel = context.WithDeadline(context.WithoutCancel(ctx), deadline)
 	} else {
 		shared, cancel = context.WithCancel(context.WithoutCancel(ctx))
@@ -247,9 +255,12 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	flights[x.key] = f
 	c.mu.Unlock()
 	x.ctx = shared
+	x.sharedWork = true
 	go func() {
 		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
-		f.expired = shared.Err() == context.DeadlineExceeded
+		// A process flight under this request flight has its own timer for the
+		// same deadline and can fire first, so the deadline itself is checked too.
+		f.cutShort = shared.Err() != nil || hasDeadline && !time.Now().Before(deadline)
 		cancel()
 		c.mu.Lock()
 		if flights[x.key] == f {
@@ -264,7 +275,7 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	}
 	if err := ctx.Err(); err != nil {
 		c.mu.Lock()
-		leave(flights, x.key, f)
+		leave(f)
 		c.mu.Unlock()
 		var zero T
 		return zero, err
@@ -273,15 +284,13 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 }
 
 // leave drops a waiter whose context ended; the caller holds c.mu. With no
-// waiter left, the shared work is cancelled and unpublished, so a later caller
-// starts fresh work instead of joining work that nobody waits for.
-func leave(flights map[string]*flight, key string, f *flight) {
+// waiter left the shared work is cancelled. Its flight stays published until
+// the work returns, so a source that ignores its context is not started again
+// for this key while it still runs.
+func leave(f *flight) {
 	f.waiters--
 	if f.waiters == 0 {
 		f.cancel()
-		if flights[key] == f {
-			delete(flights, key)
-		}
 	}
 }
 
@@ -413,6 +422,11 @@ func (x *execution[T]) traverse() (T, error) {
 		}
 		return v, err
 	}
+	// Work that no caller waits for any more fills no cache, so it cannot
+	// overwrite a newer flight's fill or land after an invalidation.
+	if x.ctx.Err() != nil {
+		return v, nil
+	}
 	if remote.kind != "error" {
 		if _, writeErr := x.putRemote(v, remote.fence, "remote", nil); writeErr != nil {
 			c.settings.logger.Warn("Error putting value in Redis cache", writeErr)
@@ -465,7 +479,14 @@ func (x *execution[T]) source(layer string) (T, error) {
 	}
 	defer cancel()
 	p := startPending(func() (T, error) { return x.load(ctx) })
-	v, err := awaitDeadline(x.ctx, clock, p, start, budget, func() error {
+	wait := x.ctx
+	if x.sharedWork {
+		// Waiters leave on their own contexts, so shared work waits for its source
+		// until the budget. A source that ignores a cancelled context then still
+		// holds its flight, and the key gets no second copy of it.
+		wait = context.Background()
+	}
+	v, err := awaitDeadline(wait, clock, p, start, budget, func() error {
 		return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(budget) * time.Millisecond}
 	}, func() { x.timedOut.Store(true) })
 	// Once the wait ends the result is settled; cancel before observers run so a

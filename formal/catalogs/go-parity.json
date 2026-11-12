@@ -3455,7 +3455,7 @@
               "WithEnabled",
               "WithDisabled"
             ],
-            "sha256": "5ecddd3cc5697d75e00180a1ed1c15cbda29152d72ad728f4223d9c10b744fdb"
+            "sha256": "630afd13d3c02a10af2d289a9e04cb0ec4ae0ffd8cb378937a53bca76be644ba"
           }
         ]
       }
@@ -3529,7 +3529,7 @@
               "IsEnabled",
               "Invalidate"
             ],
-            "sha256": "5ecddd3cc5697d75e00180a1ed1c15cbda29152d72ad728f4223d9c10b744fdb"
+            "sha256": "630afd13d3c02a10af2d289a9e04cb0ec4ae0ffd8cb378937a53bca76be644ba"
           },
           {
             "path": "go/bindings.go",
@@ -3551,7 +3551,7 @@
               "putRemote",
               "recover"
             ],
-            "sha256": "2723951c1fd07abed82c7eec191b1e699fb6e972b698d9270822aa503b4b5a6a"
+            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
           },
           {
             "path": "go/deadline.go",
@@ -3666,7 +3666,7 @@
             "symbols": [
               "New"
             ],
-            "sha256": "5ecddd3cc5697d75e00180a1ed1c15cbda29152d72ad728f4223d9c10b744fdb"
+            "sha256": "630afd13d3c02a10af2d289a9e04cb0ec4ae0ffd8cb378937a53bca76be644ba"
           },
           {
             "path": "go/policy.go",
@@ -3722,7 +3722,7 @@
               "remoteValue",
               "localResult"
             ],
-            "sha256": "2723951c1fd07abed82c7eec191b1e699fb6e972b698d9270822aa503b4b5a6a"
+            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
           }
         ]
       }
@@ -3866,7 +3866,7 @@
             "symbols": [
               "New"
             ],
-            "sha256": "5ecddd3cc5697d75e00180a1ed1c15cbda29152d72ad728f4223d9c10b744fdb"
+            "sha256": "630afd13d3c02a10af2d289a9e04cb0ec4ae0ffd8cb378937a53bca76be644ba"
           },
           {
             "path": "go/engine.go",
@@ -3874,7 +3874,7 @@
               "putLocal",
               "shared"
             ],
-            "sha256": "2723951c1fd07abed82c7eec191b1e699fb6e972b698d9270822aa503b4b5a6a"
+            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
           },
           {
             "path": "go/api.go",
@@ -3944,7 +3944,7 @@
               "canRecover",
               "recover"
             ],
-            "sha256": "2723951c1fd07abed82c7eec191b1e699fb6e972b698d9270822aa503b4b5a6a"
+            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
           },
           {
             "path": "go/shadow.go",
@@ -3992,7 +3992,7 @@
             "symbols": [
               "Invalidate"
             ],
-            "sha256": "5ecddd3cc5697d75e00180a1ed1c15cbda29152d72ad728f4223d9c10b744fdb"
+            "sha256": "630afd13d3c02a10af2d289a9e04cb0ec4ae0ffd8cb378937a53bca76be644ba"
           },
           {
             "path": "go/redis_adapter.go",
@@ -4260,7 +4260,7 @@
               "errorEvent",
               "duration"
             ],
-            "sha256": "2723951c1fd07abed82c7eec191b1e699fb6e972b698d9270822aa503b4b5a6a"
+            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
           },
           {
             "path": "go/shadow.go",

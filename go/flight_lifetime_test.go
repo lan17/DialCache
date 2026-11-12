@@ -281,3 +281,102 @@ func TestRequestFlightRetriesProcessWorkThatExpiredAtAnotherLeaderDeadline(t *te
 		}
 	})
 }
+
+func TestSourceThatIgnoresCancellationIsNotStartedTwice(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var writes atomic.Int64
+		remote := boundaryRemote{
+			read: func(context.Context) (ReadResult, error) {
+				return ReadResult{Kind: "miss", Reason: "value_absent"}, nil
+			},
+			write: func(Frame) error { writes.Add(1); return nil },
+		}
+		cache := MustNew(WithRemote(remote), WithoutCompression(), WithRemoteReadTimeout(time.Second))
+		op := Operation[int]{Identity: Identity{Namespace: "lifetime", KeyType: "id", ID: "sparse", UseCase: "get"}, Policy: Policy{RemoteTTL: time.Minute}, SourceTimeout: NoTimeout}
+		ctx, done := cache.Enable(context.Background())
+		defer done()
+		var calls atomic.Int64
+		release := make(chan struct{})
+		// The first query hangs and ignores its context; later ones return 8.
+		load := func(context.Context) (int, error) {
+			if calls.Add(1) == 1 {
+				<-release
+				return 7, nil
+			}
+			return 8, nil
+		}
+		for caller := range 2 {
+			short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+			if _, err := GetOrLoad(short, cache, op, load); !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("caller %d error = %v, want its own deadline", caller, err)
+			}
+			cancel()
+			synctest.Wait()
+		}
+		if calls.Load() != 1 {
+			t.Fatalf("source calls while the first one still runs = %d, want 1", calls.Load())
+		}
+		close(release)
+		synctest.Wait()
+		if writes.Load() != 0 || cache.GetCoalescingState().Process.ActiveLeaders != 0 {
+			t.Fatalf("after the abandoned source returned: writes = %d, published flights = %d; want 0 and 0", writes.Load(), cache.GetCoalescingState().Process.ActiveLeaders)
+		}
+		if v, err := GetOrLoad(ctx, cache, op, load); v != 8 || err != nil || calls.Load() != 2 {
+			t.Fatalf("next caller = (%d, %v) after %d source calls; want (8, nil) from fresh work after 2", v, err, calls.Load())
+		}
+	})
+}
+
+func TestFollowerOfCancelledWorkRetriesWithItsOwnContext(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newLifetimeFixture(Policy{})
+		ctx, done := f.cache.Enable(context.Background())
+		defer done()
+		release := make(chan struct{})
+		// The first query notices its cancellation only when released.
+		load := func(ctx context.Context) (int, error) {
+			if f.calls.Add(1) == 1 {
+				<-release
+				return 0, ctx.Err()
+			}
+			return 7, nil
+		}
+		short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		defer cancel()
+		if _, err := f.get(short, load); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("first caller error = %v, want its own deadline", err)
+		}
+		long, cancelLong := context.WithTimeout(ctx, time.Second)
+		defer cancelLong()
+		follower := make(chan error, 1)
+		var v int
+		go func() { var err error; v, err = f.get(long, load); follower <- err }()
+		synctest.Wait()
+		close(release)
+		if err := <-follower; v != 7 || err != nil || f.calls.Load() != 2 {
+			t.Fatalf("follower = (%d, %v) after %d source calls; want (7, nil) from fresh work", v, err, f.calls.Load())
+		}
+	})
+}
+
+func TestCancelledRequestFlightCancelsTheProcessFlightItWaitsFor(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newLifetimeFixture(Policy{RequestLocal: true})
+		defer close(f.release)
+		ctx, done := f.cache.Enable(context.Background())
+		defer done()
+		// A cancel-only caller: no deadline reaches the process flight.
+		cancelled, cancel := context.WithCancel(ctx)
+		result := make(chan error, 1)
+		go func() { _, err := f.get(cancelled, f.hang); result <- err }()
+		synctest.Wait()
+		cancel()
+		if err := <-result; !errors.Is(err, context.Canceled) {
+			t.Fatalf("caller error = %v, want its own cancellation", err)
+		}
+		synctest.Wait()
+		if live, leaders := f.live.Load(), f.cache.GetCoalescingState().Process.ActiveLeaders; live != 0 || leaders != 0 {
+			t.Fatalf("after the request flight lost its only waiter: live loaders = %d, published process flights = %d; want 0 and 0", live, leaders)
+		}
+	})
+}
