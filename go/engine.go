@@ -442,7 +442,8 @@ func (x *execution[T]) traverse() (T, error) {
 		return v, nil
 	}
 	if remote.kind != "error" {
-		if _, writeErr := x.putRemote(v, remote.fence, "remote", nil); writeErr != nil {
+		// The last caller can also leave while the value is being encoded.
+		if _, writeErr := x.putRemote(v, remote.fence, "remote", func() bool { return !x.abandoned() }); writeErr != nil {
 			c.settings.logger.Warn("Error putting value in Redis cache", writeErr)
 		}
 	}

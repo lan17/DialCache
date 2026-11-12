@@ -405,3 +405,46 @@ func TestAbandonedWorkFillsNoLocalOrRequestCache(t *testing.T) {
 		})
 	}
 }
+
+// blockingCodec holds Encode until the test releases it.
+type blockingCodec struct{ entered, release chan struct{} }
+
+func (c blockingCodec) Encode(v int) (Payload, error) {
+	close(c.entered)
+	<-c.release
+	return JSONCodec[int]{}.Encode(v)
+}
+func (c blockingCodec) Decode(p Payload) (int, error) { return JSONCodec[int]{}.Decode(p) }
+
+func TestCallerLeavingDuringEncodeStopsTheWrite(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var writes atomic.Int64
+		remote := boundaryRemote{
+			read: func(context.Context) (ReadResult, error) {
+				return ReadResult{Kind: "miss", Reason: "value_absent"}, nil
+			},
+			write: func(Frame) error { writes.Add(1); return nil },
+		}
+		cache := MustNew(WithRemote(remote), WithoutCompression(), WithRemoteReadTimeout(time.Second))
+		codec := blockingCodec{entered: make(chan struct{}), release: make(chan struct{})}
+		op := Operation[int]{Identity: Identity{Namespace: "lifetime", KeyType: "id", ID: "encode", UseCase: "get"}, Policy: Policy{RemoteTTL: time.Minute}, Codec: codec}
+		ctx, done := cache.Enable(context.Background())
+		defer done()
+		callerCtx, cancel := context.WithCancel(ctx)
+		result := make(chan error, 1)
+		go func() {
+			_, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (int, error) { return 7, nil })
+			result <- err
+		}()
+		<-codec.entered
+		cancel()
+		if err := <-result; !errors.Is(err, context.Canceled) {
+			t.Fatalf("caller error = %v, want its own cancellation", err)
+		}
+		close(codec.release)
+		synctest.Wait()
+		if writes.Load() != 0 {
+			t.Fatalf("writes = %d, want 0 after the only caller left during encoding", writes.Load())
+		}
+	})
+}
