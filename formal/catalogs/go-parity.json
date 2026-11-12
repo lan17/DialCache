@@ -3551,7 +3551,7 @@
               "putRemote",
               "recover"
             ],
-            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
+            "sha256": "8bdcb94ec7aafb764f26eae3b9f08a71098cf4d2e6f34d32ecb6613501153b4d"
           },
           {
             "path": "go/deadline.go",
@@ -3569,7 +3569,7 @@
               "runShadow",
               "warnShadowMismatch"
             ],
-            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
+            "sha256": "d317ca9cd3650dbd017057cd7e926e2f2abb58cef1cff01357b2d36cc560907f"
           },
           {
             "path": "go/api.go",
@@ -3722,7 +3722,7 @@
               "remoteValue",
               "localResult"
             ],
-            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
+            "sha256": "8bdcb94ec7aafb764f26eae3b9f08a71098cf4d2e6f34d32ecb6613501153b4d"
           }
         ]
       }
@@ -3874,7 +3874,7 @@
               "putLocal",
               "shared"
             ],
-            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
+            "sha256": "8bdcb94ec7aafb764f26eae3b9f08a71098cf4d2e6f34d32ecb6613501153b4d"
           },
           {
             "path": "go/api.go",
@@ -3944,14 +3944,14 @@
               "canRecover",
               "recover"
             ],
-            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
+            "sha256": "8bdcb94ec7aafb764f26eae3b9f08a71098cf4d2e6f34d32ecb6613501153b4d"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "runShadow"
             ],
-            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
+            "sha256": "d317ca9cd3650dbd017057cd7e926e2f2abb58cef1cff01357b2d36cc560907f"
           },
           {
             "path": "go/codec.go",
@@ -4260,14 +4260,14 @@
               "errorEvent",
               "duration"
             ],
-            "sha256": "2b514580059f0b23d0aeed8892f3652a7329482f635b93e42b28932d89a5cd46"
+            "sha256": "8bdcb94ec7aafb764f26eae3b9f08a71098cf4d2e6f34d32ecb6613501153b4d"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "shadowEvent"
             ],
-            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
+            "sha256": "d317ca9cd3650dbd017057cd7e926e2f2abb58cef1cff01357b2d36cc560907f"
           }
         ]
       }

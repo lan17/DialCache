@@ -380,3 +380,37 @@ func TestCancelledRequestFlightCancelsTheProcessFlightItWaitsFor(t *testing.T) {
 		}
 	})
 }
+
+func TestAbandonedWorkFillsNoLocalOrRequestCache(t *testing.T) {
+	for name, policy := range map[string]Policy{"local": {LocalTTL: time.Minute}, "request": {RequestLocal: true}} {
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				cache := MustNew(WithoutCompression())
+				op := Operation[int]{Identity: Identity{Namespace: "lifetime", KeyType: "id", ID: "fill", UseCase: "get"}, Policy: policy, SourceTimeout: NoTimeout}
+				ctx, done := cache.Enable(context.Background())
+				defer done()
+				release := make(chan struct{})
+				var calls atomic.Int64
+				// The first query ignores its context and returns 7 after its
+				// only caller left; later queries return 8.
+				load := func(context.Context) (int, error) {
+					if calls.Add(1) == 1 {
+						<-release
+						return 7, nil
+					}
+					return 8, nil
+				}
+				short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+				defer cancel()
+				if _, err := GetOrLoad(short, cache, op, load); !errors.Is(err, context.DeadlineExceeded) {
+					t.Fatalf("first caller error = %v, want its own deadline", err)
+				}
+				close(release)
+				synctest.Wait()
+				if v, err := GetOrLoad(ctx, cache, op, load); v != 8 || err != nil {
+					t.Fatalf("next caller = (%d, %v), want (8, nil): abandoned work must not fill the cache", v, err)
+				}
+			})
+		})
+	}
+}

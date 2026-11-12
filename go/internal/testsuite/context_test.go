@@ -377,6 +377,37 @@ func TestContextDarkShadowFillOutlivesCaller(t *testing.T) {
 	}
 }
 
+func TestContextAbandonedCoalescedDarkShadowDoesNotFill(t *testing.T) {
+	remote := newContextRemote()
+	outcomes := make(chan string, 4)
+	cache := MustNew(WithRemote(remote), WithShadowOutcomes(func(e Event) { outcomes <- e.Outcome }))
+	// The local layer makes the dark call coalesce, so the source is shared work.
+	op := contextOperation("dark-shadow-abandoned", Policy{LocalTTL: time.Minute, RemoteTTL: time.Minute, RemoteRamp: Ptr(0.0), Shadow: &ShadowPolicy{Ramp: Ptr(100.0)}})
+	ctx, done := cache.Enable(context.Background())
+	defer done()
+	release := make(chan struct{})
+	callerCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	// The source ignores its context and returns only after its caller left.
+	if _, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (string, error) { <-release; return "old", nil }); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("dark call error = %v, want its own deadline", err)
+	}
+	close(release)
+	select {
+	case outcome := <-outcomes:
+		if outcome == "filled" {
+			t.Fatal("shared shadow work filled Redis after every caller left")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no shadow verdict")
+	}
+	remote.mu.Lock()
+	defer remote.mu.Unlock()
+	if len(remote.values) != 0 {
+		t.Fatalf("Redis values after abandoned shadow work = %d, want 0", len(remote.values))
+	}
+}
+
 func TestContextRequestLocalLeaderLeavesWhileOtherScopesWait(t *testing.T) {
 	cache := MustNew(WithRemote(newContextRemote()))
 	op := contextOperation("request-local", Policy{RemoteTTL: time.Minute, RequestLocal: true})

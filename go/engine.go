@@ -16,8 +16,8 @@ type execution[T any] struct {
 	policy                    ResolvedPolicy
 	load                      func(context.Context) (T, error)
 	timedOut                  atomic.Bool
-	// sharedWork marks a flight's shared work: its waiters leave on their own contexts.
-	sharedWork bool
+	// flight is set while the execution runs a flight's shared work.
+	flight *flight
 }
 
 // ms converts a whole-millisecond duration to the wire and clock unit.
@@ -163,7 +163,9 @@ func getOrLoad[T any](ctx context.Context, c *Cache, op Operation[T], load func(
 // requestLocal serves the enabled scope's memo and fills it after a miss.
 func (x *execution[T]) requestLocal() (T, error) {
 	c := x.cache
-	state, _ := x.ctx.Value(c).(scopeState)
+	// The request's own work: a process flight below replaces x.ctx and x.flight.
+	ctx, requestFlight := x.ctx, x.flight
+	state, _ := ctx.Value(c).(scopeState)
 	start := elapsedNow(c.settings.clock)
 	c.mu.Lock()
 	raw, found := state.owner.memo[x.key]
@@ -184,7 +186,7 @@ func (x *execution[T]) requestLocal() (T, error) {
 	v, err := x.shared()
 	if err == nil {
 		c.mu.Lock()
-		if state.owner.live {
+		if state.owner.live && waited(requestFlight, ctx) {
 			state.owner.memo[x.key] = v
 		}
 		c.mu.Unlock()
@@ -255,7 +257,7 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	flights[x.key] = f
 	c.mu.Unlock()
 	x.ctx = shared
-	x.sharedWork = true
+	x.flight = f
 	go func() {
 		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
 		// A process flight under this request flight has its own timer for the
@@ -292,6 +294,24 @@ func leave(f *flight) {
 	if f.waiters == 0 {
 		f.cancel()
 	}
+}
+
+// waited reports whether a caller still waits for the work: a waiter of its
+// flight f, or without a flight the caller of ctx. The caller holds c.mu.
+func waited(f *flight, ctx context.Context) bool {
+	if f == nil {
+		return ctx.Err() == nil
+	}
+	return f.waiters > 0
+}
+
+// abandoned reports that no caller waits for this execution's work. Work that
+// nobody waits for fills no cache, so a late result cannot overwrite a newer
+// flight's fill or land after an invalidation.
+func (x *execution[T]) abandoned() bool {
+	x.cache.mu.Lock()
+	defer x.cache.mu.Unlock()
+	return !waited(x.flight, x.ctx)
 }
 
 // work is a flight's shared work. It is chosen here, not passed in as a
@@ -422,9 +442,7 @@ func (x *execution[T]) traverse() (T, error) {
 		}
 		return v, err
 	}
-	// Work that no caller waits for any more fills no cache, so it cannot
-	// overwrite a newer flight's fill or land after an invalidation.
-	if x.ctx.Err() != nil {
+	if x.abandoned() {
 		return v, nil
 	}
 	if remote.kind != "error" {
@@ -445,6 +463,9 @@ type localResult[T any] struct {
 }
 
 func (x *execution[T]) putLocal(value T) {
+	if x.abandoned() {
+		return
+	}
 	_, err := callSafely(func() (struct{}, error) {
 		x.cache.local.Put(x.key, value, ms(x.policy.Local.TTL))
 		return struct{}{}, nil
@@ -480,7 +501,7 @@ func (x *execution[T]) source(layer string) (T, error) {
 	defer cancel()
 	p := startPending(func() (T, error) { return x.load(ctx) })
 	wait := x.ctx
-	if x.sharedWork {
+	if x.flight != nil {
 		// Waiters leave on their own contexts, so shared work waits for its source
 		// until the budget. A source that ignores a cancelled context then still
 		// holds its flight, and the key gets no second copy of it.
