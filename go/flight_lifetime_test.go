@@ -425,9 +425,15 @@ func TestCallerLeavingDuringEncodeStopsTheWrite(t *testing.T) {
 			},
 			write: func(Frame) error { writes.Add(1); return nil },
 		}
-		cache := MustNew(WithRemote(remote), WithoutCompression(), WithRemoteReadTimeout(time.Second))
+		var clamps atomic.Int64
+		observe := func(e Event) {
+			if e.Kind == "error" && e.Data["error"] == "tracked_ttl_clamped" {
+				clamps.Add(1)
+			}
+		}
+		cache := MustNew(WithRemote(remote), WithoutCompression(), WithRemoteReadTimeout(time.Second), WithObserver(observe))
 		codec := blockingCodec{entered: make(chan struct{}), release: make(chan struct{})}
-		op := Operation[int]{Identity: Identity{Namespace: "lifetime", KeyType: "id", ID: "encode", UseCase: "get"}, Policy: Policy{RemoteTTL: time.Minute}, Codec: codec}
+		op := Operation[int]{Identity: Identity{Namespace: "lifetime", KeyType: "id", ID: "encode", UseCase: "get", Tracked: true}, Policy: Policy{RemoteTTL: 2 * time.Hour}, Codec: codec}
 		ctx, done := cache.Enable(context.Background())
 		defer done()
 		callerCtx, cancel := context.WithCancel(ctx)
@@ -443,8 +449,8 @@ func TestCallerLeavingDuringEncodeStopsTheWrite(t *testing.T) {
 		}
 		close(codec.release)
 		synctest.Wait()
-		if writes.Load() != 0 {
-			t.Fatalf("writes = %d, want 0 after the only caller left during encoding", writes.Load())
+		if writes.Load() != 0 || clamps.Load() != 0 {
+			t.Fatalf("writes = %d, TTL clamp events = %d; want 0 and 0 after the only caller left during encoding", writes.Load(), clamps.Load())
 		}
 	})
 }
@@ -518,6 +524,45 @@ func TestCallerLeavingDuringTheTTLClampEventStopsTheWrite(t *testing.T) {
 		synctest.Wait()
 		if writes.Load() != 0 {
 			t.Fatalf("writes = %d, want 0 after the only caller left during the TTL clamp event", writes.Load())
+		}
+	})
+}
+
+func TestFollowerOfCancelledWorkThatPanicsRetries(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newLifetimeFixture(Policy{StaleOnErrorMaxAge: Ptr(time.Hour)})
+		ctx, done := f.cache.Enable(context.Background())
+		defer done()
+		gate := make(chan struct{})
+		// Cancelled, the source returns an error that panics when the stale
+		// recovery check classifies it.
+		load := func(ctx context.Context) (int, error) {
+			if f.calls.Add(1) > 1 {
+				return 7, nil
+			}
+			<-ctx.Done()
+			<-gate
+			var err *nilUnwrapError
+			return 0, err
+		}
+		leaderCtx, cancelLeader := context.WithCancel(ctx)
+		leader := make(chan error, 1)
+		go func() { _, err := f.get(leaderCtx, load); leader <- err }()
+		synctest.Wait()
+		cancelLeader()
+		if err := <-leader; !errors.Is(err, context.Canceled) {
+			t.Fatalf("leader error = %v, want its own cancellation", err)
+		}
+		type result struct {
+			v   int
+			err error
+		}
+		follower := make(chan result, 1)
+		go func() { v, err := f.get(ctx, load); follower <- result{v, err} }()
+		synctest.Wait()
+		close(gate)
+		if got := <-follower; got.v != 7 || got.err != nil || f.calls.Load() != 2 {
+			t.Fatalf("follower = (%d, %v) after %d source calls; want (7, nil) from fresh work after the cancelled work panicked", got.v, got.err, f.calls.Load())
 		}
 	})
 }

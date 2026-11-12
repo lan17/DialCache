@@ -257,14 +257,13 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	x.ctx = shared
 	x.flight = f
 	go func() {
-		f.value, f.err = callSafely(func() (T, error) {
-			v, err := x.work(owner)
+		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
+		if shared.Err() != nil {
 			// A source timeout is the work's own outcome, which a follower inherits.
-			// errors.As runs the source error's own methods, so a panic in them is
-			// recovered here like any other source panic.
-			f.cutShort = shared.Err() != nil && !errors.As(err, new(*FallbackTimeoutError))
-			return v, err
-		})
+			// errors.As runs the error's own methods; one that panics is not a timeout.
+			timedOut, _ := callSafely(func() (bool, error) { return errors.As(f.err, new(*FallbackTimeoutError)), nil })
+			f.cutShort = !timedOut
+		}
 		cancel()
 		c.mu.Lock()
 		if flights[x.key] == f {
