@@ -165,7 +165,8 @@ in-memory values as immutable.
 
 Compression defaults to a 4,096-byte threshold and zstd level 3;
 `WithCompression` tunes both. `WithoutCompression` disables compressed writes;
-reads still accept compressed entries.
+reads still accept compressed entries, and raw payloads that begin with an
+envelope marker are escaped ([compression](https://lan17.github.io/DialCache/redis.html#compression)).
 The wire contract requires interoperable decompression, not identical
 compressed bytes.
 

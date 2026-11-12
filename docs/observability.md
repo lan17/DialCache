@@ -784,9 +784,12 @@ dictionaries use the shared names and camelCase labels, such as `cacheNamespace`
 an optional `supports("shadowValidation")` method can opt out.
 
 The `logger` option accepts a standard Python-compatible warning logger.
-DialCache calls `warning(message, details)` and awaits any awaitable it returns,
-so make sure it settles: pending logging retains resources, but not the compared
-values. See the [generated Python API](api.md) for signatures.
+DialCache calls `warning(message, details)`. When the call returns an awaitable,
+DialCache drives it in a task of its own on the event loop, so logging does not
+delay the cache call. Make sure it settles: an awaitable that never settles keeps
+its task, the awaitable and the warning's namespace, use-case and key-type labels
+pending, but neither compared value. See the [generated Python API](api.md) for
+signatures.
 
 </LanguageContent>
 

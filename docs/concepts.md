@@ -121,7 +121,8 @@ A local or remote TTL does not enable request-local caching; opt into it explici
 One LRU holds entries across all use cases in an instance. Its capacity
 defaults to 10,000 and counts entries, not object bytes. Reads update LRU order
 without extending insertion TTLs. TTLs count monotonic elapsed time, so
-wall-clock adjustments do not change when an entry expires.
+wall-clock adjustments do not change when an entry expires. An entry whose age
+has reached its TTL has expired, so a lookup at exactly the TTL boundary misses.
 
 A capacity of zero disables storage. A valid local TTL and admitted ramp still
 activate that path: it misses and can coalesce concurrent calls. Use a zero

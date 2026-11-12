@@ -140,7 +140,7 @@ for sampling and comparison behavior.
 | Go and Rust implementations and shared behavior contracts | [Go guide](https://github.com/lan17/DialCache/blob/main/go/README.md) · [Rust guide](https://github.com/lan17/DialCache/blob/main/rust/README.md) · [Quint specification](https://github.com/lan17/DialCache/blob/main/formal/README.md) · [Worked walkthrough](https://github.com/lan17/DialCache/blob/main/formal/guides/WALKTHROUGH.md) |
 
 The [documentation index](https://lan17.github.io/DialCache/) also links to client
-setup, observability, upgrades, and the maintainer guide. Everything is
+setup, observability, and upgrades. Everything is
 [readable as Markdown on GitHub](https://github.com/lan17/DialCache/tree/main/docs).
 
 MIT licensed. See [LICENSE](https://github.com/lan17/DialCache/blob/main/LICENSE).

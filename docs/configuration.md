@@ -157,7 +157,10 @@ Local and remote cohorts are layer-specific.
 
 Ramps select key cohorts, not requests or load, so a ramp of `10` does not
 guarantee 10% of calls, especially for a small or skewed key population.
-DialCache keeps the assignment stable across releases.
+DialCache keeps the assignment stable across releases. The bucket is the 32-bit
+FNV-1a hash of the UTF-16 code units of the logical key followed by `:local`,
+`:remote` or `:shadow`, divided by 2^32 and scaled to 100; the key is admitted
+when that value is below the ramp. All four ports compute the same bucket.
 
 Applications that need an externally coordinated cohort can use
 the runtime provider to return a sparse per-key ramp override of `0` or `100`.
