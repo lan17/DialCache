@@ -690,6 +690,7 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	if fence != nil && uint64(stamp) <= *fence {
 		return false, nil
 	}
+	// Checked before the clamp event too, so a skipped write emits none.
 	if allowed != nil && !allowed() {
 		return false, nil
 	}
@@ -700,6 +701,11 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	if x.op.Identity.Tracked && ttl > time.Hour {
 		ttl = time.Hour
 		x.errorEvent(layer, "tracked_ttl_clamped", false)
+	}
+	// The clamp event runs observers, which can block while the last caller
+	// leaves; check again right before the write.
+	if allowed != nil && !allowed() {
+		return false, nil
 	}
 	_, err = callSafely(func() (struct{}, error) {
 		return struct{}{}, x.cache.settings.remote.Write(x.ctx, x.remoteKey, Frame{CreatedAtMS: uint64(stamp), Binary: payload.Binary, Payload: payload.Bytes}, ttl)

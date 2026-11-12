@@ -482,3 +482,42 @@ func TestPanickingErrorFromAbandonedWorkDoesNotCrash(t *testing.T) {
 		}
 	})
 }
+
+func TestCallerLeavingDuringTheTTLClampEventStopsTheWrite(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var writes atomic.Int64
+		remote := boundaryRemote{
+			read: func(context.Context) (ReadResult, error) {
+				return ReadResult{Kind: "miss", Reason: "value_absent"}, nil
+			},
+			write: func(Frame) error { writes.Add(1); return nil },
+		}
+		entered, release := make(chan struct{}), make(chan struct{})
+		observe := func(e Event) {
+			if e.Kind == "error" && e.Data["error"] == "tracked_ttl_clamped" {
+				close(entered)
+				<-release
+			}
+		}
+		cache := MustNew(WithRemote(remote), WithoutCompression(), WithRemoteReadTimeout(time.Second), WithObserver(observe))
+		op := Operation[int]{Identity: Identity{Namespace: "lifetime", KeyType: "id", ID: "clamp", UseCase: "get", Tracked: true}, Policy: Policy{RemoteTTL: 2 * time.Hour}}
+		ctx, done := cache.Enable(context.Background())
+		defer done()
+		callerCtx, cancel := context.WithCancel(ctx)
+		result := make(chan error, 1)
+		go func() {
+			_, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (int, error) { return 7, nil })
+			result <- err
+		}()
+		<-entered
+		cancel()
+		if err := <-result; !errors.Is(err, context.Canceled) {
+			t.Fatalf("caller error = %v, want its own cancellation", err)
+		}
+		close(release)
+		synctest.Wait()
+		if writes.Load() != 0 {
+			t.Fatalf("writes = %d, want 0 after the only caller left during the TTL clamp event", writes.Load())
+		}
+	})
+}
