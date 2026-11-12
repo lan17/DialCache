@@ -16,6 +16,11 @@ from before the Go port have no matching Go tag. Publication is not atomic
 across npm, Go tags, crates.io and PyPI, so a version can appear for one port
 before another. A port's first registry release need not start at `0.1.0`.
 
+Before 1.0, a breaking change raises the minor version and is marked
+`BREAKING CHANGE` in the release notes; a new feature also raises the minor
+version, and other changes raise the patch version. Read the release notes
+before moving to a new minor version.
+
 ## Tracked protocol cutover
 
 The current protocol writes one complete client-stamped frame with native `SET`.

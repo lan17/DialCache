@@ -89,9 +89,11 @@ If the source succeeds, normal refill rules apply; the retained candidate is not
 deserialized. If the source rejects, DialCache calls the selected classifier. An
 accepted rejection authorizes a recovery check, even when no candidate exists.
 
-Recovery requires a decodable candidate with `0 <= age < M` at return time.
-Crossing `M` during decoding prevents serving. A missing, expired, or undecodable
-candidate preserves the **exact original source error**.
+DialCache checks the candidate's age before decoding it: a candidate that has
+reached `M` is a recovery miss, and its payload is neither decompressed nor
+deserialized. Otherwise it decodes the candidate and checks `0 <= age < M` again
+before returning, so crossing `M` during decoding prevents serving. A missing,
+expired, or undecodable candidate preserves the **exact original source error**.
 
 ## Choose which errors permit recovery
 

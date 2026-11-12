@@ -13,7 +13,8 @@ go get github.com/lan17/DialCache/go@latest
 
 Go 1.25 or later is required. Pin the selected version in `go.mod`. Released Go
 modules use `go/vX.Y.Z` tags at the same source commit as npm version `X.Y.Z`;
-older npm releases from before the Go port have no matching Go tag. The site
+older npm releases from before the Go port have no matching Go tag. From 2.0.0
+the module path gains a `/v2` suffix, as Go modules require. The site
 follows `main`, so consult tagged source for an installed older release.
 
 The module has no Node.js runtime dependency.

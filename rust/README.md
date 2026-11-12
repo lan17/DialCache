@@ -179,8 +179,9 @@ sentinel decodes as JSON `null`, so `Option<T>` destinations read it as
 `disable_compression` stores payloads raw while reads still accept compressed
 entries. The wire contract requires interoperable decompression, not identical
 compressed bytes. Custom runtimes must support `Runtime::spawn_blocking`
-for compression and decompression. Synchronous protocol helpers remain
-synchronous.
+for compression and decompression; [compression](https://lan17.github.io/DialCache/redis.html#compression)
+lists the sizes and levels that use it and the fail-open behavior when its
+queue is full. Synchronous protocol helpers remain synchronous.
 
 The default CPU executor is shared across cache instances: two worker threads
 and two queued jobs. Admission never waits for queue space. Saturation or worker
