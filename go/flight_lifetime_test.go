@@ -132,24 +132,21 @@ func TestAbandonedRequestFlightCancelsTheProcessFlightItWaitsFor(t *testing.T) {
 	})
 }
 
-// firstHangs returns a loader whose first call hangs until its context ends,
-// like a query on a stuck database, and whose later calls return 7.
-func (f *lifetimeFixture) firstHangs() func(context.Context) (int, error) {
-	return func(ctx context.Context) (int, error) {
-		if f.calls.Add(1) == 1 {
-			<-ctx.Done()
-			return 0, ctx.Err()
-		}
-		return 7, nil
-	}
-}
-
-func TestLeaderDeadlineEndsSharedWorkAndFollowersRetry(t *testing.T) {
+func TestLeaderDeadlineDoesNotEndSharedWork(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := newLifetimeFixture(Policy{})
 		ctx, done := f.cache.Enable(context.Background())
 		defer done()
-		load := f.firstHangs()
+		// A healthy source slower than the leader's deadline.
+		load := func(ctx context.Context) (int, error) {
+			f.calls.Add(1)
+			select {
+			case <-time.After(80 * time.Millisecond):
+				return 7, nil
+			case <-ctx.Done():
+				return 0, ctx.Err()
+			}
+		}
 		start := time.Now()
 		leaderCtx, cancelLeader := context.WithTimeout(ctx, 20*time.Millisecond)
 		defer cancelLeader()
@@ -162,13 +159,13 @@ func TestLeaderDeadlineEndsSharedWorkAndFollowersRetry(t *testing.T) {
 		if err := <-leader; !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("leader error = %v, want its own deadline", err)
 		}
-		if v != 7 || err != nil || f.calls.Load() != 2 || time.Since(start) != 20*time.Millisecond {
-			t.Fatalf("follower = (%d, %v) after %v and %d source calls; want (7, nil) from fresh work at the leader's 20ms deadline", v, err, time.Since(start), f.calls.Load())
+		if v != 7 || err != nil || f.calls.Load() != 1 || time.Since(start) != 80*time.Millisecond {
+			t.Fatalf("follower = (%d, %v) after %v and %d source calls; want (7, nil) from the shared 80ms source", v, err, time.Since(start), f.calls.Load())
 		}
 	})
 }
 
-func TestLoaderDeadlineErrorIsNotWorkExpiry(t *testing.T) {
+func TestLoaderDeadlineErrorDoesNotRestartWork(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := newLifetimeFixture(Policy{})
 		ctx, done := f.cache.Enable(context.Background())
@@ -210,31 +207,21 @@ func (r *stallingWriteRemote) Write(ctx context.Context, _ string, _ Frame, _ ti
 }
 func (r *stallingWriteRemote) Invalidate(context.Context, string, int64, int64) error { return nil }
 
-func TestStalledWriteEndsAtTheLeaderDeadline(t *testing.T) {
+func TestStalledWriteEndsWhenNoCallerWaits(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		remote := &stallingWriteRemote{}
 		cache := MustNew(WithRemote(remote), WithoutCompression(), WithRemoteReadTimeout(time.Second))
 		op := Operation[int]{Identity: Identity{Namespace: "lifetime", KeyType: "id", ID: "hot", UseCase: "get"}, Policy: Policy{RemoteTTL: time.Minute}}
 		ctx, done := cache.Enable(context.Background())
 		defer done()
-		load := func(context.Context) (int, error) { return 7, nil }
-		start := time.Now()
-		leaderCtx, cancelLeader := context.WithTimeout(ctx, 50*time.Millisecond)
-		defer cancelLeader()
-		followerCtx, cancelFollower := context.WithTimeout(ctx, time.Second)
-		defer cancelFollower()
-		leader := make(chan error, 1)
-		go func() { _, err := GetOrLoad(leaderCtx, cache, op, load); leader <- err }()
+		callerCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+		if _, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (int, error) { return 7, nil }); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("caller error = %v, want its own deadline while the write stalls", err)
+		}
 		synctest.Wait()
-		v, err := GetOrLoad(followerCtx, cache, op, load)
-		if v != 7 || err != nil || time.Since(start) != 50*time.Millisecond {
-			t.Fatalf("follower = (%d, %v) after %v; want (7, nil) once the stalled write ends at the leader's 50ms deadline", v, err, time.Since(start))
-		}
-		if err := <-leader; err != nil && !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("leader error = %v, want the value or its own deadline", err)
-		}
-		if remote.writes.Load() != 1 {
-			t.Fatalf("writes = %d, want 1", remote.writes.Load())
+		if remote.writes.Load() != 1 || cache.GetCoalescingState().Process.ActiveLeaders != 0 {
+			t.Fatalf("after the only caller left: writes = %d, published flights = %d; want the stalled write cancelled and the flight gone", remote.writes.Load(), cache.GetCoalescingState().Process.ActiveLeaders)
 		}
 	})
 }
@@ -256,11 +243,15 @@ func TestCallerCancelledAtEntryStartsNoSharedWork(t *testing.T) {
 	})
 }
 
-func TestRequestFlightRetriesProcessWorkThatExpiredAtAnotherLeaderDeadline(t *testing.T) {
+func TestRequestLeavingKeepsProcessWorkAnotherRequestWaitsFor(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		f := newLifetimeFixture(Policy{RequestLocal: true})
-		load := f.firstHangs()
-		// Two requests share one process flight; the first request leads it.
+		load := func(context.Context) (int, error) {
+			f.calls.Add(1)
+			time.Sleep(80 * time.Millisecond)
+			return 7, nil
+		}
+		// Two requests share one process flight; the first request leads it and leaves.
 		ctxB, doneB := f.cache.Enable(context.Background())
 		defer doneB()
 		ctxA, doneA := f.cache.Enable(context.Background())
@@ -276,8 +267,8 @@ func TestRequestFlightRetriesProcessWorkThatExpiredAtAnotherLeaderDeadline(t *te
 		if err := <-leader; !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("request B error = %v, want its own deadline", err)
 		}
-		if v != 7 || err != nil || f.calls.Load() != 2 {
-			t.Fatalf("request A = (%d, %v) after %d source calls; want (7, nil) from fresh process work", v, err, f.calls.Load())
+		if v != 7 || err != nil || f.calls.Load() != 1 {
+			t.Fatalf("request A = (%d, %v) after %d source calls; want (7, nil) from the shared process work", v, err, f.calls.Load())
 		}
 	})
 }

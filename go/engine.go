@@ -233,26 +233,17 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 			var zero T
 			return zero, err
 		}
-		// The work failed after its context ended: no caller was waiting, or it ran
-		// out of its leader's deadline. A follower with time left starts or joins
-		// fresh work instead of taking that failure as its own.
+		// The work was cancelled because no caller waited for it, and this
+		// follower joined before it returned. With time left, the follower starts
+		// or joins fresh work instead of taking that failure as its own.
 		if f.err != nil && f.cutShort {
 			continue
 		}
 		return followerResult[T](f)
 	}
 	// Followers share this work, so the leader's cancellation ends only its own
-	// wait. The leader's deadline still bounds the work, as when the leader ran it
-	// inline, so a hung source cannot hold a hot key past that deadline. The work
-	// is also cancelled when no caller waits for it.
-	deadline, hasDeadline := ctx.Deadline()
-	var shared context.Context
-	var cancel context.CancelFunc
-	if hasDeadline {
-		shared, cancel = context.WithDeadline(context.WithoutCancel(ctx), deadline)
-	} else {
-		shared, cancel = context.WithCancel(context.WithoutCancel(ctx))
-	}
+	// wait; the work is cancelled when no caller waits for it.
+	shared, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	f := &flight{done: make(chan struct{}), started: started, waiters: 1, cancel: cancel}
 	flights[x.key] = f
 	c.mu.Unlock()
@@ -260,9 +251,7 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	x.flight = f
 	go func() {
 		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
-		// A process flight under this request flight has its own timer for the
-		// same deadline and can fire first, so the deadline itself is checked too.
-		f.cutShort = shared.Err() != nil || hasDeadline && !time.Now().Before(deadline)
+		f.cutShort = shared.Err() != nil
 		cancel()
 		c.mu.Lock()
 		if flights[x.key] == f {
