@@ -258,7 +258,8 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	x.flight = f
 	go func() {
 		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
-		f.cutShort = shared.Err() != nil
+		// A source timeout is the work's own outcome, which a follower inherits.
+		f.cutShort = shared.Err() != nil && !errors.As(f.err, new(*FallbackTimeoutError))
 		cancel()
 		c.mu.Lock()
 		if flights[x.key] == f {
@@ -430,8 +431,8 @@ func (x *execution[T]) traverse() (T, error) {
 	}
 	v, err := x.source("remote")
 	if err != nil {
-		// A caller that stopped waiting gets its own context error, not a recovery.
-		if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAge > 0 && x.ctx.Err() == nil && x.canRecover(err) {
+		// Work that no caller waits for any more gets no recovery.
+		if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAge > 0 && !x.abandoned() && x.canRecover(err) {
 			if value, ok := x.recover(remote.frame); ok {
 				return value, nil
 			}
@@ -510,8 +511,8 @@ func (x *execution[T]) source(layer string) (T, error) {
 	// Once the wait ends the result is settled; cancel before observers run so a
 	// slow observer cannot keep a timed-out or abandoned source going.
 	cancel()
-	// A caller that stopped waiting is not a source failure.
-	if err != nil && x.ctx.Err() == nil {
+	// Work that no caller waits for any more is not a source failure.
+	if err != nil && !x.abandoned() {
 		x.errorEvent(layer, "fallback", true)
 	}
 	x.duration("fallback", layer, start, nil)
@@ -677,9 +678,6 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 		payload = EscapeRawPayload(payload)
 	}
 	x.event("storedSize", layer, map[string]any{"bytes": int64(len(payload.Bytes))})
-	if allowed != nil && !allowed() {
-		return false, nil
-	}
 	stamp, stampErr := x.writeTimestamp(layer)
 	if stampErr != nil {
 		return false, stampErr
@@ -694,6 +692,9 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	if x.op.Identity.Tracked && ttl > time.Hour {
 		ttl = time.Hour
 		x.errorEvent(layer, "tracked_ttl_clamped", false)
+	}
+	if allowed != nil && !allowed() {
+		return false, nil
 	}
 	_, err = callSafely(func() (struct{}, error) {
 		return struct{}{}, x.cache.settings.remote.Write(x.ctx, x.remoteKey, Frame{CreatedAtMS: uint64(stamp), Binary: payload.Binary, Payload: payload.Bytes}, ttl)
