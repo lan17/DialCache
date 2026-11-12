@@ -527,10 +527,11 @@ const MaxDecompressedBytes = 512 * 1024 * 1024
 const DefaultCompressionThresholdBytes = 4096
 const DefaultZstdLevel = 3
 
-// The decoder allocates a declared window before it reads any block, so a tiny
-// stored frame could otherwise force a 512 MiB allocation. 128 MiB is Node's
-// default windowLogMax (27): the largest window the TypeScript reader accepts.
-const maxZstdWindowBytes = 128 << 20
+// The decoder allocates a frame's window before it reads any block, so a tiny
+// stored frame could otherwise force a 512 MiB allocation. libzstd's default
+// reader limit, which the TypeScript, Rust and Python readers keep, is
+// (1<<27)+1 bytes; a single-segment frame's window is its content size.
+const maxZstdWindowBytes = 1<<27 + 1
 
 type CompressionConfig struct {
 	ThresholdBytes int

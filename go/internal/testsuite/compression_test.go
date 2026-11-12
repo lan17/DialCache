@@ -3,6 +3,7 @@ package dialcache_test
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"math/rand/v2"
 	"runtime"
 	"slices"
@@ -120,22 +121,33 @@ func TestCompressPayloadRoundTripsAcrossBlockSizes(t *testing.T) {
 	}
 }
 
-// rleZstdFrame returns a zstd frame that declares a 2^windowLog window, carries
-// no content size and holds n copies of b in RLE blocks of at most 128 KiB.
-func rleZstdFrame(windowLog int, b byte, n int) []byte {
-	frame := []byte{0x28, 0xb5, 0x2f, 0xfd, 0x00, byte((windowLog - 10) << 3)}
+// rleZstdFrame returns a zstd frame with the given frame header descriptor and
+// window or content size fields, holding n copies of b in RLE blocks of at most
+// 128 KiB.
+func rleZstdFrame(header []byte, b byte, n int) []byte {
+	frame := append([]byte{0x28, 0xb5, 0x2f, 0xfd}, header...)
 	for {
 		size := min(n, 128<<10)
 		n -= size
-		header := uint32(1)<<1 | uint32(size)<<3
+		block := uint32(1)<<1 | uint32(size)<<3
 		if n == 0 {
-			header |= 1
+			block |= 1
 		}
-		frame = append(frame, byte(header), byte(header>>8), byte(header>>16), b)
+		frame = append(frame, byte(block), byte(block>>8), byte(block>>16), b)
 		if n == 0 {
 			return frame
 		}
 	}
+}
+
+// declaredWindow is a frame header that declares a 2^windowLog window and no
+// content size, so the decoder sizes its history from the window.
+func declaredWindow(windowLog int) []byte { return []byte{0x00, byte((windowLog - 10) << 3)} }
+
+// singleSegment is a frame header with an 8-byte content size and no window
+// descriptor, which bounds the window by the content size.
+func singleSegment(size int) []byte {
+	return binary.LittleEndian.AppendUint64([]byte{0xe0}, uint64(size))
 }
 
 func measure(f func()) (allocated uint64, elapsed time.Duration) {
@@ -155,12 +167,12 @@ func measure(f func()) (allocated uint64, elapsed time.Duration) {
 // larger one without allocating it.
 func TestDecompressPayloadRejectsWindowsLargerThanTheTypeScriptReader(t *testing.T) {
 	for _, marker := range []byte{1, 2} {
-		accepted := DecompressPayload(Payload{Binary: true, Bytes: append([]byte{marker}, rleZstdFrame(27, 'x', 1)...)})
+		accepted := DecompressPayload(Payload{Binary: true, Bytes: append([]byte{marker}, rleZstdFrame(declaredWindow(27), 'x', 1)...)})
 		if accepted.Outcome != "decompressed" || string(accepted.Payload.Bytes) != "x" {
 			t.Fatalf("marker %d, 128 MiB window: outcome %q, payload %q", marker, accepted.Outcome, accepted.Payload.Bytes)
 		}
 		for _, windowLog := range []int{28, 29} {
-			stored := append([]byte{marker}, rleZstdFrame(windowLog, 'x', 1)...)
+			stored := append([]byte{marker}, rleZstdFrame(declaredWindow(windowLog), 'x', 1)...)
 			var read CompressionReadResult
 			allocated, elapsed := measure(func() { read = DecompressPayload(Payload{Binary: true, Bytes: stored}) })
 			if read.Outcome != "read_over_limit" || !bytes.Equal(read.Payload.Bytes, stored) || allocated > 1<<20 || elapsed > 100*time.Millisecond {
@@ -170,10 +182,25 @@ func TestDecompressPayloadRejectsWindowsLargerThanTheTypeScriptReader(t *testing
 	}
 }
 
+// A single-segment frame's window is its content size. Reads accept the same
+// sizes as libzstd's default reader limit, (1<<27)+1 bytes; libzstd and
+// klauspost write a single-segment frame only when the content fits the window.
+func TestDecompressPayloadMatchesLibzstdSingleSegmentLimit(t *testing.T) {
+	const size = 128<<20 + 1
+	read := DecompressPayload(Payload{Binary: true, Bytes: append([]byte{2}, rleZstdFrame(singleSegment(size), 'x', size)...)})
+	if read.Outcome != "decompressed" || len(read.Payload.Bytes) != size {
+		t.Fatalf("%d bytes: outcome %q, %d bytes", size, read.Outcome, len(read.Payload.Bytes))
+	}
+	stored := append([]byte{2}, rleZstdFrame(singleSegment(size+1), 'x', size+1)...)
+	if read := DecompressPayload(Payload{Binary: true, Bytes: stored}); read.Outcome != "read_over_limit" || !bytes.Equal(read.Payload.Bytes, stored) {
+		t.Fatalf("%d bytes: outcome %q", size+1, read.Outcome)
+	}
+}
+
 // Writers that store uncompressed values still read frames marked as zstd, so
 // the window bound holds on a tracked, remote-only read too.
 func TestOversizedZstdWindowFailsOpenWithoutAllocating(t *testing.T) {
-	raw, err := EncodeFrame(Frame{CreatedAtMS: uint64(time.Now().UnixMilli()), Binary: true, Payload: append([]byte{2}, rleZstdFrame(29, 'x', 1)...)})
+	raw, err := EncodeFrame(Frame{CreatedAtMS: uint64(time.Now().UnixMilli()), Binary: true, Payload: append([]byte{2}, rleZstdFrame(declaredWindow(29), 'x', 1)...)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +230,7 @@ func TestOversizedZstdWindowFailsOpenWithoutAllocating(t *testing.T) {
 // becomes a 3-byte U+FFFD. A 16 KiB frame of 512 MiB of 0xFF would otherwise
 // return 1.5 GiB of text, so the replaced text must also fit the 512 MiB cap.
 func TestDecompressPayloadBoundsReplacedText(t *testing.T) {
-	stored := append([]byte{1}, rleZstdFrame(17, 0xff, MaxDecompressedBytes)...)
+	stored := append([]byte{1}, rleZstdFrame(declaredWindow(17), 0xff, MaxDecompressedBytes)...)
 	var read CompressionReadResult
 	allocated, elapsed := measure(func() { read = DecompressPayload(Payload{Binary: true, Bytes: stored}) })
 	if read.Outcome != "read_over_limit" || !bytes.Equal(read.Payload.Bytes, stored) || allocated > 5<<30 {
