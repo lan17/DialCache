@@ -15,7 +15,7 @@
     },
     {
       "path": "docs/api.md",
-      "sha256": "315112302be59d3a112212ff05ba5f8d5c5e4d02ef220708c477f3a717082acb",
+      "sha256": "25ac59c05a03be05b352c010559ff9a8b412fa37f80886f800c547020ed4ec08",
       "entries": [
         {"title":"API reference","contracts":["B01"]},
         {"title":"Imports","contracts":["B01"]},
@@ -105,7 +105,7 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "912813dc308a0fb2b1953c02a991ca606879578d4589d48e2363b56f14299a4f",
+      "sha256": "409c3e6dd51f72d8df6e746fbcf1ee5a619cdc2f0f97beaf37a5b20c9c99c3c1",
       "entries": [
         {"title":"Getting started","contracts":["B01"]},
         {"title":"Install","contracts":["B01"]},
@@ -118,7 +118,7 @@
     },
     {
       "path": "docs/index.md",
-      "sha256": "9ddc84d8985dd0699524893fd0aa802b71760b190f888a28c94fb0d40f15509a",
+      "sha256": "e0c8c3b906c206e4912a29864e91ed0b8cba0ac0902f36e560bff686f50de60e",
       "entries": [
         {"title":"DialCache documentation","contracts":["B01"]},
         {"title":"Learn the model","contracts":["B01"]},
@@ -165,7 +165,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "ec2c671e9305fcb5e5ea2210613f037351cdd9a0947a6c17567d93cf68f08cde",
+      "sha256": "75046ba7ed6d03523421bb7004ea2458509f0721cf42611d2a480352eb400bf1",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -173,13 +173,12 @@
         {"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
         {"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
         {"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
-        {"title":"Redis client budgets","contracts":["E01","C23","C56"]},
-        {"title":"Conformance","contracts":["B01"]}
+        {"title":"Redis client budgets","contracts":["E01","C23","C56"]}
       ]
     },
     {
       "path": "docs/languages/python.md",
-      "sha256": "d6adc478599e184e585e15af8a3553f23e1749d041fe46f0358dbba1ee824b2e",
+      "sha256": "d646ba4c65d5f523bde81a9904cf62710ecbc9f39baffcef2ad5dabfa198d079",
       "entries": [
         {"title":"Python integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -187,26 +186,24 @@
         {"title":"Identity and policy","contracts":["W01","W02","C16","C18","C20","B01"]},
         {"title":"Values and cancellation","contracts":["B03","C25","C26","E04","B02"]},
         {"title":"Redis and observability","contracts":["C29","C32","W04","E01","X01","B01"]},
-        {"title":"Sharing Redis with other languages","contracts":["W01","W02","E04","B03","B01"]},
-        {"title":"Validation","contracts":["B01"]}
+        {"title":"Sharing Redis with other languages","contracts":["W01","W02","E04","B03","B01"]}
       ]
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "ab4fd96e1664d9525adba0d80d9be6f209329d6ab1cf35091891f5c3c59a719f",
+      "sha256": "a5700605880b4ecd93ab68d7bacd9175f0a7385bee1b7b8e31c9adbcde5bbe22",
       "entries": [
         {"title":"Rust integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
         {"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
         {"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
         {"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
-        {"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
-        {"title":"Conformance","contracts":["B01"]}
+        {"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]}
       ]
     },
     {
       "path": "docs/languages/typescript.md",
-      "sha256": "27a4546a5bef235b84ff89c27ab50b4fa62a84d4bebcc17b687aeb4b514e95ec",
+      "sha256": "b101ce789a36c578c13b928f569030e14bbed671b8a3edc35f635248b209c4ed",
       "entries": [
         {"title":"TypeScript integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},

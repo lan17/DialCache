@@ -45,7 +45,6 @@ lifetime, argument binding and application-owned clients.
 
 <LanguageContent language="typescript">
 
-The following TypeScript usage notes retain the established guide anchors.
 The <a href="./reference/typescript/index.html" target="_self">generated TypeDoc reference</a> includes
 the complete exported signatures.
 

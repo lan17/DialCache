@@ -20,17 +20,17 @@ serde = { version = "1", features = ["derive"] }
 ```
 
 Adjust the path to your checkout. The core crate requires Rust 1.85 or later;
-the current `redis` dependency requires 1.88. The repository pins its CI toolchain
-in `rust/rust-toolchain.toml`. Available registry versions are listed on
+the current `redis` dependency requires 1.88. The crate has no Node.js runtime
+dependency. Available registry versions are listed on
 [crates.io](https://crates.io/crates/dialcache); docs.rs builds their API references.
 
 Build the cache inside a live Tokio runtime with the time driver enabled. The
 default `TokioRuntime` captures that handle. `TokioRuntime::from_handle` permits
 an explicit runtime, and the public `Runtime` trait supports other integrations.
 
-The [getting-started example](../getting-started.md#wrap-a-reader) is imported
-from an executed native test. A complete standalone example is available in
-[`rust/examples/basic.rs`](https://github.com/lan17/DialCache/blob/main/rust/examples/basic.rs):
+See the [getting-started example](../getting-started.md#wrap-a-reader) for a
+complete reader, or run the
+[standalone example](https://github.com/lan17/DialCache/blob/main/rust/examples/basic.rs):
 
 ```bash
 cd rust
@@ -111,14 +111,6 @@ replaces it, and is the only source of differences for an operation whose
 `preview` is custom or `None`, or one built with `with_codec`. See
 [confirmed mismatch logging](../shadow-validation.md#confirmed-mismatch-logging).
 
-Large compression jobs and all zstd decompression use a bounded CPU executor.
-Application codecs choose their own scheduling. See [compression](../redis.md#compression)
-for thresholds and fail-open behavior on executor saturation.
-
-## Conformance
-
-Run `make check-rust` from the repository root for native and committed smoke
-checks. The crate has no Node dependency; repository conformance tooling uses
-Node to replay the same histories as the other ports. The
-[formal guide](https://github.com/lan17/DialCache/blob/main/formal/README.md)
-explains complete validation and reproducing one history.
+Application codecs control their own scheduling. See
+[compression](../redis.md#compression) for thresholds and fail-open behavior
+when compression or decompression capacity is exhausted.

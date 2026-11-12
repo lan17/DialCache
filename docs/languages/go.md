@@ -16,9 +16,11 @@ modules use `go/vX.Y.Z` tags at the same source commit as npm version `X.Y.Z`;
 older npm releases from before the Go port have no matching Go tag. The site
 follows `main`, so consult tagged source for an installed older release.
 
-The [getting-started example](../getting-started.md#wrap-a-reader) is imported
-from a native Go test. The module also includes a runnable
-[`ExampleCached`](https://github.com/lan17/DialCache/blob/main/go/example_test.go).
+The module has no Node.js runtime dependency.
+
+See the [getting-started example](../getting-started.md#wrap-a-reader) for a
+complete Go reader, or the runnable
+[`ExampleCached`](https://github.com/lan17/DialCache/blob/main/go/example_test.go) example.
 
 ## Request scope and operations
 
@@ -98,7 +100,6 @@ replaces the built-in difference computation of confirmed-mismatch warnings; a
 `MismatchEntry` side set to `Absent` is omitted. See
 [comparison semantics](../shadow-validation.md#comparison-semantics).
 
-
 ### Redis client budgets
 
 DialCache bounds only its own wait for a remote read. The read context has no
@@ -165,11 +166,3 @@ Build one client per process and reuse it.
 Give `Invalidate` a context deadline. Do not derive a socket deadline from
 `ReadBudget`: a deadline that cuts a slow command closes its connection, and the
 reconnects add load while Redis is slow.
-
-## Conformance
-
-The module replays the same histories as TypeScript and Rust. The cache library
-has no Node dependency; only repository conformance tooling uses Node. For
-native checks run `make check-go` from the repository root. The
-[formal guide](https://github.com/lan17/DialCache/blob/main/formal/README.md)
-explains complete validation and reproducing one history.
