@@ -235,9 +235,16 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 		}
 		// The work was cancelled because no caller waited for it, and this
 		// follower joined before it returned. With time left, the follower starts
-		// or joins fresh work instead of taking that failure as its own.
+		// or joins fresh work instead of taking that failure as its own. The work
+		// unpublishes its flight before it settles; a flight still published here
+		// would be joined again forever, so its result stands.
 		if f.err != nil && f.cutShort {
-			continue
+			c.mu.Lock()
+			unpublished := flights[x.key] != f
+			c.mu.Unlock()
+			if unpublished {
+				continue
+			}
 		}
 		return followerResult[T](f)
 	}
