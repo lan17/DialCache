@@ -204,6 +204,7 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	ctx := x.ctx
 	if f := flights[x.key]; f != nil {
 		f.followers++
+		f.waiters++
 		c.mu.Unlock()
 		x.event("coalesced", "", map[string]any{"scope": label})
 		select {
@@ -213,19 +214,23 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 		if err := ctx.Err(); err != nil {
 			c.mu.Lock()
 			f.followers--
+			leave(flights, x.key, f)
 			c.mu.Unlock()
 			var zero T
 			return zero, err
 		}
 		return followerResult[T](f)
 	}
-	f := &flight{done: make(chan struct{}), started: started}
+	// Followers share this work, so the leader's cancellation ends only its own
+	// wait; the work ends when no caller waits for it.
+	shared, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	f := &flight{done: make(chan struct{}), started: started, waiters: 1, cancel: cancel}
 	flights[x.key] = f
 	c.mu.Unlock()
-	// Followers share this work, so the leader's cancellation ends only its own wait.
-	x.ctx = context.WithoutCancel(ctx)
+	x.ctx = shared
 	go func() {
 		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
+		cancel()
 		c.mu.Lock()
 		if flights[x.key] == f {
 			delete(flights, x.key)
@@ -238,10 +243,26 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	case <-ctx.Done():
 	}
 	if err := ctx.Err(); err != nil {
+		c.mu.Lock()
+		leave(flights, x.key, f)
+		c.mu.Unlock()
 		var zero T
 		return zero, err
 	}
 	return followerResult[T](f)
+}
+
+// leave drops a waiter whose context ended; the caller holds c.mu. With no
+// waiter left, the shared work is cancelled and unpublished, so a later caller
+// starts fresh work instead of joining work that nobody waits for.
+func leave(flights map[string]*flight, key string, f *flight) {
+	f.waiters--
+	if f.waiters == 0 {
+		f.cancel()
+		if flights[key] == f {
+			delete(flights, key)
+		}
+	}
 }
 
 // work is a flight's shared work. It is chosen here, not passed in as a
