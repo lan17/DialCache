@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "8d0207d7edc3706ca8ff5d7d496086972258b07e4c41f52b1a5ac0c45097831f",
+      "sha256": "23800a53bc6f746de57e82c8d8f028807c99beda52e8af163aabddaf50ba064a",
       "entries": [
         {"title":"DialCache","contracts":["B01"]},
         {"title":"Install TypeScript","contracts":["B01"]},
@@ -334,14 +334,15 @@
     },
     {
       "path": "typescript/README.md",
-      "sha256": "e45fc57974c0693ef3b704f8b571137c16b70df6244239555cbc2a3729f16f31",
+      "sha256": "69efc9e9e9b92cf727a688e3fce29b21aaa2dca47662d1df850b863f492bc08f",
       "entries": [
         {"title":"DialCache","contracts":["B01"]},
         {"title":"Install","contracts":["B01"]},
         {"title":"Usage","contracts":["C01","C05","W01"]},
         {"title":"How reads work","contracts":["C05","C31"]},
         {"title":"Runtime control","contracts":["C16","C18"]},
-        {"title":"Documentation","contracts":["B01"]}
+        {"title":"Documentation","contracts":["B01"]},
+        {"title":"Development","contracts":["B01"]}
       ]
     },
     {
@@ -1155,7 +1156,7 @@
   "reviewedGuides": [
     {
       "path": "formal/README.md",
-      "sha256": "a27fae8c54e7f257437d72738ef610cc309233066a9d0fccea26255630130c13",
+      "sha256": "3d643b1f11c673de7a667fef23878d2586a0bdb57aed5ddee67e3fec9b7e6370",
       "entries": [
         {"title":"Executable DialCache specification"},
         {"title":"Start with your task"},
@@ -1768,7 +1769,7 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "da0f7d2bffaa110f7945d92897220366384dfc93d96af7171d809ffdda2e5a0e",
+      "sha256": "8f0a8bbd03f71d630f337a83c9c01f1e737bd7c634e7e7ac9d9a4b988fb511ea",
       "entries": [
         {"title":"Validation and evidence"},
         {"title":"Prerequisites"},
@@ -1801,13 +1802,13 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "afcdde22fe023e3f7677ff55926c3d233d467434b2b104ef8ad40d0a703c2cc0",
+      "sha256": "8a5d28440950af8a2e90cd7aa401f872ab0daf2eaedaa82a1a8fae70c870242f",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},
         {"title":"Configuration and effects"},
         {"title":"Values, codecs and observability"},
-        {"title":"Validation and reproducing a trace"}
+        {"title":"Development"}
       ],
       "review": {
         "kind": "contract-guide",
