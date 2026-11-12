@@ -173,8 +173,9 @@ age when stale recovery is active and the separate one-hour tracked cap.
 A semantic miss includes absent, unsupported, logically expired, future-dated,
 and watermark-fenced frames. It does not include a present payload that fails
 `load`: that is `deserialization_error`, with no repair. Miss reason and observed
-fence are independent. A logically expired value follows normal refill behavior
-and does not supply an observed watermark fence.
+fence are independent. A value that is logically expired when the shadow read
+settles is classified as a miss before the application codec decoder runs; it
+follows normal refill behavior and does not supply an observed watermark fence.
 
 `filled` means the client accepted the write before the deadline. `fill_error`
 means payload preparation or writing failed. Neither proves what remains in
@@ -277,7 +278,8 @@ Returned Redis payload bytes must remain stable after the adapter read settles.
 Keep arguments, captured state, and accepted source values immutable, or snapshot
 before the invocation, so detached work still refers to the key that was selected.
 
-Comparison does not reuse the caller's decoded hit object.
+Comparison does not reuse the caller's decoded hit object, and sampling does not
+copy, hash, or compare either value on the caller's path.
 
 ## Capacity, deadlines, and detachment
 
@@ -763,8 +765,9 @@ A top-level `UNDEFINED` is the absent value, and `None` is JSON `null`.
 `shadow_mismatch_diff=`, set beside `shadow_comparator` on `cached()` or
 `get_or_load()`, sets the hook. It returns a list of mappings, each with a str
 `"path"` and optional `"cached"` and `"source"` sides; a missing key or
-`UNDEFINED` omits a side. A hook that raises, returns an awaitable or a non-list,
-or omits `"path"` from any of the first 64 entries fails. Entries are logged
+`UNDEFINED` omits a side. A hook that raises, returns an awaitable (a coroutine
+is closed without running) or a non-list, or omits `"path"` from any of the
+first 64 entries fails. Entries are logged
 as returned, with `str()` of each path. A non-callable value raises
 `ConfigError`.
 

@@ -161,8 +161,9 @@ original integer matters.
 Components use percent encoding compatible with JavaScript `encodeURIComponent`,
 so delimiters inside values do not become structural separators. Namespace
 braces are rejected; tracked entity kinds and ids also reject braces. Untracked
-kinds and ids may contain encoded braces. Automatic key-construction failures
-follow the [fail-open path](concepts.md#fail-open-and-liveness).
+kinds and ids may contain encoded braces. Every component must be well-formed
+Unicode text; an unpaired surrogate is rejected. Automatic key-construction
+failures follow the [fail-open path](concepts.md#fail-open-and-liveness).
 
 <LanguageContent language="typescript">
 
