@@ -158,7 +158,16 @@ for sampling and comparison behavior.
 | Native implementations and shared behavior contracts | [TypeScript guide](typescript/README.md) · [Go guide](go/README.md) · [Rust guide](rust/README.md) · [Python guide](python/README.md) · [Quint specification](formal/README.md) · [Worked walkthrough](formal/guides/WALKTHROUGH.md) |
 
 The [documentation index](https://lan17.github.io/DialCache/) also links to client
-setup, observability, upgrades, and the maintainer guide. Everything is
+setup, observability, and upgrades. Everything is
 [readable as Markdown on GitHub](https://github.com/lan17/DialCache/tree/main/docs).
+
+## Development
+
+Run `make check` from the repository root for the routine checks of every language;
+[Validation and evidence](formal/guides/VALIDATION.md) lists the toolchains and the other
+lanes. [Development process](DEVELOPMENT_PROCESS.md) explains how a change travels from a
+request to a merged commit, the [maintainer guide](MAINTAINERS.md) covers validation,
+benchmarks, and releases, and [Writing shared documentation](WRITING-DOCS.md) explains how
+to change `docs/`, which is published as the reference for people who use DialCache.
 
 MIT licensed. See [LICENSE](https://github.com/lan17/DialCache/blob/main/LICENSE).

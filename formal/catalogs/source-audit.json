@@ -2,15 +2,47 @@
   "schemaVersion": 2,
   "sources": [
     {
+      "path": "MAINTAINERS.md",
+      "sha256": "c1031f47c4c76cafe0ce62b621872760ecac71a5b0633489063cbb72936a3295",
+      "entries": [
+        {"title":"Maintainer guide","contracts":["B01"]},
+        {"title":"Validation","contracts":["B01"]},
+        {"title":"Maintaining the reference","contracts":["E05","B01"]},
+        {"title":"Run the documentation site","contracts":["B01"]},
+        {"title":"Publish to GitHub Pages","contracts":["B01"]},
+        {"title":"Cache-path benchmark","contracts":["X02"]},
+        {"title":"Redis write benchmark","contracts":["X02"]},
+        {"title":"Stale-on-error benchmark","contracts":["X02"]},
+        {"title":"Releasing","contracts":["B01","E05"]},
+        {"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
+        {"title":"Retry a Rust publication","contracts":["B01","E05"]},
+        {"title":"Set up PyPI publishing once","contracts":["B01","E05"]},
+        {"title":"Retry a Python publication","contracts":["B01","E05"]}
+      ]
+    },
+    {
       "path": "README.md",
-      "sha256": "23800a53bc6f746de57e82c8d8f028807c99beda52e8af163aabddaf50ba064a",
+      "sha256": "2f57974de4039f45a3608464f1235a5567af7e6f32c7f58cf0232dde051e9304",
       "entries": [
         {"title":"DialCache","contracts":["B01"]},
         {"title":"Install TypeScript","contracts":["B01"]},
         {"title":"Usage","contracts":["C01","C05","W01"]},
         {"title":"How reads work","contracts":["C05","C31"]},
         {"title":"Runtime control","contracts":["C16","C18"]},
-        {"title":"Documentation","contracts":["B01"]}
+        {"title":"Documentation","contracts":["B01"]},
+        {"title":"Development","contracts":["B01"]}
+      ]
+    },
+    {
+      "path": "WRITING-DOCS.md",
+      "sha256": "ad940b793c46100c67c2b51d1771c401fe89eca5a09284e0448233f13d1edb3d",
+      "entries": [
+        {"title":"Writing shared documentation","contracts":["B01"]},
+        {"title":"Change a feature guide","contracts":["B01"]},
+        {"title":"Import tested examples","contracts":["B01"]},
+        {"title":"Run the checks","contracts":["B01"]},
+        {"title":"Generated references and evidence","contracts":["B01"]},
+        {"title":"Add a port","contracts":["B01"]}
       ]
     },
     {
@@ -33,18 +65,6 @@
         {"title":"Constructing keys directly","contracts":["W01","B01"]},
         {"title":"Errors","contracts":["C27","B01"]},
         {"title":"Custom integrations","contracts":["E01","B01","X01"]}
-      ]
-    },
-    {
-      "path": "docs/authoring.md",
-      "sha256": "757251e7c72ecdd3306ba812583ca67b5be564b6d4775f4e816246780bd0d124",
-      "entries": [
-        {"title":"Writing shared documentation","contracts":["B01"]},
-        {"title":"Change a feature guide","contracts":["B01"]},
-        {"title":"Import tested examples","contracts":["B01"]},
-        {"title":"Run the checks","contracts":["B01"]},
-        {"title":"Generated references and evidence","contracts":["B01"]},
-        {"title":"Add a port","contracts":["B01"]}
       ]
     },
     {
@@ -72,7 +92,7 @@
     },
     {
       "path": "docs/concepts.md",
-      "sha256": "afa3488fb34b1b3928c81b0bd5941716f35ea4da17a8b57605c9b415dc28f67d",
+      "sha256": "af79212f8e77de41c21e29bebc4022fd03574a5e6654696183889f24ca16b858",
       "entries": [
         {"title":"How DialCache works","contracts":["C01"]},
         {"title":"Identity governs reuse","contracts":["W01","E04"]},
@@ -118,7 +138,7 @@
     },
     {
       "path": "docs/index.md",
-      "sha256": "e0c8c3b906c206e4912a29864e91ed0b8cba0ac0902f36e560bff686f50de60e",
+      "sha256": "03cab86fc4187d4af98feb89e62920755d086d0aa34680c3e764309627f6fb39",
       "entries": [
         {"title":"DialCache documentation","contracts":["B01"]},
         {"title":"Learn the model","contracts":["B01"]},
@@ -191,7 +211,7 @@
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "a5700605880b4ecd93ab68d7bacd9175f0a7385bee1b7b8e31c9adbcde5bbe22",
+      "sha256": "ae1e0dcb12f62dc827c075c0e8f3c92ac298a6758e59d6d65205180b3dee9c4c",
       "entries": [
         {"title":"Rust integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -211,25 +231,6 @@
         {"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
         {"title":"Values and codecs","contracts":["W02","E04","B03"]},
         {"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]}
-      ]
-    },
-    {
-      "path": "docs/maintainers.md",
-      "sha256": "61eda3022f04eb70fd70ff8d4ea49959914599dc02802c1778e56e9b0c09adcf",
-      "entries": [
-        {"title":"Maintainer guide","contracts":["B01"]},
-        {"title":"Validation","contracts":["B01"]},
-        {"title":"Maintaining the reference","contracts":["E05","B01"]},
-        {"title":"Run the documentation site","contracts":["B01"]},
-        {"title":"Publish to GitHub Pages","contracts":["B01"]},
-        {"title":"Cache-path benchmark","contracts":["X02"]},
-        {"title":"Redis write benchmark","contracts":["X02"]},
-        {"title":"Stale-on-error benchmark","contracts":["X02"]},
-        {"title":"Releasing","contracts":["B01","E05"]},
-        {"title":"Set up crates.io publishing once","contracts":["B01","E05"]},
-        {"title":"Retry a Rust publication","contracts":["B01","E05"]},
-        {"title":"Set up PyPI publishing once","contracts":["B01","E05"]},
-        {"title":"Retry a Python publication","contracts":["B01","E05"]}
       ]
     },
     {
@@ -258,7 +259,7 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "dff2373d06ba29328a99024ff26867075af637f6ad35b9f9489b9ea2613e7516",
+      "sha256": "fce0b00a5ce212e1267aa3eda28f4e9334209d87730fb0ea0fe5f543b741888b",
       "entries": [
         {"title":"Redis and Valkey","contracts":["E01"]},
         {"title":"Install a client","contracts":["B01","E01"]},
@@ -317,7 +318,7 @@
     },
     {
       "path": "docs/upgrading.md",
-      "sha256": "0de57723b9b508ba25b6702259e9c836040264cc388e1909eaa275a046e884aa",
+      "sha256": "f957c5b77b8ff6f5c69cc570e3d5dd4cb04f7689cc46bacdeb343b55be15bbc0",
       "entries": [
         {"title":"Upgrading","contracts":["E05"]},
         {"title":"Tracked protocol cutover","contracts":["E05","W09"]},
@@ -1326,7 +1327,7 @@
     },
     {
       "path": "formal/guides/CONTRACTS.md",
-      "sha256": "b9bad07a7d1cc8485cf91dda40937231efb2548519c63ecdb4dee0e80b8627c1",
+      "sha256": "228903a65ee47ea51ff381bb299124e35e7555bbcaa9ff1c37651883c16c3919",
       "entries": [
         {"title":"Portable contract inventory"},
         {"title":"Where the boundary lies"},
@@ -1736,7 +1737,7 @@
     },
     {
       "path": "formal/guides/TEST-AUDIT.md",
-      "sha256": "3cf1504a1b61e00a3c04c0039bb2bd8d1d76e3a5d8103d47657fabcd021074b0",
+      "sha256": "e107e7ec644b332b55d7a621d0da43428499f04b1673b6932850fb8ea3af85e8",
       "entries": [
         {"title":"Docs and test behavior audit"},
         {"title":"Keeping the audit current"},

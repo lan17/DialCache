@@ -5,7 +5,7 @@ coverage/
 .formal-traces/
 docs/.vitepress/cache/
 docs/public/reference/
-docs/generated/
+formal/generated/behavior.md
 *.tgz
 .env
 .env.*

@@ -1,6 +1,6 @@
 # Maintainer guide
 
-[Documentation](index.md) · [Upgrading](upgrading.md)
+[Documentation](docs/index.md) · [Upgrading](docs/upgrading.md)
 
 This page covers repository validation, documentation maintenance, diagnostic
 benchmarks, and the existing release process.
@@ -74,16 +74,17 @@ there. Feature guides have one shared behavioral explanation plus selected
 native examples and notes. Native language guides explain contexts, ownership,
 codecs and installation; generated API references follow each port's source.
 
-Follow [documentation authoring](authoring.md) when changing a guide or adding a
+Follow [documentation authoring](WRITING-DOCS.md) when changing a guide or adding a
 language. Displayed runnable snippets import named regions from real native
 source files. CI compiles and executes those sources with behavioral assertions;
 API excerpts are explicitly labeled and do not claim the same test coverage.
 
 When behavior changes, update the shared guide and affected native examples in
 the same PR. Check defaults and bounds against source, and document rollout or
-compatibility implications in [Upgrading](upgrading.md). The generated
-[behavior catalogue](generated/behavior.md) reuses the formal case inventory;
-it does not turn a prose claim into proof.
+compatibility implications in [Upgrading](docs/upgrading.md). The generated
+behavior catalogue (`formal/generated/behavior.md`, written by
+`node scripts/generate-docs.mjs --catalogue-only`) reuses the formal case
+inventory; it does not turn a prose claim into proof.
 
 Each implementation owns its native source, tests, examples and package
 metadata under `typescript/`, `go/` or `rust/`. Shared guides, formal contracts,
@@ -324,7 +325,7 @@ gh secret set CARGO_REGISTRY_TOKEN --repo lan17/DialCache
 Enter the token at the prompt. The first publication can run entirely in the
 workflow; no local `cargo publish` is needed. The package check does not verify
 registry credentials or ownership. Until the first publication succeeds, use a
-checkout dependency as described in the [Rust guide](languages/rust.md).
+checkout dependency as described in the [Rust guide](docs/languages/rust.md).
 
 After the crate exists, configure its **Settings → Trusted Publishing** for
 GitHub owner `lan17`, repository `DialCache`, workflow `release.yaml`, with no
@@ -371,7 +372,7 @@ See [PyPI's pending publisher guide](https://docs.pypi.org/trusted-publishers/cr
 
 The package checks do not verify PyPI account ownership or the publisher
 configuration. Until the first successful publication, install from a checkout
-as described in the [Python guide](languages/python.md). Afterwards use
+as described in the [Python guide](docs/languages/python.md). Afterwards use
 `python -m pip install 'dialcache[redis]'` (omit the extra for local-only use).
 
 ### Retry a Python publication

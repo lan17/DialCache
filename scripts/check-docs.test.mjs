@@ -10,7 +10,7 @@ import { checkDocsLinks, checkDocsSources, checkFormalLinks } from './check-docs
 test('catalogue evidence links land on test definitions rather than earlier comments', () => {
   const root = fileURLToPath(new URL('../', import.meta.url));
   execFileSync(process.execPath, ['scripts/generate-docs.mjs', '--catalogue-only'], { cwd: root });
-  const catalogue = readFileSync(join(root, 'docs/generated/behavior.md'), 'utf8');
+  const catalogue = readFileSync(join(root, 'formal/generated/behavior.md'), 'utf8');
   for (const [model, name] of [
     ['shadow', 'explicitInequalityRequiresConfirmationTest'],
     ['independent', 'staggeredSourceStartsKeepIndependentBudgetsTest'],

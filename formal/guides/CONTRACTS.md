@@ -162,7 +162,7 @@ Each row identifies where the source's semantic rules land. Repeated tests in di
 | `docs/redis.md` | C22/C23/C27–C29, W01–W09; B01–B03, E01–E05, X02 |
 | `docs/api.md` | C01–C54/W01–W09 where those contracts are repeated; B01/B03, X01 for exact API/export/reference contracts |
 | `docs/observability.md` | C30/C47/C50–C54/C60, W04; X01 for detailed telemetry contracts |
-| `docs/upgrading.md`, `docs/maintainers.md` | E05, B01, X01/X02 for deployment, package/release/test workflow, and benchmarks |
+| `docs/upgrading.md`, `MAINTAINERS.md` | E05, B01, X01/X02 for deployment, package/release/test workflow, and benchmarks |
 
 | Implementation tests (`typescript/test/` basenames) | Inventory |
 | --- | --- |

@@ -1,8 +1,12 @@
 # Writing shared documentation
 
+`docs/` is published to GitHub Pages as the reference for people who use DialCache.
+Write it for them; material for contributors and maintainers lives in the repository root
+and in [`formal/`](formal/README.md).
+
 Maintain one feature guide for the portable behavior. Keep native setup and
-idioms in [TypeScript](languages/typescript.md), [Go](languages/go.md),
-[Rust](languages/rust.md), and [Python](languages/python.md). The language selector changes examples, binding notes,
+idioms in [TypeScript](docs/languages/typescript.md), [Go](docs/languages/go.md),
+[Rust](docs/languages/rust.md), and [Python](docs/languages/python.md). The language selector changes examples, binding notes,
 and API links while preserving the shared explanation and feature URL.
 
 ## Change a feature guide
@@ -115,10 +119,12 @@ TypeDoc reads TypeScript's exported entry points, `go doc -all` reads Go's publi
 package, rustdoc reads the Rust crate with all features, and standard-library
 `pydoc` reads Python's public package and integration modules. Python uses the
 interpreter in `PYTHON`, or `python/.venv/bin/python` by default. Their output and the
-[behavior catalogue](generated/behavior.md) are generated on every site build,
-ignored by Git, and published with the site. Edit public doc comments or the
-underlying reviewed inventory to change them. The existing TypeScript API usage
-notes supplement the generated signatures.
+behavior catalogue (`formal/generated/behavior.md`, written by
+`node scripts/generate-docs.mjs --catalogue-only`) are generated on every site
+build and ignored by Git; the API references are published with the site, the
+catalogue is not. Edit public doc comments or the underlying reviewed inventory
+to change them. The existing TypeScript API usage notes supplement the generated
+signatures.
 
 The catalogue is a navigation aid to registered models, regressions, and replay
 evidence. It is not a fresh conformance report. Executing examples verifies their
