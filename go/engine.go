@@ -257,9 +257,14 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	x.ctx = shared
 	x.flight = f
 	go func() {
-		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
-		// A source timeout is the work's own outcome, which a follower inherits.
-		f.cutShort = shared.Err() != nil && !errors.As(f.err, new(*FallbackTimeoutError))
+		f.value, f.err = callSafely(func() (T, error) {
+			v, err := x.work(owner)
+			// A source timeout is the work's own outcome, which a follower inherits.
+			// errors.As runs the source error's own methods, so a panic in them is
+			// recovered here like any other source panic.
+			f.cutShort = shared.Err() != nil && !errors.As(err, new(*FallbackTimeoutError))
+			return v, err
+		})
 		cancel()
 		c.mu.Lock()
 		if flights[x.key] == f {
@@ -685,6 +690,9 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	if fence != nil && uint64(stamp) <= *fence {
 		return false, nil
 	}
+	if allowed != nil && !allowed() {
+		return false, nil
+	}
 	ttl := x.policy.Remote.TTL
 	if x.policy.StaleOnErrorMaxAge > 0 {
 		ttl = x.policy.StaleOnErrorMaxAge
@@ -692,9 +700,6 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	if x.op.Identity.Tracked && ttl > time.Hour {
 		ttl = time.Hour
 		x.errorEvent(layer, "tracked_ttl_clamped", false)
-	}
-	if allowed != nil && !allowed() {
-		return false, nil
 	}
 	_, err = callSafely(func() (struct{}, error) {
 		return struct{}{}, x.cache.settings.remote.Write(x.ctx, x.remoteKey, Frame{CreatedAtMS: uint64(stamp), Binary: payload.Binary, Payload: payload.Bytes}, ttl)

@@ -448,3 +448,37 @@ func TestCallerLeavingDuringEncodeStopsTheWrite(t *testing.T) {
 		}
 	})
 }
+
+// nilUnwrapError is a typed-nil error whose Unwrap dereferences its receiver,
+// so errors.As on it panics.
+type nilUnwrapError struct{ inner error }
+
+func (e *nilUnwrapError) Error() string { return "nil unwrap" }
+func (e *nilUnwrapError) Unwrap() error { return e.inner }
+
+func TestPanickingErrorFromAbandonedWorkDoesNotCrash(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newLifetimeFixture(Policy{})
+		ctx, done := f.cache.Enable(context.Background())
+		defer done()
+		load := func(ctx context.Context) (int, error) {
+			<-ctx.Done()
+			var err *nilUnwrapError
+			return 0, err
+		}
+		callerCtx, cancel := context.WithCancel(ctx)
+		caller := make(chan error, 1)
+		go func() { _, err := f.get(callerCtx, load); caller <- err }()
+		synctest.Wait()
+		cancel()
+		if err := <-caller; !errors.Is(err, context.Canceled) {
+			t.Fatalf("caller error = %v, want its own cancellation", err)
+		}
+		// The abandoned work returns its error now; a panic while the flight
+		// classifies it would end the process.
+		synctest.Wait()
+		if v, err := f.get(ctx, func(context.Context) (int, error) { return 7, nil }); v != 7 || err != nil {
+			t.Fatalf("next call = (%d, %v), want (7, nil) from fresh work", v, err)
+		}
+	})
+}
