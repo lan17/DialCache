@@ -527,6 +527,11 @@ const MaxDecompressedBytes = 512 * 1024 * 1024
 const DefaultCompressionThresholdBytes = 4096
 const DefaultZstdLevel = 3
 
+// The decoder allocates a declared window before it reads any block, so a tiny
+// stored frame could otherwise force a 512 MiB allocation. 128 MiB is Node's
+// default windowLogMax (27): the largest window the TypeScript reader accepts.
+const maxZstdWindowBytes = 128 << 20
+
 type CompressionConfig struct {
 	ThresholdBytes int
 	Level          int
@@ -653,7 +658,7 @@ func DecompressPayload(payload Payload, limit ...int) CompressionReadResult {
 		result.Outcome = "fallback_raw"
 		return result
 	}
-	reader, err := zstd.NewReader(bytes.NewReader(body), zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(MaxDecompressedBytes))
+	reader, err := zstd.NewReader(bytes.NewReader(body), zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(MaxDecompressedBytes), zstd.WithDecoderMaxWindow(maxZstdWindowBytes))
 	if err != nil {
 		result.Outcome = "fallback_raw"
 		return result
@@ -672,7 +677,13 @@ func DecompressPayload(payload Payload, limit ...int) CompressionReadResult {
 		return result
 	}
 	if marker == 1 {
-		decoded = replacementUTF8(decoded)
+		var within bool
+		// The limit counts decoded bytes (portable vectors), but each ill-formed
+		// byte can grow to a 3-byte U+FFFD; keep the replaced text under the cap.
+		if decoded, within = replacementUTF8Within(decoded, MaxDecompressedBytes); !within {
+			result.Outcome = "read_over_limit"
+			return result
+		}
 	}
 	return CompressionReadResult{Payload{Bytes: decoded, Binary: marker == 2}, "decompressed"}
 }
