@@ -470,9 +470,10 @@ emits no recovery outcome. See [Stale-on-error](stale-on-error.md).
 Shadow value age is reported only for `match` and confirmed `mismatch`, at verdict
 time. Recovery age is reported only for `served`, at return time. Both use the
 observing application's epoch clock minus the frame's writer timestamp.
-Shadow age uses the original `C0` timestamp, even if confirmation finds identical
-payload bytes with a newer timestamp. It clamps to zero after clock rollback and
-skips nonfinite age observations.
+Shadow age uses the original `C0` timestamp (see
+[shadow validation](shadow-validation.md#the-c0-s-c1-algorithm)), even if
+confirmation finds identical payload bytes with a newer timestamp. It clamps to
+zero after clock rollback and skips nonfinite age observations.
 
 The future-offset histogram records a positive offset for valid decoded frames
 ahead of the observer clock. Ordinary and initial-shadow reads then miss;
@@ -540,8 +541,8 @@ original source rejection. See [Serialization](redis.md#serialization).
 
 Use duration, ratio and pre/post-size series together when changing threshold
 or level. A good compression ratio does not establish acceptable runtime cost.
-The [compression guide](redis.md#compression) explains native execution (including
-Rust's bounded CPU executor), the envelope and mixed-version rollout.
+The [compression guide](redis.md#compression) explains the envelope and
+mixed-version rollout.
 
 ## Confirmed mismatch warnings
 
@@ -593,11 +594,10 @@ Observers and metrics adapters receive an `Event` whose `Kind` is
 `shadowMismatchLogging`, with the outcome in `Event.Outcome`; the
 `WithShadowOutcomes` hook does not receive it. `hook_error` means
 `Operation.MismatchDiff` returned an error or panicked, or the built-in
-computation could not parse back a map, slice or `JSONObject` nested more than
-10,000 levels deep. A struct whose `MarshalJSON` writes a number outside double
-range, or whose JSON nests that deep, has no rendering and reports
-`render_error` instead. A Go logger returns nothing, so a `Warn` panic is its
-only `logger_error`.
+computation could not parse a rendering back; `render_error` means a value had
+no JSON rendering. The limits are listed under
+[Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging).
+A Go logger returns nothing, so a `Warn` panic is its only `logger_error`.
 
 </LanguageContent>
 
@@ -606,12 +606,11 @@ only `logger_error`.
 Observers receive `Event::ShadowMismatchLogging` with the use-case labels and a
 `ShadowMismatchLoggingOutcome`, and `MetricKind::ShadowMismatchLogging` maps it
 to the names above. `hook_error` means the `mismatch_diff` hook panicked, or
-the built-in computation could not parse a rendering back: one nested 128 or
-more levels deep, or, with `serde_json`'s `raw_value` feature on and
-`arbitrary_precision` off, a `RawValue` number outside double range.
-`render_error` also covers a selected field the operation has no renderer for
-and work the bounded CPU executor rejected. A `Logger` panic is the
-`logger_error`.
+the built-in computation could not parse a rendering back; `render_error`
+covers unavailable renderings and rendering-capacity exhaustion. The limits are
+listed under
+[Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging).
+A `Logger` panic produces `logger_error`.
 
 </LanguageContent>
 
@@ -785,15 +784,9 @@ dictionaries use the shared names and camelCase labels, such as `cacheNamespace`
 an optional `supports("shadowValidation")` method can opt out.
 
 The `logger` option accepts a standard Python-compatible warning logger.
-DialCache calls `warning(message, details)`, and when any warning's call returns
-an awaitable, DialCache drives it in a task of its own on the event loop. Unless
-a `hook_error` or `render_error` was already recorded, a confirmed-mismatch
-warning's `shadowMismatchLogging` outcome waits for that awaitable. An awaitable
-that never settles keeps its task pending, holding the awaitable and, for a
-confirmed mismatch, its namespace, use-case and key-type labels, but neither
-compared value. Each such warning retains one task: the cost of counting a
-delivery that fails after `warning` returns as `logger_error`. See the
-[generated Python API](api.md) for signatures.
+DialCache calls `warning(message, details)` and awaits any awaitable it returns,
+so make sure it settles: pending logging retains resources, but not the compared
+values. See the [generated Python API](api.md) for signatures.
 
 </LanguageContent>
 

@@ -152,7 +152,7 @@
     },
     {
       "path": "docs/keys.md",
-      "sha256": "09446ece068184cd0828ccb6f726a95b59d970d509a342ff3c6cff5d3d587504",
+      "sha256": "8a11d94bd2602a76c2bf4bac81207ab26140c7bc6651d17a3435b7f7161a6ef7",
       "entries": [
         {"title":"Keys and identity","contracts":["W01"]},
         {"title":"Anatomy of a key","contracts":["W01"]},
@@ -237,7 +237,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "ed88c26971eae18b957c0852c02d5ea35fdb814458827d79c7807a7c42c0db19",
+      "sha256": "5579ec829d03a82d63a34e39735b041f6714626b5b54d040effd537b03b23c71",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -284,7 +284,7 @@
     },
     {
       "path": "docs/shadow-validation.md",
-      "sha256": "e318acf6936ad4c9126363eff2c803d00a20596f92a00c543e645cb6ca765c34",
+      "sha256": "4c24bd7eaa6b88ebc4323b0e323359a78d14505e267c1fddd8c370e577c2410e",
       "entries": [
         {"title":"Shadow validation","contracts":["C47"]},
         {"title":"What a check establishes","contracts":["C50","C51"]},
@@ -306,7 +306,7 @@
     },
     {
       "path": "docs/stale-on-error.md",
-      "sha256": "c8309c1502169d15ec960014e9f9fa7201a0968ad18eac7bcea46626d0a56a4f",
+      "sha256": "eb3d2b59013bc37e279dc9479de9c86167f1130bd7be2f2ad0a3c9c5329cb654",
       "entries": [
         {"title":"Stale-on-error","contracts":["C40"]},
         {"title":"Fresh age and maximum age","contracts":["C40"]},
