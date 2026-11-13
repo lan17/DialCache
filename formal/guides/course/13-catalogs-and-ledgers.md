@@ -99,7 +99,7 @@ You will edit a tracked guide and undo it at the end.
    {
      sources: 50,
      tests: 633,
-     sections: 216,
+     sections: 221,
      reviewedGuides: 19,
      guideSections: 195
    }
