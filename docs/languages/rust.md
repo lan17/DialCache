@@ -19,7 +19,8 @@ serde = { version = "1", features = ["derive"] }
 ```
 
 Adjust the path to your checkout. The core crate requires Rust 1.85 or later;
-the current `redis` dependency requires 1.88. The crate has no Node.js runtime
+building the `redis` feature with this repository's lockfile requires Rust 1.88.
+The crate has no Node.js runtime
 dependency. Available registry versions are listed on
 [crates.io](https://crates.io/crates/dialcache); docs.rs builds their API references.
 

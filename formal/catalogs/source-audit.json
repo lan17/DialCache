@@ -125,7 +125,7 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "409c3e6dd51f72d8df6e746fbcf1ee5a619cdc2f0f97beaf37a5b20c9c99c3c1",
+      "sha256": "d9591172e2680824531564768959573dc577b7603728c0d5a58d557ccaaa47a2",
       "entries": [
         {"title":"Getting started","contracts":["B01"]},
         {"title":"Install","contracts":["B01"]},
@@ -211,7 +211,7 @@
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "04af81e10dd6b5090328d5618bbf77d2dc2af58047a479c35a3b25a6690a629c",
+      "sha256": "d298b5d3223a66f17342f0c645030e131526803c70f47d1dc98a1ce16b5785f4",
       "entries": [
         {"title":"Rust integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
