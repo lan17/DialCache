@@ -283,6 +283,12 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 		var zero T
 		return zero, err
 	}
+	// Like a caller without coalescing, the leader keeps a value that its work
+	// returned together with an error; followers get only the error.
+	if f.err != nil {
+		v, _ := assertValue[T](f.value)
+		return v, f.err
+	}
 	return followerResult[T](f)
 }
 

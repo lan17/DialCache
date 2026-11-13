@@ -566,3 +566,15 @@ func TestFollowerOfCancelledWorkThatPanicsRetries(t *testing.T) {
 		}
 	})
 }
+
+func TestCoalescedLeaderKeepsAValueReturnedWithAnError(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newLifetimeFixture(Policy{})
+		ctx, done := f.cache.Enable(context.Background())
+		defer done()
+		failed := errors.New("partial result")
+		if v, err := f.get(ctx, func(context.Context) (int, error) { return 7, failed }); v != 7 || !errors.Is(err, failed) {
+			t.Fatalf("leader = (%d, %v), want (7, %v), as without coalescing", v, err, failed)
+		}
+	})
+}
