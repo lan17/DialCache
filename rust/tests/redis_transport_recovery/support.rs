@@ -1,6 +1,7 @@
 use std::fs::{self, File};
 use std::future::Future;
 use std::net::TcpListener;
+use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -40,7 +41,7 @@ impl Directory {
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
-        fs::create_dir(&path).unwrap();
+        fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
         Self(path)
     }
 }
@@ -67,6 +68,7 @@ impl Server {
             ),
         )
         .unwrap();
+        fs::set_permissions(&config, fs::Permissions::from_mode(0o600)).unwrap();
         let log = File::create(directory.join(format!("{name}.log"))).unwrap();
         let mut command = Command::new("redis-server");
         command.arg(&config);
@@ -121,15 +123,28 @@ pub async fn connect(client: &Client) -> redis::RedisResult<MultiplexedConnectio
         .await
 }
 
-pub async fn ready(client: &Client) -> MultiplexedConnection {
+pub async fn ready(client: &Client, server: &mut Server) -> MultiplexedConnection {
     let until = Instant::now() + Duration::from_secs(10);
     loop {
+        assert!(
+            server.child.try_wait().unwrap().is_none(),
+            "owned Redis process exited before readiness"
+        );
         if let Ok(mut connection) = connect(client).await {
-            if redis::cmd("PING")
+            if let Ok(info) = redis::cmd("INFO")
+                .arg("server")
                 .query_async::<String>(&mut connection)
                 .await
-                .is_ok()
             {
+                let pid = info
+                    .lines()
+                    .find_map(|line| line.strip_prefix("process_id:"))
+                    .and_then(|value| value.trim().parse::<u32>().ok());
+                assert_eq!(
+                    pid,
+                    Some(server.child.id()),
+                    "Redis endpoint does not belong to the owned child"
+                );
                 return connection;
             }
         }

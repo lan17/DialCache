@@ -21,14 +21,17 @@ cargo test --locked \
 ```
 
 The suite starts only disposable loopback services. It does not read an external
-Redis endpoint. Certificates and private keys are generated in a temporary
-directory and removed after each test. Child processes are killed and reaped on
-success, failure, and timeout.
+Redis endpoint. Readiness checks the owned child's liveness and verifies the
+responding server's process ID before workload commands. Certificates and private
+keys are generated in a temporary directory and removed after each test. Child
+processes are killed and reaped on success, failure, and timeout. Forced process
+death bypasses Rust cleanup.
 
-Native connection and command waits use a 200 ms budget, except the explicit
-50 ms mutation-timeout cases. The partial-read test disables the native response
+The `transport` target configures 200 ms connection and response timeouts, except
+the explicit 50 ms mutation-timeout cases. Queue and reconnect waits are not
+covered by the response timer. The partial-read test disables the native response
 timeout and requires the cache deadline to release the caller within 500 ms.
-Each asynchronous test has a 30-second deadline;
+Each test in that target has a 30-second deadline;
 each synchronous certificate-generation command has its own 10-second deadline.
 The TCP reply gate is an owned Tokio task that closes its sockets when dropped.
 
@@ -56,11 +59,11 @@ The TCP reply gate is an owned Tokio task that closes its sockets when dropped.
 - Transport shutdown: closing a connection with an incomplete reply releases the
   pending adapter read with an error.
 
-This is not a load test or a high-availability certification. It does not test
-multi-Sentinel quorum loss, split brain, lost replication, TLS Sentinel links,
-TLS Cluster routing, certificate rotation, native-tls, or automatic application
-connection replacement. Connection discovery and replacement remain application
-responsibilities.
+The `transport` target is not a load test or a high-availability certification.
+It does not test multi-Sentinel quorum loss, split brain, lost replication,
+TLS Sentinel links, TLS Cluster routing, certificate rotation, native-tls, or
+automatic application connection replacement. Connection discovery and
+replacement remain application responsibilities.
 
 ## Opt-in mixed load
 
@@ -74,6 +77,13 @@ DIALCACHE_REDIS_LOAD_SECONDS=10 cargo test --locked \
   --manifest-path rust/tests/redis_transport_recovery/Cargo.toml \
   --test mixed_load mixed_load_with_one_outage -- --ignored --nocapture
 ```
+
+Each run uses fresh local authentication, retained across its owned Redis
+restart. This prevents an active manager from sending workload commands to an
+unrelated server that takes the port during the outage. The configuration is
+stored in a private temporary directory and file, not in command arguments or
+logged URLs. Cleanup controls include a competing-listener test that rejects
+cache writes, invalidation and script mutation after reconnect.
 
 Use `120` instead of `10` for the longer case. The workload is fixed at 200 planned
 arrivals per second on four Tokio workers: 60% hot reads, 20% cold reads, 10%

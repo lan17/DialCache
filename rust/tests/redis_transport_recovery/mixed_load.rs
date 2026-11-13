@@ -5,6 +5,8 @@ compile_error!("The opt-in load fixture uses Linux process memory measurements."
 mod support;
 
 use std::future::Future;
+use std::io::Read;
+use std::os::unix::fs::PermissionsExt;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -13,11 +15,12 @@ use std::time::Duration;
 use dialcache::observe::CompressionOutcome;
 use dialcache::redis::RedisAdapter;
 use dialcache::{
-    BoxError, DialCache, Event, Identity, InvalidateRequest, Observer, Operation, Policy,
-    ReadContext, ReadRequest, ReadResult, RedisConnection, Remote, Runtime, SourceBudget,
+    BoxError, DialCache, Event, Frame, Identity, InvalidateRequest, Observer, Operation, Payload,
+    Policy, ReadContext, ReadRequest, ReadResult, RedisConnection, Remote, Runtime, SourceBudget,
     TokioRuntime, WriteRequest,
 };
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
+use redis::{Client, IntoConnectionInfo, RedisConnectionInfo};
 use tokio::sync::{oneshot, Notify, Semaphore};
 use tokio::task::JoinSet;
 use tokio::time::Instant;
@@ -354,6 +357,23 @@ struct Results {
     replacement_pid: AtomicU64,
 }
 
+fn authenticated_redis_config(port: u16) -> (Client, String) {
+    let mut bytes = [0; 32];
+    std::fs::File::open("/dev/urandom")
+        .unwrap()
+        .read_exact(&mut bytes)
+        .unwrap();
+    let password: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    let info = ("127.0.0.1", port)
+        .into_connection_info()
+        .unwrap()
+        .set_redis_settings(RedisConnectionInfo::default().set_password(&password));
+    (
+        Client::open(info).unwrap(),
+        format!("requirepass {password}"),
+    )
+}
+
 fn value(key: usize) -> String {
     let mut value = format!("entity:{key:08}|");
     value.extend(std::iter::repeat_n('x', VALUE_BYTES - value.len()));
@@ -417,8 +437,8 @@ async fn cleanup_controls() {
         for mode in 0..3 {
             let directory = Directory::new();
             let port = free_port();
-            let server = Server::start(&directory.0, "cleanup", port, "", false);
-            let mut connection = ready(&server.client()).await;
+            let mut server = Server::start(&directory.0, "cleanup", port, "", false);
+            let mut connection = ready(&server.client(), &mut server).await;
             let info: String = redis::cmd("INFO")
                 .arg("server")
                 .query_async(&mut connection)
@@ -450,6 +470,82 @@ async fn cleanup_controls() {
             assert_closed(port, &[pid]);
             println!("cleanup mode={mode} pid={pid} port={port} reaped=1 listener_closed=1");
         }
+        let directory = Directory::new();
+        let port = free_port();
+        let (client, configuration) = authenticated_redis_config(port);
+        let mut owned = Server::start(&directory.0, "auth-owner", port, &configuration, false);
+        assert_eq!(
+            std::fs::metadata(&directory.0).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            std::fs::metadata(directory.0.join("auth-owner.conf"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        ready(&client, &mut owned).await;
+        let mut manager = support::manager(&client).await;
+        owned.stop();
+        let mut other = Server::start(&directory.0, "auth-other", port, "", false);
+        let mut foreign = ready(&other.client(), &mut other).await;
+        let reconnect_rejected = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match redis::cmd("PING").query_async::<String>(&mut manager).await {
+                    Ok(_) => break false,
+                    Err(error) if error.kind() == redis::ErrorKind::AuthenticationFailed => {
+                        break true;
+                    }
+                    Err(_) => tokio::time::sleep(Duration::from_millis(20)).await,
+                }
+            }
+        })
+        .await
+        .expect("manager did not reach the replacement listener");
+        let remote = RedisAdapter::new(manager.clone());
+        let write_rejected = remote
+            .write(WriteRequest {
+                value_key: "{owned-reconnect}:value#frame".into(),
+                frame: Frame {
+                    created_at_ms: 1_000,
+                    payload: Payload::text("7"),
+                },
+                ttl_ms: 60_000,
+            })
+            .await
+            .is_err();
+        let invalidation_rejected = remote
+            .invalidate(InvalidateRequest {
+                watermark_key: "{owned-reconnect}#watermark".into(),
+                invalidated_at_ms: 1_500,
+                future_buffer_ms: 0,
+            })
+            .await
+            .is_err();
+        let script_rejected = redis::cmd("SCRIPT")
+            .arg("FLUSH")
+            .query_async::<()>(&mut manager)
+            .await
+            .is_err();
+        let keys: u64 = redis::cmd("DBSIZE").query_async(&mut foreign).await.unwrap();
+        let commands: String = redis::cmd("INFO")
+            .arg("commandstats")
+            .query_async(&mut foreign)
+            .await
+            .unwrap();
+        let mutations = commands.lines().any(|line| {
+            ["cmdstat_set:", "cmdstat_eval:", "cmdstat_evalsha:", "cmdstat_script"]
+                .iter()
+                .any(|command| line.starts_with(command))
+        });
+        assert!(
+            reconnect_rejected && write_rejected && invalidation_rejected && script_rejected
+                && keys == 0 && !mutations,
+            "unowned Redis: auth_rejected={reconnect_rejected} write_rejected={write_rejected} invalidation_rejected={invalidation_rejected} script_rejected={script_rejected} keys={keys} mutation_commands={mutations}"
+        );
+        println!("cleanup reconnect_auth=verified workload_mutations=0 foreign_keys=0");
     })
     .await
     .expect("cleanup controls exceeded their deadline");
@@ -471,10 +567,10 @@ async fn mixed_load_with_one_outage() {
 async fn run(seconds: u64) {
     let directory = Arc::new(Directory::new());
     let port = free_port();
-    let server = Server::start(&directory.0, "mixed", port, "", false);
-    ready(&server.client()).await;
-    let mut connection = server
-        .client()
+    let (client, configuration) = authenticated_redis_config(port);
+    let mut server = Server::start(&directory.0, "mixed", port, &configuration, false);
+    ready(&client, &mut server).await;
+    let mut connection = client
         .get_connection_manager_with_config(
             ConnectionManagerConfig::new()
                 .set_connection_timeout(Some(RAW_BUDGET))
@@ -531,7 +627,7 @@ async fn run(seconds: u64) {
     let server_info = info(&mut connection, "server").await.unwrap();
     let initial_pid = info_number(&server_info, "process_id");
     results.initial_pid.store(initial_pid, SeqCst);
-    println!("server phase=initial pid={initial_pid} port={port} bind=127.0.0.1 persistence=disabled client_concurrency=16 native_ms=80");
+    println!("server phase=initial pid={initial_pid} port={port} bind=127.0.0.1 persistence=disabled authentication=per_run client_concurrency=16 native_ms=80");
     let stop = Arc::new(Notify::new());
     let rss_before = rss_kib();
     results.rss_peak_kib.store(rss_before, SeqCst);
@@ -576,8 +672,9 @@ async fn run(seconds: u64) {
                 println!("fault event=stopped at_ms={}", begin.elapsed().as_millis());
             }
             if stopped && !restarted && now >= restart_at {
-                let replacement = Server::start(&control_directory.0, "mixed", port, "", false);
-                ready(&replacement.client()).await;
+                let mut replacement =
+                    Server::start(&control_directory.0, "mixed", port, &configuration, false);
+                ready(&client, &mut replacement).await;
                 server = Some(replacement);
                 restarted = true;
                 support::manager_ready(&mut control_connection).await;

@@ -74,7 +74,7 @@ async fn tls_checks_trust_and_hostname_then_reconnects() {
         let port = free_port();
         let mut server = certs.start(port, false);
         let client = certs.client("localhost", port, "ca", false);
-        let mut plain = ready(&client).await;
+        let mut plain = ready(&client, &mut server).await;
         let untrusted = connect(&certs.client("localhost", port, "other-ca", false))
             .await
             .expect_err("untrusted CA accepted")
@@ -102,8 +102,8 @@ async fn tls_checks_trust_and_hostname_then_reconnects() {
             .query_async::<String>(&mut reconnecting)
             .await
             .is_err());
-        let _replacement = certs.start(port, false);
-        ready(&client).await;
+        let mut replacement = certs.start(port, false);
+        ready(&client, &mut replacement).await;
         manager_ready(&mut reconnecting).await;
         assert!(
             redis::cmd("PING")
@@ -122,9 +122,9 @@ async fn tls_requires_a_valid_client_certificate_when_configured() {
     bounded(async {
         let certs = Certificates::new();
         let port = free_port();
-        let _server = certs.start(port, true);
+        let mut server = certs.start(port, true);
         let client = certs.client("localhost", port, "ca", true);
-        let connection = ready(&client).await;
+        let connection = ready(&client, &mut server).await;
         assert!(
             connect(&certs.client("localhost", port, "ca", false))
                 .await
@@ -141,13 +141,13 @@ async fn sentinel_rediscovery_preserves_replicated_watermark_after_promotion() {
     bounded(async {
         let directory = Directory::new();
         let mut primary = Server::start(&directory.0, "primary", free_port(), "", false);
-        ready(&primary.client()).await;
-        let replica = Server::start(&directory.0, "replica", free_port(),
+        ready(&primary.client(), &mut primary).await;
+        let mut replica = Server::start(&directory.0, "replica", free_port(),
             &format!("replicaof 127.0.0.1 {}\nrepl-diskless-sync-delay 0", primary.port), false);
-        let mut replica_connection = ready(&replica.client()).await;
-        let sentinel = Server::start(&directory.0, "sentinel", free_port(),
+        let mut replica_connection = ready(&replica.client(), &mut replica).await;
+        let mut sentinel = Server::start(&directory.0, "sentinel", free_port(),
             &format!("sentinel monitor fixture 127.0.0.1 {} 1\nsentinel down-after-milliseconds fixture 300\nsentinel failover-timeout fixture 2000", primary.port), true);
-        let mut sentinel_connection = ready(&sentinel.client()).await;
+        let mut sentinel_connection = ready(&sentinel.client(), &mut sentinel).await;
         let until = Instant::now() + Duration::from_secs(10);
         loop {
             let replicas: Vec<redis::Value> = redis::cmd("SENTINEL").arg("REPLICAS").arg("fixture")
@@ -206,8 +206,8 @@ async fn sentinel_rediscovery_preserves_replicated_watermark_after_promotion() {
 async fn partial_read_reply_times_out_without_refill_and_connection_remains_aligned() {
     bounded(async {
         let directory = Directory::new();
-        let server = Server::start(&directory.0, "partial", free_port(), "", false);
-        let direct = ready(&server.client()).await;
+        let mut server = Server::start(&directory.0, "partial", free_port(), "", false);
+        let direct = ready(&server.client(), &mut server).await;
         let gate = ResponseGate::start(server.port).await;
         let mut through = gate
             .client()
@@ -298,8 +298,8 @@ async fn partial_read_reply_times_out_without_refill_and_connection_remains_alig
 async fn lost_invalidation_reply_can_report_failure_after_the_watermark_committed() {
     bounded(async {
         let directory = Directory::new();
-        let server = Server::start(&directory.0, "lost-reply", free_port(), "", false);
-        let mut direct = ready(&server.client()).await;
+        let mut server = Server::start(&directory.0, "lost-reply", free_port(), "", false);
+        let mut direct = ready(&server.client(), &mut server).await;
         let gate = ResponseGate::start(server.port).await;
         let mut through = gate
             .client()
@@ -348,8 +348,8 @@ async fn lost_invalidation_reply_can_report_failure_after_the_watermark_committe
 async fn timed_out_mutations_can_execute_after_the_server_resumes() {
     bounded(async {
         let directory = Directory::new();
-        let server = Server::start(&directory.0, "late-mutation", free_port(), "", false);
-        let direct = ready(&server.client()).await;
+        let mut server = Server::start(&directory.0, "late-mutation", free_port(), "", false);
+        let direct = ready(&server.client(), &mut server).await;
         let connection = server
             .client()
             .get_multiplexed_async_connection_with_config(
@@ -385,8 +385,8 @@ async fn timed_out_mutations_can_execute_after_the_server_resumes() {
 async fn transport_shutdown_releases_an_incomplete_reply() {
     bounded(async {
         let directory = Directory::new();
-        let server = Server::start(&directory.0, "shutdown", free_port(), "", false);
-        let direct = ready(&server.client()).await;
+        let mut server = Server::start(&directory.0, "shutdown", free_port(), "", false);
+        let direct = ready(&server.client(), &mut server).await;
         RedisAdapter::new(direct).write(write(1_000)).await.unwrap();
         let gate = ResponseGate::start(server.port).await;
         let connection = connect(&gate.client()).await.unwrap();
@@ -409,6 +409,34 @@ async fn transport_shutdown_releases_an_incomplete_reply() {
         gate.held.notified().await;
         drop(gate);
         assert!(pending.await.unwrap().is_err());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn readiness_rejects_other_servers_and_bind_conflicts() {
+    bounded(async {
+        let directory = Directory::new();
+        let mut other = Server::start(&directory.0, "other", free_port(), "", false);
+        let mut connection = ready(&other.client(), &mut other).await;
+        for port in [other.port, free_port()] {
+            let mut owned = Server::start(&directory.0, "owned", port, "", false);
+            if port != other.port {
+                ready(&owned.client(), &mut owned).await;
+            }
+            let client = other.client();
+            let result = tokio::spawn(async move { ready(&client, &mut owned).await }).await;
+            assert!(result
+                .expect_err("readiness accepted another server")
+                .is_panic());
+            assert_eq!(
+                redis::cmd("PING")
+                    .query_async::<String>(&mut connection)
+                    .await
+                    .unwrap(),
+                "PONG"
+            );
+        }
     })
     .await;
 }
