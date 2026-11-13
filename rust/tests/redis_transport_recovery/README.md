@@ -91,13 +91,16 @@ ratios are printed. Failed invalidations are not successful fences. Values are
 checked for identity and byte integrity, not for revocation of an acquired
 snapshot. This case makes no quiescent freshness or durability claim.
 
-Connection and command budgets are 80 ms, the cache read budget is 30 ms, source
-work has a 60 ms native budget and an 80 ms cache budget, and the whole caller
-operation has a 300 ms deadline from dispatch. Cancellation drops the caller
+The configured connection and response timeouts are 80 ms. This is not a
+wall-clock limit on a whole native command future: shared reconnect waits and
+client concurrency waits occur before the response timer. The cache read budget
+is 30 ms, source work has a 60 ms native budget and an 80 ms cache budget, and the
+whole caller operation has a 300 ms deadline from dispatch. Cancellation drops the caller
 after two milliseconds, not its underlying source or native command task.
-Native command tasks retain their permits and counters until the client wait
-settles. Client reconnect tasks and server execution after a timeout remain
-outside those counters. A final `PING` orders earlier replies on the surviving
+Native command tasks retain their permits and counters until the client future
+settles, including its queue and reconnect waits. Independent client reconnect
+tasks and server execution after a timeout remain outside those counters.
+A final `PING` orders earlier replies on the surviving
 connection. One absolute five-second drain deadline includes callers, raw work,
 invalidations, server shutdown and cleanup; a run has a further overall deadline
 of its requested duration plus 20 seconds.
