@@ -264,7 +264,7 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "fce0b00a5ce212e1267aa3eda28f4e9334209d87730fb0ea0fe5f543b741888b",
+      "sha256": "37cd276f3bbc4e60f01c3a1b2447f57e63652a75661861b49ae63743145b4af6",
       "entries": [
         {"title":"Redis and Valkey","contracts":["E01"]},
         {"title":"Install a client","contracts":["B01","E01"]},
