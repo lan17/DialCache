@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use tokio::time::{sleep, sleep_until, timeout};
+use tokio::time::{sleep, sleep_until, timeout, timeout_at};
 
 const SEED: u64 = 0x5eed1234;
 const SOURCE_CAPACITY: usize = 8;
@@ -122,7 +122,11 @@ impl Settings {
                 } else {
                     128
                 },
-                128,
+                if case == Case::Compressed {
+                    64 * 1024
+                } else {
+                    128
+                },
                 1024 * 1024,
             ) as usize,
         }
@@ -172,7 +176,7 @@ struct Histogram {
 
 impl Histogram {
     fn record(&mut self, elapsed: Duration) {
-        let micros = elapsed.as_micros().min(u64::MAX as u128) as u64;
+        let micros = elapsed.as_nanos().div_ceil(1000).min(u64::MAX as u128) as u64;
         let bucket = (64 - micros.saturating_sub(1).leading_zeros()) as usize;
         self.buckets[bucket.min(31)] += 1;
         self.count += 1;
@@ -719,6 +723,7 @@ async fn run(settings: &Settings, metrics: Arc<Metrics>) {
     }
     drain(&metrics).await;
     sample("warmup_drained", start, &metrics);
+    let warm_sources = metrics.source.started.load(SeqCst);
     let measurement = Instant::now();
     let begin = tokio::time::Instant::now();
     let duration = Duration::from_secs(settings.seconds);
@@ -763,14 +768,6 @@ async fn run(settings: &Settings, metrics: Arc<Metrics>) {
                 "fault": failed, "elapsed_ms": measurement.elapsed().as_millis()})
             );
         }
-        if settings.case == Case::Tracked && index % (settings.rate / 10).max(1) == 0 {
-            let app = app.clone();
-            let key = ((index / (settings.rate / 10).max(1)) % 16) as usize;
-            invalidations.spawn(async move {
-                app.versions[key].fetch_add(1, SeqCst);
-                app.cache.invalidate("item", key, 0).await.unwrap();
-            });
-        }
         random ^= random << 13;
         random ^= random >> 7;
         random ^= random << 17;
@@ -783,6 +780,15 @@ async fn run(settings: &Settings, metrics: Arc<Metrics>) {
         if lag > Duration::from_millis(20) {
             metrics.late.fetch_add(1, SeqCst);
             continue;
+        }
+        if settings.case == Case::Tracked && index % (settings.rate / 10).max(1) == 0 {
+            assert!(invalidations.len() < 16);
+            let app = app.clone();
+            let key = ((index / (settings.rate / 10).max(1)) % 16) as usize;
+            invalidations.spawn(async move {
+                app.versions[key].fetch_add(1, SeqCst);
+                app.cache.invalidate("item", key, 0).await.unwrap();
+            });
         }
         let Ok(permit) = slots.clone().try_acquire_owned() else {
             metrics.rejected.fetch_add(1, SeqCst);
@@ -869,10 +875,10 @@ async fn run(settings: &Settings, metrics: Arc<Metrics>) {
                 while let Some(result) = callers.join_next().await {
                     result.unwrap();
                 }
+                drain(&metrics).await;
             })
             .await
             .expect("malformed cycle callers did not drain");
-            drain(&metrics).await;
             assert!(metrics
                 .values
                 .lock()
@@ -882,20 +888,22 @@ async fn run(settings: &Settings, metrics: Arc<Metrics>) {
         }
     }
     sleep_until(begin + duration).await;
+    let drain_deadline = begin + duration + Duration::from_secs(5);
     sample("admission_closed", measurement, &metrics);
     finished.store(true, SeqCst);
     app.fault.store(false, SeqCst);
-    while let Some(result) = invalidations.join_next().await {
-        result.unwrap();
-    }
-    timeout(Duration::from_secs(5), async {
+    timeout_at(drain_deadline, async {
+        while let Some(result) = invalidations.join_next().await {
+            result.unwrap();
+        }
         while let Some(result) = callers.join_next().await {
             result.unwrap();
         }
+        drain(&metrics).await;
+        sampler.await.unwrap();
     })
     .await
-    .expect("callers did not drain");
-    drain(&metrics).await;
+    .expect("cohort did not drain within one five-second deadline");
     sample("drained", measurement, &metrics);
     assert_eq!(
         metrics.admitted.load(SeqCst),
@@ -927,12 +935,33 @@ async fn run(settings: &Settings, metrics: Arc<Metrics>) {
     assert_eq!(app.source_slots.available_permits(), SOURCE_CAPACITY);
     assert_eq!(app.provider_slots.available_permits(), PROVIDER_CAPACITY);
     assert!(metrics.ok.load(SeqCst) > 0, "no successful load sample");
+    if matches!(settings.case, Case::HotHit | Case::SpreadHit) {
+        assert_eq!(metrics.source.started.load(SeqCst), warm_sources);
+    }
+    if settings.case == Case::Compressed {
+        assert!(metrics.decompressed.load(SeqCst) > 0);
+        assert_eq!(
+            metrics.reads.load(SeqCst),
+            metrics.decompressed.load(SeqCst) + metrics.source.started.load(SeqCst) - warm_sources
+                + metrics.source_rejected.load(SeqCst)
+        );
+        assert!(metrics.writes.load(SeqCst) <= metrics.source.started.load(SeqCst) - warm_sources);
+    }
+    if settings.case.malformed() {
+        let admitted = metrics.admitted.load(SeqCst);
+        assert_eq!(metrics.reads.load(SeqCst), admitted);
+        assert_eq!(metrics.source.started.load(SeqCst), admitted);
+        assert_eq!(metrics.writes.load(SeqCst), admitted);
+        assert_eq!(metrics.ok.load(SeqCst), admitted);
+    }
     if settings.case == Case::Tracked {
         let version = app.versions[0].fetch_add(1, SeqCst) + 1;
         app.cache.invalidate("item", 0, 0).await.unwrap();
         sleep(Duration::from_millis(2)).await;
         assert_eq!(app.get(0).await.unwrap().version, version);
+        let source_calls = metrics.source.started.load(SeqCst);
         assert_eq!(app.get(0).await.unwrap().version, version);
+        assert_eq!(metrics.source.started.load(SeqCst), source_calls);
         assert!(metrics.fenced.load(SeqCst) > 0);
     }
     if settings.case == Case::Recovery {
@@ -947,7 +976,6 @@ async fn run(settings: &Settings, metrics: Arc<Metrics>) {
         app.check(1, &value);
     }
     drain(&metrics).await;
-    sampler.await.unwrap();
     drop(app);
     assert!(metrics
         .values
@@ -979,6 +1007,9 @@ fn bounded_offered_load_drains_all_work() {
             "local_ttl_seconds": 3600, "remote_ttl_seconds": if settings.case == Case::Recovery { 1 } else { 3600 },
             "recovery_age_seconds": if settings.case == Case::Recovery { 3600 } else { 0 },
             "observer": "inline_atomic_counters", "sampled_weak_values_capacity": 256,
+            "invalidation_every_arrivals": if settings.case == Case::Tracked { Some((settings.rate / 10).max(1)) } else { None },
+            "pending_invalidation_limit": 16,
+            "drain_deadline_seconds_after_window": 5,
             "histogram_last_bucket_upper_us": 2147483648u64, "histogram_overflow": "included_in_last_bucket_and_max"
         })
     );
@@ -1009,4 +1040,9 @@ fn histogram_upper_bounds_use_nearest_rank() {
     histogram.record(Duration::from_secs(2200));
     assert_eq!(histogram.percentile(100), 2_200_000_000);
     assert_eq!(histogram.overflow, 1);
+    let mut boundary = Histogram::default();
+    boundary.record(Duration::from_nanos(1001));
+    assert_eq!(boundary.percentile(100), 2);
+    boundary.record(Duration::from_nanos(2001));
+    assert_eq!(boundary.percentile(100), 4);
 }
