@@ -474,7 +474,10 @@ bounded for large values.
 
 Compression of payloads of at least 64 KiB (or at levels 10–22 once the
 threshold is met) and every decompression run on a bounded CPU queue shared by
-all instances: two workers and two queued jobs by default. When that queue is
+all instances: two workers and two queued jobs by default. Tokio worker-thread
+and blocking-thread limits do not change this pool. Use a custom
+`Runtime::spawn_blocking` implementation for a different bounded CPU executor.
+When that queue is
 full, the work is rejected and DialCache fails open: a read of a compressed
 value falls through to the source, and the write is skipped. Custom codecs
 manage their own CPU work.

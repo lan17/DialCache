@@ -19,7 +19,8 @@ serde = { version = "1", features = ["derive"] }
 ```
 
 Adjust the path to your checkout. The core crate requires Rust 1.85 or later;
-the current `redis` dependency requires 1.88. The crate has no Node.js runtime
+building the `redis` feature with this repository's lockfile requires Rust 1.88.
+The crate has no Node.js runtime
 dependency. Available registry versions are listed on
 [crates.io](https://crates.io/crates/dialcache); docs.rs builds their API references.
 
@@ -113,3 +114,120 @@ replaces it, and is the only source of differences for an operation whose
 Application codecs control their own scheduling. See
 [compression](../redis.md#compression) for thresholds and fail-open behavior
 when compression or decompression capacity is exhausted.
+
+## Application-owned limits
+
+<LanguageContent language="rust">
+
+These four recipes use existing APIs. They add no library defaults and protect
+an application only after it adopts them. Choose limits for your workload.
+The complete [executable examples](https://github.com/lan17/DialCache/blob/main/rust/tests/docs_examples.rs)
+include imports, test dependencies and assertions.
+
+### Source and policy work
+
+Acquire source capacity inside the registered source, not around `get`.
+The permit then remains held when a caller stops waiting or the cache source
+deadline expires. The same source guard applies to uncached and shadow calls.
+Use non-waiting admission to avoid an unbounded queue of waiting callers.
+
+This example uses a semaphore as a test dependency. Replace that wait with
+source I/O that has its own finite budget:
+
+<<< @/../rust/tests/docs_examples.rs#rust-source-budget{rust}
+
+The application's one-second timeout drops this dependency future and releases
+its permit. It does not prove cancellation of work in a client-owned task or at
+the server. If your client starts separate tasks, keep the permit with the task
+that owns the resource until it finishes, and bound its native queue and I/O.
+Acquire the permit before scheduling that task, not after it starts.
+A caller timeout only ends that caller's wait. None of these timers can preempt
+blocking synchronous code.
+
+Admission and dependency timeout errors are `Error::Source`, not
+`Error::FallbackTimeout`. If stale recovery should accept one of these errors,
+classify that specific error with `should_recover`; do not accept every source
+failure.
+
+Prefer a cheap local configuration snapshot. When a provider must await I/O,
+bound that work separately: policy resolves before source sharing and before
+the source timer starts.
+
+<<< @/../rust/tests/docs_examples.rs#rust-provider-budget{rust}
+
+A provider error runs the source uncached; it does not enable baseline caching.
+Keep the source guard active on that path. `Ok(None)` means inherit, not
+configuration failure.
+
+### Complete mutation calls
+
+Wrap the remote adapter before passing it to the cache builder. This example
+forwards the original read request and cancellation context, and gives each
+write or invalidation one 200 ms wait budget:
+
+<<< @/../rust/tests/docs_examples.rs#rust-mutation-budget{rust}
+
+For `RedisAdapter`, the invalidation budget covers both `EVALSHA` and its `EVAL`
+retry. Keep the client's own finite connection, command and queue limits as
+well. No breaker bypasses invalidation. A timed-out write preserves the source
+result; a timed-out invalidation returns an error to its caller.
+
+Timeout drops the adapter future, not an already accepted server command. A
+mutation can still happen after the error, so its outcome is unknown until
+verified. This budget excludes earlier serialization and compression; give an
+asynchronous custom codec its own settlement bound. It is not a total-call
+deadline.
+
+### Values and request scopes
+
+Use a value domain with a known bound on retained data, and validate remote
+decodes as well as source results. This example stores only a 32-byte digest.
+The codec checks the JSON payload length and the exact decoded array length:
+
+<<< @/../rust/tests/docs_examples.rs#rust-bounded-values{rust}
+
+The payload check runs **after** the engine's decompression. It does not prevent
+decompression allocations, nor does a serialized-byte limit measure heap size.
+The fixed array bounds this value type, not process memory or all temporary
+allocations.
+
+Set process-local capacity explicitly. Here `remote` is the test snapshot
+adapter and `clock` is its fixed test clock; use your adapter and normal clock
+in the application:
+
+<<< @/../rust/tests/docs_examples.rs#rust-bounded-scopes{rust}
+
+Capacity counts entries, not bytes. Request memoization has no capacity limit.
+Bound simultaneous requests and keys per request, use bounded key types, and
+close scopes promptly:
+
+<<< @/../rust/tests/docs_examples.rs#rust-bounded-request{rust}
+
+Use `request_local(false)` when request memoization is not needed. Closing a
+scope releases its memo, but does not cancel source work or release `Arc`s held
+by callers. Keep the request permit until the caller also releases retained
+results. Apply the source controls above as well.
+
+### Nonblocking metric transport
+
+`DatadogObserver` maps names, tags and units, then calls `DogStatsdClient`
+synchronously. A slow client delays cache calls. This client queues packets
+with `try_send`; a full or closed queue drops the packet rather than waiting:
+
+<<< @/../rust/tests/docs_examples.rs#rust-metric-queue{rust}
+
+Create it with `sync_channel` and a fixed capacity, then pass it to
+`DatadogObserver::new`. The example also caps each packet at 512 bytes and drops
+unsafe wire separators. Keep application labels stable and bounded.
+
+A separate sender must consume the queue with finite I/O budgets. The tests use
+only a loopback UDP socket with a write timeout, preserve the exporter's metric
+mapping, and count send errors separately. Monitor drop and send-error counters
+outside this exporter to avoid recursive reporting. Stop producers and drop
+their sender handles before joining the sender at shutdown.
+
+Queue acceptance and a successful UDP send do not prove delivery to Datadog.
+This example changes neither the metric schema nor the selected histogram or
+distribution mode.
+
+</LanguageContent>

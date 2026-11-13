@@ -148,7 +148,7 @@ so the drift is caught by the check, not by a learner:
   the code may have moved for a reason the lesson should mention.
 - **A quoted count comes from a check.** Quote a number only as `node
   formal/tools/execution.mjs` prints it (`"regressions": 489`) or as `node
-  formal/tools/check-source-audit.mjs` prints it (`guideSections: 195`); the
+  formal/tools/check-source-audit.mjs` prints it (`guideSections: 196`); the
   check compares both with today's output. When an exercise changes a count, say
   so in words rather than quoting the new number.
 - **The course is outside the review ledger on purpose.** The lessons are

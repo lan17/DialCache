@@ -125,7 +125,7 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "409c3e6dd51f72d8df6e746fbcf1ee5a619cdc2f0f97beaf37a5b20c9c99c3c1",
+      "sha256": "d9591172e2680824531564768959573dc577b7603728c0d5a58d557ccaaa47a2",
       "entries": [
         {"title":"Getting started","contracts":["B01"]},
         {"title":"Install","contracts":["B01"]},
@@ -211,14 +211,19 @@
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "ae1e0dcb12f62dc827c075c0e8f3c92ac298a6758e59d6d65205180b3dee9c4c",
+      "sha256": "d298b5d3223a66f17342f0c645030e131526803c70f47d1dc98a1ce16b5785f4",
       "entries": [
         {"title":"Rust integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
         {"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
         {"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
         {"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
-        {"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]}
+        {"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
+        {"title":"Application-owned limits","contracts":["B01","E03","X02"]},
+        {"title":"Source and policy work","contracts":["C01","C11","C20","C23","C25","C27","B01","B02","E03","X02"]},
+        {"title":"Complete mutation calls","contracts":["C27","C29","C56","B01","E01","E03","X02"]},
+        {"title":"Values and request scopes","contracts":["C03","C07","C08","B03","E04","X02"]},
+        {"title":"Nonblocking metric transport","contracts":["C30","X01","X02"]}
       ]
     },
     {
@@ -259,7 +264,7 @@
     },
     {
       "path": "docs/redis.md",
-      "sha256": "fce0b00a5ce212e1267aa3eda28f4e9334209d87730fb0ea0fe5f543b741888b",
+      "sha256": "37cd276f3bbc4e60f01c3a1b2447f57e63652a75661861b49ae63743145b4af6",
       "entries": [
         {"title":"Redis and Valkey","contracts":["E01"]},
         {"title":"Install a client","contracts":["B01","E01"]},
@@ -1767,7 +1772,7 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "8f0a8bbd03f71d630f337a83c9c01f1e737bd7c634e7e7ac9d9a4b988fb511ea",
+      "sha256": "c2baf298efdc5723f991acd3e3d200c1b0aa97bcfd113a4fa683cd35b6a01715",
       "entries": [
         {"title":"Validation and evidence"},
         {"title":"Prerequisites"},
@@ -1776,7 +1781,8 @@
         {"title":"Reproducing one history"},
         {"title":"Mutation evidence"},
         {"title":"Exploratory runs"},
-        {"title":"A retained sampling regression"}
+        {"title":"A retained sampling regression"},
+        {"title":"Rust consumer and resource checks"}
       ],
       "review": {
         "kind": "tooling-guide",
