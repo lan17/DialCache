@@ -275,6 +275,126 @@ mod application_budgets {
         Ok(())
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn native_work_keeps_its_permit_after_the_wait_ends() -> Result<(), BoxError> {
+        use std::io::{ErrorKind, Read};
+        use std::net::TcpStream;
+        use tokio::io::AsyncWriteExt;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let address = listener.local_addr()?;
+        let slots = Arc::new(Semaphore::new(1));
+        let started = Arc::new(Semaphore::new(0));
+        let finished = Arc::new(Semaphore::new(0));
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let native_timeouts = Arc::new(AtomicUsize::new(0));
+        let cache = DialCache::builder().build()?;
+        let reader = cache
+            .use_case::<u64, u64>("item", "nativeSource")
+            .key(|id: &u64| KeySpec::new(id))
+            .source({
+                let (slots, started, finished) = (slots.clone(), started.clone(), finished.clone());
+                let (active, peak, native_timeouts) =
+                    (active.clone(), peak.clone(), native_timeouts.clone());
+                move |_, _| {
+                    let (slots, started, finished) =
+                        (slots.clone(), started.clone(), finished.clone());
+                    let (active, peak, native_timeouts) =
+                        (active.clone(), peak.clone(), native_timeouts.clone());
+                    async move {
+                        let permit = slots.try_acquire_owned()?;
+                        // Dropping the join handle cannot stop blocking I/O.
+                        let work = tokio::task::spawn_blocking(move || {
+                            let mut stream =
+                                TcpStream::connect_timeout(&address, Duration::from_secs(1))?;
+                            stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+                            let running = active.fetch_add(1, Ordering::SeqCst) + 1;
+                            peak.fetch_max(running, Ordering::SeqCst);
+                            started.add_permits(1);
+                            let mut reply = [0];
+                            let result = stream.read_exact(&mut reply);
+                            if result.as_ref().is_err_and(|error| {
+                                matches!(error.kind(), ErrorKind::TimedOut | ErrorKind::WouldBlock)
+                            }) {
+                                native_timeouts.fetch_add(1, Ordering::SeqCst);
+                            }
+                            drop(stream);
+                            active.fetch_sub(1, Ordering::SeqCst);
+                            drop(permit);
+                            finished.add_permits(1);
+                            result?;
+                            Ok::<_, BoxError>(u64::from(reply[0]))
+                        });
+                        timeout(Duration::from_millis(200), work).await??
+                    }
+                }
+            })
+            .register()?;
+
+        let caller = tokio::spawn({
+            let reader = reader.clone();
+            async move { reader.get_uncached(1).await }
+        });
+        let (mut server, _) = timeout(Duration::from_secs(3), listener.accept()).await??;
+        timeout(Duration::from_secs(3), started.acquire())
+            .await??
+            .forget();
+        let error = timeout(Duration::from_secs(3), caller).await??.unwrap_err();
+        assert!(error.source_error().unwrap().is::<Elapsed>());
+        assert_eq!(active.load(Ordering::SeqCst), 1);
+        let rejected = reader.get_uncached(2).await.unwrap_err();
+        assert_eq!(peak.load(Ordering::SeqCst), 1);
+        assert_eq!(active.load(Ordering::SeqCst), 1);
+        assert_eq!(slots.available_permits(), 0);
+        assert!(rejected.source_error().unwrap().is::<TryAcquireError>());
+        assert_eq!(native_timeouts.load(Ordering::SeqCst), 0);
+        server.write_all(&[1]).await?;
+        timeout(Duration::from_secs(3), finished.acquire())
+            .await??
+            .forget();
+        drop(server);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert_eq!(slots.available_permits(), 1);
+
+        let caller = tokio::spawn({
+            let reader = reader.clone();
+            async move { reader.get_uncached(2).await }
+        });
+        let (stalled_server, _) = timeout(Duration::from_secs(3), listener.accept()).await??;
+        timeout(Duration::from_secs(3), started.acquire())
+            .await??
+            .forget();
+        caller.abort();
+        assert!(caller.await.unwrap_err().is_cancelled());
+        assert_eq!(active.load(Ordering::SeqCst), 1);
+        assert_eq!(slots.available_permits(), 0);
+        timeout(Duration::from_secs(4), finished.acquire())
+            .await??
+            .forget();
+        drop(stalled_server);
+        assert_eq!(native_timeouts.load(Ordering::SeqCst), 1);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert_eq!(slots.available_permits(), 1);
+
+        let caller = tokio::spawn({
+            let reader = reader.clone();
+            async move { reader.get_uncached(3).await }
+        });
+        let (mut server, _) = timeout(Duration::from_secs(3), listener.accept()).await??;
+        server.write_all(&[3]).await?;
+        assert_eq!(*timeout(Duration::from_secs(3), caller).await???, 3);
+        timeout(Duration::from_secs(3), finished.acquire())
+            .await??
+            .forget();
+        drop(server);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert_eq!(peak.load(Ordering::SeqCst), 1);
+        assert_eq!(slots.available_permits(), 1);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn provider_failure_never_activates_baseline_caching() -> Result<(), BoxError> {
         let configuration = Arc::new(Semaphore::new(0));
@@ -747,6 +867,101 @@ mod bounded_values {
         }
         Ok(())
     }
+
+    #[tokio::test]
+    async fn request_permit_covers_caller_retained_values() -> Result<(), BoxError> {
+        use dialcache::{Identity, Operation};
+
+        let requests = Semaphore::new(1);
+        let permit = requests.try_acquire()?;
+        let cache = DialCache::builder().local_capacity(0).build()?;
+        let request = cache.enable_guard();
+        let operation = Operation::<Digest>::new(Identity::new("digest", 1_u64, "retained"))
+            .policy(Policy::default().request_local(true));
+        let value = cache
+            .get_or_load(request.scope(), operation, |_| async {
+                Ok(Digest([1; 32]))
+            })
+            .await?;
+        let weak = Arc::downgrade(&value);
+        drop(request);
+        assert!(weak.upgrade().is_some());
+        assert!(requests.try_acquire().is_err());
+        drop(value);
+        assert!(weak.upgrade().is_none());
+        drop(permit);
+        assert_eq!(requests.available_permits(), 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn digest_limit_runs_after_remote_decompression() -> Result<(), BoxError> {
+        use dialcache::limits::MAX_DECOMPRESSED_BYTES;
+        use dialcache::observe::CompressionOutcome;
+        use dialcache::protocol::{compress_payload, CompressionConfig};
+        use dialcache::SystemClock;
+
+        struct MeasuredCodec(Arc<AtomicUsize>);
+
+        impl Codec<Digest> for MeasuredCodec {
+            fn encode<'a>(&'a self, value: &'a Digest) -> BoxFuture<'a, Result<Payload, BoxError>> {
+                DigestCodec.encode(value)
+            }
+
+            fn decode(&self, payload: Payload) -> BoxFuture<'_, Result<Digest, BoxError>> {
+                self.0.store(payload.len(), Ordering::SeqCst);
+                DigestCodec.decode(payload)
+            }
+        }
+
+        let valid = JsonCodec::encode_value(&Digest([255; 32]))?;
+        let mut oversized = valid.clone();
+        oversized.bytes.resize(1 << 20, b' ');
+        for (payload, expected, source_calls) in [
+            (valid, 255, 0),
+            (oversized, 3, 1),
+            (JsonCodec::encode_value(&vec![0_u8; 33])?, 3, 1),
+        ] {
+            let size = payload.len();
+            let compressed = compress_payload(
+                payload,
+                &CompressionConfig {
+                    threshold_bytes: 1,
+                    ..CompressionConfig::default()
+                },
+                MAX_DECOMPRESSED_BYTES,
+            )?;
+            assert_eq!(compressed.outcome, CompressionOutcome::Compressed);
+            assert!(compressed.payload.len() < 129);
+            let cache = DialCache::builder()
+                .local_capacity(0)
+                .disable_compression()
+                .remote(SnapshotRemote(compressed.payload))
+                .clock(SystemClock::with_sources(|| Duration::ZERO, || 1_000))
+                .build()?;
+            let decoded_bytes = Arc::new(AtomicUsize::new(0));
+            let calls = Arc::new(AtomicUsize::new(0));
+            let reader = cache
+                .use_case::<u8, Digest>("digest", "compressed")
+                .policy(Policy::default().remote_ttl_sec(60))
+                .key(|id: &u8| KeySpec::new(*id as u64))
+                .codec(Arc::new(MeasuredCodec(decoded_bytes.clone())))
+                .source({
+                    let calls = calls.clone();
+                    move |_, id| {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        async move { Ok(Digest([id; 32])) }
+                    }
+                })
+                .register()?;
+            let request = cache.enable_guard();
+            let value = reader.get(request.scope(), 3).await?;
+            assert_eq!(decoded_bytes.load(Ordering::SeqCst), size);
+            assert_eq!(value.0, [expected; 32]);
+            assert_eq!(calls.load(Ordering::SeqCst), source_calls);
+        }
+        Ok(())
+    }
 }
 
 mod metric_transport {
@@ -813,8 +1028,9 @@ mod metric_transport {
             let completed = completion
                 .recv_timeout(std::time::Duration::from_secs(2))
                 .is_ok();
+            let retained = receiver.try_recv();
             drop(receiver);
-            completed
+            (completed, retained)
         });
         let dropped = Arc::new(AtomicUsize::new(0));
         let client = QueuedMetrics {
@@ -822,8 +1038,9 @@ mod metric_transport {
             dropped: dropped.clone(),
         };
         client.increment("test", 1.0, &[]);
-        client.increment("test", 1.0, &[]);
-        assert_eq!(dropped.load(Ordering::Relaxed), 1);
+        client.histogram("test", 0.25, &[]);
+        client.distribution("test", 0.5, &[]);
+        assert_eq!(dropped.load(Ordering::Relaxed), 2);
         let observer = DatadogObserver::new(
             client,
             DatadogOptions::new(ObservationMetricType::Distribution),
@@ -848,12 +1065,11 @@ mod metric_transport {
         )
         .await;
         let _ = finished.send(());
-        assert!(
-            watchdog.join().unwrap(),
-            "metric export waited for its sink"
-        );
+        let (completed, retained) = watchdog.join().unwrap();
+        assert!(completed, "metric export waited for its sink");
+        assert_eq!(retained?, "test:1|c|#");
         assert_eq!(*result??, 1);
-        assert!(dropped.load(Ordering::Relaxed) > 0);
+        assert!(dropped.load(Ordering::Relaxed) > 2);
         let before = dropped.load(Ordering::Relaxed);
         assert_eq!(*reader.get(request.scope(), 1).await?, 1);
         assert_eq!(dropped.load(Ordering::Relaxed), before + 2);
@@ -869,12 +1085,74 @@ mod metric_transport {
         use std::net::UdpSocket;
         use std::time::Duration;
 
-        let receiver = UdpSocket::bind("127.0.0.1:0")?;
-        receiver.set_read_timeout(Some(Duration::from_secs(2)))?;
+        for (mode, kind) in [
+            (ObservationMetricType::Distribution, "d"),
+            (ObservationMetricType::Histogram, "h"),
+        ] {
+            let receiver = UdpSocket::bind("127.0.0.1:0")?;
+            receiver.set_read_timeout(Some(Duration::from_secs(2)))?;
+            let socket = UdpSocket::bind("127.0.0.1:0")?;
+            socket.connect(receiver.local_addr()?)?;
+            socket.set_write_timeout(Some(Duration::from_millis(50)))?;
+            let (packets, queue) = sync_channel::<String>(4);
+            let (stopped, completion) = sync_channel(1);
+            let errors = Arc::new(AtomicUsize::new(0));
+            let send_errors = errors.clone();
+            let sender = std::thread::spawn(move || {
+                for packet in queue {
+                    if socket.send(packet.as_bytes()).is_err() {
+                        send_errors.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                stopped.send(()).unwrap();
+            });
+            let dropped = Arc::new(AtomicUsize::new(0));
+            let client = QueuedMetrics {
+                packets,
+                dropped: dropped.clone(),
+            };
+            client.increment("test", 1.0, &[("bad".into(), "newline\n".into())]);
+            client.increment("test", 1.0, &[("large".into(), "x".repeat(513))]);
+            assert_eq!(dropped.load(Ordering::Relaxed), 2);
+            let observer = DatadogObserver::new(client, DatadogOptions::new(mode))?;
+            let labels = Labels {
+                namespace: "example".into(),
+                use_case: "item:byId".into(),
+                key_type: "item".into(),
+                layer: Layer::Local,
+            };
+            observer.observe(&Event::Request {
+                labels: labels.clone(),
+            });
+            observer.observe(&Event::Get {
+                labels,
+                seconds: 0.25,
+            });
+            drop(observer);
+            completion.recv_timeout(Duration::from_secs(2))?;
+            sender.join().unwrap();
+            assert_eq!(errors.load(Ordering::Relaxed), 0);
+            assert_eq!(dropped.load(Ordering::Relaxed), 2);
+            let mut buffer = [0; 512];
+            let count = receiver.recv(&mut buffer)?;
+            assert_eq!(std::str::from_utf8(&buffer[..count])?, "dialcache.request.count:1|c|#cache_namespace:example,use_case:item:byId,key_type:item,layer:local");
+            let count = receiver.recv(&mut buffer)?;
+            assert_eq!(std::str::from_utf8(&buffer[..count])?, format!("dialcache.get.duration:0.25|{kind}|#cache_namespace:example,use_case:item:byId,key_type:item,layer:local"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn sender_counts_failed_sends_and_stops_after_all_producers() -> Result<(), BoxError> {
+        use std::net::UdpSocket;
+        use std::sync::mpsc::TryRecvError;
+        use std::time::Duration;
+
+        // An unconnected socket makes send fail without relying on remote ICMP.
         let socket = UdpSocket::bind("127.0.0.1:0")?;
-        socket.connect(receiver.local_addr()?)?;
         socket.set_write_timeout(Some(Duration::from_millis(50)))?;
         let (packets, queue) = sync_channel::<String>(4);
+        let (stopped, completion) = sync_channel(1);
         let errors = Arc::new(AtomicUsize::new(0));
         let send_errors = errors.clone();
         let sender = std::thread::spawn(move || {
@@ -883,40 +1161,27 @@ mod metric_transport {
                     send_errors.fetch_add(1, Ordering::Relaxed);
                 }
             }
+            stopped.send(()).unwrap();
         });
         let dropped = Arc::new(AtomicUsize::new(0));
+        let last_producer = QueuedMetrics {
+            packets: packets.clone(),
+            dropped: dropped.clone(),
+        };
         let client = QueuedMetrics {
             packets,
             dropped: dropped.clone(),
         };
-        client.increment("test", 1.0, &[("bad".into(), "newline\n".into())]);
-        client.increment("test", 1.0, &[("large".into(), "x".repeat(513))]);
-        assert_eq!(dropped.load(Ordering::Relaxed), 2);
-        let observer = DatadogObserver::new(
-            client,
-            DatadogOptions::new(ObservationMetricType::Distribution),
-        )?;
-        let labels = Labels {
-            namespace: "example".into(),
-            use_case: "item:byId".into(),
-            key_type: "item".into(),
-            layer: Layer::Local,
-        };
-        observer.observe(&Event::Request {
-            labels: labels.clone(),
-        });
-        observer.observe(&Event::Get {
-            labels,
-            seconds: 0.25,
-        });
-        drop(observer);
+        client.increment("test", 1.0, &[]);
+        client.histogram("test", 0.25, &[]);
+        drop(client);
+        assert!(matches!(completion.try_recv(), Err(TryRecvError::Empty)));
+        last_producer.distribution("test", 0.5, &[]);
+        drop(last_producer);
+        completion.recv_timeout(Duration::from_secs(2))?;
         sender.join().unwrap();
-        assert_eq!(errors.load(Ordering::Relaxed), 0);
-        let mut buffer = [0; 512];
-        let count = receiver.recv(&mut buffer)?;
-        assert_eq!(std::str::from_utf8(&buffer[..count])?, "dialcache.request.count:1|c|#cache_namespace:example,use_case:item:byId,key_type:item,layer:local");
-        let count = receiver.recv(&mut buffer)?;
-        assert_eq!(std::str::from_utf8(&buffer[..count])?, "dialcache.get.duration:0.25|d|#cache_namespace:example,use_case:item:byId,key_type:item,layer:local");
+        assert_eq!(errors.load(Ordering::Relaxed), 3);
+        assert_eq!(dropped.load(Ordering::Relaxed), 0);
         Ok(())
     }
 }

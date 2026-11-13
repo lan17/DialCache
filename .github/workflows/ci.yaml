@@ -124,6 +124,15 @@ jobs:
       - name: Verify the packaged Rust crate with every feature
         working-directory: rust
         run: cargo package --locked --all-features
+      - name: Check the isolated production-feature Rust consumer
+        working-directory: rust/tests/production_consumer
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/rust/target/production-consumer
+        run: |
+          cargo tree --locked --edges features --invert dialcache
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo run --locked
       - name: Install LLVM coverage tools for the pinned Rust toolchain
         working-directory: rust
         run: rustup component add llvm-tools-preview

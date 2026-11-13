@@ -48,8 +48,9 @@ dialcache = { path = "../DialCache/rust" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 ```
 
-Adjust the path to your checkout. The core crate requires Rust 1.85; the `redis`
-feature currently requires Rust 1.88. See the [Rust guide](languages/rust.md) for
+Adjust the path to your checkout. The core crate requires Rust 1.85 or later;
+building the `redis` feature with this repository's lockfile requires Rust 1.88.
+See the [Rust guide](languages/rust.md) for
 runtime, feature and value-ownership details.
 
 </LanguageContent>
