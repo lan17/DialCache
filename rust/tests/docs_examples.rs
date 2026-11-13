@@ -747,6 +747,101 @@ mod bounded_values {
         }
         Ok(())
     }
+
+    #[tokio::test]
+    async fn request_permit_covers_caller_retained_values() -> Result<(), BoxError> {
+        use dialcache::{Identity, Operation};
+
+        let requests = Semaphore::new(1);
+        let permit = requests.try_acquire()?;
+        let cache = DialCache::builder().local_capacity(0).build()?;
+        let request = cache.enable_guard();
+        let operation = Operation::<Digest>::new(Identity::new("digest", 1_u64, "retained"))
+            .policy(Policy::default().request_local(true));
+        let value = cache
+            .get_or_load(request.scope(), operation, |_| async {
+                Ok(Digest([1; 32]))
+            })
+            .await?;
+        let weak = Arc::downgrade(&value);
+        drop(request);
+        assert!(weak.upgrade().is_some());
+        assert!(requests.try_acquire().is_err());
+        drop(value);
+        assert!(weak.upgrade().is_none());
+        drop(permit);
+        assert_eq!(requests.available_permits(), 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn digest_limit_runs_after_remote_decompression() -> Result<(), BoxError> {
+        use dialcache::limits::MAX_DECOMPRESSED_BYTES;
+        use dialcache::observe::CompressionOutcome;
+        use dialcache::protocol::{compress_payload, CompressionConfig};
+        use dialcache::SystemClock;
+
+        struct MeasuredCodec(Arc<AtomicUsize>);
+
+        impl Codec<Digest> for MeasuredCodec {
+            fn encode<'a>(&'a self, value: &'a Digest) -> BoxFuture<'a, Result<Payload, BoxError>> {
+                DigestCodec.encode(value)
+            }
+
+            fn decode(&self, payload: Payload) -> BoxFuture<'_, Result<Digest, BoxError>> {
+                self.0.store(payload.len(), Ordering::SeqCst);
+                DigestCodec.decode(payload)
+            }
+        }
+
+        let valid = JsonCodec::encode_value(&Digest([255; 32]))?;
+        let mut oversized = valid.clone();
+        oversized.bytes.resize(1 << 20, b' ');
+        for (payload, expected, source_calls) in [
+            (valid, 255, 0),
+            (oversized, 3, 1),
+            (JsonCodec::encode_value(&vec![0_u8; 33])?, 3, 1),
+        ] {
+            let size = payload.len();
+            let compressed = compress_payload(
+                payload,
+                &CompressionConfig {
+                    threshold_bytes: 1,
+                    ..CompressionConfig::default()
+                },
+                MAX_DECOMPRESSED_BYTES,
+            )?;
+            assert_eq!(compressed.outcome, CompressionOutcome::Compressed);
+            assert!(compressed.payload.len() < 129);
+            let cache = DialCache::builder()
+                .local_capacity(0)
+                .disable_compression()
+                .remote(SnapshotRemote(compressed.payload))
+                .clock(SystemClock::with_sources(|| Duration::ZERO, || 1_000))
+                .build()?;
+            let decoded_bytes = Arc::new(AtomicUsize::new(0));
+            let calls = Arc::new(AtomicUsize::new(0));
+            let reader = cache
+                .use_case::<u8, Digest>("digest", "compressed")
+                .policy(Policy::default().remote_ttl_sec(60))
+                .key(|id: &u8| KeySpec::new(*id as u64))
+                .codec(Arc::new(MeasuredCodec(decoded_bytes.clone())))
+                .source({
+                    let calls = calls.clone();
+                    move |_, id| {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        async move { Ok(Digest([id; 32])) }
+                    }
+                })
+                .register()?;
+            let request = cache.enable_guard();
+            let value = reader.get(request.scope(), 3).await?;
+            assert_eq!(decoded_bytes.load(Ordering::SeqCst), size);
+            assert_eq!(value.0, [expected; 32]);
+            assert_eq!(calls.load(Ordering::SeqCst), source_calls);
+        }
+        Ok(())
+    }
 }
 
 mod metric_transport {
