@@ -13,3 +13,7 @@ tokio = { version = "1", features = ["full"] }
 [[test]]
 name = "transport"
 path = "transport.rs"
+
+[[test]]
+name = "mixed_load"
+path = "mixed_load.rs"
