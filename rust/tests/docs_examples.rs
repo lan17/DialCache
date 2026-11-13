@@ -848,7 +848,10 @@ mod metric_transport {
         )
         .await;
         let _ = finished.send(());
-        assert!(watchdog.join().unwrap(), "metric export waited for its sink");
+        assert!(
+            watchdog.join().unwrap(),
+            "metric export waited for its sink"
+        );
         assert_eq!(*result??, 1);
         assert!(dropped.load(Ordering::Relaxed) > 0);
         let before = dropped.load(Ordering::Relaxed);
