@@ -69,7 +69,7 @@
     },
     {
       "path": "docs/coalescing.md",
-      "sha256": "90f3ea7bb7ff2dedde1e85e750198352367722cf19cc8b329b560b2ed6fe8c3a",
+      "sha256": "5b3bda048c79d1500119d0cb90749937157261f24c7eaaa6dc7ae5309ccd38f5",
       "entries": [
         {"title":"Coalescing and liveness","contracts":["C11"]},
         {"title":"Request coalescing","contracts":["C11"]},
