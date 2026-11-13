@@ -201,7 +201,17 @@ impl ArgValue {
                         "bigint text {text:?} is not a decimal integer"
                     )));
                 }
-                text
+                let digits = text
+                    .strip_prefix('-')
+                    .unwrap_or(&text)
+                    .trim_start_matches('0');
+                if digits.is_empty() {
+                    "0".to_owned()
+                } else if text.starts_with('-') {
+                    format!("-{digits}")
+                } else {
+                    digits.to_owned()
+                }
             }
             ArgValue::Str(text) => text,
         }))
