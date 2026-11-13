@@ -10,7 +10,8 @@ not DialCache defaults, and this crate does not change the library's manifest.
 
 Use the repository's Rust toolchain on Unix. Install `redis-server` with TLS
 support, `openssl`, and `kill` on `PATH`. Missing tools or missing TLS support fail
-the requested tests; no case is silently skipped.
+the requested tests; no case is silently skipped. Redis 8.0.5 is the checked
+server version. The Sentinel control uses `SENTINEL DEBUG` timing settings.
 
 From the repository root:
 
@@ -31,7 +32,7 @@ The `transport` target configures 200 ms connection and response timeouts, excep
 the explicit 50 ms mutation-timeout cases. Queue and reconnect waits are not
 covered by the response timer. The partial-read test disables the native response
 timeout and requires the cache deadline to release the caller within 500 ms.
-Each test in that target has a 30-second deadline;
+Each test in that target configures a 30-second Tokio timeout;
 each synchronous certificate-generation command has its own 10-second deadline.
 The TCP reply gate is an owned Tokio task that closes its sockets when dropped.
 
@@ -42,10 +43,14 @@ The TCP reply gate is an owned Tokio task that closes its sockets when dropped.
 - Mutual TLS: a valid client certificate succeeds; an absent certificate fails.
 - TLS server restart: an address-bound `ConnectionManager` reconnects, while an
   old `MultiplexedConnection` remains disconnected.
-- Plaintext Sentinel: one primary, one replica, and one Sentinel with quorum one.
+- Sentinel over mutual TLS: one primary, one replica, and one Sentinel with quorum one.
   The test confirms replication of a value and watermark before killing the
   primary. It then discovers the promoted replica and creates a new manager.
   The old address-bound manager is not assumed to follow Sentinel.
+- Retired Sentinel endpoint: an unrelated TLS server takes the old primary port.
+  Native discovery and daemon links retain the private CA. The server's role,
+  configuration file, keys and reconfiguration command counts stay unchanged.
+  The control sets and checks a 200 ms INFO period and 100 ms publish period.
 - Post-promotion invalidation: an explicit script-cache flush exercises the
   `EVALSHA`/`EVAL` fallback. Watermark retention, monotonicity, old-frame fencing,
   and a later valid frame are checked through real Redis commands.
@@ -61,7 +66,7 @@ The TCP reply gate is an owned Tokio task that closes its sockets when dropped.
 
 The `transport` target is not a load test or a high-availability certification.
 It does not test multi-Sentinel quorum loss, split brain, lost replication,
-TLS Sentinel links, TLS Cluster routing, certificate rotation, native-tls, or
+TLS Cluster routing, certificate rotation, native-tls, or
 automatic application connection replacement. Connection discovery and
 replacement remain application responsibilities.
 

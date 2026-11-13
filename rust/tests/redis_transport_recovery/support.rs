@@ -299,16 +299,20 @@ impl Certificates {
         )
     }
 
+    pub fn tls_certificates(&self, ca: &str, client_auth: bool) -> TlsCertificates {
+        TlsCertificates {
+            root_cert: Some(fs::read(self.directory.0.join(format!("{ca}.crt"))).unwrap()),
+            client_tls: client_auth.then(|| redis::ClientTlsConfig {
+                client_cert: fs::read(self.directory.0.join("client.crt")).unwrap(),
+                client_key: fs::read(self.directory.0.join("client.key")).unwrap(),
+            }),
+        }
+    }
+
     pub fn client(&self, host: &str, port: u16, ca: &str, client_auth: bool) -> Client {
         Client::build_with_tls(
             format!("rediss://{host}:{port}"),
-            TlsCertificates {
-                root_cert: Some(fs::read(self.directory.0.join(format!("{ca}.crt"))).unwrap()),
-                client_tls: client_auth.then(|| redis::ClientTlsConfig {
-                    client_cert: fs::read(self.directory.0.join("client.crt")).unwrap(),
-                    client_key: fs::read(self.directory.0.join("client.key")).unwrap(),
-                }),
-            },
+            self.tls_certificates(ca, client_auth),
         )
         .unwrap()
     }

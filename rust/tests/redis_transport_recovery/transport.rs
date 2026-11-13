@@ -11,7 +11,7 @@ use dialcache::{
     CancelToken, DialCache, Frame, Identity, InvalidateRequest, MissReason, Operation, Payload,
     Policy, ReadContext, ReadRequest, ReadResult, RedisAdapter, Remote, SourceBudget, WriteRequest,
 };
-use redis::sentinel::{SentinelClient, SentinelServerType};
+use redis::sentinel::{SentinelClientBuilder, SentinelServerType};
 use support::*;
 
 const VALUE_KEY: &str = "{transport:thing:1}:value#frame";
@@ -139,15 +139,26 @@ async fn tls_requires_a_valid_client_certificate_when_configured() {
 #[tokio::test]
 async fn sentinel_rediscovery_preserves_replicated_watermark_after_promotion() {
     bounded(async {
-        let directory = Directory::new();
-        let mut primary = Server::start(&directory.0, "primary", free_port(), "", false);
-        ready(&primary.client(), &mut primary).await;
-        let mut replica = Server::start(&directory.0, "replica", free_port(),
-            &format!("replicaof 127.0.0.1 {}\nrepl-diskless-sync-delay 0", primary.port), false);
-        let mut replica_connection = ready(&replica.client(), &mut replica).await;
-        let mut sentinel = Server::start(&directory.0, "sentinel", free_port(),
-            &format!("sentinel monitor fixture 127.0.0.1 {} 1\nsentinel down-after-milliseconds fixture 300\nsentinel failover-timeout fixture 2000", primary.port), true);
-        let mut sentinel_connection = ready(&sentinel.client(), &mut sentinel).await;
+        let certs = Certificates::new();
+        let other_certs = Certificates::new();
+        let directory = &certs.directory.0;
+        let tls = "port 0\ntls-cert-file server.crt\ntls-key-file server.key\ntls-ca-cert-file ca.crt\ntls-auth-clients yes";
+        let outbound_tls = "tls-replication yes\ntls-client-cert-file client.crt\ntls-client-key-file client.key";
+        let primary_port = free_port();
+        let mut primary = Server::start(directory, "primary", primary_port,
+            &format!("{tls}\ntls-port {primary_port}"), false);
+        let primary_client = certs.client("localhost", primary.port, "ca", true);
+        ready(&primary_client, &mut primary).await;
+        let replica_port = free_port();
+        let mut replica = Server::start(directory, "replica", replica_port,
+            &format!("{tls}\n{outbound_tls}\ntls-port {replica_port}\nreplicaof localhost {}\nreplica-announce-ip localhost\nreplica-announce-port {replica_port}\nrepl-diskless-sync-delay 0", primary.port), false);
+        let replica_client = certs.client("localhost", replica.port, "ca", true);
+        let mut replica_connection = ready(&replica_client, &mut replica).await;
+        let sentinel_port = free_port();
+        let mut sentinel = Server::start(directory, "sentinel", sentinel_port,
+            &format!("{tls}\n{outbound_tls}\ntls-port {sentinel_port}\nsentinel resolve-hostnames yes\nsentinel announce-hostnames yes\nsentinel monitor fixture localhost {} 1\nsentinel down-after-milliseconds fixture 300\nsentinel failover-timeout fixture 2000", primary.port), true);
+        let sentinel_client = certs.client("localhost", sentinel.port, "ca", true);
+        let mut sentinel_connection = ready(&sentinel_client, &mut sentinel).await;
         let until = Instant::now() + Duration::from_secs(10);
         loop {
             let replicas: Vec<redis::Value> = redis::cmd("SENTINEL").arg("REPLICAS").arg("fixture")
@@ -159,10 +170,15 @@ async fn sentinel_rediscovery_preserves_replicated_watermark_after_promotion() {
             assert!(Instant::now() < until, "Sentinel did not discover a synchronized replica");
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        let mut discovery = SentinelClient::build(
-            vec![format!("redis://127.0.0.1:{}", sentinel.port)],
-            "fixture", None, SentinelServerType::Master,
-        ).unwrap();
+        let certificates = certs.tls_certificates("ca", true);
+        let mut discovery = SentinelClientBuilder::new(
+            [sentinel_client.get_connection_info().addr().clone()],
+            "fixture", SentinelServerType::Master,
+        ).unwrap()
+            .set_client_to_redis_tls_mode(redis::TlsMode::Secure)
+            .set_client_to_redis_certificates(certificates.clone())
+            .set_client_to_sentinel_certificates(certificates)
+            .build().unwrap();
         let initial_client = discovery.async_get_client().await.unwrap();
         let mut old_manager = manager(&initial_client).await;
         let old_remote = RedisAdapter::new(old_manager.clone());
@@ -177,7 +193,8 @@ async fn sentinel_rediscovery_preserves_replicated_watermark_after_promotion() {
         let until = Instant::now() + Duration::from_secs(15);
         let promoted = loop {
             if let Ok(client) = discovery.async_get_client().await {
-                if client.get_connection_info().addr() == replica.client().get_connection_info().addr() {
+                if matches!(client.get_connection_info().addr(), redis::ConnectionAddr::TcpTls { host, port, .. }
+                    if host == "localhost" && *port == replica.port) {
                     break client;
                 }
             }
@@ -199,6 +216,45 @@ async fn sentinel_rediscovery_preserves_replicated_watermark_after_promotion() {
         assert!(matches!(read(&remote).await, ReadResult::Miss { reason: MissReason::WatermarkFenced, .. }));
         remote.write(write(2_001)).await.unwrap();
         assert_eq!(read(&remote).await, ReadResult::Hit(write(2_001).frame));
+        // Reconfiguration waits four publish periods plus a fresh INFO reply.
+        redis::cmd("SENTINEL").arg("DEBUG")
+            .arg("info-period").arg(200).arg("publish-period").arg(100)
+            .query_async::<()>(&mut sentinel_connection).await.unwrap();
+        let cadence: std::collections::HashMap<String, i64> = redis::cmd("SENTINEL")
+            .arg("DEBUG").query_async(&mut sentinel_connection).await.unwrap();
+        assert_eq!(cadence["INFO-PERIOD"], 200);
+        assert_eq!(cadence["PUBLISH-PERIOD"], 100);
+        drop(old_remote);
+        drop(old_manager);
+        let mut other = other_certs.start(primary.port, false);
+        let other_client = other_certs.client("localhost", primary.port, "ca", false);
+        ready(&other_client, &mut other).await;
+        let other_config = other_certs.directory.0.join("tls.conf");
+        let configuration_before = std::fs::read(&other_config).unwrap();
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        let mut foreign = ready(&other_client, &mut other).await;
+        let role: String = redis::cmd("INFO").arg("replication").query_async(&mut foreign).await.unwrap();
+        let commands: String = redis::cmd("INFO").arg("commandstats").query_async(&mut foreign).await.unwrap();
+        let keys: u64 = redis::cmd("DBSIZE").query_async(&mut foreign).await.unwrap();
+        let mutation_commands: Vec<_> = commands.lines().filter(|line| {
+            ["cmdstat_slaveof:", "cmdstat_replicaof:", "cmdstat_config", "cmdstat_multi:", "cmdstat_exec:", "cmdstat_publish:"]
+                .iter().any(|command| line.starts_with(command))
+        }).map(|line| line.split(':').next().unwrap()).collect();
+        let config_changed = std::fs::read(&other_config).unwrap() != configuration_before;
+        let replicas: Vec<std::collections::HashMap<String, String>> = redis::cmd("SENTINEL")
+            .arg("REPLICAS").arg("fixture").query_async(&mut sentinel_connection).await.unwrap();
+        let old_port = primary.port.to_string();
+        let retired = replicas.iter().find(|node| node.get("port") == Some(&old_port))
+            .expect("Sentinel lost the retired primary address");
+        let retired_down = retired["flags"].split(',').any(|flag| flag == "s_down");
+        let master = role.lines().any(|line| line == "role:master");
+        let expected_master_port = format!("master_port:{}", replica.port);
+        let reconfigured = role.lines().any(|line| line == "role:slave")
+            && role.lines().any(|line| line == "master_host:localhost")
+            && role.lines().any(|line| line == expected_master_port);
+        println!("sentinel retired_down={retired_down} foreign_role_master={master} foreign_keys={keys} reconfigured={reconfigured} config_changed={config_changed} mutation_commands={mutation_commands:?}");
+        assert!(retired_down && master && keys == 0 && !config_changed && mutation_commands.is_empty(),
+            "Sentinel did not reject the competing Redis");
     }).await;
 }
 
