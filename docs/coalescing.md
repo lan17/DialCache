@@ -86,7 +86,9 @@ failure, or cancellation behavior would be incorrect.
 
 Explicit invalidation does not clear existing flights. A caller arriving after
 invalidation can join a leader that read Redis before invalidation, even when
-only tracked remote caching is enabled. Use `coalesce: false` when each caller
+only tracked remote caching is enabled. This holds after every earlier caller
+has stopped waiting: the flight stays open until its source settles or times
+out. Use `coalesce: false` when each caller
 needs its own watermark observation; see
 [Independent fence checks](invalidation.md#independent-fence-checks).
 

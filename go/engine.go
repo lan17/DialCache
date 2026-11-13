@@ -16,6 +16,8 @@ type execution[T any] struct {
 	policy                    ResolvedPolicy
 	load                      func(context.Context) (T, error)
 	timedOut                  atomic.Bool
+	// flight is set while the execution runs a flight's shared work.
+	flight *flight
 }
 
 // ms converts a whole-millisecond duration to the wire and clock unit.
@@ -161,7 +163,9 @@ func getOrLoad[T any](ctx context.Context, c *Cache, op Operation[T], load func(
 // requestLocal serves the enabled scope's memo and fills it after a miss.
 func (x *execution[T]) requestLocal() (T, error) {
 	c := x.cache
-	state, _ := x.ctx.Value(c).(scopeState)
+	// The request's own work: a process flight below replaces x.ctx and x.flight.
+	ctx, requestFlight := x.ctx, x.flight
+	state, _ := ctx.Value(c).(scopeState)
 	start := elapsedNow(c.settings.clock)
 	c.mu.Lock()
 	raw, found := state.owner.memo[x.key]
@@ -182,7 +186,7 @@ func (x *execution[T]) requestLocal() (T, error) {
 	v, err := x.shared()
 	if err == nil {
 		c.mu.Lock()
-		if state.owner.live {
+		if state.owner.live && waited(requestFlight, ctx) {
 			state.owner.memo[x.key] = v
 		}
 		c.mu.Unlock()
@@ -192,18 +196,29 @@ func (x *execution[T]) requestLocal() (T, error) {
 
 func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, label string) (T, error) {
 	c := x.cache
-	// Read the clock before taking the lock. The caller-supplied clock is the
-	// only external code on this path; a panic from it must not leave c.mu
-	// held, or the scope cleanup in Enable would deadlock.
-	started := elapsedNow(c.settings.clock)
-	c.mu.Lock()
-	if owner != nil && !owner.live {
-		c.mu.Unlock()
-		return x.work(owner)
-	}
 	ctx := x.ctx
-	if f := flights[x.key]; f != nil {
+	var started time.Duration
+	for {
+		// A caller that already left starts and joins nothing.
+		if err := ctx.Err(); err != nil {
+			var zero T
+			return zero, err
+		}
+		// Read the clock before taking the lock. The caller-supplied clock is the
+		// only external code on this path; a panic from it must not leave c.mu
+		// held, or the scope cleanup in Enable would deadlock.
+		started = elapsedNow(c.settings.clock)
+		c.mu.Lock()
+		if owner != nil && !owner.live {
+			c.mu.Unlock()
+			return x.work(owner)
+		}
+		f := flights[x.key]
+		if f == nil {
+			break
+		}
 		f.followers++
+		f.waiters++
 		c.mu.Unlock()
 		x.event("coalesced", "", map[string]any{"scope": label})
 		select {
@@ -213,19 +228,43 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 		if err := ctx.Err(); err != nil {
 			c.mu.Lock()
 			f.followers--
+			leave(f)
 			c.mu.Unlock()
 			var zero T
 			return zero, err
 		}
+		// The work was cancelled because no caller waited for it, and this
+		// follower joined before it returned. With time left, the follower starts
+		// or joins fresh work instead of taking that failure as its own. The work
+		// unpublishes its flight before it settles; a flight still published here
+		// would be joined again forever, so its result stands.
+		if f.err != nil && f.cutShort {
+			c.mu.Lock()
+			unpublished := flights[x.key] != f
+			c.mu.Unlock()
+			if unpublished {
+				continue
+			}
+		}
 		return followerResult[T](f)
 	}
-	f := &flight{done: make(chan struct{}), started: started}
+	// Followers share this work, so the leader's cancellation ends only its own
+	// wait; the work is cancelled when no caller waits for it.
+	shared, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	f := &flight{done: make(chan struct{}), started: started, waiters: 1, cancel: cancel}
 	flights[x.key] = f
 	c.mu.Unlock()
-	// Followers share this work, so the leader's cancellation ends only its own wait.
-	x.ctx = context.WithoutCancel(ctx)
+	x.ctx = shared
+	x.flight = f
 	go func() {
 		f.value, f.err = callSafely(func() (T, error) { return x.work(owner) })
+		if shared.Err() != nil {
+			// A source timeout is the work's own outcome, which a follower inherits.
+			// errors.As runs the error's own methods; one that panics is not a timeout.
+			timedOut, _ := callSafely(func() (bool, error) { return errors.As(f.err, new(*FallbackTimeoutError)), nil })
+			f.cutShort = !timedOut
+		}
+		cancel()
 		c.mu.Lock()
 		if flights[x.key] == f {
 			delete(flights, x.key)
@@ -238,10 +277,42 @@ func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, la
 	case <-ctx.Done():
 	}
 	if err := ctx.Err(); err != nil {
+		c.mu.Lock()
+		leave(f)
+		c.mu.Unlock()
 		var zero T
 		return zero, err
 	}
 	return followerResult[T](f)
+}
+
+// leave drops a waiter whose context ended; the caller holds c.mu. With no
+// waiter left the shared work is cancelled. Its flight stays published until
+// the work returns, so a source that ignores its context is not started again
+// for this key while it still runs.
+func leave(f *flight) {
+	f.waiters--
+	if f.waiters == 0 {
+		f.cancel()
+	}
+}
+
+// waited reports whether a caller still waits for the work: a waiter of its
+// flight f, or without a flight the caller of ctx. The caller holds c.mu.
+func waited(f *flight, ctx context.Context) bool {
+	if f == nil {
+		return ctx.Err() == nil
+	}
+	return f.waiters > 0
+}
+
+// abandoned reports that no caller waits for this execution's work. Work that
+// nobody waits for fills no cache, so a late result cannot overwrite a newer
+// flight's fill or land after an invalidation.
+func (x *execution[T]) abandoned() bool {
+	x.cache.mu.Lock()
+	defer x.cache.mu.Unlock()
+	return !waited(x.flight, x.ctx)
 }
 
 // work is a flight's shared work. It is chosen here, not passed in as a
@@ -364,16 +435,20 @@ func (x *execution[T]) traverse() (T, error) {
 	}
 	v, err := x.source("remote")
 	if err != nil {
-		// A caller that stopped waiting gets its own context error, not a recovery.
-		if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAge > 0 && x.ctx.Err() == nil && x.canRecover(err) {
+		// Work that no caller waits for any more gets no recovery.
+		if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAge > 0 && !x.abandoned() && x.canRecover(err) {
 			if value, ok := x.recover(remote.frame); ok {
 				return value, nil
 			}
 		}
 		return v, err
 	}
+	if x.abandoned() {
+		return v, nil
+	}
 	if remote.kind != "error" {
-		if _, writeErr := x.putRemote(v, remote.fence, "remote", nil); writeErr != nil {
+		// The last caller can also leave while the value is being encoded.
+		if _, writeErr := x.putRemote(v, remote.fence, "remote", func() bool { return !x.abandoned() }); writeErr != nil {
 			c.settings.logger.Warn("Error putting value in Redis cache", writeErr)
 		}
 	}
@@ -390,6 +465,9 @@ type localResult[T any] struct {
 }
 
 func (x *execution[T]) putLocal(value T) {
+	if x.abandoned() {
+		return
+	}
 	_, err := callSafely(func() (struct{}, error) {
 		x.cache.local.Put(x.key, value, ms(x.policy.Local.TTL))
 		return struct{}{}, nil
@@ -424,14 +502,21 @@ func (x *execution[T]) source(layer string) (T, error) {
 	}
 	defer cancel()
 	p := startPending(func() (T, error) { return x.load(ctx) })
-	v, err := awaitDeadline(x.ctx, clock, p, start, budget, func() error {
+	wait := x.ctx
+	if x.flight != nil {
+		// Waiters leave on their own contexts, so shared work waits for its source
+		// until the budget. A source that ignores a cancelled context then still
+		// holds its flight, and the key gets no second copy of it.
+		wait = context.Background()
+	}
+	v, err := awaitDeadline(wait, clock, p, start, budget, func() error {
 		return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(budget) * time.Millisecond}
 	}, func() { x.timedOut.Store(true) })
 	// Once the wait ends the result is settled; cancel before observers run so a
 	// slow observer cannot keep a timed-out or abandoned source going.
 	cancel()
-	// A caller that stopped waiting is not a source failure.
-	if err != nil && x.ctx.Err() == nil {
+	// Work that no caller waits for any more is not a source failure.
+	if err != nil && !x.abandoned() {
 		x.errorEvent(layer, "fallback", true)
 	}
 	x.duration("fallback", layer, start, nil)
@@ -597,14 +682,15 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 		payload = EscapeRawPayload(payload)
 	}
 	x.event("storedSize", layer, map[string]any{"bytes": int64(len(payload.Bytes))})
-	if allowed != nil && !allowed() {
-		return false, nil
-	}
 	stamp, stampErr := x.writeTimestamp(layer)
 	if stampErr != nil {
 		return false, stampErr
 	}
 	if fence != nil && uint64(stamp) <= *fence {
+		return false, nil
+	}
+	// Checked before the clamp event too, so a skipped write emits none.
+	if allowed != nil && !allowed() {
 		return false, nil
 	}
 	ttl := x.policy.Remote.TTL
@@ -614,6 +700,11 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	if x.op.Identity.Tracked && ttl > time.Hour {
 		ttl = time.Hour
 		x.errorEvent(layer, "tracked_ttl_clamped", false)
+	}
+	// The clamp event runs observers, which can block while the last caller
+	// leaves; check again right before the write.
+	if allowed != nil && !allowed() {
+		return false, nil
 	}
 	_, err = callSafely(func() (struct{}, error) {
 		return struct{}{}, x.cache.settings.remote.Write(x.ctx, x.remoteKey, Frame{CreatedAtMS: uint64(stamp), Binary: payload.Binary, Payload: payload.Bytes}, ttl)

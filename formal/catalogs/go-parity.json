@@ -3455,7 +3455,7 @@
               "WithEnabled",
               "WithDisabled"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "f04226ccc2778fbbfd4159a8e06c10ddcb80c5324aed467bde6f0eb23e86cfea"
           }
         ]
       }
@@ -3529,7 +3529,7 @@
               "IsEnabled",
               "Invalidate"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "f04226ccc2778fbbfd4159a8e06c10ddcb80c5324aed467bde6f0eb23e86cfea"
           },
           {
             "path": "go/bindings.go",
@@ -3551,7 +3551,7 @@
               "putRemote",
               "recover"
             ],
-            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
+            "sha256": "29ef764c03bbffaee2a37cc2fe526c7761e7ba2c23a0f4b445741b061e53271b"
           },
           {
             "path": "go/deadline.go",
@@ -3569,7 +3569,7 @@
               "runShadow",
               "warnShadowMismatch"
             ],
-            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
+            "sha256": "d317ca9cd3650dbd017057cd7e926e2f2abb58cef1cff01357b2d36cc560907f"
           },
           {
             "path": "go/api.go",
@@ -3666,7 +3666,7 @@
             "symbols": [
               "New"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "f04226ccc2778fbbfd4159a8e06c10ddcb80c5324aed467bde6f0eb23e86cfea"
           },
           {
             "path": "go/policy.go",
@@ -3722,7 +3722,7 @@
               "remoteValue",
               "localResult"
             ],
-            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
+            "sha256": "29ef764c03bbffaee2a37cc2fe526c7761e7ba2c23a0f4b445741b061e53271b"
           }
         ]
       }
@@ -3866,7 +3866,7 @@
             "symbols": [
               "New"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "f04226ccc2778fbbfd4159a8e06c10ddcb80c5324aed467bde6f0eb23e86cfea"
           },
           {
             "path": "go/engine.go",
@@ -3874,7 +3874,7 @@
               "putLocal",
               "shared"
             ],
-            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
+            "sha256": "29ef764c03bbffaee2a37cc2fe526c7761e7ba2c23a0f4b445741b061e53271b"
           },
           {
             "path": "go/api.go",
@@ -3944,14 +3944,14 @@
               "canRecover",
               "recover"
             ],
-            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
+            "sha256": "29ef764c03bbffaee2a37cc2fe526c7761e7ba2c23a0f4b445741b061e53271b"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "runShadow"
             ],
-            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
+            "sha256": "d317ca9cd3650dbd017057cd7e926e2f2abb58cef1cff01357b2d36cc560907f"
           },
           {
             "path": "go/codec.go",
@@ -3992,7 +3992,7 @@
             "symbols": [
               "Invalidate"
             ],
-            "sha256": "b4d335e6d501c399b85bd5c61169810d622efcb6e53d5106d40b2e66a789b449"
+            "sha256": "f04226ccc2778fbbfd4159a8e06c10ddcb80c5324aed467bde6f0eb23e86cfea"
           },
           {
             "path": "go/redis_adapter.go",
@@ -4260,14 +4260,14 @@
               "errorEvent",
               "duration"
             ],
-            "sha256": "6517e9fd1647fcfd24e1925589a7fffcc8eae8a8f2933b272c46ec425e3f47eb"
+            "sha256": "29ef764c03bbffaee2a37cc2fe526c7761e7ba2c23a0f4b445741b061e53271b"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "shadowEvent"
             ],
-            "sha256": "335f4bbd5def8fdb5b6a8225729dcc8626907976f2ac65366696e8673a42a1fc"
+            "sha256": "d317ca9cd3650dbd017057cd7e926e2f2abb58cef1cff01357b2d36cc560907f"
           }
         ]
       }
