@@ -1,3 +1,5 @@
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::cell::Cell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -12,6 +14,41 @@ use dialcache::{
 use futures::future::BoxFuture;
 use parking_lot::Mutex;
 use sha2::{Digest, Sha256};
+
+struct CountingAllocator;
+
+thread_local! {
+    static ALLOCATED: Cell<usize> = const { Cell::new(0) };
+}
+
+fn count(bytes: usize) {
+    let _ = ALLOCATED.try_with(|allocated| allocated.set(allocated.get() + bytes));
+}
+
+// SAFETY: every call forwards to the system allocator unchanged.
+unsafe impl GlobalAlloc for CountingAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        count(layout.size());
+        System.alloc(layout)
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        count(layout.size());
+        System.alloc_zeroed(layout)
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        count(new_size);
+        System.realloc(ptr, layout, new_size)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        System.dealloc(ptr, layout)
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: CountingAllocator = CountingAllocator;
 
 fn expanding_text() -> Payload {
     // A 128 KiB window and 1536 RLE blocks: 192 MiB of FF becomes 576 MiB of UTF-8.
@@ -32,9 +69,17 @@ fn expanding_text() -> Payload {
 #[test]
 fn repaired_text_cannot_exceed_the_global_read_limit() {
     let original = expanding_text();
+    let before = ALLOCATED.with(Cell::get);
     let result = decompress_payload(original.clone(), MAX_DECOMPRESSED_BYTES);
+    let allocated = ALLOCATED.with(Cell::get) - before;
     assert_eq!(result.outcome, Some(CompressionOutcome::ReadOverLimit));
     assert_eq!(result.payload, original);
+    // The raw buffer's growth uses at most 512 MiB in total. Even one exact
+    // 576 MiB repair allocation exceeds this budget on its own.
+    assert!(
+        allocated < MAX_DECOMPRESSED_BYTES + (1 << 20),
+        "rejected text allocated {allocated} bytes"
+    );
 }
 
 struct FrameRemote {
