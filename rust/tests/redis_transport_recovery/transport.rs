@@ -163,8 +163,13 @@ async fn sentinel_rediscovery_preserves_replicated_watermark_after_promotion() {
         loop {
             let replicas: Vec<redis::Value> = redis::cmd("SENTINEL").arg("REPLICAS").arg("fixture")
                 .query_async(&mut sentinel_connection).await.unwrap();
-            let info: String = redis::cmd("INFO").arg("replication").query_async(&mut replica_connection).await.unwrap();
-            if !replicas.is_empty() && info.contains("master_link_status:up") {
+            let info: redis::RedisResult<String> = redis::cmd("INFO").arg("replication").query_async(&mut replica_connection).await;
+            let synchronized = match info {
+                Ok(info) => info.contains("master_link_status:up"),
+                Err(error) if error.is_timeout() => false,
+                Err(error) => panic!("replica readiness failed: {error}"),
+            };
+            if !replicas.is_empty() && synchronized {
                 break;
             }
             assert!(Instant::now() < until, "Sentinel did not discover a synchronized replica");
