@@ -808,6 +808,14 @@ mod metric_transport {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn full_or_closed_metric_queue_does_not_wait() -> Result<(), BoxError> {
         let (packets, receiver) = sync_channel(1);
+        let (finished, completion) = sync_channel(1);
+        let watchdog = std::thread::spawn(move || {
+            let completed = completion
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .is_ok();
+            drop(receiver);
+            completed
+        });
         let dropped = Arc::new(AtomicUsize::new(0));
         let client = QueuedMetrics {
             packets,
@@ -839,8 +847,8 @@ mod metric_transport {
             reader.get(request.scope(), 1),
         )
         .await;
-        // Disconnect before asserting, so a broken blocking sender can exit.
-        drop(receiver);
+        let _ = finished.send(());
+        assert!(watchdog.join().unwrap(), "metric export waited for its sink");
         assert_eq!(*result??, 1);
         assert!(dropped.load(Ordering::Relaxed) > 0);
         let before = dropped.load(Ordering::Relaxed);
