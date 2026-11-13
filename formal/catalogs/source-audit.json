@@ -211,7 +211,7 @@
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "1cac7833035036ec5ea58cf4e90980d52bcb89c84e28be7441a22bb0b401fbb8",
+      "sha256": "04af81e10dd6b5090328d5618bbf77d2dc2af58047a479c35a3b25a6690a629c",
       "entries": [
         {"title":"Rust integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -1772,7 +1772,7 @@
     },
     {
       "path": "formal/guides/VALIDATION.md",
-      "sha256": "8f0a8bbd03f71d630f337a83c9c01f1e737bd7c634e7e7ac9d9a4b988fb511ea",
+      "sha256": "c2baf298efdc5723f991acd3e3d200c1b0aa97bcfd113a4fa683cd35b6a01715",
       "entries": [
         {"title":"Validation and evidence"},
         {"title":"Prerequisites"},
@@ -1781,7 +1781,8 @@
         {"title":"Reproducing one history"},
         {"title":"Mutation evidence"},
         {"title":"Exploratory runs"},
-        {"title":"A retained sampling regression"}
+        {"title":"A retained sampling regression"},
+        {"title":"Rust consumer and resource checks"}
       ],
       "review": {
         "kind": "tooling-guide",

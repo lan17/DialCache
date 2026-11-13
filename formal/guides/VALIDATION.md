@@ -419,3 +419,54 @@ public-action regressions now anchor all of them:
 | policy / `remote-value:7`, `remote-value:8`, `remote-value:9` | [falsyRemoteValuesAreServedFromRemoteTest](../models/dialcache-policy-conformance.qnt) |
 | layers / `source-publication-probed-in-all-three-layers` | [untrackedSourcePublicationIsProbedInAllThreeLayersTest](../models/dialcache-layers-conformance.qnt) |
 | independent / `distinct-retained-recovery-values` | [independentRecoveriesServeDistinctAcquiredSnapshotsTest](../models/dialcache-independent-conformance.qnt) |
+
+## Rust consumer and resource checks
+
+The Rust CI job separately builds `rust/tests/production_consumer`, whose own
+workspace and lockfile keep the root crate's `test-util` development dependency
+out of the consumer graph. It checks the production shadow-log rendering path
+and panic isolation, not the deterministic replay runtime:
+
+```sh
+cargo tree --locked --manifest-path rust/tests/production_consumer/Cargo.toml --edges features --invert dialcache
+cargo fmt --manifest-path rust/tests/production_consumer/Cargo.toml --check
+cargo clippy --locked --manifest-path rust/tests/production_consumer/Cargo.toml --target-dir rust/target/production-consumer --all-targets -- -D warnings
+cargo run --locked --manifest-path rust/tests/production_consumer/Cargo.toml --target-dir rust/target/production-consumer
+```
+
+The consumer's first assertion distinguishes the production renderer from the
+test renderer. As a negative control, adding `--features dialcache/test-util`
+to the last command must fail that assertion. Do not count that expected failure
+as a production validation result.
+
+The default native suite also checks application-owned permits across actual
+socket work, caller abandonment and native I/O expiry; retained result values
+and post-decompression codec limits; and bounded metric queue, sender error and
+shutdown behavior. These tests do not turn the recipes into library defaults.
+
+Longer load tests and the local transport fixture are opt-in. The load runner
+requires GNU `timeout`, Python 3, a clean committed checkout and a new output
+directory for each run:
+
+```sh
+DIALCACHE_SOAK_CASES='hot-hit cancellation' \
+DIALCACHE_SOAK_WORKER_COUNTS=1 DIALCACHE_SOAK_RATES=1000 DIALCACHE_SOAK_SECONDS=10 \
+bash scripts/rust-scale-soak.sh /tmp/dialcache-scale-evidence
+
+cargo test --locked --manifest-path rust/tests/redis_transport_recovery/Cargo.toml \
+  --test transport -- --test-threads=1
+```
+
+The load runner records its source and harness fingerprints, offered arrivals,
+admission decisions, caller outcomes, bounded latency histograms and actual work
+drain. Fixed-window completions and eventual cohort success are different
+measurements. Synthetic remote results are not Redis capacity measurements, and
+RSS observations do not prove a memory ceiling.
+
+The transport fixture needs TLS-capable `redis-server` and OpenSSL and fails
+when prerequisites are missing. Its separate downstream manifest selects Redis
+TLS/Sentinel features and a rustls crypto provider without changing the library
+defaults. It tests explicit primary rediscovery, not automatic application
+failover. See its [scope and commands](../../rust/tests/redis_transport_recovery/README.md)
+before running it. Neither opt-in suite replaces portable replay, required
+hosted validation, or the Docker-backed interoperability matrix.

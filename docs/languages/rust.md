@@ -139,6 +139,7 @@ The application's one-second timeout drops this dependency future and releases
 its permit. It does not prove cancellation of work in a client-owned task or at
 the server. If your client starts separate tasks, keep the permit with the task
 that owns the resource until it finishes, and bound its native queue and I/O.
+Acquire the permit before scheduling that task, not after it starts.
 A caller timeout only ends that caller's wait. None of these timers can preempt
 blocking synchronous code.
 
@@ -203,7 +204,8 @@ close scopes promptly:
 
 Use `request_local(false)` when request memoization is not needed. Closing a
 scope releases its memo, but does not cancel source work or release `Arc`s held
-by callers. Apply the source controls above as well.
+by callers. Keep the request permit until the caller also releases retained
+results. Apply the source controls above as well.
 
 ### Nonblocking metric transport
 
