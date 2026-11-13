@@ -275,6 +275,126 @@ mod application_budgets {
         Ok(())
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn native_work_keeps_its_permit_after_the_wait_ends() -> Result<(), BoxError> {
+        use std::io::{ErrorKind, Read};
+        use std::net::TcpStream;
+        use tokio::io::AsyncWriteExt;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let address = listener.local_addr()?;
+        let slots = Arc::new(Semaphore::new(1));
+        let started = Arc::new(Semaphore::new(0));
+        let finished = Arc::new(Semaphore::new(0));
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let native_timeouts = Arc::new(AtomicUsize::new(0));
+        let cache = DialCache::builder().build()?;
+        let reader = cache
+            .use_case::<u64, u64>("item", "nativeSource")
+            .key(|id: &u64| KeySpec::new(id))
+            .source({
+                let (slots, started, finished) = (slots.clone(), started.clone(), finished.clone());
+                let (active, peak, native_timeouts) =
+                    (active.clone(), peak.clone(), native_timeouts.clone());
+                move |_, _| {
+                    let (slots, started, finished) =
+                        (slots.clone(), started.clone(), finished.clone());
+                    let (active, peak, native_timeouts) =
+                        (active.clone(), peak.clone(), native_timeouts.clone());
+                    async move {
+                        let permit = slots.try_acquire_owned()?;
+                        // Dropping the join handle cannot stop blocking I/O.
+                        let work = tokio::task::spawn_blocking(move || {
+                            let mut stream =
+                                TcpStream::connect_timeout(&address, Duration::from_secs(1))?;
+                            stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+                            let running = active.fetch_add(1, Ordering::SeqCst) + 1;
+                            peak.fetch_max(running, Ordering::SeqCst);
+                            started.add_permits(1);
+                            let mut reply = [0];
+                            let result = stream.read_exact(&mut reply);
+                            if result.as_ref().is_err_and(|error| {
+                                matches!(error.kind(), ErrorKind::TimedOut | ErrorKind::WouldBlock)
+                            }) {
+                                native_timeouts.fetch_add(1, Ordering::SeqCst);
+                            }
+                            drop(stream);
+                            active.fetch_sub(1, Ordering::SeqCst);
+                            drop(permit);
+                            finished.add_permits(1);
+                            result?;
+                            Ok::<_, BoxError>(u64::from(reply[0]))
+                        });
+                        timeout(Duration::from_millis(200), work).await??
+                    }
+                }
+            })
+            .register()?;
+
+        let caller = tokio::spawn({
+            let reader = reader.clone();
+            async move { reader.get_uncached(1).await }
+        });
+        let (mut server, _) = timeout(Duration::from_secs(3), listener.accept()).await??;
+        timeout(Duration::from_secs(3), started.acquire())
+            .await??
+            .forget();
+        let error = timeout(Duration::from_secs(3), caller).await??.unwrap_err();
+        assert!(error.source_error().unwrap().is::<Elapsed>());
+        assert_eq!(active.load(Ordering::SeqCst), 1);
+        let rejected = reader.get_uncached(2).await.unwrap_err();
+        assert_eq!(peak.load(Ordering::SeqCst), 1);
+        assert_eq!(active.load(Ordering::SeqCst), 1);
+        assert_eq!(slots.available_permits(), 0);
+        assert!(rejected.source_error().unwrap().is::<TryAcquireError>());
+        assert_eq!(native_timeouts.load(Ordering::SeqCst), 0);
+        server.write_all(&[1]).await?;
+        timeout(Duration::from_secs(3), finished.acquire())
+            .await??
+            .forget();
+        drop(server);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert_eq!(slots.available_permits(), 1);
+
+        let caller = tokio::spawn({
+            let reader = reader.clone();
+            async move { reader.get_uncached(2).await }
+        });
+        let (stalled_server, _) = timeout(Duration::from_secs(3), listener.accept()).await??;
+        timeout(Duration::from_secs(3), started.acquire())
+            .await??
+            .forget();
+        caller.abort();
+        assert!(caller.await.unwrap_err().is_cancelled());
+        assert_eq!(active.load(Ordering::SeqCst), 1);
+        assert_eq!(slots.available_permits(), 0);
+        timeout(Duration::from_secs(4), finished.acquire())
+            .await??
+            .forget();
+        drop(stalled_server);
+        assert_eq!(native_timeouts.load(Ordering::SeqCst), 1);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert_eq!(slots.available_permits(), 1);
+
+        let caller = tokio::spawn({
+            let reader = reader.clone();
+            async move { reader.get_uncached(3).await }
+        });
+        let (mut server, _) = timeout(Duration::from_secs(3), listener.accept()).await??;
+        server.write_all(&[3]).await?;
+        assert_eq!(*timeout(Duration::from_secs(3), caller).await???, 3);
+        timeout(Duration::from_secs(3), finished.acquire())
+            .await??
+            .forget();
+        drop(server);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+        assert_eq!(peak.load(Ordering::SeqCst), 1);
+        assert_eq!(slots.available_permits(), 1);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn provider_failure_never_activates_baseline_caching() -> Result<(), BoxError> {
         let configuration = Arc::new(Semaphore::new(0));
