@@ -1028,8 +1028,9 @@ mod metric_transport {
             let completed = completion
                 .recv_timeout(std::time::Duration::from_secs(2))
                 .is_ok();
+            let retained = receiver.try_recv();
             drop(receiver);
-            completed
+            (completed, retained)
         });
         let dropped = Arc::new(AtomicUsize::new(0));
         let client = QueuedMetrics {
@@ -1037,8 +1038,9 @@ mod metric_transport {
             dropped: dropped.clone(),
         };
         client.increment("test", 1.0, &[]);
-        client.increment("test", 1.0, &[]);
-        assert_eq!(dropped.load(Ordering::Relaxed), 1);
+        client.histogram("test", 0.25, &[]);
+        client.distribution("test", 0.5, &[]);
+        assert_eq!(dropped.load(Ordering::Relaxed), 2);
         let observer = DatadogObserver::new(
             client,
             DatadogOptions::new(ObservationMetricType::Distribution),
@@ -1063,12 +1065,11 @@ mod metric_transport {
         )
         .await;
         let _ = finished.send(());
-        assert!(
-            watchdog.join().unwrap(),
-            "metric export waited for its sink"
-        );
+        let (completed, retained) = watchdog.join().unwrap();
+        assert!(completed, "metric export waited for its sink");
+        assert_eq!(retained?, "test:1|c|#");
         assert_eq!(*result??, 1);
-        assert!(dropped.load(Ordering::Relaxed) > 0);
+        assert!(dropped.load(Ordering::Relaxed) > 2);
         let before = dropped.load(Ordering::Relaxed);
         assert_eq!(*reader.get(request.scope(), 1).await?, 1);
         assert_eq!(dropped.load(Ordering::Relaxed), before + 2);
@@ -1084,12 +1085,74 @@ mod metric_transport {
         use std::net::UdpSocket;
         use std::time::Duration;
 
-        let receiver = UdpSocket::bind("127.0.0.1:0")?;
-        receiver.set_read_timeout(Some(Duration::from_secs(2)))?;
+        for (mode, kind) in [
+            (ObservationMetricType::Distribution, "d"),
+            (ObservationMetricType::Histogram, "h"),
+        ] {
+            let receiver = UdpSocket::bind("127.0.0.1:0")?;
+            receiver.set_read_timeout(Some(Duration::from_secs(2)))?;
+            let socket = UdpSocket::bind("127.0.0.1:0")?;
+            socket.connect(receiver.local_addr()?)?;
+            socket.set_write_timeout(Some(Duration::from_millis(50)))?;
+            let (packets, queue) = sync_channel::<String>(4);
+            let (stopped, completion) = sync_channel(1);
+            let errors = Arc::new(AtomicUsize::new(0));
+            let send_errors = errors.clone();
+            let sender = std::thread::spawn(move || {
+                for packet in queue {
+                    if socket.send(packet.as_bytes()).is_err() {
+                        send_errors.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                stopped.send(()).unwrap();
+            });
+            let dropped = Arc::new(AtomicUsize::new(0));
+            let client = QueuedMetrics {
+                packets,
+                dropped: dropped.clone(),
+            };
+            client.increment("test", 1.0, &[("bad".into(), "newline\n".into())]);
+            client.increment("test", 1.0, &[("large".into(), "x".repeat(513))]);
+            assert_eq!(dropped.load(Ordering::Relaxed), 2);
+            let observer = DatadogObserver::new(client, DatadogOptions::new(mode))?;
+            let labels = Labels {
+                namespace: "example".into(),
+                use_case: "item:byId".into(),
+                key_type: "item".into(),
+                layer: Layer::Local,
+            };
+            observer.observe(&Event::Request {
+                labels: labels.clone(),
+            });
+            observer.observe(&Event::Get {
+                labels,
+                seconds: 0.25,
+            });
+            drop(observer);
+            completion.recv_timeout(Duration::from_secs(2))?;
+            sender.join().unwrap();
+            assert_eq!(errors.load(Ordering::Relaxed), 0);
+            assert_eq!(dropped.load(Ordering::Relaxed), 2);
+            let mut buffer = [0; 512];
+            let count = receiver.recv(&mut buffer)?;
+            assert_eq!(std::str::from_utf8(&buffer[..count])?, "dialcache.request.count:1|c|#cache_namespace:example,use_case:item:byId,key_type:item,layer:local");
+            let count = receiver.recv(&mut buffer)?;
+            assert_eq!(std::str::from_utf8(&buffer[..count])?, format!("dialcache.get.duration:0.25|{kind}|#cache_namespace:example,use_case:item:byId,key_type:item,layer:local"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn sender_counts_failed_sends_and_stops_after_all_producers() -> Result<(), BoxError> {
+        use std::net::UdpSocket;
+        use std::sync::mpsc::TryRecvError;
+        use std::time::Duration;
+
+        // An unconnected socket makes send fail without relying on remote ICMP.
         let socket = UdpSocket::bind("127.0.0.1:0")?;
-        socket.connect(receiver.local_addr()?)?;
         socket.set_write_timeout(Some(Duration::from_millis(50)))?;
         let (packets, queue) = sync_channel::<String>(4);
+        let (stopped, completion) = sync_channel(1);
         let errors = Arc::new(AtomicUsize::new(0));
         let send_errors = errors.clone();
         let sender = std::thread::spawn(move || {
@@ -1098,40 +1161,27 @@ mod metric_transport {
                     send_errors.fetch_add(1, Ordering::Relaxed);
                 }
             }
+            stopped.send(()).unwrap();
         });
         let dropped = Arc::new(AtomicUsize::new(0));
+        let last_producer = QueuedMetrics {
+            packets: packets.clone(),
+            dropped: dropped.clone(),
+        };
         let client = QueuedMetrics {
             packets,
             dropped: dropped.clone(),
         };
-        client.increment("test", 1.0, &[("bad".into(), "newline\n".into())]);
-        client.increment("test", 1.0, &[("large".into(), "x".repeat(513))]);
-        assert_eq!(dropped.load(Ordering::Relaxed), 2);
-        let observer = DatadogObserver::new(
-            client,
-            DatadogOptions::new(ObservationMetricType::Distribution),
-        )?;
-        let labels = Labels {
-            namespace: "example".into(),
-            use_case: "item:byId".into(),
-            key_type: "item".into(),
-            layer: Layer::Local,
-        };
-        observer.observe(&Event::Request {
-            labels: labels.clone(),
-        });
-        observer.observe(&Event::Get {
-            labels,
-            seconds: 0.25,
-        });
-        drop(observer);
+        client.increment("test", 1.0, &[]);
+        client.histogram("test", 0.25, &[]);
+        drop(client);
+        assert!(matches!(completion.try_recv(), Err(TryRecvError::Empty)));
+        last_producer.distribution("test", 0.5, &[]);
+        drop(last_producer);
+        completion.recv_timeout(Duration::from_secs(2))?;
         sender.join().unwrap();
-        assert_eq!(errors.load(Ordering::Relaxed), 0);
-        let mut buffer = [0; 512];
-        let count = receiver.recv(&mut buffer)?;
-        assert_eq!(std::str::from_utf8(&buffer[..count])?, "dialcache.request.count:1|c|#cache_namespace:example,use_case:item:byId,key_type:item,layer:local");
-        let count = receiver.recv(&mut buffer)?;
-        assert_eq!(std::str::from_utf8(&buffer[..count])?, "dialcache.get.duration:0.25|d|#cache_namespace:example,use_case:item:byId,key_type:item,layer:local");
+        assert_eq!(errors.load(Ordering::Relaxed), 3);
+        assert_eq!(dropped.load(Ordering::Relaxed), 0);
         Ok(())
     }
 }
