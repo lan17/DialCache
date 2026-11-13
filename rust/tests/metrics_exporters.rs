@@ -764,7 +764,7 @@ mod prometheus_exporter {
 
 mod isolation {
     use super::*;
-    use dialcache::testing::{TestExecutor, WALL_EPOCH_MS};
+    use dialcache::testing::{TestExecutor, VirtualClock, WALL_EPOCH_MS};
     use dialcache::{DialCache, KeySpec, Policy};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -780,6 +780,65 @@ mod isolation {
         fn observes_shadow_outcomes(&self) -> bool {
             panic!("exporter failure");
         }
+    }
+
+    struct AdvancingObserver {
+        clock: Arc<VirtualClock>,
+        durations: Arc<Mutex<Vec<f64>>>,
+    }
+
+    impl Observer for AdvancingObserver {
+        fn observe(&self, event: &Event) {
+            match event {
+                Event::Request { labels } if labels.layer == Layer::Local => {
+                    self.clock.shift(250, false);
+                }
+                Event::Get { labels, seconds } if labels.layer == Layer::Local => {
+                    self.durations.lock().push(*seconds);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn local_get_duration_excludes_request_observer_time() {
+        let mut exec = TestExecutor::new(WALL_EPOCH_MS);
+        let durations = Arc::new(Mutex::new(Vec::new()));
+        let cache = DialCache::builder()
+            .clock_arc(exec.clock.clone())
+            .runtime_arc(exec.runtime.clone())
+            .observer(AdvancingObserver {
+                clock: exec.clock.clone(),
+                durations: durations.clone(),
+            })
+            .build()
+            .expect("configuration");
+        let source_calls = Arc::new(AtomicUsize::new(0));
+        let counting = source_calls.clone();
+        let lookup = cache
+            .use_case::<i64, i64>("item", "lookup")
+            .policy(Policy::default().local_ttl_sec(60))
+            .key(|id: &i64| KeySpec::new(id.to_string()))
+            .source(move |_scope, id: i64| {
+                counting.fetch_add(1, Ordering::SeqCst);
+                async move { Ok(id * 10) }
+            })
+            .register()
+            .expect("use case");
+
+        for _ in 0..2 {
+            let cache = cache.clone();
+            let lookup = lookup.clone();
+            let value = exec.block_on(async move {
+                cache
+                    .enable(|scope| async move { lookup.get(&scope, 7).await })
+                    .await
+            });
+            assert_eq!(*value.expect("lookup result"), 70);
+        }
+        assert_eq!(source_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(*durations.lock(), [0.0, 0.0]);
     }
 
     /// A panicking observer never changes the result of a cached call.
