@@ -1,0 +1,15 @@
+[package]
+name = "dialcache-transport-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+dialcache = { path = "../..", features = ["redis"] }
+redis = { version = "=1.7.0", features = ["tokio-rustls-comp", "sentinel", "connection-manager"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio = { version = "1", features = ["full"] }
+
+[[test]]
+name = "transport"
+path = "transport.rs"
