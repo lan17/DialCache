@@ -568,13 +568,30 @@ func TestFollowerOfCancelledWorkThatPanicsRetries(t *testing.T) {
 }
 
 func TestCoalescedLeaderKeepsAValueReturnedWithAnError(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		f := newLifetimeFixture(Policy{})
-		ctx, done := f.cache.Enable(context.Background())
-		defer done()
-		failed := errors.New("partial result")
-		if v, err := f.get(ctx, func(context.Context) (int, error) { return 7, failed }); v != 7 || !errors.Is(err, failed) {
-			t.Fatalf("leader = (%d, %v), want (7, %v), as without coalescing", v, err, failed)
-		}
-	})
+	for _, policy := range []Policy{{LocalTTL: time.Minute}, {LocalTTL: time.Minute, RequestLocal: true}} {
+		synctest.Test(t, func(t *testing.T) {
+			f := newLifetimeFixture(policy)
+			ctx, done := f.cache.Enable(context.Background())
+			defer done()
+			failed := errors.New("partial result")
+			gate := make(chan struct{})
+			load := func(context.Context) (int, error) { f.calls.Add(1); <-gate; return 7, failed }
+			type result struct {
+				v   int
+				err error
+			}
+			leader, follower := make(chan result, 1), make(chan result, 1)
+			go func() { v, err := f.get(ctx, load); leader <- result{v, err} }()
+			synctest.Wait()
+			go func() { v, err := f.get(ctx, load); follower <- result{v, err} }()
+			synctest.Wait()
+			close(gate)
+			if l, fo := <-leader, <-follower; l.v != 7 || !errors.Is(l.err, failed) || fo.v != 0 || !errors.Is(fo.err, failed) {
+				t.Fatalf("leader = (%d, %v), follower = (%d, %v); want (7, %v) as without coalescing, and (0, %v)", l.v, l.err, fo.v, fo.err, failed, failed)
+			}
+			if v, err := f.get(ctx, func(context.Context) (int, error) { f.calls.Add(1); return 9, nil }); v != 9 || err != nil || f.calls.Load() != 2 {
+				t.Fatalf("next call = (%d, %v) after %d source calls; want (9, nil) after 2: a value returned with an error is not cached", v, err, f.calls.Load())
+			}
+		})
+	}
 }
