@@ -216,6 +216,8 @@ struct Metrics {
     rejected: AtomicU64,
     admitted: AtomicU64,
     completed: AtomicU64,
+    completed_within_window: AtomicU64,
+    successful_within_window: AtomicU64,
     logical_ok: AtomicU64,
     logical_error: AtomicU64,
     logical_deadline: AtomicU64,
@@ -290,6 +292,8 @@ impl Metrics {
             "window_closed": self.window_closed.load(SeqCst),
             "admission_rejected": self.rejected.load(SeqCst), "admitted": self.admitted.load(SeqCst),
             "completed_callers": self.completed.load(SeqCst), "attempts": self.attempts.load(SeqCst),
+            "completed_within_window": self.completed_within_window.load(SeqCst),
+            "successful_within_window": self.successful_within_window.load(SeqCst),
             "logical_ok": self.logical_ok.load(SeqCst), "logical_error": self.logical_error.load(SeqCst),
             "logical_deadline": self.logical_deadline.load(SeqCst),
             "ok": self.ok.load(SeqCst), "source_error": self.source_error.load(SeqCst),
@@ -801,6 +805,7 @@ async fn run(settings: &Settings, metrics: Arc<Metrics>) {
         metrics.admitted.fetch_add(1, SeqCst);
         let app = app.clone();
         let active = metrics.callers.enter();
+        let window_end = begin + duration;
         callers.spawn(async move {
             let (_permit, _active) = (permit, active);
             let mut succeeded = false;
@@ -839,7 +844,14 @@ async fn run(settings: &Settings, metrics: Arc<Metrics>) {
                     }
                 }
             }
-            let elapsed = tokio::time::Instant::now().duration_since(intended);
+            let completed_at = tokio::time::Instant::now();
+            let elapsed = completed_at.duration_since(intended);
+            if completed_at <= window_end {
+                app.metrics.completed_within_window.fetch_add(1, SeqCst);
+                if succeeded {
+                    app.metrics.successful_within_window.fetch_add(1, SeqCst);
+                }
+            }
             app.metrics.latency.lock().record(elapsed);
             if succeeded {
                 app.metrics.logical_ok.fetch_add(1, SeqCst);
