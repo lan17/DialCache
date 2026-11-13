@@ -61,3 +61,57 @@ multi-Sentinel quorum loss, split brain, lost replication, TLS Sentinel links,
 TLS Cluster routing, certificate rotation, native-tls, or automatic application
 connection replacement. Connection discovery and replacement remain application
 responsibilities.
+
+## Opt-in mixed load
+
+The separate `mixed_load` target is ignored by default. On Linux, run its cleanup
+controls once, then select a 10-second pilot or a 120-second observation:
+
+```sh
+cargo test --locked --manifest-path rust/tests/redis_transport_recovery/Cargo.toml \
+  --test mixed_load cleanup_controls -- --ignored --nocapture
+DIALCACHE_REDIS_LOAD_SECONDS=10 cargo test --locked \
+  --manifest-path rust/tests/redis_transport_recovery/Cargo.toml \
+  --test mixed_load mixed_load_with_one_outage -- --ignored --nocapture
+```
+
+Use `120` instead of `10` for the longer case. The workload is fixed at 200 planned
+arrivals per second on four Tokio workers: 60% hot reads, 20% cold reads, 10%
+cancellable reads, and 10% invalidations. Values are deterministic, compressible
+64 KiB strings tied to their entity ID. The process-local cache is disabled.
+There are at most 64 caller operations, eight raw source operations, 64 adapter
+operations and 64 native command waits; the Redis client permits 16 concurrent
+commands. Admission never waits for capacity. Arrivals over 20 ms late or after
+the fixed window closes are counted and dropped.
+
+Each run kills its disposable Redis at one third of the requested duration and
+starts a fresh, empty server two seconds later. Planned and actual fault times,
+child PIDs, post-restart Redis hits, terminal outcomes, and offered/admitted
+ratios are printed. Failed invalidations are not successful fences. Values are
+checked for identity and byte integrity, not for revocation of an acquired
+snapshot. This case makes no quiescent freshness or durability claim.
+
+Connection and command budgets are 80 ms, the cache read budget is 30 ms, source
+work has a 60 ms native budget and an 80 ms cache budget, and the whole caller
+operation has a 300 ms deadline from dispatch. Cancellation drops the caller
+after two milliseconds, not its underlying source or native command task.
+Native command tasks retain their permits and counters until the client wait
+settles. Client reconnect tasks and server execution after a timeout remain
+outside those counters. A final `PING` orders earlier replies on the surviving
+connection. One absolute five-second drain deadline includes callers, raw work,
+invalidations, server shutdown and cleanup; a run has a further overall deadline
+of its requested duration plus 20 seconds.
+
+Latency starts at the intended arrival and ends after value validation. Results
+separate all terminals, successful lookups, cancellation, and actual fault
+phases. Histograms use 32 power-of-two microsecond buckets with ceiling conversion,
+nearest-rank upper bounds, maximum and overflow. Only terminals strictly before
+the window end count in within-window rates. Raw work reports distinguish
+submission, start, finish, drop and rejection; CPU submission includes rejected
+jobs, while source and native submission counts begin after their capacity gate.
+
+Memory output is process RSS and Redis `used_memory`, sampled about every 100 ms
+plus the diagnostic query time. It is not allocator attribution or a continuous
+peak. Server command totals include diagnostics and Lua commands; the old
+server's pre-stop total is a lower bound. This workload is not a capacity target,
+a production traffic model, or a general benchmark suite.
