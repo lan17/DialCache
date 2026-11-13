@@ -211,14 +211,19 @@
     },
     {
       "path": "docs/languages/rust.md",
-      "sha256": "ae1e0dcb12f62dc827c075c0e8f3c92ac298a6758e59d6d65205180b3dee9c4c",
+      "sha256": "1cac7833035036ec5ea58cf4e90980d52bcb89c84e28be7441a22bb0b401fbb8",
       "entries": [
         {"title":"Rust integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
         {"title":"Request scope and operations","contracts":["C01","C02","C03","B01","B02"]},
         {"title":"Policy and errors","contracts":["C16","C17","C18","C20","C21","C23","C25","C27","C29","B01","B02"]},
         {"title":"Identity and values","contracts":["W01","W02","E04","B03"]},
-        {"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]}
+        {"title":"Integrations","contracts":["E01","B01","B03","X01","C46","C47","C60"]},
+        {"title":"Application-owned limits","contracts":["B01","E03","X02"]},
+        {"title":"Source and policy work","contracts":["C01","C11","C20","C23","C25","C27","B01","B02","E03","X02"]},
+        {"title":"Complete mutation calls","contracts":["C27","C29","C56","B01","E01","E03","X02"]},
+        {"title":"Values and request scopes","contracts":["C03","C07","C08","B03","E04","X02"]},
+        {"title":"Nonblocking metric transport","contracts":["C30","X01","X02"]}
       ]
     },
     {
