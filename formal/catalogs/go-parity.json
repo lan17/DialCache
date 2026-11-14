@@ -3680,14 +3680,14 @@
             "symbols": [
               "Identity"
             ],
-            "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
+            "sha256": "27cd94fd9d5e3b5b101d9dd4db810706b35811c8f5ebece23d89aae439669267"
           },
           {
             "path": "go/codec.go",
             "symbols": [
               "JSONCodec"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "ddec51c29141c29c6c76e74cb2b25f20235519a8d26e32bc0e73fd04ab6882a0"
           }
         ]
       }
@@ -3714,7 +3714,7 @@
               "RawReadResult",
               "NormalizeReadResult"
             ],
-            "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
+            "sha256": "27cd94fd9d5e3b5b101d9dd4db810706b35811c8f5ebece23d89aae439669267"
           },
           {
             "path": "go/engine.go",
@@ -3751,7 +3751,7 @@
               "EscapeRawPayload",
               "firstZstdFrame"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "ddec51c29141c29c6c76e74cb2b25f20235519a8d26e32bc0e73fd04ab6882a0"
           }
         ]
       }
@@ -3818,7 +3818,7 @@
               "CeilSupportedCacheTTLMS",
               "ValidateTimestampMS"
             ],
-            "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
+            "sha256": "27cd94fd9d5e3b5b101d9dd4db810706b35811c8f5ebece23d89aae439669267"
           },
           {
             "path": "go/policy.go",
@@ -3904,7 +3904,7 @@
             "symbols": [
               "Cohort"
             ],
-            "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
+            "sha256": "27cd94fd9d5e3b5b101d9dd4db810706b35811c8f5ebece23d89aae439669267"
           },
           {
             "path": "go/policy.go",
@@ -3959,7 +3959,7 @@
               "CompressPayload",
               "DecompressPayload"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "ddec51c29141c29c6c76e74cb2b25f20235519a8d26e32bc0e73fd04ab6882a0"
           },
           {
             "path": "go/redis_adapter.go",
@@ -4028,7 +4028,7 @@
               "parseWatermark",
               "replacementUTF8"
             ],
-            "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
+            "sha256": "27cd94fd9d5e3b5b101d9dd4db810706b35811c8f5ebece23d89aae439669267"
           }
         ]
       }
@@ -4143,7 +4143,7 @@
             "symbols": [
               "appendJSON"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "ddec51c29141c29c6c76e74cb2b25f20235519a8d26e32bc0e73fd04ab6882a0"
           },
           {
             "path": "go/shadow_log.go",
@@ -4211,7 +4211,7 @@
               "escape",
               "utf16Less"
             ],
-            "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
+            "sha256": "27cd94fd9d5e3b5b101d9dd4db810706b35811c8f5ebece23d89aae439669267"
           }
         ]
       }
@@ -4361,7 +4361,7 @@
               "ReadResult",
               "NormalizeReadResult"
             ],
-            "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
+            "sha256": "27cd94fd9d5e3b5b101d9dd4db810706b35811c8f5ebece23d89aae439669267"
           },
           {
             "path": "go/redis_adapter.go",
@@ -4394,7 +4394,7 @@
               "EncodeFrame",
               "DecodeFrame"
             ],
-            "sha256": "d12b6b8c8c91f40e93cd44d97644ea1824b57ff0641d07a0e16ffe9a25ffde4a"
+            "sha256": "27cd94fd9d5e3b5b101d9dd4db810706b35811c8f5ebece23d89aae439669267"
           },
           {
             "path": "go/redis_adapter.go",
@@ -4440,7 +4440,7 @@
               "SemanticEqual",
               "validateJSONScalarStrings"
             ],
-            "sha256": "f0494637d5f1c5d5b16172c83545224468898543bbf862dcee86a3ffe226284c"
+            "sha256": "ddec51c29141c29c6c76e74cb2b25f20235519a8d26e32bc0e73fd04ab6882a0"
           }
         ]
       }

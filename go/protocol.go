@@ -323,8 +323,18 @@ func DecodeFrame(raw []byte, tracked bool, watermark *string) ReadResult {
 // A valid incomplete prefix (E2 82) is one subpart; forbidden continuation bytes
 // (ED A0 80, an encoded surrogate) are not swallowed into that prefix.
 func replacementUTF8(raw []byte) []byte {
+	out, _ := replacementUTF8Within(raw, -1)
+	return out
+}
+
+// replacementUTF8Within stops with false once the output exceeds limit bytes; a
+// negative limit means no limit.
+func replacementUTF8Within(raw []byte, limit int) ([]byte, bool) {
 	out := make([]byte, 0, len(raw))
 	for len(raw) > 0 {
+		if limit >= 0 && len(out) > limit {
+			return nil, false
+		}
 		r, size := utf8.DecodeRune(raw)
 		if r != utf8.RuneError || size != 1 {
 			out = append(out, raw[:size]...)
@@ -355,7 +365,7 @@ func replacementUTF8(raw []byte) []byte {
 		out = utf8.AppendRune(out, utf8.RuneError)
 		raw = raw[consumed:]
 	}
-	return out
+	return out, limit < 0 || len(out) <= limit
 }
 
 // UnmarshalJSON rejects isolated UTF-16 escapes before encoding/json replaces
