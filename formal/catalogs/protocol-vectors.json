@@ -304,6 +304,78 @@
       ]
     },
     {
+      "name": "bigint decimal text uses canonical numeric identity",
+      "input": {
+        "literalNegative": "-0001",
+        "literalPositive": "0001",
+        "literalZero": "-0"
+      },
+      "bigintArgs": {
+        "negative": "-0001",
+        "negativeZero": "-0",
+        "paddedZero": "000",
+        "positive": "0001",
+        "signedPaddedZero": "-000",
+        "zero": "0"
+      },
+      "expected": [
+        [
+          "literalNegative",
+          "-0001"
+        ],
+        [
+          "literalPositive",
+          "0001"
+        ],
+        [
+          "literalZero",
+          "-0"
+        ],
+        [
+          "negative",
+          "-1"
+        ],
+        [
+          "negativeZero",
+          "0"
+        ],
+        [
+          "paddedZero",
+          "0"
+        ],
+        [
+          "positive",
+          "1"
+        ],
+        [
+          "signedPaddedZero",
+          "0"
+        ],
+        [
+          "zero",
+          "0"
+        ]
+      ]
+    },
+    {
+      "name": "bigint decimal text retains magnitudes beyond fixed-width integers",
+      "input": {},
+      "bigintArgs": {
+        "negative": "-0001234567890123456789012345678901234567890123456789012345678901234567890",
+        "positive": "0001234567890123456789012345678901234567890123456789012345678901234567890"
+      },
+      "expected": [
+        [
+          "negative",
+          "-1234567890123456789012345678901234567890123456789012345678901234567890"
+        ],
+        [
+          "positive",
+          "1234567890123456789012345678901234567890123456789012345678901234567890"
+        ]
+      ]
+    },
+    {
       "name": "empty arguments",
       "input": {},
       "expected": []
