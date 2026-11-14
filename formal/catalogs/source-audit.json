@@ -22,7 +22,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "2f57974de4039f45a3608464f1235a5567af7e6f32c7f58cf0232dde051e9304",
+      "sha256": "3d7c7469a8940bfa2393e53b0b60d44618a84f6fcc8257e23b62bd63b0f0a122",
       "entries": [
         {"title":"DialCache","contracts":["B01"]},
         {"title":"Install TypeScript","contracts":["B01"]},
