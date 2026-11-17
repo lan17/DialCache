@@ -528,3 +528,24 @@ func protocolNumber(value float64, special string) float64 {
 		return value
 	}
 }
+
+func TestReplacementUTF8Within(t *testing.T) {
+	for _, test := range []struct {
+		raw   string
+		limit int
+		want  string
+		ok    bool
+	}{
+		{"\xff\xff", -1, "\ufffd\ufffd", true},
+		{"\xff\xff", 6, "\ufffd\ufffd", true},
+		{"\xff\xff", 5, "", false},
+		{"abc", 3, "abc", true},
+		{"abc", 2, "", false},
+		{"", 0, "", true},
+	} {
+		got, ok := replacementUTF8Within([]byte(test.raw), test.limit)
+		if ok != test.ok || ok && string(got) != test.want {
+			t.Errorf("%q within %d: got %q, %v", test.raw, test.limit, got, ok)
+		}
+	}
+}

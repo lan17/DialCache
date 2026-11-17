@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	. "github.com/lan17/DialCache/go"
@@ -374,6 +375,86 @@ func TestContextDarkShadowFillOutlivesCaller(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("no shadow verdict")
+	}
+}
+
+func TestContextAbandonedCoalescedDarkShadowDoesNotFill(t *testing.T) {
+	remote := newContextRemote()
+	outcomes := make(chan string, 4)
+	cache := MustNew(WithRemote(remote), WithShadowOutcomes(func(e Event) { outcomes <- e.Outcome }))
+	// The local layer makes the dark call coalesce, so the source is shared work.
+	op := contextOperation("dark-shadow-abandoned", Policy{LocalTTL: time.Minute, RemoteTTL: time.Minute, RemoteRamp: Ptr(0.0), Shadow: &ShadowPolicy{Ramp: Ptr(100.0)}})
+	ctx, done := cache.Enable(context.Background())
+	defer done()
+	release := make(chan struct{})
+	callerCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	// The source ignores its context and returns only after its caller left.
+	if _, err := GetOrLoad(callerCtx, cache, op, func(context.Context) (string, error) { <-release; return "old", nil }); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("dark call error = %v, want its own deadline", err)
+	}
+	close(release)
+	select {
+	case outcome := <-outcomes:
+		if outcome == "filled" {
+			t.Fatal("shared shadow work filled Redis after every caller left")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no shadow verdict")
+	}
+	remote.mu.Lock()
+	defer remote.mu.Unlock()
+	if len(remote.values) != 0 {
+		t.Fatalf("Redis values after abandoned shadow work = %d, want 0", len(remote.values))
+	}
+}
+
+func TestContextFollowerOfCancelledWorkInheritsItsOutcome(t *testing.T) {
+	for _, stale := range []bool{true, false} {
+		t.Run(fmt.Sprintf("stale=%v", stale), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				cache := MustNew(WithRemote(newContextRemote()))
+				policy := Policy{RemoteTTL: time.Second}
+				if stale {
+					policy.StaleOnErrorMaxAge = Ptr(time.Minute)
+				}
+				op := contextOperation("cancelled-outcome", policy)
+				op.SourceTimeout = 100 * time.Millisecond
+				ctx, done := cache.Enable(context.Background())
+				defer done()
+				if _, err := GetOrLoad(ctx, cache, op, func(context.Context) (string, error) { return "old", nil }); err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(1100 * time.Millisecond) // past RemoteTTL: a retained candidate when stale is on
+				release := make(chan struct{})
+				defer close(release)
+				var calls atomic.Int64
+				// The source ignores its context, so cancelled work keeps running.
+				hang := func(context.Context) (string, error) { calls.Add(1); <-release; return "", errors.New("released") }
+				leaderCtx, cancelLeader := context.WithTimeout(ctx, 30*time.Millisecond)
+				defer cancelLeader()
+				leader := make(chan error, 1)
+				go func() { _, err := GetOrLoad(leaderCtx, cache, op, hang); leader <- err }()
+				time.Sleep(40 * time.Millisecond)
+				if err := <-leader; !errors.Is(err, context.DeadlineExceeded) {
+					t.Fatalf("leader error = %v, want its own deadline", err)
+				}
+				// A caller joins the cancelled work while its source still runs.
+				followerCtx, cancelFollower := context.WithTimeout(ctx, 150*time.Millisecond)
+				defer cancelFollower()
+				start := time.Now()
+				v, err := GetOrLoad(followerCtx, cache, op, hang)
+				var timeout *FallbackTimeoutError
+				switch {
+				case calls.Load() != 1 || time.Since(start) != 60*time.Millisecond:
+					t.Fatalf("follower = (%q, %v) after %v and %d source calls; want the shared work's outcome at its 100ms source deadline after 1 call", v, err, time.Since(start), calls.Load())
+				case stale && (v != "old" || err != nil):
+					t.Fatalf("follower = (%q, %v), want the stale value", v, err)
+				case !stale && !errors.As(err, &timeout):
+					t.Fatalf("follower error = %v, want the shared source timeout", err)
+				}
+			})
+		})
 	}
 }
 

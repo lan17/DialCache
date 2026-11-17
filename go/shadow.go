@@ -243,7 +243,11 @@ func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[
 			return out("timeout")
 		}
 		if fill {
-			filled, writeErr := sx.putRemote(value, fence, "remote_shadow", func() bool { return !expired() })
+			// Shadow work outlives its caller, but shared work that no caller waits
+			// for any more must not fill Redis after an invalidation.
+			filled, writeErr := sx.putRemote(value, fence, "remote_shadow", func() bool {
+				return !expired() && (x.flight == nil || !x.abandoned())
+			})
 			if expired() {
 				return out("timeout")
 			}

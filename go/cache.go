@@ -18,6 +18,12 @@ type flight struct {
 	err       error
 	started   time.Duration
 	followers int
+	// waiters counts the leader and followers still waiting; cancel ends the
+	// shared work once none is left.
+	waiters int
+	cancel  context.CancelFunc
+	// cutShort records that the work was cancelled before it returned.
+	cutShort bool
 }
 type scope struct {
 	live    bool
