@@ -22,13 +22,14 @@
     },
     {
       "path": "README.md",
-      "sha256": "2f57974de4039f45a3608464f1235a5567af7e6f32c7f58cf0232dde051e9304",
+      "sha256": "5c43a8fdd938880e2d7acfc3f3217a8dea4ca9a9a4ddbcf531223fbba5a0a162",
       "entries": [
         {"title":"DialCache","contracts":["B01"]},
+        {"title":"Example","contracts":["C01","C05","C16","C18","C32","W01"]},
+        {"title":"Safe to roll out","contracts":["C01","C13","C17","C27","C40","C47"]},
+        {"title":"Languages","contracts":["B01"]},
         {"title":"Install TypeScript","contracts":["B01"]},
-        {"title":"Usage","contracts":["C01","C05","W01"]},
         {"title":"How reads work","contracts":["C05","C31"]},
-        {"title":"Runtime control","contracts":["C16","C18"]},
         {"title":"Documentation","contracts":["B01"]},
         {"title":"Development","contracts":["B01"]}
       ]
