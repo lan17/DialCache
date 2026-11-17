@@ -2,10 +2,12 @@ package dialcache
 
 import (
 	"errors"
+	"math"
 	"math/big"
 	"os"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -315,6 +317,104 @@ func TestPrometheusBindingsRejectIncompatibleOrUnregisteredCollectors(t *testing
 				t.Fatalf("failed constructor created an observed series: %v %v", families, err)
 			}
 		})
+	}
+}
+
+func TestPrometheusBucketOptions(t *testing.T) {
+	want := []float64{0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.25}
+	timer := slices.Clone(want)
+	bucketsOf := func(registry *prometheus.Registry, name string) []float64 {
+		t.Helper()
+		families, err := registry.Gather()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, family := range families {
+			if family.GetName() == name {
+				var bounds []float64
+				for _, bucket := range family.Metric[0].Histogram.Bucket {
+					bounds = append(bounds, bucket.GetUpperBound())
+				}
+				return bounds
+			}
+		}
+		t.Fatalf("%s not exported", name)
+		return nil
+	}
+	defaults := map[string][]float64{}
+	for _, schema := range PrometheusCollectorSchemas("") {
+		defaults[schema.Kind] = schema.Buckets
+	}
+
+	registry := prometheus.NewRegistry()
+	first, err := NewPrometheusMetrics(registry, "", PrometheusBuckets("get", timer), PrometheusBuckets("fallback", timer))
+	if err != nil {
+		t.Fatal(err)
+	}
+	timer[0] = 0.5 // The adapter keeps its own copy of the caller's slice.
+	second, err := NewPrometheusMetrics(registry, "", PrometheusBuckets("get", want), PrometheusBuckets("fallback", want))
+	if err != nil {
+		t.Fatal("same effective buckets did not reuse the earlier group:", err)
+	}
+	for _, kind := range []string{"get", "fallback", "serialization"} {
+		_ = first.ObserveEvent(metricTestEvent(kind))
+		_ = second.ObserveEvent(metricTestEvent(kind))
+	}
+	if got := bucketsOf(registry, "dialcache_get_timer"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("get buckets = %v", got)
+	}
+	if got := bucketsOf(registry, "dialcache_fallback_timer"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("fallback buckets = %v", got)
+	}
+	if got := bucketsOf(registry, "dialcache_serialization_timer"); !reflect.DeepEqual(got, defaults["serialization"]) {
+		t.Fatalf("unset kind lost its default buckets: %v", got)
+	}
+	before := collectorDescriptions(registry)
+	if _, err := NewPrometheusMetrics(registry, ""); err == nil {
+		t.Fatal("default buckets reused a group with custom buckets")
+	}
+	if !reflect.DeepEqual(before, collectorDescriptions(registry)) {
+		t.Fatal("failed reuse changed the registry")
+	}
+
+	bound := prometheus.NewRegistry()
+	var get PrometheusCollectorSchema
+	for _, schema := range PrometheusCollectorSchemas("bound_", PrometheusBuckets("get", want)) {
+		if schema.Kind == "get" {
+			get = schema
+		}
+	}
+	histogram := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: get.Name, Help: get.Help, Buckets: get.Buckets}, get.Labels)
+	bound.MustRegister(histogram)
+	binding := []PrometheusCollectorBinding{{get, histogram}}
+	if _, err := NewPrometheusMetricsWithBindings(bound, "bound_", binding); err == nil {
+		t.Fatal("binding with custom buckets matched the default schema")
+	}
+	adapter, err := NewPrometheusMetricsWithBindings(bound, "bound_", binding, PrometheusBuckets("get", want))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = adapter.ObserveEvent(metricTestEvent("get"))
+	if got := bucketsOf(bound, get.Name); !reflect.DeepEqual(got, want) {
+		t.Fatalf("bound get buckets = %v", got)
+	}
+
+	for name, invalid := range map[string][]PrometheusOption{
+		"unknown kind":   {PrometheusBuckets("latency", want)},
+		"counter kind":   {PrometheusBuckets("request", want)},
+		"repeated kind":  {PrometheusBuckets("get", want), PrometheusBuckets("get", want)},
+		"empty":          {PrometheusBuckets("get", nil)},
+		"not increasing": {PrometheusBuckets("get", []float64{0.01, 0.01})},
+		"NaN":            {PrometheusBuckets("get", []float64{math.NaN()})},
+		"infinite":       {PrometheusBuckets("get", []float64{0.01, math.Inf(1)})},
+	} {
+		registry := prometheus.NewRegistry()
+		if _, err := NewPrometheusMetrics(registry, "", invalid...); err == nil {
+			t.Fatalf("accepted %s buckets", name)
+		}
+		if got := collectorDescriptions(registry); len(got) != 0 {
+			t.Fatalf("%s: failed constructor registered %d collectors", name, len(got))
+		}
 	}
 }
 
