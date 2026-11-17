@@ -185,7 +185,7 @@
     },
     {
       "path": "docs/languages/go.md",
-      "sha256": "68b3b6822ee4aa51bdc8b39bd81ae8d5ffd3193fbcad7bac8b46e72cb6be3dda",
+      "sha256": "0a3c089446b3ed433db2b6c72a969b3b3147a963c77d67380d161d67e2609761",
       "entries": [
         {"title":"Go integration","contracts":["B01"]},
         {"title":"Installation and runtime","contracts":["B01","B02"]},
@@ -235,7 +235,7 @@
     },
     {
       "path": "docs/observability.md",
-      "sha256": "11fb60820a7736f9ff1f3658262ec2803efde56281d453218e6b93f574fd1114",
+      "sha256": "7adbfff1ef6cb3aee88aa6ff6df3b1cc917f0f1773aeaa99fe64f2fbb47e6830",
       "entries": [
         {"title":"Observability","contracts":["C30","X01"]},
         {"title":"Reading the signals","contracts":["C58"]},
@@ -1507,7 +1507,7 @@
     },
     {
       "path": "formal/guides/GO-PARITY.md",
-      "sha256": "0ab9505cb3cb1185887f080882bb50b16cf88dc7134305e144478ece178c7a7b",
+      "sha256": "282f8022f39fae25d759f0a7b947d0ac0b944f9868f7fd368903f2209280d881",
       "entries": [
         {"title":"Go parity acceptance"},
         {"title":"Required evidence"},
@@ -1800,7 +1800,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "c3352fa63c06222cb8399c4141e0d654c0bb0481b93a82dde125c58dbdf25be4",
+      "sha256": "be73abe41721126d086614b4caef31535a06973eba2b585b3a6fbc1223290d58",
       "entries": [
         {"title":"DialCache for Go"},
         {"title":"Use"},

@@ -658,6 +658,15 @@ native error type or message:
 
 DialCache defines these values itself, so they are identical for every adapter.
 
+<LanguageContent language="go">
+
+A source error that `Operation.ExpectedError` accepts, such as not found, records
+no `fallback` error, even when stale recovery serves a value. The fallback timer
+still records the wait. A source deadline or panic always records `fallback`.
+The other languages have no such option yet.
+
+</LanguageContent>
+
 A valid explicit invalidation without a configured remote adapter is still an
 invalidation attempt: it emits the invalidation count and `error="invalidation"`
 then returns the native missing-remote error. Invalid buffer inputs fail before

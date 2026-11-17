@@ -129,6 +129,12 @@ Source/codec/provider/comparator panics become `CallbackPanicError`; telemetry
 panics are ignored. Cache plumbing fails open while explicit maintenance errors
 are returned. Applications still own cancellation of the source context.
 
+DialCache records every source error as a `fallback` error, including one that
+reports a normal outcome such as not found. Set `Operation.ExpectedError` to
+mark those errors: the caller still gets the error and nothing is cached, but no
+`fallback` error is recorded. A source deadline or panic always counts. Only Go
+has this option for now.
+
 `WithClock` separates wall time from elapsed time. The default clock preserves
 fractional milliseconds through `PreciseClock.ElapsedTime`. Custom clocks can
 implement that optional interface; existing `ElapsedMS`-only clocks retain their

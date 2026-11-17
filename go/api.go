@@ -116,6 +116,13 @@ type Operation[T any] struct {
 	SourceTimeout time.Duration
 	// ShouldRecover replaces the instance recovery predicate for this operation.
 	ShouldRecover RecoveryPredicate
+	// ExpectedError reports whether an error that the source returned is a
+	// normal outcome, such as not found, rather than a source failure. The
+	// caller still gets the error and nothing is cached, but no fallback error
+	// event is recorded. This operation's FallbackTimeoutError and
+	// CallbackPanicError always count, and so does an error when the
+	// predicate panics.
+	ExpectedError func(error) bool
 	// Comparator decides shadow matches; nil compares with SemanticEqual.
 	Comparator func(cached, source T) (bool, error)
 	// MismatchDiff replaces the built-in JSON difference computation behind
