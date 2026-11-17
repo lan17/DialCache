@@ -231,14 +231,17 @@ rendering or computation fails is nil. A `Warn` panic stays isolated, and the
 `shadowMismatchLogging` event reports it as `logger_error` unless a hook or
 render failure outranks it. The Prometheus and DogStatsD adapters preserve
 metric names, units, labels, bucket boundaries, and counter increments. Logical
-cache keys never become metric labels.
+cache keys never become metric labels. `PrometheusBuckets` is a Go-only option
+that replaces one histogram's boundaries; without it the Prometheus schema
+matches TypeScript, and the other ports have no such option yet.
 
 The Go Prometheus binding accepts an explicit native registry. Reconstructing
 this adapter with the same registry and prefix reuses its collectors and
 observations. `NewPrometheusMetricsWithBindings` additionally reuses externally
 created, individually registered `CounterVec` and `HistogramVec` collectors.
 Each `PrometheusCollectorBinding` supplies the actual collector and its
-construction schema. All declared schemas, public descriptors, and registered
+construction schema, compared with the schema the same bucket options build.
+All declared schemas, public descriptors, and registered
 collector identities are checked before the remaining collectors are
 registered as an atomic group. A failed compatibility check creates no metric
 series or partial collector group.

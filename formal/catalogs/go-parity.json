@@ -11,7 +11,7 @@
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
     "sourceAuditDispositionsSha256": "942eab018ae0d8fa189ff16c322f6d9b3301aadc7c46d00b311018728c62f34e",
-    "featureCoverageSha256": "3097efff9a5ea1cc2f2e4c9eb767ad5dc4e437d9a7f17d8c6950f8c3fbc039e6",
+    "featureCoverageSha256": "3ad445174431b89164b9a9bbfef0adbeb7ff7e0ca6675b7c8b904392da02084a",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -4311,7 +4311,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "PrometheusMetrics preserves metric names, labels, histogram units and buckets using client_golang. Existing individually registered collectors require explicit schema-bearing bindings plus descriptor and registry-identity validation; this replaces prom-client registry introspection and makes histogram-schema knowledge an explicit caller precondition. dialcache_shadow_mismatch_logging_counter is a twentieth collector schema.",
+        "rationale": "PrometheusMetrics preserves metric names, labels, histogram units and buckets using client_golang. Existing individually registered collectors require explicit schema-bearing bindings plus descriptor and registry-identity validation; this replaces prom-client registry introspection and makes histogram-schema knowledge an explicit caller precondition. dialcache_shadow_mismatch_logging_counter is a twentieth collector schema. PrometheusBuckets is a Go-only option that replaces one histogram's bounds; without it every bucket matches TypeScript, and reuse and bindings compare the schema the options build.",
         "nativeAdaptations": [
           "B01",
           "X01"
@@ -4322,12 +4322,14 @@
             "symbols": [
               "PrometheusCollectorSchema",
               "PrometheusCollectorSchemas",
+              "PrometheusOption",
+              "PrometheusBuckets",
               "PrometheusCollectorBinding",
               "NewPrometheusMetrics",
               "NewPrometheusMetricsWithBindings",
               "ObserveEvent"
             ],
-            "sha256": "1027779b913bb890cd06ffe314d80840ce67c522bc12dad9b6e12b4224a9d340"
+            "sha256": "ccbb46eea578033e4f1c3f6c5fb50bea53b40e90a22f6cdce20509781c9eea56"
           }
         ]
       }

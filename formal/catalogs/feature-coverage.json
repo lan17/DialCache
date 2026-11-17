@@ -1072,7 +1072,7 @@
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
           "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
         }
       ],
       "adaptation": "Observability must remain diagnostic even when both the primary operation and logger fail.",
@@ -1391,7 +1391,13 @@
           "test": "TestPrometheusWireSchemaMatchesTypeScriptBinding",
           "path": "go/metrics_test.go",
           "scope": "All twenty Go collector names, help text, label order, kinds and bucket boundaries are checked against the TS binding schema.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
+        },
+        {
+          "test": "TestPrometheusBucketOptions",
+          "path": "go/metrics_test.go",
+          "scope": "PrometheusBuckets replaces only the named histograms' bounds; reuse and bindings compare the effective schema, and invalid options fail before any collector registers.",
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
         }
       ],
       "adaptation": "Exporter schema changes break dashboards even when portable event semantics still pass; current Go schema check derives its expectation from TS source, not Quint.",
@@ -1431,7 +1437,7 @@
           "test": "TestPrometheusReuseAndConflictIsolation",
           "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
         }
       ],
       "adaptation": "Registry ownership and collector reuse avoid global pollution and duplicate collectors in multi-instance deployments.",
@@ -1471,19 +1477,19 @@
           "test": "TestPrometheusReuseAndConflictIsolation",
           "path": "go/metrics_test.go",
           "scope": "Compatible adapters reuse counters and histograms in one caller registry; incompatible pre-existing metrics cause no partial collector registration.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
         },
         {
           "test": "TestPrometheusExplicitBindingsPreserveExistingObservations",
           "path": "go/metrics_test.go",
           "scope": "Explicit compatible externally created collectors preserve pre-existing counter and histogram observations when bound by an adapter.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
         },
         {
           "test": "TestPrometheusBindingsRejectIncompatibleOrUnregisteredCollectors",
           "path": "go/metrics_test.go",
           "scope": "Explicit collector bindings reject malformed schema, conflicting registry state or unregistered collector identities.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
         }
       ],
       "adaptation": "Go requires explicit collector bindings/schema because client_golang cannot expose empty histogram bucket schema; no destructive compatibility probing is permitted.",
@@ -1525,7 +1531,7 @@
           "test": "TestDatadogMetricNamesUnitsAndLabels",
           "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
         }
       ],
       "adaptation": "Different observation modes have different backend semantics and require a namespace migration; current schema source remains native integration code.",
@@ -1566,7 +1572,7 @@
           "test": "TestDatadogMetricNamesUnitsAndLabels",
           "path": "go/metrics_test.go",
           "scope": "Native DogStatsD method/name/unit tables, representative bounded labels, histogram mode, namespace restrictions and nil-client validation are checked.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
         }
       ],
       "adaptation": "Typed Go methods replace TS duck-typed method validation, but namespace and cardinality constraints remain observable integration contracts.",
@@ -1606,7 +1612,7 @@
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
           "path": "go/metrics_test.go",
           "scope": "Native observer panic/error and logger panics are isolated; JSON/key previews obey UTF-8 byte caps and unsupported/cyclic values have null previews.",
-          "sha256": "55657dc4165d0c5fd40b796a904472d6b65402b2b0704f593cf4c618d3ba3639"
+          "sha256": "43e1151b3d8f6b14efdae89be31785c39a9130a54ff6205a502477c0f0493093"
         }
       ],
       "adaptation": "C60 covers whether a warning happens; bounded formatting and native JSON failures are separate observability behavior.",

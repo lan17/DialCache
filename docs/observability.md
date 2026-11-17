@@ -134,7 +134,8 @@ ship a Prometheus exporter. Preserve the shared labels, names and units below.
 
 ### Histogram buckets
 
-Bucket boundaries are fixed; the adapter has no bucket customization option:
+Every adapter uses these finite bucket boundaries by default. The TypeScript and
+Rust adapters have no bucket option.
 
 | Metric family | Unit | Finite bucket boundaries |
 | --- | --- | --- |
@@ -143,6 +144,28 @@ Bucket boundaries are fixed; the adapter has no bucket customization option:
 | Compression ratio | Ratio | `0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1` |
 | Shadow and recovery value ages | Seconds | `1, 5, 15, 60, 300, 900, 3600, 10800, 43200, 86400, 259200, 604800` |
 | Future timestamp offsets | Seconds | `0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 5, 15, 60, 300, 900, 3600, 10800, 43200` |
+
+<LanguageContent language="go">
+
+`PrometheusBuckets(kind, bounds)` replaces the boundaries of one histogram.
+`kind` is the histogram's `PrometheusCollectorSchema.Kind`, such as `get`,
+`fallback`, `serialization` or `compressionDuration`. Pass the same options to
+`NewPrometheusMetrics`, `NewPrometheusMetricsWithBindings` and
+`PrometheusCollectorSchemas`: adapters and bindings that share a registry and
+prefix must use the same buckets. Construction fails for an unknown or counter
+kind, a repeated kind, and boundaries that are empty, not finite or not
+increasing. Fewer boundaries give fewer series per label set, and boundaries
+that differ from the table do not aggregate with other services that use the
+defaults. This excerpt shows example boundaries, not recommended ones:
+
+```go
+timer := []float64{0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.25}
+metrics, err := dialcache.NewPrometheusMetrics(registry, "",
+	dialcache.PrometheusBuckets("get", timer),
+	dialcache.PrometheusBuckets("fallback", timer))
+```
+
+</LanguageContent>
 
 ### Prometheus metrics
 
