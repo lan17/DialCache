@@ -3,7 +3,9 @@ package dialcache
 import (
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
+	"slices"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -16,8 +18,25 @@ type PrometheusCollectorSchema struct {
 	Buckets          []float64
 }
 
-func PrometheusCollectorSchemas(prefix string) []PrometheusCollectorSchema {
-	return []PrometheusCollectorSchema{
+// PrometheusOption changes the buckets of one adapter histogram.
+type PrometheusOption struct {
+	kind    string
+	buckets []float64
+}
+
+// PrometheusBuckets sets the finite bucket boundaries of the histogram whose
+// PrometheusCollectorSchema.Kind is kind; +Inf is implicit. The constructors
+// reject an unknown or counter kind, a repeated kind, and boundaries that are
+// empty, not finite or not strictly increasing. Adapters and bindings that
+// share a registry and prefix must use the same buckets.
+func PrometheusBuckets(kind string, buckets []float64) PrometheusOption {
+	return PrometheusOption{kind: kind, buckets: buckets}
+}
+
+// PrometheusCollectorSchemas returns the schemas the adapter builds with these
+// options. It does not validate the options; the constructors do.
+func PrometheusCollectorSchemas(prefix string, options ...PrometheusOption) []PrometheusCollectorSchema {
+	schemas := []PrometheusCollectorSchema{
 		{Kind: "disabled", Name: prefix + "dialcache_disabled_counter", Help: "Requests where DialCache skipped a cache layer.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer", "reason"}},
 		{Kind: "miss", Name: prefix + "dialcache_miss_counter", Help: "DialCache cache misses.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer", "reason"}},
 		{Kind: "request", Name: prefix + "dialcache_request_counter", Help: "Total DialCache cache-layer requests.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer"}},
@@ -39,6 +58,37 @@ func PrometheusCollectorSchemas(prefix string) []PrometheusCollectorSchema {
 		{Kind: "compressionRatio", Name: prefix + "dialcache_compression_ratio_histogram", Help: "Compressed-to-original DialCache payload size ratio for compressed writes.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer"}, Buckets: []float64{0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1}},
 		{Kind: "compressionDuration", Name: prefix + "dialcache_compression_timer", Help: "DialCache payload compression and decompression latency in seconds.", Labels: []string{"cache_namespace", "use_case", "key_type", "layer", "operation"}, Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}},
 	}
+	for _, option := range options {
+		for i := range schemas {
+			if schemas[i].Kind == option.kind && schemas[i].Buckets != nil {
+				// client_golang keeps the slice it is given as live bucket bounds.
+				schemas[i].Buckets = slices.Clone(option.buckets)
+			}
+		}
+	}
+	return schemas
+}
+
+func checkPrometheusOptions(options []PrometheusOption) error {
+	settable := make(map[string]bool)
+	for _, schema := range PrometheusCollectorSchemas("") {
+		settable[schema.Kind] = schema.Buckets != nil
+	}
+	for _, option := range options {
+		if !settable[option.kind] {
+			return fmt.Errorf("Prometheus buckets: %q is not a histogram kind, or is set twice", option.kind)
+		}
+		settable[option.kind] = false
+		if len(option.buckets) == 0 {
+			return fmt.Errorf("Prometheus buckets for %q are empty", option.kind)
+		}
+		for i, bound := range option.buckets {
+			if math.IsNaN(bound) || math.IsInf(bound, 0) || i > 0 && bound <= option.buckets[i-1] {
+				return fmt.Errorf("Prometheus buckets for %q must be finite and strictly increasing", option.kind)
+			}
+		}
+	}
+	return nil
 }
 
 type prometheusMetricsCollector struct {
@@ -83,8 +133,8 @@ var prometheusConstruction sync.Mutex
 
 // NewPrometheusMetrics creates collectors or reuses an earlier DialCache group.
 // Use NewPrometheusMetricsWithBindings to reuse externally created collectors.
-func NewPrometheusMetrics(registry *prometheus.Registry, prefix string) (*PrometheusMetrics, error) {
-	return NewPrometheusMetricsWithBindings(registry, prefix, nil)
+func NewPrometheusMetrics(registry *prometheus.Registry, prefix string, options ...PrometheusOption) (*PrometheusMetrics, error) {
+	return NewPrometheusMetricsWithBindings(registry, prefix, nil, options...)
 }
 
 func collectorDescriptions(collector prometheus.Collector) []string {
@@ -102,7 +152,7 @@ func collectorDescriptions(collector prometheus.Collector) []string {
 // remain on the same collector objects. As with registry configuration itself,
 // callers must not concurrently unregister/reconfigure the supplied collectors
 // during construction; concurrent observations remain safe.
-func NewPrometheusMetricsWithBindings(registry *prometheus.Registry, prefix string, bindings []PrometheusCollectorBinding) (adapter *PrometheusMetrics, err error) {
+func NewPrometheusMetricsWithBindings(registry *prometheus.Registry, prefix string, bindings []PrometheusCollectorBinding, options ...PrometheusOption) (adapter *PrometheusMetrics, err error) {
 	prometheusConstruction.Lock()
 	defer prometheusConstruction.Unlock()
 	defer func() {
@@ -114,7 +164,10 @@ func NewPrometheusMetricsWithBindings(registry *prometheus.Registry, prefix stri
 	if registry == nil {
 		return nil, errors.New("Prometheus registry is required")
 	}
-	collector := &prometheusMetricsCollector{schemas: PrometheusCollectorSchemas(prefix), counters: make(map[string]*prometheus.CounterVec), histograms: make(map[string]*prometheus.HistogramVec)}
+	if err := checkPrometheusOptions(options); err != nil {
+		return nil, err
+	}
+	collector := &prometheusMetricsCollector{schemas: PrometheusCollectorSchemas(prefix, options...), counters: make(map[string]*prometheus.CounterVec), histograms: make(map[string]*prometheus.HistogramVec)}
 	for _, schema := range collector.schemas {
 		if counterKinds[schema.Kind] {
 			collector.counters[schema.Kind] = prometheus.NewCounterVec(prometheus.CounterOpts{Name: schema.Name, Help: schema.Help}, schema.Labels)
