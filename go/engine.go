@@ -521,8 +521,9 @@ func (x *execution[T]) source(layer string) (T, error) {
 	// Once the wait ends the result is settled; cancel before observers run so a
 	// slow observer cannot keep a timed-out or abandoned source going.
 	cancel()
-	// Work that no caller waits for any more is not a source failure.
-	if err != nil && !x.abandoned() {
+	// Work that no caller waits for any more is not a source failure, and an
+	// error that the operation expects is a normal outcome.
+	if err != nil && !x.abandoned() && !x.expected(err) {
 		x.errorEvent(layer, "fallback", true)
 	}
 	x.duration("fallback", layer, start, nil)
@@ -743,6 +744,25 @@ func (x *execution[T]) canRecover(err error) bool {
 	ok, e := callSafely(func() (bool, error) { return predicate(err) })
 	if e != nil {
 		x.cache.settings.logger.Warn("DialCache stale recovery predicate threw; recovery was denied", e)
+	}
+	return e == nil && ok
+}
+
+// expected reports whether the operation's ExpectedError accepts an error that
+// the source returned. The deadline and panic errors come from DialCache
+// itself, unwrapped, so they never reach the predicate.
+func (x *execution[T]) expected(err error) bool {
+	predicate := x.op.ExpectedError
+	if predicate == nil {
+		return false
+	}
+	switch err.(type) {
+	case *FallbackTimeoutError, *CallbackPanicError:
+		return false
+	}
+	ok, e := callSafely(func() (bool, error) { return predicate(err), nil })
+	if e != nil {
+		x.cache.settings.logger.Warn("DialCache expected error predicate panicked; the error counts as a source failure", e)
 	}
 	return e == nil && ok
 }

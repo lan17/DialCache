@@ -11,7 +11,7 @@
     "semanticCasesSha256": "380273598e1d956a3f9fce270cc84424b342e456139b279bd56576bd3b837f65",
     "executionSha256": "eaf117c3e8630013cc8df0524f84af440c470f42e8711ab4dd07b931161c784f",
     "sourceAuditDispositionsSha256": "942eab018ae0d8fa189ff16c322f6d9b3301aadc7c46d00b311018728c62f34e",
-    "featureCoverageSha256": "7bfe01e9ed074fc4661e6db2d3397341f7f691f476e2358e4af082c8117570de",
+    "featureCoverageSha256": "3ad445174431b89164b9a9bbfef0adbeb7ff7e0ca6675b7c8b904392da02084a",
     "coverageWitnessesSha256": "745cebececddbfa97912621ada94072d648e8e60e8b3eb013b91eefd16f352a1",
     "profilesSha256": "888a522f8ad97862ebcb0b5fe363ec7bec60367fa42c60e1623141814b1991b3"
   },
@@ -3328,13 +3328,14 @@
     "nativeBindingAdaptations": [
       {
         "id": "B01",
-        "rationale": "One Go package exposes one non-generic Cache with generic Cached[T]/GetOrLoad[T] functions, a typed Operation[T] with a typed Codec and comparator, a time.Duration Policy with a typed or JSON-shaped runtime overlay, functional options and sentinel errors. Enable returns a scoped context and its close function, with callback helpers for the TypeScript shape; New returns ErrInvalidOption instead of panicking, operation validation returns errors, and functional options distinguish an omitted setting from an explicit zero or empty value. TypeScript entry-point/typechecking tests remain language-specific; observable validation and failure consequences still require Go tests.",
+        "rationale": "One Go package exposes one non-generic Cache with generic Cached[T]/GetOrLoad[T] functions, a typed Operation[T] with a typed Codec and comparator, a time.Duration Policy with a typed or JSON-shaped runtime overlay, functional options and sentinel errors. Enable returns a scoped context and its close function, with callback helpers for the TypeScript shape; New returns ErrInvalidOption instead of panicking, operation validation returns errors, and functional options distinguish an omitted setting from an explicit zero or empty value. TypeScript entry-point/typechecking tests remain language-specific; observable validation and failure consequences still require Go tests. Operation.ExpectedError is a Go-only option that keeps errors a source returns for normal outcomes out of the fallback error event.",
         "references": [
           "go/README.md",
           "go/api.go",
           "go/bindings.go",
           "go/internal/testsuite/bindings_test.go",
-          "go/api_boundary_test.go"
+          "go/api_boundary_test.go",
+          "go/expected_error_test.go"
         ]
       },
       {
@@ -3396,7 +3397,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Static configuration and callback contracts map to typed time.Duration Policy, functional Option constructors and Operation[T]. ParsePolicy exposes the seconds-based JSON input; pointer leaves and functional options preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults. The shadow.mismatchLogging leaves map to ShadowPolicy.MismatchLogging with a typed MismatchDiffLevel, and the logMismatches shorthand stays a *bool that expands to them.",
+        "rationale": "Static configuration and callback contracts map to typed time.Duration Policy, functional Option constructors and Operation[T]. ParsePolicy exposes the seconds-based JSON input; pointer leaves and functional options preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults. The shadow.mismatchLogging leaves map to ShadowPolicy.MismatchLogging with a typed MismatchDiffLevel, and the logMismatches shorthand stays a *bool that expands to them. Operation.ExpectedError is a Go-only field: Go sources return errors for normal outcomes such as not found, where TypeScript sources return a null that DialCache stores.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -3425,7 +3426,7 @@
               "RecoveryPredicate",
               "MismatchEntry"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "bb3080c11fbdff95e379bdca68484ed4bd755fe7d8e080e1394026bfda4f028d"
           }
         ]
       }
@@ -3511,7 +3512,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The warning's leaves come from the invocation's ResolvedShadow, Operation.MismatchDiff replaces the built-in walk, and warnShadowMismatch emits one shadowMismatchLogging event; a Warn panic is the Go logger_error. Each caller waits on its own context: a leader runs the shared flight on a context its own cancellation does not end, followers stop waiting when their own context ends, the source context carries the source deadline, and detached shadow work runs on a context that ends with its job.",
+        "rationale": "The public orchestration is divided into Cache lifecycle, Cached registration, GetOrLoad execution, source/read deadlines and detached shadow work. GetOrLoad snapshots inputs before awaiting policy; singleFlight owns leaders/followers. Go contexts, generics, returned errors and recovered callback panics replace TypeScript overloads, promises and exceptions; default diagnostic logging lives in an internal package, while public logger callbacks and inspection remain root-package bindings. The warning's leaves come from the invocation's ResolvedShadow, Operation.MismatchDiff replaces the built-in walk, and warnShadowMismatch emits one shadowMismatchLogging event; a Warn panic is the Go logger_error. Each caller waits on its own context: a leader runs the shared flight on a context its own cancellation does not end, followers stop waiting when their own context ends, the source context carries the source deadline, and detached shadow work runs on a context that ends with its job. source records no fallback error event for an error that Operation.ExpectedError accepts; the caller still gets the error and nothing is cached, and the deadline and panic errors never reach the predicate.",
         "nativeAdaptations": [
           "B01",
           "B02",
@@ -3547,11 +3548,12 @@
               "singleFlight",
               "shared",
               "source",
+              "expected",
               "readServing",
               "putRemote",
               "recover"
             ],
-            "sha256": "7872cc5aa3eada704c89f1e11ddd5ee619ebb5533f5aed95cf74f228bea0f3f9"
+            "sha256": "cbb35e38195a6506e766f27695127e7de1c0e8b446f8086f9322df3911015548"
           },
           {
             "path": "go/deadline.go",
@@ -3578,7 +3580,7 @@
               "Operation",
               "Event"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "bb3080c11fbdff95e379bdca68484ed4bd755fe7d8e080e1394026bfda4f028d"
           },
           {
             "path": "go/internal/logging/logging.go",
@@ -3613,7 +3615,7 @@
               "CallbackPanicError",
               "ErrNoRemote"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "bb3080c11fbdff95e379bdca68484ed4bd755fe7d8e080e1394026bfda4f028d"
           },
           {
             "path": "go/redis_adapter.go",
@@ -3652,7 +3654,7 @@
               "Codec",
               "Remote"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "bb3080c11fbdff95e379bdca68484ed4bd755fe7d8e080e1394026bfda4f028d"
           },
           {
             "path": "go/bindings.go",
@@ -3722,7 +3724,7 @@
               "remoteValue",
               "localResult"
             ],
-            "sha256": "7872cc5aa3eada704c89f1e11ddd5ee619ebb5533f5aed95cf74f228bea0f3f9"
+            "sha256": "cbb35e38195a6506e766f27695127e7de1c0e8b446f8086f9322df3911015548"
           }
         ]
       }
@@ -3790,7 +3792,7 @@
               "TimerClock",
               "DeferredExecutor"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "bb3080c11fbdff95e379bdca68484ed4bd755fe7d8e080e1394026bfda4f028d"
           }
         ]
       }
@@ -3874,11 +3876,11 @@
               "putLocal",
               "shared"
             ],
-            "sha256": "7872cc5aa3eada704c89f1e11ddd5ee619ebb5533f5aed95cf74f228bea0f3f9"
+            "sha256": "cbb35e38195a6506e766f27695127e7de1c0e8b446f8086f9322df3911015548"
           },
           {
             "path": "go/api.go",
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d",
+            "sha256": "bb3080c11fbdff95e379bdca68484ed4bd755fe7d8e080e1394026bfda4f028d",
             "symbols": [
               "systemClock",
               "newSystemClock"
@@ -3944,7 +3946,7 @@
               "canRecover",
               "recover"
             ],
-            "sha256": "7872cc5aa3eada704c89f1e11ddd5ee619ebb5533f5aed95cf74f228bea0f3f9"
+            "sha256": "cbb35e38195a6506e766f27695127e7de1c0e8b446f8086f9322df3911015548"
           },
           {
             "path": "go/shadow.go",
@@ -4241,7 +4243,7 @@
               "Option",
               "Logger"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "bb3080c11fbdff95e379bdca68484ed4bd755fe7d8e080e1394026bfda4f028d"
           },
           {
             "path": "go/metrics.go",
@@ -4260,7 +4262,7 @@
               "errorEvent",
               "duration"
             ],
-            "sha256": "7872cc5aa3eada704c89f1e11ddd5ee619ebb5533f5aed95cf74f228bea0f3f9"
+            "sha256": "cbb35e38195a6506e766f27695127e7de1c0e8b446f8086f9322df3911015548"
           },
           {
             "path": "go/shadow.go",
@@ -4354,7 +4356,7 @@
               "Remote",
               "ReadBudget"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "bb3080c11fbdff95e379bdca68484ed4bd755fe7d8e080e1394026bfda4f028d"
           },
           {
             "path": "go/protocol.go",
@@ -4430,7 +4432,7 @@
               "Codec",
               "ContextCodec"
             ],
-            "sha256": "45ae467fbcef94cb47ebb9e9912f06c81ee03529ad63a108e91db017cd3a1f7d"
+            "sha256": "bb3080c11fbdff95e379bdca68484ed4bd755fe7d8e080e1394026bfda4f028d"
           },
           {
             "path": "go/codec.go",

@@ -60,6 +60,22 @@ and `errors.As` for native error handling. `FallbackTimeoutError` reports a
 source deadline; callback panics become `CallbackPanicError`. `Invalidate`
 returns maintenance errors, including `ErrNoRemote` without an adapter.
 
+A Go source often returns an error for a normal outcome, such as not found, and
+DialCache records each source error as a `fallback` error. Set
+`Operation.ExpectedError` to mark the errors that are not failures. The caller
+still gets the error unchanged and nothing is cached; only the `fallback` error
+is skipped, and the fallback duration is still recorded. `FallbackTimeoutError`
+and `CallbackPanicError` always count, and so does an error when the predicate
+panics. To cache a not-found answer, return it as a value instead. The other
+languages have no such option yet. Excerpt:
+
+```go
+op := dialcache.Operation[Profile]{
+	Identity:      dialcache.Identity{KeyType: "user", UseCase: "profile"},
+	ExpectedError: func(err error) bool { return errors.Is(err, ErrNotFound) },
+}
+```
+
 ## Identity and values
 
 `Identity` holds normalized strings and ordered argument pairs. Use

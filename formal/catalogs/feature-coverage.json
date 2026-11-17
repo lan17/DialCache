@@ -17,6 +17,7 @@
         "B01.static-policy-validation",
         "B01.policy-leaf-omission",
         "B01.capacity-validation",
+        "B01.expected-source-errors",
         "B01.renamed-and-removed-options"
       ],
       "assumptions": []
@@ -562,7 +563,8 @@
         "X01.datadog-schema-mode",
         "X01.datadog-validation-privacy",
         "X01.shadow-log-resource-bounds",
-        "X01.coalescing-inspection"
+        "X01.coalescing-inspection",
+        "B01.expected-source-errors"
       ],
       "assumptions": [
         "E03"
@@ -905,6 +907,43 @@
       ],
       "adaptation": "Both bindings reject an explicit zero shadow capacity; in Go WithShadowCapacity(0) returns ErrInvalidOption. Go distinguishes an omitted local capacity, which keeps the default of 10,000, from WithLocalCapacity(0), which disables storage while retaining coalescing.",
       "gaps": []
+    },
+    {
+      "id": "B01.expected-source-errors",
+      "rule": "Operation.ExpectedError marks errors a source returns for normal outcomes: an accepted error reaches the caller unchanged, is cached in no layer and records no fallback error event, while the fallback timer, stale recovery and coalescing are unchanged; the source deadline and panic errors always count.",
+      "contracts": [
+        "B01"
+      ],
+      "relatedContracts": [
+        "C27",
+        "C58"
+      ],
+      "typescript": [],
+      "go": [
+        {
+          "test": "TestExpectedErrorRecordsNoFallbackError",
+          "path": "go/expected_error_test.go",
+          "scope": "Accepting, rejecting, nil and panicking predicates over request, local and remote layers: the source error reaches the caller and the predicate unchanged, nothing is cached or written, the fallback timer records every call and only an accepted error skips the fallback error event; a panicking predicate logs a warning.",
+          "sha256": "413453de509fc916ff6d370040dc84d2d4c7158efb7df9369cf7e9f181b20602"
+        },
+        {
+          "test": "TestExpectedErrorAlwaysCountsDeadlinesAndPanics",
+          "path": "go/expected_error_test.go",
+          "scope": "A source deadline and a source panic return FallbackTimeoutError and CallbackPanicError, record one fallback error and never call a predicate that accepts every error.",
+          "sha256": "413453de509fc916ff6d370040dc84d2d4c7158efb7df9369cf7e9f181b20602"
+        },
+        {
+          "test": "TestExpectedErrorReachesCoalescedFollowers",
+          "path": "go/expected_error_test.go",
+          "scope": "A leader and two coalesced followers get the same source error from one source call; the predicate runs once, and the flight records one fallback error only when the predicate rejects the error.",
+          "sha256": "413453de509fc916ff6d370040dc84d2d4c7158efb7df9369cf7e9f181b20602"
+        }
+      ],
+      "adaptation": "Go sources return errors for normal outcomes such as not found, where TypeScript sources usually return null, which DialCache stores; the predicate keeps those errors out of the fallback error count without caching them.",
+      "gaps": [],
+      "notApplicable": {
+        "typescript": "TypeScript has no expected-error option yet (#287); its sources usually return null for a normal miss, which DialCache stores as a value."
+      }
     },
     {
       "id": "B02.native-context-propagation",

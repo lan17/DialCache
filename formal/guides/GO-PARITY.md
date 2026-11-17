@@ -210,6 +210,17 @@ bindings have focused native tests and share the generated policy and shadow
 replay evidence above. The ledger and feature inventory distinguish each
 portable case's Quint evidence from its additional native binding requirements.
 
+`Operation.ExpectedError` is a Go-only binding option. Go sources return errors
+for normal outcomes such as not found, where TypeScript and Python sources
+usually return a value that DialCache stores. An error the predicate accepts
+still reaches the caller unchanged and is not stored, but it records no
+`fallback` error event, even when stale recovery serves; C58's rule that a
+recovered failure still counts applies to the errors it does not accept. The
+fallback duration, stale recovery and coalescing are unchanged, and the source
+deadline and panic errors never reach the predicate. With the field unset the
+shared replay evidence applies unchanged; native tests in
+[`expected_error_test.go`](../../go/expected_error_test.go) cover the option.
+
 `MetricsAdapter.ObserveEvent` accepts backend-neutral diagnostics.
 `FailureIsolatedObserver` and `FailureIsolatedLogger` prevent exporter errors
 or panics from replacing cache/source results. Confirmed-mismatch warning fields
