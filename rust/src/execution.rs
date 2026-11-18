@@ -590,12 +590,13 @@ impl Execution {
                     });
                 }
                 Ok(found) => {
+                    let seconds = self.seconds_since(start);
                     self.emit(Event::Request {
                         labels: self.labels(Layer::Local),
                     });
                     self.emit(Event::Get {
                         labels: self.labels(Layer::Local),
-                        seconds: self.seconds_since(start),
+                        seconds,
                     });
                     let reason = match found {
                         Some(value) if value.as_ref().type_id() == self.op.metadata.value_type => {
