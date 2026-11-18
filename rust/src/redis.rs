@@ -134,6 +134,8 @@ pub struct RedisReadCancelled;
 /// arguments without a server. Every method borrows `&self`; implementations
 /// clone the underlying handle per command, which the `redis` crate's handles
 /// make cheap.
+/// [`RedisAdapter`] accepts server errors as either `Err` or [`Value::ServerError`]
+/// and normalizes them before classifying replies or retrying invalidation.
 pub trait RedisConnection: Send + Sync + 'static {
     /// Run one command with the handle's default routing.
     fn run(&self, cmd: Cmd) -> BoxFuture<'_, RedisResult<Value>>;
@@ -246,11 +248,11 @@ impl<C: RedisConnection> RedisAdapter<C> {
                 cmd
             };
             let evalsha = script_command("EVALSHA", &invalidation_script_sha1());
-            let reply = match self.connection.run(evalsha).await {
+            let reply = match settle(self.connection.run(evalsha).await) {
                 Ok(reply) => reply,
                 Err(_) => {
                     let eval = script_command("EVAL", INVALIDATION_SCRIPT);
-                    self.connection.run(eval).await?
+                    settle(self.connection.run(eval).await)?
                 }
             };
             validate_invalidation_reply(&reply)?;
@@ -363,7 +365,7 @@ impl<C: RedisConnection> Remote for RedisAdapter<C> {
                 }
             };
             let reply = match future::select(command, context.cancel.cancelled()).await {
-                Either::Left((reply, _)) => reply?,
+                Either::Left((reply, _)) => settle(reply)?,
                 Either::Right(((), _)) => return Err(Box::new(RedisReadCancelled) as BoxError),
             };
             let (value, watermark) = if tracked {
@@ -393,7 +395,7 @@ impl<C: RedisConnection> Remote for RedisAdapter<C> {
                 .arg(raw)
                 .arg("PX")
                 .arg(request.ttl_ms.to_string());
-            let reply = self.connection.run(cmd).await?;
+            let reply = settle(self.connection.run(cmd).await)?;
             validate_set_reply(&reply)?;
             Ok(())
         }
@@ -640,27 +642,78 @@ mod tests {
 
     #[test]
     fn invalidate_retries_evalsha_once_as_eval_with_identical_arguments() {
-        let connection = Scripted::with(vec![failure(), Ok(Value::Int(1))]);
+        for reply in [
+            failure(),
+            redis::parse_redis_value(b"-NOSCRIPT No matching script\r\n"),
+        ] {
+            let connection = Scripted::with(vec![reply, Ok(Value::Int(1))]);
+            let adapter = RedisAdapter::new(connection.clone());
+            block_on(adapter.invalidate(InvalidateRequest {
+                watermark_key: "watermark".into(),
+                invalidated_at_ms: 1_700_000_000_000,
+                future_buffer_ms: 100,
+            }))
+            .expect("EVAL retry succeeds");
+            let calls = connection.calls();
+            assert_eq!(calls.len(), 2, "{calls:?}");
+            let first = strings(&calls[0].args);
+            let second = strings(&calls[1].args);
+            assert_eq!(first[0], "EVALSHA");
+            assert_eq!(first[1], invalidation_script_sha1());
+            assert_eq!(second[0], "EVAL");
+            assert_eq!(second[1], INVALIDATION_SCRIPT);
+            assert_eq!(first[2..], second[2..], "retry changed logical arguments");
+            assert_eq!(
+                first[2..],
+                ["1", "watermark", "100", "1700000000000"].map(str::to_string)
+            );
+        }
+    }
+
+    #[test]
+    fn server_error_values_remain_native_errors() {
+        let denied = redis::parse_redis_value(b"-NOPERM command denied\r\n").unwrap();
+        let connection = Scripted::with(vec![Ok(denied); 5]);
         let adapter = RedisAdapter::new(connection.clone());
-        block_on(adapter.invalidate(InvalidateRequest {
-            watermark_key: "watermark".into(),
-            invalidated_at_ms: 1_700_000_000_000,
-            future_buffer_ms: 100,
+        for watermark_key in [None, Some("watermark".to_string())] {
+            let error = block_on(adapter.read(
+                ReadRequest {
+                    value_key: "value".into(),
+                    watermark_key,
+                },
+                context(),
+            ))
+            .expect_err("read error must not become a miss");
+            assert_eq!(
+                error.downcast_ref::<redis::RedisError>().unwrap().code(),
+                Some("NOPERM")
+            );
+        }
+        let error = block_on(adapter.write(WriteRequest {
+            value_key: "value".into(),
+            frame: Frame {
+                created_at_ms: 1,
+                payload: Payload::text("1"),
+            },
+            ttl_ms: 1,
         }))
-        .expect("EVAL retry succeeds");
-        let calls = connection.calls();
-        assert_eq!(calls.len(), 2, "{calls:?}");
-        let first = strings(&calls[0].args);
-        let second = strings(&calls[1].args);
-        assert_eq!(first[0], "EVALSHA");
-        assert_eq!(first[1], invalidation_script_sha1());
-        assert_eq!(second[0], "EVAL");
-        assert_eq!(second[1], INVALIDATION_SCRIPT);
-        assert_eq!(first[2..], second[2..], "retry changed logical arguments");
+        .expect_err("write error must not become success");
         assert_eq!(
-            first[2..],
-            ["1", "watermark", "100", "1700000000000"].map(str::to_string)
+            error.downcast_ref::<redis::RedisError>().unwrap().code(),
+            Some("NOPERM")
         );
+        let error = block_on(adapter.invalidate_decimal("watermark", "0", "1"))
+            .expect_err("failed retry must preserve its native error");
+        assert_eq!(
+            error.downcast_ref::<redis::RedisError>().unwrap().code(),
+            Some("NOPERM")
+        );
+        let commands: Vec<_> = connection
+            .calls()
+            .iter()
+            .map(|call| strings(&call.args)[0].clone())
+            .collect();
+        assert_eq!(commands, ["GET", "MGET", "SET", "EVALSHA", "EVAL"]);
     }
 
     #[test]

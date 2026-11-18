@@ -43,6 +43,7 @@ use std::collections::HashMap;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use dialcache::protocol::encode_frame;
@@ -52,7 +53,10 @@ use dialcache::{
     ReadResult, Remote, WriteRequest,
 };
 use formal::witness::sha256_hex;
-use redis::aio::{ConnectionManager, ConnectionManagerConfig, MultiplexedConnection};
+use futures::future::{BoxFuture, FutureExt};
+use redis::aio::{
+    ConnectionLike, ConnectionManager, ConnectionManagerConfig, MultiplexedConnection,
+};
 use redis::cluster::{ClusterClientBuilder, NodeAddress};
 use redis::cluster_async::ClusterConnection;
 use redis::cluster_read_routing::RandomReplicaStrategy;
@@ -500,6 +504,94 @@ fn redis_7_standalone() {
 #[ignore = "Docker-backed; run through make integration-rust"]
 fn valkey_8_standalone() {
     run_standalone("valkey8", "valkey/valkey:8-alpine");
+}
+
+struct RawConnection {
+    connection: MultiplexedConnection,
+    commands: Mutex<Vec<String>>,
+}
+
+impl RedisConnection for RawConnection {
+    fn run(&self, cmd: redis::Cmd) -> BoxFuture<'_, redis::RedisResult<Value>> {
+        let Some(redis::Arg::Simple(name)) = cmd.args_iter().next() else {
+            panic!("expected a command name");
+        };
+        self.commands
+            .lock()
+            .unwrap()
+            .push(String::from_utf8(name.to_vec()).unwrap());
+        let mut connection = self.connection.clone();
+        async move { connection.req_packed_command(&cmd).await }.boxed()
+    }
+
+    fn run_on_primary(
+        &self,
+        _key: &str,
+        cmd: redis::Cmd,
+    ) -> BoxFuture<'_, redis::RedisResult<Value>> {
+        self.run(cmd)
+    }
+}
+
+fn run_custom_connection(protocol: &str) {
+    let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
+    runtime.block_on(async {
+        let (_container, endpoint) = start_server("redis:7-alpine", false);
+        wait_for_ping(&endpoint).await;
+        let config = redis::AsyncConnectionConfig::new()
+            .set_connection_timeout(Some(COMMAND_BUDGET))
+            .set_response_timeout(Some(COMMAND_BUDGET));
+        let mut connection = Client::open(format!("redis://{endpoint}/?protocol={protocol}"))
+            .expect("client")
+            .get_multiplexed_async_connection_with_config(&config)
+            .await
+            .expect("connection");
+        let adapter = RedisAdapter::new(RawConnection {
+            connection: connection.clone(),
+            commands: Mutex::new(Vec::new()),
+        });
+        let watermark = "{custom-connection}:watermark";
+        for invalidated_at_ms in [2_000, 3_000] {
+            if invalidated_at_ms == 3_000 {
+                redis::cmd("SCRIPT")
+                    .arg("FLUSH")
+                    .query_async::<()>(&mut connection)
+                    .await
+                    .expect("flush script cache");
+            }
+            adapter.connection().commands.lock().unwrap().clear();
+            adapter
+                .invalidate(InvalidateRequest {
+                    watermark_key: watermark.into(),
+                    invalidated_at_ms,
+                    future_buffer_ms: 0,
+                })
+                .await
+                .expect("custom connection recovers from NOSCRIPT");
+            assert_eq!(
+                *adapter.connection().commands.lock().unwrap(),
+                ["EVALSHA", "EVAL"]
+            );
+            let actual: u64 = redis::cmd("GET")
+                .arg(watermark)
+                .query_async(&mut connection)
+                .await
+                .expect("watermark");
+            assert_eq!(actual, invalidated_at_ms);
+        }
+    });
+}
+
+#[test]
+#[ignore = "Docker-backed; run through make integration-rust"]
+fn redis_custom_connection_resp2() {
+    run_custom_connection("resp2");
+}
+
+#[test]
+#[ignore = "Docker-backed; run through make integration-rust"]
+fn redis_custom_connection_resp3() {
+    run_custom_connection("resp3");
 }
 
 #[test]
