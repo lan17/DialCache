@@ -8,11 +8,14 @@
 //! See "Envelope selection and codec environment" in `formal/guides/PROTOCOL.md`.
 
 use crate::codec::Payload;
-use crate::limits::{DEFAULT_COMPRESSION_THRESHOLD_BYTES, DEFAULT_ZSTD_LEVEL, MAX_SAFE_INTEGER};
+use crate::limits::{
+    DEFAULT_COMPRESSION_THRESHOLD_BYTES, DEFAULT_ZSTD_LEVEL, MAX_DECOMPRESSED_BYTES,
+    MAX_SAFE_INTEGER,
+};
 use crate::observe::CompressionOutcome;
 
 use super::frame::ProtocolError;
-use super::text::replacement_utf8;
+use super::text::{replacement_utf8, replacement_utf8_within};
 
 /// Envelope byte `0x00`: the rest is raw serializer output whose own first
 /// byte would have collided with a marker.
@@ -202,8 +205,15 @@ pub fn decompress_payload(
             match decode_first_zstd_frame(&payload.bytes[1..], max_decompressed_bytes) {
                 Ok(decoded) => {
                     let decoded = if marker == MARKER_ZSTD_UTF8 {
+                        let Some(bytes) = replacement_utf8_within(&decoded, MAX_DECOMPRESSED_BYTES)
+                        else {
+                            return CompressionReadResult {
+                                payload,
+                                outcome: Some(CompressionOutcome::ReadOverLimit),
+                            };
+                        };
                         Payload {
-                            bytes: replacement_utf8(&decoded),
+                            bytes,
                             binary: false,
                         }
                     } else {
@@ -490,6 +500,24 @@ mod tests {
                     outcome: Some(CompressionOutcome::FallbackRaw)
                 }
             );
+        }
+    }
+
+    #[test]
+    fn small_read_limits_count_raw_bytes_before_text_replacement() {
+        for (marker, expected) in [
+            (MARKER_ZSTD_UTF8, Payload::text("\u{FFFD}")),
+            (MARKER_ZSTD_BINARY, Payload::binary([0xff])),
+        ] {
+            let mut bytes = vec![marker];
+            bytes.extend_from_slice(&zstd_compress(&[0xff], 3).unwrap());
+            let original = Payload::binary(bytes);
+            let decoded = decompress_payload(original.clone(), 1);
+            assert_eq!(decoded.outcome, Some(CompressionOutcome::Decompressed));
+            assert_eq!(decoded.payload, expected);
+            let rejected = decompress_payload(original.clone(), 0);
+            assert_eq!(rejected.outcome, Some(CompressionOutcome::ReadOverLimit));
+            assert_eq!(rejected.payload, original);
         }
     }
 

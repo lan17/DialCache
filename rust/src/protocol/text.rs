@@ -14,9 +14,62 @@ pub fn replacement_utf8(bytes: &[u8]) -> Vec<u8> {
     String::from_utf8_lossy(bytes).into_owned().into_bytes()
 }
 
+pub(super) fn replacement_utf8_within(bytes: &[u8], limit: usize) -> Option<Vec<u8>> {
+    if bytes.len() > limit {
+        return None;
+    }
+    if std::str::from_utf8(bytes).is_ok() {
+        return Some(bytes.to_vec());
+    }
+
+    // Count replacement growth before allocating; a tiny zstd frame can expand
+    // to malformed text whose repaired representation exceeds the read ceiling.
+    let mut len = bytes.len();
+    for chunk in bytes.utf8_chunks() {
+        if !chunk.invalid().is_empty() {
+            len = len.checked_add(3 - chunk.invalid().len())?;
+            if len > limit {
+                return None;
+            }
+        }
+    }
+    let mut out = Vec::with_capacity(len);
+    for chunk in bytes.utf8_chunks() {
+        out.extend_from_slice(chunk.valid().as_bytes());
+        if !chunk.invalid().is_empty() {
+            out.extend_from_slice("\u{FFFD}".as_bytes());
+        }
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::replacement_utf8;
+    use super::{replacement_utf8, replacement_utf8_within};
+
+    #[test]
+    fn bounded_replacement_preserves_text_and_checks_exact_output_bytes() {
+        for (bytes, expected) in [
+            (&b""[..], ""),
+            (&b"text"[..], "text"),
+            (&[0xff][..], "\u{FFFD}"),
+            (&[0xe2, 0x82][..], "\u{FFFD}"),
+            (&[0xe2, 0x82, b'A'][..], "\u{FFFD}A"),
+            (&[0xf0, 0x9f, 0x98][..], "\u{FFFD}"),
+            (&[0xed, 0xa0, 0x80][..], "\u{FFFD}\u{FFFD}\u{FFFD}"),
+            ("\u{FEFF}\0\u{FFFF}😀".as_bytes(), "\u{FEFF}\0\u{FFFF}😀"),
+        ] {
+            for limit in [expected.len(), expected.len() + 1] {
+                assert_eq!(
+                    replacement_utf8_within(bytes, limit).unwrap(),
+                    expected.as_bytes()
+                );
+            }
+            if !expected.is_empty() {
+                assert_eq!(replacement_utf8_within(bytes, expected.len() - 1), None);
+            }
+        }
+    }
 
     fn decoded(bytes: &[u8]) -> String {
         String::from_utf8(replacement_utf8(bytes)).expect("replacement output is UTF-8")
