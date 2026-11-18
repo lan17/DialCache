@@ -12,9 +12,55 @@ mod fixtures;
 #[path = "formal/key_vectors.rs"]
 mod key_vectors;
 
+use dialcache::identity::{normalize_args, ArgValue, Identity};
 use serde_json::{json, Value};
 
 type Check = fn(&Value) -> Result<(), String>;
+
+#[test]
+fn bigint_text_uses_canonical_keys_but_strings_remain_literal() {
+    for (text, expected) in [
+        ("1", "1"),
+        ("0001", "1"),
+        ("-1", "-1"),
+        ("-0001", "-1"),
+        ("0", "0"),
+        ("-0", "0"),
+        ("000", "0"),
+        ("-000", "0"),
+        ("0010200", "10200"),
+        ("-0010200", "-10200"),
+    ] {
+        let args = normalize_args([("n", ArgValue::BigInt(text.into()))]).unwrap();
+        assert_eq!(args, vec![("n".into(), expected.into())], "{text}");
+        for tracked in [false, true] {
+            let identity = Identity::new("id", text, "Get")
+                .namespace("urn")
+                .tracked(tracked);
+            let canonical = normalize_args([("n", ArgValue::Str(expected.into()))]).unwrap();
+            assert_eq!(
+                identity.clone().args(args.clone()).keys().unwrap(),
+                identity.clone().args(canonical).keys().unwrap(),
+                "{text}, tracked={tracked}"
+            );
+            assert_eq!(identity.id, text);
+        }
+        let literal = normalize_args([("n", ArgValue::Str(text.into()))]).unwrap();
+        assert_eq!(literal, vec![("n".into(), text.into())]);
+    }
+}
+
+#[test]
+fn bigint_text_preserves_arbitrary_width_magnitudes() {
+    let magnitude = "12345678901234567890".repeat(100);
+    for sign in ["", "-"] {
+        let expected = format!("{sign}{magnitude}");
+        for text in [expected.clone(), format!("{sign}000{magnitude}")] {
+            let actual = normalize_args([("n", ArgValue::BigInt(text))]).unwrap();
+            assert_eq!(actual, vec![("n".into(), expected.clone())]);
+        }
+    }
+}
 
 #[test]
 fn key_assertions_distinguish_library_rejections_from_bad_fixtures() {
