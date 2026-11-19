@@ -1,0 +1,33 @@
+/* Keep the selector beside search without squeezing the navigation links. */
+@media (min-width: 960px) {
+  .VPNavBar .language-selector { margin-left: 32px; }
+  .VPNavBarSearch { padding-left: 16px; }
+}
+
+@media (min-width: 960px) and (max-width: 1199px) {
+  .VPNavBarSearch .DocSearch-Button-Placeholder,
+  .VPNavBarSearch .DocSearch-Button-Keys { display: none; }
+  .VPNavBarSearch .DocSearch-Search-Icon { margin-right: 0; }
+}
+
+/* VitePress only fixes its main header on desktop. Keep it in the flow on
+   smaller screens and let the page navigation stick immediately below it. */
+@media (max-width: 959px) {
+  .Layout > header.VPNav { position: sticky; }
+  .Layout > div.VPLocalNav { top: var(--vp-nav-height); }
+  .VPLocalNav .VPLocalNavOutlineDropdown .items {
+    max-height: calc(100vh - var(--vp-nav-height) - 86px);
+  }
+  /* A second row keeps all language names visible on phones and tablets. */
+  :root { --vp-nav-height: 112px; }
+  .Layout .VPNavBar .title,
+  .Layout .VPNavBar .content-body { height: 64px; }
+  .VPNavBar .language-selector {
+    position: absolute;
+    top: 64px;
+    left: 0;
+    width: 100%;
+    height: 48px;
+    justify-content: center;
+  }
+}
